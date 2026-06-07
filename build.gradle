@@ -2,6 +2,7 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'net.neoforged.moddev' version '2.0.141'
+    id 'com.google.protobuf' version '0.9.4'
     id 'idea'
 }
 
@@ -28,6 +29,16 @@ sourceSets.main.resources {
 
 repositories {
     // Add here additional repositories if required by some of the dependencies below.
+    exclusiveContent {
+        forRepository {
+            mavenCentral()
+        }
+        filter {
+            includeGroup 'com.google.protobuf'
+        }
+    }
+
+    mavenCentral()
 }
 
 base {
@@ -113,6 +124,7 @@ configurations {
 }
 
 dependencies {
+    implementation 'com.google.protobuf:protobuf-java:4.30.2'
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
@@ -134,6 +146,12 @@ dependencies {
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:4.30.2'
+    }
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.

@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package withme.gym.observation;
+
+import "withme/gym/observation/entity.proto";
+import "withme/gym/observation/inventory.proto";
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.withme.gym.observation.proto";
+option java_outer_classname = "ComponentsProto";
+
+message SelfStateComponent {
+  string entity_type = 1;
+  string uuid = 2;
+  double health = 3;
+  double max_health = 4;
+  double x = 5;
+  double y = 6;
+  double z = 7;
+  double vx = 8;
+  double vy = 9;
+  double vz = 10;
+  float yaw = 11;
+  float pitch = 12;
+  bool on_ground = 13;
+  bool in_water = 14;
+  bool in_lava = 15;
+  bool alive = 16;
+}
+
+message NearbyEntitiesComponent {
+  repeated EntityView entities = 1;
+}
+
+message NearbyBlocksComponent {
+}
+
+message InventoryComponent {
+  repeated ItemStackView slots = 1;
+}
+
+message WorldStateComponent {
+  int64 day_time = 1;
+  bool raining = 2;
+  bool thundering = 3;
+  string dimension = 4;
+}
+
+message ObservationComponent {
+  oneof value {
+    SelfStateComponent self_state = 1;
+    NearbyEntitiesComponent nearby_entities = 2;
+    NearbyBlocksComponent nearby_blocks = 3;
+    InventoryComponent inventory = 4;
+    WorldStateComponent world_state = 5;
+  }
+}

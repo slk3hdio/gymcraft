@@ -1,0 +1,40 @@
+package io.github.mousemeya.withme.gym.env;
+import io.github.mousemeya.withme.gym.space.McSpace;
+import io.github.mousemeya.withme.gym.observation.proto.McObservation;
+
+import java.util.Map;
+
+/**
+ * 核心环境接口，对应 Gymnasium 的 Env 类。
+ * @param <A> 动作类型 (ActType)
+ */
+public interface McEnv<A> {
+
+    /**
+     * 重置环境到初始状态。
+     * @param seed 随机种子，用于可复现性
+     * @param options 可选的配置参数
+     * @return 包含初始观测和额外信息的元组
+     */
+    ResetResult reset(Integer seed, Map<String, Object> options);
+
+    /**
+     * 执行一步交互。
+     * @param action 智能体选择的动作
+     * @return 包含新观测、奖励、终止标志、截断标志和额外信息的元组
+     */
+    StepResult step(A action);
+
+    // --- 核心属性 ---
+    /** 返回动作空间 */
+    McSpace<A> getActionSpace();
+
+    /** 返回观测空间 */
+    McSpace<McObservation> getObservationSpace();
+
+    /** 环境的元数据，如渲染模式 */
+    Map<String, Object> getMetadata();
+
+    /** 关闭环境，释放资源 */
+    void close();
+}

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package withme.gym.observation;
+
+import "withme/gym/observation/components.proto";
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.withme.gym.observation.proto";
+option java_outer_classname = "ObservationProto";
+
+message ObservationHeader {
+  int32 schema_version = 1;
+  int64 game_tick = 2;
+  string dimension = 3;
+  string agent_id = 4;
+}
+
+message McObservation {
+  ObservationHeader header = 1;
+  map<string, ObservationComponent> components = 2;
+}
