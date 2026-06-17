@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package withme.gym.action;
+
+import "withme/gym/action/components.proto";
+import "google/protobuf/any.proto";
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.withme.gym.action.proto";
+option java_outer_classname = "McActionProto";
+
+message McAction{
+    map<string, google.protobuf.Any> components = 1;
+}
+

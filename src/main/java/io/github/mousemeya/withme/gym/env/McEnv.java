@@ -1,14 +1,14 @@
 package io.github.mousemeya.withme.gym.env;
-import io.github.mousemeya.withme.gym.space.McSpace;
+import io.github.mousemeya.withme.gym.action.proto.McAction;
 import io.github.mousemeya.withme.gym.observation.proto.McObservation;
+import io.github.mousemeya.withme.gym.space.McSpace;
 
 import java.util.Map;
 
 /**
  * 核心环境接口，对应 Gymnasium 的 Env 类。
- * @param <A> 动作类型 (ActType)
  */
-public interface McEnv<A> {
+public interface McEnv {
 
     /**
      * 重置环境到初始状态。
@@ -23,11 +23,11 @@ public interface McEnv<A> {
      * @param action 智能体选择的动作
      * @return 包含新观测、奖励、终止标志、截断标志和额外信息的元组
      */
-    StepResult step(A action);
+    StepResult step(McAction action);
 
     // --- 核心属性 ---
     /** 返回动作空间 */
-    McSpace<A> getActionSpace();
+    McSpace<McAction> getActionSpace();
 
     /** 返回观测空间 */
     McSpace<McObservation> getObservationSpace();
