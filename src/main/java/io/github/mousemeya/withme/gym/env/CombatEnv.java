@@ -3,15 +3,17 @@ package io.github.mousemeya.withme.gym.env;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import io.github.mousemeya.withme.registry.ActionComponents;
+import io.github.mousemeya.withme.registry.ObservationComponents;
 
 /**
  * 战斗环境 —— 训练 Mob 攻击并击杀目标实体的 RL 环境。
  * <p>
- * 动作空间：{@code gym.move_to}、{@code gym.set_attack_target}、
- * {@code gym.attack_once}、{@code gym.noop}
+ * 动作空间：{@code withme:move_to}、{@code withme:set_attack_target}、
+ * {@code withme:attack_once}、{@code withme:noop}
  * <p>
  * 观测空间：自身状态、附近实体、附近方块、背包、世界状态
  * <p>
@@ -26,22 +28,31 @@ import java.util.UUID;
  * 截断条件：步数超过 2400
  */
 public class CombatEnv extends EntityMcEnv {
-
-    // 该环境支持的动作键列表
-    private static final List<String> ACTION_KEYS = List.of("gym.move_to", "gym.set_attack_target", "gym.attack_once", "gym.noop");
-    // 该环境输出的观测键列表
-    private static final List<String> OBS_KEYS = List.of("gym.self", "gym.nearby_entities", "gym.nearby_blocks", "gym.inventory", "gym.world");
-
     private UUID targetEntityUuid;   // 攻击目标的 UUID
     private int stepCount;           // 当前回合已执行的步数
     private double lastTargetHealth; // 上一步目标的生命值，用于计算伤害差值
 
     public CombatEnv(UUID entityUuid) {
-        super(entityUuid, ACTION_KEYS, OBS_KEYS);
+        super(
+            entityUuid,
+            java.util.List.of(
+                ActionComponents.MOVE_TO.get(),
+                ActionComponents.SET_ATTACK_TARGET.get(),
+                ActionComponents.ATTACK_ONCE.get(),
+                ActionComponents.NOOP.get()
+            ),
+            java.util.List.of(
+                ObservationComponents.SELF.get(),
+                ObservationComponents.NEARBY_ENTITIES.get(),
+                ObservationComponents.NEARBY_BLOCKS.get(),
+                ObservationComponents.INVENTORY.get(),
+                ObservationComponents.WORLD.get()
+            )
+        );
     }
 
     @Override
-    protected String getEnvType() { return "combat"; }
+    public String getEnvType() { return "withme:combat"; }
 
     @Override
     protected void onReset(Mob mob, Integer seed, Map<String, Object> options) {

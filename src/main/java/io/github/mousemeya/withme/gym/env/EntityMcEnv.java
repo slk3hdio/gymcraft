@@ -1,19 +1,21 @@
 package io.github.mousemeya.withme.gym.env;
 
 import io.github.mousemeya.withme.gym.action.EntityAgentController;
+import io.github.mousemeya.withme.gym.action.ActionComponent;
+import io.github.mousemeya.withme.gym.action.McActionSpace;
 import io.github.mousemeya.withme.gym.action.proto.McAction;
 import io.github.mousemeya.withme.gym.agent.AgentControlState;
 import io.github.mousemeya.withme.gym.agent.AgentRegistry;
 import io.github.mousemeya.withme.gym.obs.EntityObservationBuilder;
+import io.github.mousemeya.withme.gym.obs.McObservationSpace;
+import io.github.mousemeya.withme.gym.obs.ObservationComponent;
 import io.github.mousemeya.withme.gym.observation.proto.McObservation;
-import io.github.mousemeya.withme.gym.space.ActionSpace;
 import io.github.mousemeya.withme.gym.space.McSpace;
-import io.github.mousemeya.withme.gym.space.ObservationSpace;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,29 +27,34 @@ import java.util.UUID;
  * 提供通用的 reset/step 流程，子类只需实现奖励计算、终止判断等策略方法。
  * <p>
  * 工厂方法 {@link #create(String, UUID)} 根据环境类型创建对应子类实例
- * （目前支持 "navigation" 和 "combat"）。
+ * 环境实现由 NeoForge 自定义注册表中的 McEnvFactory 创建。
  */
 public abstract class EntityMcEnv implements McEnv {
 
     protected final UUID entityUuid;   // 绑定的 Mob 实体 UUID
     protected final String agentId;    // 智能体标识符，格式为 "agent-<uuid前8位>"
-    protected final ActionSpace actionSpace;        // 动作空间定义
-    protected final ObservationSpace observationSpace;  // 观测空间定义
+    protected final McActionSpace actionSpace;        // 动作空间定义
+    protected final McObservationSpace observationSpace;  // 观测空间定义
+    protected final EntityAgentController controller;  // 动作分发器
+    protected final EntityObservationBuilder observationBuilder;  // 观测构建器
     private boolean closed;  // 环境是否已关闭
 
-    protected EntityMcEnv(UUID entityUuid, List<String> actionKeys, List<String> obsKeys) {
+    protected EntityMcEnv(
+        UUID entityUuid,
+        Collection<ActionComponent<?>> actionComponents,
+        Collection<ObservationComponent<?>> observationComponents
+    ) {
         this.entityUuid = entityUuid;
         this.agentId = "agent-" + entityUuid.toString().substring(0, 8);
-        this.actionSpace = new ActionSpace(actionKeys);
-        this.observationSpace = new ObservationSpace(obsKeys);
+        this.actionSpace = new McActionSpace(actionComponents);
+        this.observationSpace = new McObservationSpace(observationComponents);
+        this.controller = new EntityAgentController(actionComponents);
+        this.observationBuilder = new EntityObservationBuilder(observationComponents);
     }
 
-    /** 工厂方法：根据环境类型字符串创建对应的环境实例 */
+    /** 工厂方法：根据环境类型注册表 ID 创建对应的环境实例 */
     public static EntityMcEnv create(String envType, UUID entityUuid) {
-        return switch (envType) {
-            case "combat" -> new CombatEnv(entityUuid);
-            default -> new NavigationEnv(entityUuid);
-        };
+        return McEnvFactories.create(envType, entityUuid);
     }
 
     /** 在所有已加载的维度中查找目标实体 */
@@ -79,12 +86,13 @@ public abstract class EntityMcEnv implements McEnv {
         state.moveTarget = null;
         state.attackTargetUuid = null;
         state.pendingAction = null;
+        state.controller = controller;
         state.episodeId++;
         state.lastStepTick = mob.level().getGameTime();
 
         onReset(mob, seed, options);
 
-        var obs = EntityObservationBuilder.build(mob, agentId);
+        var obs = observationBuilder.build(mob, agentId);
         state.latestObservation = obs;
         return new ResetResult(obs, Map.of("entity_uuid", entityUuid.toString()));
     }
@@ -105,9 +113,13 @@ public abstract class EntityMcEnv implements McEnv {
             return new StepResult(McObservation.getDefaultInstance(), 0, true, false, Map.of("reason", "agent not active"));
         }
 
-        EntityAgentController.defaultController().apply(mob, action);
+        if (!actionSpace.contains(action)) {
+            return new StepResult(McObservation.getDefaultInstance(), 0, false, false, Map.of("reason", "invalid action"));
+        }
 
-        var obs = EntityObservationBuilder.build(mob, agentId);
+        controller.apply(mob, action);
+
+        var obs = observationBuilder.build(mob, agentId);
         state.latestObservation = obs;
 
         double reward = computeReward(mob);
@@ -152,14 +164,15 @@ public abstract class EntityMcEnv implements McEnv {
                 state.moveTarget = null;
                 state.attackTargetUuid = null;
                 state.pendingAction = null;
+                state.controller = null;
                 mob.getNavigation().stop();
                 mob.setTarget(null);
             }
         }
     }
 
-    /** 返回环境类型标识符（如 "navigation"、"combat"） */
-    protected abstract String getEnvType();
+    /** 返回环境类型注册表 ID */
+    public abstract String getEnvType();
     /** 环境重置时的子类自定义逻辑 */
     protected abstract void onReset(Mob mob, Integer seed, Map<String, Object> options);
     /** 计算当前步的奖励值 */

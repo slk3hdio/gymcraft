@@ -26,7 +26,7 @@ public class AgentRegistry {
      * 如果该实体尚未有会话，则根据 envType 创建新的环境实例。
      *
      * @param entityUuid 实体的 UUID
-     * @param envType    环境类型（"navigation" 或 "combat"）
+     * @param envType    环境工厂注册表 ID
      * @return 该实体对应的 RL 环境实例
      */
     public static io.github.mousemeya.withme.gym.env.EntityMcEnv acquire(UUID entityUuid, String envType) {

@@ -1,9 +1,11 @@
 package io.github.mousemeya.withme;
 
 import io.github.mousemeya.withme.gym.agent.AgentAttachmentHolder;
-import io.github.mousemeya.withme.command.AgentCommands;
-import io.github.mousemeya.withme.event.AgentEvents;
 import io.github.mousemeya.withme.item.AgentToolItem;
+import io.github.mousemeya.withme.registry.ActionComponents;
+import io.github.mousemeya.withme.registry.EnvFactories;
+import io.github.mousemeya.withme.registry.ObservationComponents;
+import io.github.mousemeya.withme.registry.RegistryKeys;
 
 import org.slf4j.Logger;
 
@@ -79,6 +81,8 @@ public class WithMe {
     public WithMe(IEventBus modEventBus, ModContainer modContainer) {
         // Register the commonSetup method for modloading
         modEventBus.addListener(this::commonSetup);
+        // Register custom registries before their DeferredRegisters attach entries to them.
+        modEventBus.addListener(RegistryKeys::register);
 
         // Register the Deferred Register to the mod event bus so blocks get registered
         BLOCKS.register(modEventBus);
@@ -88,6 +92,10 @@ public class WithMe {
         CREATIVE_MODE_TABS.register(modEventBus);
         // Register the Attachment types
         AgentAttachmentHolder.DEFERRED_REGISTER.register(modEventBus);
+        // Register pluggable RL action/observation/env entries.
+        ActionComponents.REGISTRY.register(modEventBus);
+        ObservationComponents.REGISTRY.register(modEventBus);
+        EnvFactories.REGISTRY.register(modEventBus);
 
         // Register ourselves for server and other game events we are interested in.
         NeoForge.EVENT_BUS.register(this);

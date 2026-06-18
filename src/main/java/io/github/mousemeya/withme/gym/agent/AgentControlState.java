@@ -1,6 +1,7 @@
 package io.github.mousemeya.withme.gym.agent;
 
 import io.github.mousemeya.withme.gym.action.proto.McAction;
+import io.github.mousemeya.withme.gym.action.EntityAgentController;
 import io.github.mousemeya.withme.gym.observation.proto.McObservation;
 import net.minecraft.world.phys.Vec3;
 
@@ -21,14 +22,16 @@ public class AgentControlState {
     public String agentId;
     /** 当前控制模式 */
     public ControlMode controlMode = ControlMode.OWN_FLAGS;
-    /** 环境类型（"navigation" 或 "combat"） */
-    public String envType = "navigation";
+    /** 环境类型注册表 ID */
+    public String envType = "withme:navigation";
     /** 导航目标位置，为 null 表示无目标 */
     public Vec3 moveTarget;
     /** 攻击目标实体的 UUID */
     public UUID attackTargetUuid;
     /** 待执行的动作，由 AgentGoal.tick() 消费 */
     public McAction pendingAction;
+    /** 当前环境的动作控制器，用于消费 pendingAction */
+    public EntityAgentController controller;
     /** 最近一次构建的观测数据 */
     public McObservation latestObservation;
     /** 当前回合（episode）编号 */

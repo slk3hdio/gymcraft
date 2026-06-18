@@ -54,15 +54,15 @@ public class AgentToolItem extends Item {
                 player.sendSystemMessage(Component.literal(String.format(
                     "Agent: %s | Env: %s | Active: %s",
                     env.getAgentId(),
-                    env instanceof io.github.mousemeya.withme.gym.env.NavigationEnv ? "navigation" : "combat",
+                    env.getEnvType(),
                     state != null && state.active
                 )));
             } else {
-                var env = AgentRegistry.acquire(mob.getUUID(), "navigation");
+                var env = AgentRegistry.acquire(mob.getUUID(), "withme:navigation");
                 env.reset(null, Map.of());
                 AgentCommands.injectGoal(mob);
                 player.sendSystemMessage(Component.literal("Agent attached to " + mob.getName().getString() +
-                    " (navigation) id=" + env.getAgentId()));
+                    " (withme:navigation) id=" + env.getAgentId()));
             }
         }
 

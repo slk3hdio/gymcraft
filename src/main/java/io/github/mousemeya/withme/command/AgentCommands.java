@@ -36,13 +36,13 @@ public class AgentCommands {
 
         var attachCmd = Commands.literal("attach")
             .then(Commands.argument("target", EntityArgument.entity())
-                .then(Commands.argument("env", StringArgumentType.word())
+                .then(Commands.argument("env", StringArgumentType.string())
                     .executes(ctx -> {
                         var envType = StringArgumentType.getString(ctx, "env");
                         return attach(ctx, envType);
                     })
                 )
-                .executes(ctx -> attach(ctx, "navigation"))
+                .executes(ctx -> attach(ctx, "withme:navigation"))
             );
 
         var detachCmd = Commands.literal("detach")
@@ -146,7 +146,7 @@ public class AgentCommands {
         var info = Component.literal(String.format(
             "Agent: %s | Env: %s | Mode: %s | Active: %s | Target: %s",
             env.getAgentId(),
-            env instanceof io.github.mousemeya.withme.gym.env.NavigationEnv ? "navigation" : "combat",
+            env.getEnvType(),
             state != null ? state.controlMode.name() : "?",
             state != null && state.active,
             mob.getTarget() != null ? mob.getTarget().getName().getString() : "none"

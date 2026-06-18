@@ -3,14 +3,16 @@ package io.github.mousemeya.withme.gym.env;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import io.github.mousemeya.withme.registry.ActionComponents;
+import io.github.mousemeya.withme.registry.ObservationComponents;
 
 /**
  * 导航环境 —— 训练 Mob 移动到指定目标位置的 RL 环境。
  * <p>
- * 动作空间：{@code gym.move_to}（移动到坐标）、{@code gym.noop}（无操作）
+ * 动作空间：{@code withme:move_to}（移动到坐标）、{@code withme:noop}（无操作）
  * <p>
  * 观测空间：自身状态、附近实体、附近方块、世界状态
  * <p>
@@ -25,21 +27,24 @@ import java.util.UUID;
  * 截断条件：步数超过 1200
  */
 public class NavigationEnv extends EntityMcEnv {
-
-    // 该环境支持的动作键列表
-    private static final List<String> ACTION_KEYS = List.of("gym.move_to", "gym.noop");
-    // 该环境输出的观测键列表
-    private static final List<String> OBS_KEYS = List.of("gym.self", "gym.nearby_entities", "gym.nearby_blocks", "gym.world");
-
     private Vec3 goalPosition;  // 导航目标坐标，通过 reset 的 options 设置
     private int stepCount;      // 当前回合已执行的步数
 
     public NavigationEnv(UUID entityUuid) {
-        super(entityUuid, ACTION_KEYS, OBS_KEYS);
+        super(
+            entityUuid,
+            java.util.List.of(ActionComponents.MOVE_TO.get(), ActionComponents.NOOP.get()),
+            java.util.List.of(
+                ObservationComponents.SELF.get(),
+                ObservationComponents.NEARBY_ENTITIES.get(),
+                ObservationComponents.NEARBY_BLOCKS.get(),
+                ObservationComponents.WORLD.get()
+            )
+        );
     }
 
     @Override
-    protected String getEnvType() { return "navigation"; }
+    public String getEnvType() { return "withme:navigation"; }
 
     @Override
     protected void onReset(Mob mob, Integer seed, Map<String, Object> options) {
