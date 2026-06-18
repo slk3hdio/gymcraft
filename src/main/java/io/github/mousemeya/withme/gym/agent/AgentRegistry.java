@@ -1,4 +1,4 @@
-package io.github.mousemeya.withme.agent;
+package io.github.mousemeya.withme.gym.agent;
 
 import com.mojang.logging.LogUtils;
 import net.minecraft.world.entity.Mob;
@@ -12,12 +12,12 @@ public class AgentRegistry {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     public static final AgentAttachmentHolder ATTACHMENTS = new AgentAttachmentHolder();
-    private static final Map<UUID, EntityMcEnv> sessions = new ConcurrentHashMap<>();
+    private static final Map<UUID, io.github.mousemeya.withme.gym.env.EntityMcEnv> sessions = new ConcurrentHashMap<>();
 
-    public static EntityMcEnv acquire(UUID entityUuid, String envType) {
+    public static io.github.mousemeya.withme.gym.env.EntityMcEnv acquire(UUID entityUuid, String envType) {
         return sessions.computeIfAbsent(entityUuid, uuid -> {
             LOGGER.info("Creating agent session for {} with env={}", uuid, envType);
-            var env = EntityMcEnv.create(envType, uuid);
+            var env = io.github.mousemeya.withme.gym.env.EntityMcEnv.create(envType, uuid);
             sessions.put(uuid, env);
             return env;
         });
@@ -35,7 +35,7 @@ public class AgentRegistry {
         return sessions.containsKey(entityUuid);
     }
 
-    public static EntityMcEnv get(UUID entityUuid) {
+    public static io.github.mousemeya.withme.gym.env.EntityMcEnv get(UUID entityUuid) {
         return sessions.get(entityUuid);
     }
 

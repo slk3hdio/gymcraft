@@ -1,4 +1,4 @@
-package io.github.mousemeya.withme.agent;
+package io.github.mousemeya.withme.gym.env;
 
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -21,21 +21,16 @@ public class CombatEnv extends EntityMcEnv {
     }
 
     @Override
-    protected String getEnvType() {
-        return "combat";
-    }
+    protected String getEnvType() { return "combat"; }
 
     @Override
     protected void onReset(Mob mob, Integer seed, Map<String, Object> options) {
         stepCount = 0;
         lastTargetHealth = 0;
-
         if (options != null && options.containsKey("target_uuid")) {
             targetEntityUuid = UUID.fromString((String) options.get("target_uuid"));
-            var state = AgentRegistry.getState(mob);
-            if (state != null) {
-                state.attackTargetUuid = targetEntityUuid;
-            }
+            var state = io.github.mousemeya.withme.gym.agent.AgentRegistry.getState(mob);
+            if (state != null) state.attackTargetUuid = targetEntityUuid;
         } else {
             targetEntityUuid = null;
         }
@@ -45,19 +40,14 @@ public class CombatEnv extends EntityMcEnv {
     protected double computeReward(Mob mob) {
         stepCount++;
         double reward = 0;
-
         LivingEntity target = mob.getTarget();
         if (target != null) {
             double currentHealth = target.getHealth();
             double damageDealt = lastTargetHealth - currentHealth;
             reward += damageDealt * 2.0;
             lastTargetHealth = currentHealth;
-
-            if (!target.isAlive()) {
-                reward += 50.0;
-            }
+            if (!target.isAlive()) reward += 50.0;
         }
-
         reward -= 0.01;
         return reward;
     }
@@ -65,15 +55,10 @@ public class CombatEnv extends EntityMcEnv {
     @Override
     protected boolean isTerminated(Mob mob) {
         if (!mob.isAlive()) return true;
-
-        if (mob.getTarget() != null) {
-            return !mob.getTarget().isAlive();
-        }
+        if (mob.getTarget() != null) return !mob.getTarget().isAlive();
         return false;
     }
 
     @Override
-    protected boolean isTruncated(Mob mob) {
-        return stepCount > 2400;
-    }
+    protected boolean isTruncated(Mob mob) { return stepCount > 2400; }
 }

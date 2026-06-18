@@ -1,8 +1,9 @@
-package io.github.mousemeya.withme.agent;
+package io.github.mousemeya.withme.gym.obs;
 
 import com.google.protobuf.Any;
+import io.github.mousemeya.withme.gym.agent.AgentControlState;
+import io.github.mousemeya.withme.gym.agent.AgentRegistry;
 import io.github.mousemeya.withme.gym.observation.proto.*;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -11,8 +12,6 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
-
-import java.util.UUID;
 
 public class EntityObservationBuilder {
 
@@ -48,14 +47,11 @@ public class EntityObservationBuilder {
             .setUuid(mob.getUUID().toString())
             .setHealth(mob.getHealth())
             .setMaxHealth(mob.getMaxHealth())
-            .setX(mob.getX())
-            .setY(mob.getY())
-            .setZ(mob.getZ())
+            .setX(mob.getX()).setY(mob.getY()).setZ(mob.getZ())
             .setVx(mob.getDeltaMovement().x)
             .setVy(mob.getDeltaMovement().y)
             .setVz(mob.getDeltaMovement().z)
-            .setYaw(mob.getYRot())
-            .setPitch(mob.getXRot())
+            .setYaw(mob.getYRot()).setPitch(mob.getXRot())
             .setOnGround(mob.onGround())
             .setInWater(mob.isInWater())
             .setInLava(mob.isInLava())
@@ -65,12 +61,9 @@ public class EntityObservationBuilder {
             b.setNavigating(state.moveTarget != null);
             b.setAtTarget(state.moveTarget != null
                 && mob.blockPosition().distToCenterSqr(state.moveTarget.x, state.moveTarget.y, state.moveTarget.z) < 2.0);
-            if (mob.getTarget() != null) {
-                b.setTargetEntityId(mob.getTarget().getId());
-            }
+            if (mob.getTarget() != null) b.setTargetEntityId(mob.getTarget().getId());
             b.setControlMode(state.controlMode.name().toLowerCase());
         }
-
         return b.build();
     }
 
@@ -83,23 +76,16 @@ public class EntityObservationBuilder {
 
         for (var entity : level.getEntitiesOfClass(LivingEntity.class, aabb, e -> e != mob)) {
             double dist = mob.distanceTo(entity);
-            var view = EntityView.newBuilder()
+            b.addEntities(EntityView.newBuilder()
                 .setEntityId(entity.getId())
                 .setEntityType(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString())
                 .setUuid(entity.getUUID().toString())
-                .setX(entity.getX())
-                .setY(entity.getY())
-                .setZ(entity.getZ())
-                .setDistance(dist)
-                .setLiving(true)
+                .setX(entity.getX()).setY(entity.getY()).setZ(entity.getZ())
+                .setDistance(dist).setLiving(true)
                 .setHostile(!entity.getType().getCategory().isFriendly())
                 .setAlly(entity.isAlliedTo(mob))
-                .setPlayer(entity instanceof Player)
-                .setItem(false)
-                .build();
-            b.addEntities(view);
+                .setPlayer(entity instanceof Player).setItem(false).build());
         }
-
         return b.build();
     }
 
@@ -108,39 +94,29 @@ public class EntityObservationBuilder {
         var level = mob.level();
         var center = mob.blockPosition();
 
-        for (int dx = -NEARBY_BLOCK_RADIUS; dx <= NEARBY_BLOCK_RADIUS; dx++) {
-            for (int dy = -NEARBY_BLOCK_RADIUS; dy <= NEARBY_BLOCK_RADIUS; dy++) {
+        for (int dx = -NEARBY_BLOCK_RADIUS; dx <= NEARBY_BLOCK_RADIUS; dx++)
+            for (int dy = -NEARBY_BLOCK_RADIUS; dy <= NEARBY_BLOCK_RADIUS; dy++)
                 for (int dz = -NEARBY_BLOCK_RADIUS; dz <= NEARBY_BLOCK_RADIUS; dz++) {
                     var pos = center.offset(dx, dy, dz);
                     var blockState = level.getBlockState(pos);
                     if (blockState.isAir()) continue;
                     double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     if (dist > NEARBY_BLOCK_RADIUS) continue;
-
                     b.addBlocks(BlockView.newBuilder()
-                        .setX(pos.getX())
-                        .setY(pos.getY())
-                        .setZ(pos.getZ())
+                        .setX(pos.getX()).setY(pos.getY()).setZ(pos.getZ())
                         .setBlockId(BuiltInRegistries.BLOCK.getKey(blockState.getBlock()).toString())
-                        .setDistance(dist)
-                        .build());
+                        .setDistance(dist).build());
                 }
-            }
-        }
-
         return b.build();
     }
 
     private static InventoryComponent buildInventory(Mob mob) {
         var b = InventoryComponent.newBuilder();
         int slot = 0;
-        for (EquipmentSlot equipmentSlot : EquipmentSlot.VALUES) {
-            if (!equipmentSlot.isArmor() && equipmentSlot != EquipmentSlot.MAINHAND && equipmentSlot != EquipmentSlot.OFFHAND)
-                continue;
-            var stack = mob.getItemBySlot(equipmentSlot);
-            if (!stack.isEmpty()) {
-                b.addSlots(buildItemView(stack, slot));
-            }
+        for (var eq : EquipmentSlot.VALUES) {
+            if (!eq.isArmor() && eq != EquipmentSlot.MAINHAND && eq != EquipmentSlot.OFFHAND) continue;
+            var stack = mob.getItemBySlot(eq);
+            if (!stack.isEmpty()) b.addSlots(buildItemView(stack, slot));
             slot++;
         }
         return b.build();
@@ -149,10 +125,7 @@ public class EntityObservationBuilder {
     private static ItemStackView buildItemView(ItemStack stack, int slot) {
         return ItemStackView.newBuilder()
             .setItemId(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
-            .setCount(stack.getCount())
-            .setSlot(slot)
-            .setEmpty(stack.isEmpty())
-            .build();
+            .setCount(stack.getCount()).setSlot(slot).setEmpty(stack.isEmpty()).build();
     }
 
     private static WorldStateComponent buildWorldState(Mob mob) {

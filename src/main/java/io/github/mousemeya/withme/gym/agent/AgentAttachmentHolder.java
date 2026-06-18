@@ -1,4 +1,4 @@
-package io.github.mousemeya.withme.agent;
+package io.github.mousemeya.withme.gym.agent;
 
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -11,7 +11,6 @@ public class AgentAttachmentHolder {
         DeferredRegister.create(NeoForgeRegistries.ATTACHMENT_TYPES, "withme");
 
     public final Supplier<AttachmentType<AgentControlState>> AGENT_STATE = DEFERRED_REGISTER.register(
-        "agent_control_state",
-        () -> AttachmentType.builder(AgentControlState::new).build()
+        "agent_control_state", () -> AttachmentType.builder(AgentControlState::new).build()
     );
 }

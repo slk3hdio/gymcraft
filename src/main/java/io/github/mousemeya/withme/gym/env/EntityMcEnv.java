@@ -1,13 +1,15 @@
-package io.github.mousemeya.withme.agent;
+package io.github.mousemeya.withme.gym.env;
 
+import io.github.mousemeya.withme.gym.action.EntityAgentController;
 import io.github.mousemeya.withme.gym.action.proto.McAction;
-import io.github.mousemeya.withme.gym.env.McEnv;
-import io.github.mousemeya.withme.gym.env.ResetResult;
-import io.github.mousemeya.withme.gym.env.StepResult;
+import io.github.mousemeya.withme.gym.agent.AgentControlState;
+import io.github.mousemeya.withme.gym.agent.AgentRegistry;
+import io.github.mousemeya.withme.gym.obs.EntityObservationBuilder;
 import io.github.mousemeya.withme.gym.observation.proto.McObservation;
 import io.github.mousemeya.withme.gym.space.ActionSpace;
 import io.github.mousemeya.withme.gym.space.McSpace;
 import io.github.mousemeya.withme.gym.space.ObservationSpace;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
@@ -43,9 +45,7 @@ public abstract class EntityMcEnv implements McEnv {
         if (server == null) return null;
         for (var level : server.getAllLevels()) {
             var entity = level.getEntity(entityUuid);
-            if (entity instanceof Mob mob && mob.isAlive()) {
-                return mob;
-            }
+            if (entity instanceof Mob mob && mob.isAlive()) return mob;
         }
         return null;
     }
@@ -94,7 +94,7 @@ public abstract class EntityMcEnv implements McEnv {
             return new StepResult(McObservation.getDefaultInstance(), 0, true, false, Map.of("reason", "agent not active"));
         }
 
-        EntityAgentController.apply(mob, action);
+        EntityAgentController.defaultController().apply(mob, action);
 
         var obs = EntityObservationBuilder.build(mob, agentId);
         state.latestObservation = obs;
@@ -103,22 +103,16 @@ public abstract class EntityMcEnv implements McEnv {
         boolean terminated = isTerminated(mob);
         boolean truncated = isTruncated(mob);
 
-        if (terminated || truncated) {
-            state.active = false;
-        }
+        if (terminated || truncated) state.active = false;
 
         return new StepResult(obs, reward, terminated, truncated, Map.of());
     }
 
     @Override
-    public McSpace<McAction> getActionSpace() {
-        return actionSpace;
-    }
+    public McSpace<McAction> getActionSpace() { return actionSpace; }
 
     @Override
-    public McSpace<McObservation> getObservationSpace() {
-        return observationSpace;
-    }
+    public McSpace<McObservation> getObservationSpace() { return observationSpace; }
 
     @Override
     public Map<String, Object> getMetadata() {
@@ -127,7 +121,7 @@ public abstract class EntityMcEnv implements McEnv {
             "entity_uuid", entityUuid.toString(),
             "env_type", getEnvType(),
             "entity_alive", mob != null && mob.isAlive(),
-            "entity_type", mob != null ? net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString() : "unknown"
+            "entity_type", mob != null ? BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString() : "unknown"
         );
     }
 
@@ -158,7 +152,5 @@ public abstract class EntityMcEnv implements McEnv {
     protected abstract boolean isTerminated(Mob mob);
     protected abstract boolean isTruncated(Mob mob);
 
-    public String getAgentId() {
-        return agentId;
-    }
+    public String getAgentId() { return agentId; }
 }

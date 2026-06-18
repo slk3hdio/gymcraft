@@ -1,6 +1,6 @@
 package io.github.mousemeya.withme.item;
 
-import io.github.mousemeya.withme.agent.AgentRegistry;
+import io.github.mousemeya.withme.gym.agent.AgentRegistry;
 import io.github.mousemeya.withme.command.AgentCommands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
@@ -42,7 +42,7 @@ public class AgentToolItem extends Item {
                 player.sendSystemMessage(Component.literal(String.format(
                     "Agent: %s | Env: %s | Active: %s",
                     env.getAgentId(),
-                    env instanceof io.github.mousemeya.withme.agent.NavigationEnv ? "navigation" : "combat",
+                    env instanceof io.github.mousemeya.withme.gym.env.NavigationEnv ? "navigation" : "combat",
                     state != null && state.active
                 )));
             } else {

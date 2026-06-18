@@ -1,5 +1,6 @@
-package io.github.mousemeya.withme.agent;
+package io.github.mousemeya.withme.gym.agent;
 
+import io.github.mousemeya.withme.gym.action.EntityAgentController;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 
@@ -36,7 +37,8 @@ public class AgentGoal extends Goal {
         var action = state.pendingAction;
         if (action != null) {
             state.pendingAction = null;
-            EntityAgentController.apply(mob, action);
+            var controller = EntityAgentController.defaultController();
+            controller.apply(mob, action);
         }
     }
 }

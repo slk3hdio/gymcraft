@@ -1,4 +1,4 @@
-package io.github.mousemeya.withme.agent;
+package io.github.mousemeya.withme.gym.env;
 
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
@@ -20,14 +20,11 @@ public class NavigationEnv extends EntityMcEnv {
     }
 
     @Override
-    protected String getEnvType() {
-        return "navigation";
-    }
+    protected String getEnvType() { return "navigation"; }
 
     @Override
     protected void onReset(Mob mob, Integer seed, Map<String, Object> options) {
         stepCount = 0;
-
         if (options != null && options.containsKey("goal_x")) {
             goalPosition = new Vec3(
                 ((Number) options.get("goal_x")).doubleValue(),
@@ -43,26 +40,18 @@ public class NavigationEnv extends EntityMcEnv {
     protected double computeReward(Mob mob) {
         stepCount++;
         if (goalPosition == null) return 0;
-
         double dist = mob.position().distanceTo(goalPosition);
         double reward = -dist * 0.01;
-
-        if (dist < 1.5) {
-            reward += 10.0;
-        }
-
+        if (dist < 1.5) reward += 10.0;
         reward -= 0.01;
         return reward;
     }
 
     @Override
     protected boolean isTerminated(Mob mob) {
-        return !mob.isAlive()
-            || (goalPosition != null && mob.position().distanceTo(goalPosition) < 1.5);
+        return !mob.isAlive() || (goalPosition != null && mob.position().distanceTo(goalPosition) < 1.5);
     }
 
     @Override
-    protected boolean isTruncated(Mob mob) {
-        return stepCount > 1200;
-    }
+    protected boolean isTruncated(Mob mob) { return stepCount > 1200; }
 }

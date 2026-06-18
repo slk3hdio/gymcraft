@@ -1,6 +1,6 @@
 package io.github.mousemeya.withme;
 
-import io.github.mousemeya.withme.agent.AgentAttachmentHolder;
+import io.github.mousemeya.withme.gym.agent.AgentAttachmentHolder;
 import io.github.mousemeya.withme.command.AgentCommands;
 import io.github.mousemeya.withme.event.AgentEvents;
 import io.github.mousemeya.withme.item.AgentToolItem;

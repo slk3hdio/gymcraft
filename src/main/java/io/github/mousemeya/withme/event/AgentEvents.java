@@ -1,7 +1,7 @@
 package io.github.mousemeya.withme.event;
 
-import io.github.mousemeya.withme.agent.AgentGoal;
-import io.github.mousemeya.withme.agent.AgentRegistry;
+import io.github.mousemeya.withme.gym.agent.AgentGoal;
+import io.github.mousemeya.withme.gym.agent.AgentRegistry;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;

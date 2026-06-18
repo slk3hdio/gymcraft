@@ -2,8 +2,8 @@ package io.github.mousemeya.withme.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
-import io.github.mousemeya.withme.agent.AgentGoal;
-import io.github.mousemeya.withme.agent.AgentRegistry;
+import io.github.mousemeya.withme.gym.agent.AgentGoal;
+import io.github.mousemeya.withme.gym.agent.AgentRegistry;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -132,7 +132,7 @@ public class AgentCommands {
         var info = Component.literal(String.format(
             "Agent: %s | Env: %s | Mode: %s | Active: %s | Target: %s",
             env.getAgentId(),
-            env instanceof io.github.mousemeya.withme.agent.NavigationEnv ? "navigation" : "combat",
+            env instanceof io.github.mousemeya.withme.gym.env.NavigationEnv ? "navigation" : "combat",
             state != null ? state.controlMode.name() : "?",
             state != null && state.active,
             mob.getTarget() != null ? mob.getTarget().getName().getString() : "none"
