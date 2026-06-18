@@ -18,13 +18,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * 基于实体的 RL 环境抽象基类，实现 {@link McEnv} 接口。
+ * <p>
+ * 将 Gymnasium 的 Env 概念绑定到一个具体的 Minecraft Mob 实体上，
+ * 提供通用的 reset/step 流程，子类只需实现奖励计算、终止判断等策略方法。
+ * <p>
+ * 工厂方法 {@link #create(String, UUID)} 根据环境类型创建对应子类实例
+ * （目前支持 "navigation" 和 "combat"）。
+ */
 public abstract class EntityMcEnv implements McEnv {
 
-    protected final UUID entityUuid;
-    protected final String agentId;
-    protected final ActionSpace actionSpace;
-    protected final ObservationSpace observationSpace;
-    private boolean closed;
+    protected final UUID entityUuid;   // 绑定的 Mob 实体 UUID
+    protected final String agentId;    // 智能体标识符，格式为 "agent-<uuid前8位>"
+    protected final ActionSpace actionSpace;        // 动作空间定义
+    protected final ObservationSpace observationSpace;  // 观测空间定义
+    private boolean closed;  // 环境是否已关闭
 
     protected EntityMcEnv(UUID entityUuid, List<String> actionKeys, List<String> obsKeys) {
         this.entityUuid = entityUuid;
@@ -33,6 +42,7 @@ public abstract class EntityMcEnv implements McEnv {
         this.observationSpace = new ObservationSpace(obsKeys);
     }
 
+    /** 工厂方法：根据环境类型字符串创建对应的环境实例 */
     public static EntityMcEnv create(String envType, UUID entityUuid) {
         return switch (envType) {
             case "combat" -> new CombatEnv(entityUuid);
@@ -40,6 +50,7 @@ public abstract class EntityMcEnv implements McEnv {
         };
     }
 
+    /** 在所有已加载的维度中查找目标实体 */
     protected Mob findEntity() {
         var server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) return null;
@@ -131,6 +142,7 @@ public abstract class EntityMcEnv implements McEnv {
         releaseEntity();
     }
 
+    /** 释放实体控制：停止导航、清除攻击目标、重置控制状态 */
     public void releaseEntity() {
         var mob = findEntity();
         if (mob != null) {
@@ -146,10 +158,15 @@ public abstract class EntityMcEnv implements McEnv {
         }
     }
 
+    /** 返回环境类型标识符（如 "navigation"、"combat"） */
     protected abstract String getEnvType();
+    /** 环境重置时的子类自定义逻辑 */
     protected abstract void onReset(Mob mob, Integer seed, Map<String, Object> options);
+    /** 计算当前步的奖励值 */
     protected abstract double computeReward(Mob mob);
+    /** 判断回合是否因达成目标而终止 */
     protected abstract boolean isTerminated(Mob mob);
+    /** 判断回合是否因超时等原因被截断 */
     protected abstract boolean isTruncated(Mob mob);
 
     public String getAgentId() { return agentId; }

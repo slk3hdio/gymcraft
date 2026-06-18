@@ -59,8 +59,10 @@ public class WithMe {
     public static final DeferredItem<Item> EXAMPLE_ITEM = ITEMS.registerSimpleItem("example_item", p -> p.food(new FoodProperties.Builder()
             .alwaysEdible().nutrition(1).saturationModifier(2f).build()));
 
-    public static final DeferredItem<AgentToolItem> AGENT_TOOL = ITEMS.register("agent_tool",
-        () -> new AgentToolItem());
+    // 注册自定义物品 AgentToolItem，用于在游戏中将 RL 智能体绑定/解绑到 Mob 上
+    // 使用 registerItem 以确保框架自动将物品 ID 注入到 Item.Properties 中
+    public static final DeferredItem<AgentToolItem> AGENT_TOOL = ITEMS.registerItem("agent_tool",
+        AgentToolItem::new);
 
     // Creates a creative tab with the id "withme:example_tab" for the example item, that is placed after the combat tab
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()

@@ -9,6 +9,12 @@ import net.minecraft.world.entity.Mob;
 
 import java.util.UUID;
 
+/**
+ * "gym.set_attack_target" 动作处理器 —— 设置 Mob 的攻击目标。
+ * <p>
+ * 支持通过 UUID 或实体 ID 两种方式指定目标，
+ * 设置后更新 Mob 的 target 和 AgentControlState 中的 attackTargetUuid。
+ */
 public class SetAttackTargetHandler implements ActionHandler {
 
     @Override

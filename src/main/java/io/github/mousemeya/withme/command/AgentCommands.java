@@ -16,9 +16,20 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 import java.util.Map;
 
+/**
+ * 智能体管理命令，注册 {@code /agent} 命令树。
+ * <p>
+ * 提供以下子命令：
+ * <ul>
+ *   <li>{@code /agent attach <target> [env]} - 将指定类型的 RL 环境绑定到目标 Mob 上，默认为 navigation</li>
+ *   <li>{@code /agent detach <target>} - 从目标 Mob 上解绑智能体</li>
+ *   <li>{@code /agent info <target>} - 查看目标 Mob 的智能体状态信息</li>
+ * </ul>
+ */
 @EventBusSubscriber(modid = "withme")
 public class AgentCommands {
 
+    /** 监听命令注册事件，注册 /agent 命令树 */
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         var dispatcher = event.getDispatcher();
@@ -52,6 +63,7 @@ public class AgentCommands {
         );
     }
 
+    /** 执行 attach 子命令：创建智能体会话、重置环境、注入 AgentGoal */
     private static int attach(CommandContext<CommandSourceStack> ctx, String envType) {
         var source = ctx.getSource();
         Entity target;
@@ -82,6 +94,7 @@ public class AgentCommands {
         return 1;
     }
 
+    /** 执行 detach 子命令：释放智能体会话 */
     private static int detach(CommandContext<CommandSourceStack> ctx) {
         var source = ctx.getSource();
         Entity target;
@@ -107,6 +120,7 @@ public class AgentCommands {
         return 1;
     }
 
+    /** 执行 info 子命令：查询并显示智能体的当前状态 */
     private static int info(CommandContext<CommandSourceStack> ctx) {
         var source = ctx.getSource();
         Entity target;
@@ -141,6 +155,7 @@ public class AgentCommands {
         return 1;
     }
 
+    /** 向 Mob 的 goalSelector 注入 AgentGoal（优先级 0），替换已有的同类 Goal */
     public static void injectGoal(Mob mob) {
         mob.goalSelector.removeAllGoals(goal -> goal instanceof AgentGoal);
         mob.goalSelector.addGoal(0, new AgentGoal(mob));

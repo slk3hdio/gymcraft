@@ -14,9 +14,21 @@ import net.minecraft.world.item.Rarity;
 
 import java.util.Map;
 
+/**
+ * 智能体工具物品，用于在游戏中通过右键点击 Mob 来管理 RL 智能体。
+ * <p>
+ * 使用方式：
+ * <ul>
+ *   <li>右键点击 Mob：如果该 Mob 没有挂载智能体，则绑定一个导航环境（NavigationEnv）智能体；
+ *       如果已有智能体，则显示当前智能体状态信息。</li>
+ *   <li>Shift+右键点击 Mob：解绑已挂载的智能体。</li>
+ * </ul>
+ * <p>
+ * 该物品不可堆叠，品质为 EPIC（紫色名称），游戏中使用木棍的外观模型。
+ */
 public class AgentToolItem extends Item {
-    public AgentToolItem() {
-        super(new Properties().stacksTo(1).rarity(Rarity.EPIC));
+    public AgentToolItem(Properties properties) {
+        super(properties.stacksTo(1).rarity(Rarity.EPIC));
     }
 
     @Override
