@@ -14,13 +14,8 @@ import java.util.Map;
 /**
  * 单次攻击组件 —— 对目标实体执行一次近战攻击。
  * <p>
- * 参数空间（DictSpace）：
- * <ul>
- *   <li>{@code target_entity_id} —— 目标实体 ID</li>
- * </ul>
- * 如果组件中未指定目标，则回退使用 Mob 当前的攻击目标 {@link net.minecraft.world.entity.Mob#getTarget()}。
- * 仅在 {@link net.minecraft.world.entity.Mob#isWithinMeleeAttackRange(LivingEntity)} 范围内时才会执行攻击，
- * 避免远距离的无意义攻击尝试。
+ * 如果组件中未指定目标 ID，则回退使用 Mob 当前的攻击目标。
+ * 仅在近战攻击范围内才实际执行攻击。
  * </p>
  */
 public class AttackOnceActionComponent implements ActionComponent<AttackOnceComponent> {

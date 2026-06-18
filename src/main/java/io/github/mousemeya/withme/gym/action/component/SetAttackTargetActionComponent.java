@@ -17,13 +17,8 @@ import java.util.UUID;
 /**
  * 设置攻击目标组件 —— 为 Mob 指定攻击目标实体。
  * <p>
- * 参数空间（DictSpace）：
- * <ul>
- *   <li>{@code target_uuid} —— 目标的 UUID 字符串，推荐方式</li>
- *   <li>{@code target_entity_id} —— 目标的实体 ID（int），旧式标识</li>
- * </ul>
- * 通过 UUID 查找实体时需在 ServerLevel 中遍历；通过 entity_id 时可在当前维度直接获取。
- * apply() 在设置成功后同时更新 AgentControlState 中的 attackTargetUuid。
+ * 支持通过 UUID 或实体 ID 两种方式指定目标。通过 UUID 查找时会在所有已加载维度中搜索。
+ * apply() 同时更新 Mob 的 target 和 AgentControlState 中的 attackTargetUuid。
  * </p>
  */
 public class SetAttackTargetActionComponent implements ActionComponent<SetAttackTargetComponent> {

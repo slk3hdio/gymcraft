@@ -15,15 +15,9 @@ import java.util.Map;
 /**
  * 寻路动作组件 —— 使用 Minecraft Mob 的 Navigation API 将实体导航到指定三维坐标。
  * <p>
- * 参数空间（DictSpace）：
- * <ul>
- *   <li>{@code x/y/z} —— 目标位置，范围覆盖整个 Minecraft 世界边界</li>
- *   <li>{@code speed_modifier} —— 移动速度修正值，0 表示使用默认移动速度</li>
- *   <li>{@code stop_distance} —— 停止距离，到达该距离内视为抵达</li>
- *   <li>{@code timeout_ticks} —— 寻路超时（游戏刻）</li>
- * </ul>
  * apply() 会更新 AgentControlState 中的 moveTarget 字段，
- * 同时调用 mob.getNavigation().moveTo() 启动 NPC 寻路系统。
+ * 并调用 mob.getNavigation().moveTo() 启动 NPC 寻路系统。
+ * 参数空间包含坐标、速度修正值、停止距离和超时时间。
  * </p>
  */
 public class MoveToActionComponent implements ActionComponent<MoveToComponent> {

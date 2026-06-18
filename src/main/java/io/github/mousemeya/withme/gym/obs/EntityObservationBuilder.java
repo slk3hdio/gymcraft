@@ -13,10 +13,8 @@ import java.util.List;
 /**
  * 观测构建组合器 —— 不包含任何具体观测逻辑的通用构建器。
  * <p>
- * 接收一组 {@link ObservationComponent}，在 {@link #build(Mob, String)} 时依次调用
- * 每个组件的 build() 方法，将返回的 Protobuf 消息通过 Any 打包后放入最终的
- * {@link McObservation}。新增观测维度只需新增一个 ObservationComponent 实现，
- * 并在对应环境的构造函数中传入即可。
+ * 在 build() 时依次调用每个组件的 build() 方法，
+ * 将返回的 Protobuf 消息通过 Any 打包后放入最终的 McObservation。
  * </p>
  */
 public class EntityObservationBuilder {
@@ -26,6 +24,7 @@ public class EntityObservationBuilder {
         this.components = List.copyOf(components);
     }
 
+    /** 构建完整的 McObservation 消息，包含 header 和所有注册的观测组件。 */
     public McObservation build(Mob mob, String agentId) {
         var level = mob.level();
         long gameTick = level.getGameTime();

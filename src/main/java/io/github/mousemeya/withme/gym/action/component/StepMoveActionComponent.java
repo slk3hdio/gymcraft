@@ -11,17 +11,10 @@ import net.minecraft.world.entity.Mob;
 import java.util.Map;
 
 /**
- * 单步移动控制组件 —— 在每个 tick 中直接操作 Mob 的姿态和位移，而非通过 Navigation API。
+ * 单步移动控制组件 —— 在每个 tick 中直接操作 Mob 的姿态和位移。
  * <p>
- * 参数空间（DictSpace）：
- * <ul>
- *   <li>{@code forward} —— 前进/后退量 [-1, 1]</li>
- *   <li>{@code strafe_right} —— 右移/左移量 [-1, 1]</li>
- *   <li>{@code yaw_delta} —— 偏航角增量（度）[-180, 180]</li>
- *   <li>{@code pitch_delta} —— 俯仰角增量（度）[-90, 90]</li>
- *   <li>{@code jump} —— 是否跳跃</li>
- * </ul>
- * 此组件适用于需要帧级精细控制的场景（如强化学习中的连续控制策略）。
+ * 适用于需要帧级精细控制的场景（如强化学习中的连续控制策略）。
+ * 与 MoveToActionComponent 的路径规划不同，此组件直接控制移动、跳跃和视角。
  * </p>
  */
 public class StepMoveActionComponent implements ActionComponent<StepMoveComponent> {

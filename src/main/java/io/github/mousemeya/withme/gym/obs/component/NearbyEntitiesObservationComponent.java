@@ -18,12 +18,10 @@ import net.minecraft.world.phys.AABB;
 import java.util.Map;
 
 /**
- * 附近实体观测组件 —— 扫描 Mob 周围 {@value #RADIUS} 格内的所有 {@link LivingEntity}。
+ * 附近实体观测组件 —— 扫描 Mob 周围 16 格内的所有 {@link LivingEntity}。
  * <p>
- * 输出为 {@link NearbyEntitiesComponent}，包含一个 {@link EntityView} 的重复字段列表。
- * 每个 EntityView 记录：实体的 ID、UUID、类型、坐标、距离、是否敌对、是否盟友、
- * 是否为玩家等属性。
- * 扫描使用 AABB 批量查询 {@code level.getEntitiesOfClass()}，性能为 O(n)。
+ * 每个 EntityView 记录：实体 ID、UUID、类型、坐标、距离、敌对/盟友标志等。
+ * 使用 AABB 批量查询 {@code level.getEntitiesOfClass()}。
  * </p>
  */
 public class NearbyEntitiesObservationComponent implements ObservationComponent<NearbyEntitiesComponent> {
@@ -52,6 +50,7 @@ public class NearbyEntitiesObservationComponent implements ObservationComponent<
         return component != null && component.getEntitiesCount() <= 512;
     }
 
+    /** 扫描 AABB 范围内的所有 LivingEntity，构建实体观测列表。 */
     @Override
     public NearbyEntitiesComponent build(Mob mob, AgentControlState state, ObservationContext context) {
         var builder = NearbyEntitiesComponent.newBuilder();

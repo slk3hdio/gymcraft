@@ -16,18 +16,14 @@ import java.util.Map;
 /**
  * 动作空间 —— 对 {@link McAction} 的组合空间封装，实现 {@link McSpace} 接口。
  * <p>
- * 内部维护一个 {@code Map<String, ActionComponent>} 的不可变映射，
  * 所有组件的 schema、校验、采样逻辑完全委托给各个 {@link ActionComponent} 实现。
- * 核心层不需要知道任何具体动作类型，新增动作只需注册新的 ActionComponent 实现。
- * </p>
- * <p>
- * 构造时通过 {@link #componentId(ActionComponent)} 从 NeoForge 注册表中获取正式 key 用于映射。
- * serialize() 输出格式为 {@code {type: "mc_action", components: {key: {space}, ...}}}。
+ * 核心层不需要知道任何具体动作类型。
  * </p>
  */
 public class McActionSpace implements McSpace<McAction> {
     private final Map<String, ActionComponent<?>> components;
 
+    /** @param components 该空间包含的所有动作组件实例 */
     public McActionSpace(Collection<ActionComponent<?>> components) {
         var map = new LinkedHashMap<String, ActionComponent<?>>();
         for (var component : components) {
@@ -41,6 +37,7 @@ public class McActionSpace implements McSpace<McAction> {
         return McAction.getDefaultInstance();
     }
 
+    /** 校验 McAction 中的所有组件是否都在该空间中且参数合法。 */
     @Override
     public boolean contains(McAction value) {
         if (value == null) return false;
@@ -69,6 +66,7 @@ public class McActionSpace implements McSpace<McAction> {
         return components;
     }
 
+    /** 从 NeoForge 注册表中获取动作组件的正式注册表 ID 字符串。 */
     public static String componentId(ActionComponent<?> component) {
         Identifier key = RegistryKeys.ACTION_COMPONENTS.getKey(component);
         if (key == null) {
@@ -77,6 +75,7 @@ public class McActionSpace implements McSpace<McAction> {
         return key.toString();
     }
 
+    /** 解包 Any 后委托组件自身的 contains() 做参数校验。 */
     private static <T extends Message> boolean containsComponent(ActionComponent<T> component, Any any) {
         if (!any.is(component.protoType())) return false;
         try {

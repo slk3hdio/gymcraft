@@ -15,11 +15,10 @@ import net.minecraft.world.entity.Mob;
 import java.util.Map;
 
 /**
- * 附近方块观测组件 —— 扫描 Mob 周围 {@value #RADIUS} 格内的所有非空气方块。
+ * 附近方块观测组件 —— 扫描 Mob 周围 8 格内的所有非空气方块。
  * <p>
- * 输出为 {@link NearbyBlocksComponent}，包含 {@link BlockView} 的重复字段列表。
- * 每个 BlockView 记录：方块坐标、方块 ID（如 minecraft:stone）、与 Mob 的距离。
- * 扫描算法使用三重嵌套循环遍历三维立方体范围，跳过空气方块以降低带宽。
+ * 每个 BlockView 记录：方块坐标、方块 ID、与 Mob 的距离。
+ * 跳过空气方块以降低数据传输量。
  * </p>
  */
 public class NearbyBlocksObservationComponent implements ObservationComponent<NearbyBlocksComponent> {
@@ -48,6 +47,7 @@ public class NearbyBlocksObservationComponent implements ObservationComponent<Ne
         return component != null && component.getBlocksCount() <= 4096;
     }
 
+    /** 遍历三维范围，收集非空气方块的坐标、ID 和距离。 */
     @Override
     public NearbyBlocksComponent build(Mob mob, AgentControlState state, ObservationContext context) {
         var builder = NearbyBlocksComponent.newBuilder();

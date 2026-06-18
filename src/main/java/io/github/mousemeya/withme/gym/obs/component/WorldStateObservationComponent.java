@@ -16,14 +16,8 @@ import java.util.Map;
 /**
  * 世界状态观测组件 —— 获取 Mob 所在维度的全局环境信息。
  * <p>
- * 输出为 {@link WorldStateComponent}，包含以下字段：
- * <ul>
- *   <li>{@code day_time} —— 当前游戏刻（不是实际时间）</li>
- *   <li>{@code raining} —— 是否正在下雨</li>
- *   <li>{@code thundering} —— 是否正在打雷</li>
- *   <li>{@code dimension} —— 维度 ID（如 minecraft:overworld）</li>
- * </ul>
- * 这些信息不依赖 Mob 自身状态，同一 tick 内所有 Mob 的观测结果相同。
+ * 输出维度 ID、游戏刻、天气状态等。这些信息与 Mob 自身状态无关，
+ * 同一 tick 内所有 Mob 的观测结果相同。
  * </p>
  */
 public class WorldStateObservationComponent implements ObservationComponent<WorldStateComponent> {
@@ -54,6 +48,7 @@ public class WorldStateObservationComponent implements ObservationComponent<Worl
         return component != null && component.getDayTime() >= 0;
     }
 
+    /** 从当前维度读取时间、天气和维度 ID。 */
     @Override
     public WorldStateComponent build(Mob mob, AgentControlState state, ObservationContext context) {
         var level = mob.level();

@@ -12,16 +12,6 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  * 挂载到 {@link RegistryKeys#ENV_FACTORIES} 注册表上。
  * <p>
  * 每个环境类型通过注册表 ID（如 {@code withme:navigation}）唯一标识。
- * {@link io.github.mousemeya.withme.gym.env.McEnvFactories#create(String, java.util.UUID)}
- * 通过此注册表查找工厂并创建环境实例。
- * </p>
- * <p>
- * 新增环境类型的步骤：
- * <ol>
- *   <li>创建继承 {@code EntityMcEnv} 的环境实现类</li>
- *   <li>实现 {@code McEnvFactory} 接口或其方法引用（如 {@code NavigationEnv::new}）</li>
- *   <li>在此类中新增一个 {@code DeferredHolder} 字段</li>
- * </ol>
  * </p>
  */
 public final class EnvFactories {

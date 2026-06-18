@@ -17,19 +17,14 @@ import java.util.Map;
 /**
  * 观测空间 —— 对 {@link McObservation} 的组合空间封装，实现 {@link McSpace} 接口。
  * <p>
- * 内部维护一个 {@code Map<String, ObservationComponent>} 的不可变映射，
  * 所有组件的 schema 和校验完全委托给各个 {@link ObservationComponent} 实现。
- * 核心层不需要知道任何具体观测组件类型。
- * </p>
- * <p>
- * sample() 会为每个注册的观测组件生成一个默认样本并封装为完整的 McObservation 消息。
- * serialize() 输出结构为 {@code {type: "mc_observation", components: {key: {space}, ...}}}。
- * contains() 校验时需要每个组件的 Any 消息能被正确解包并通过组件自身的验证。
+ * sample() 会为每个注册的观测组件生成默认样本。
  * </p>
  */
 public class McObservationSpace implements McSpace<McObservation> {
     private final Map<String, ObservationComponent<?>> components;
 
+    /** @param components 该空间包含的所有观测组件实例 */
     public McObservationSpace(Collection<ObservationComponent<?>> components) {
         var map = new LinkedHashMap<String, ObservationComponent<?>>();
         for (var component : components) {
@@ -48,6 +43,7 @@ public class McObservationSpace implements McSpace<McObservation> {
         return builder.build();
     }
 
+    /** 校验 McObservation 中的所有组件是否都在该空间中且值合法。 */
     @Override
     public boolean contains(McObservation value) {
         if (value == null) return false;
@@ -76,6 +72,7 @@ public class McObservationSpace implements McSpace<McObservation> {
         return components;
     }
 
+    /** 从 NeoForge 注册表中获取观测组件的正式注册表 ID 字符串。 */
     public static String componentId(ObservationComponent<?> component) {
         Identifier key = RegistryKeys.OBSERVATION_COMPONENTS.getKey(component);
         if (key == null) {
@@ -84,6 +81,7 @@ public class McObservationSpace implements McSpace<McObservation> {
         return key.toString();
     }
 
+    /** 解包 Any 后委托组件自身的 contains() 做参数校验。 */
     private static <T extends Message> boolean containsComponent(ObservationComponent<T> component, Any any) {
         if (!any.is(component.protoType())) return false;
         try {

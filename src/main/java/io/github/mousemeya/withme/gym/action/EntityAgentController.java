@@ -17,15 +17,7 @@ import java.util.Map;
  * 动作分发器 —— 解析 {@link McAction} 中每个动作组件，按注册表 ID 分发给对应的
  * {@link ActionComponent} 执行。
  * <p>
- * 分发流程：
- * <ol>
- *   <li>遍历 McAction.components 中的每个 entry</li>
- *   <li>以 entry 的 key（注册表 ID，如 {@code withme:move_to}）查找本地组件映射</li>
- *   <li>用组件的 {@code protoType()} 校验 Any 消息类型是否匹配</li>
- *   <li>解包后调用组件的 {@code contains()} 参数校验</li>
- *   <li>校验通过后调用组件的 {@code apply()} 执行实际动作</li>
- * </ol>
- * 任意步骤失败时仅打印 debug 日志并跳过该组件，不影响其他组件的执行。
+ * 校验流程：类型匹配 → 参数合法性 → 执行；任意步骤失败仅跳过，不影响其他组件。
  * </p>
  */
 public class EntityAgentController {
@@ -33,6 +25,7 @@ public class EntityAgentController {
 
     private final Map<String, ActionComponent<?>> components;
 
+    /** @param components 该控制器可处理的所有动作组件实例 */
     public EntityAgentController(Collection<ActionComponent<?>> components) {
         var map = new LinkedHashMap<String, ActionComponent<?>>();
         for (var component : components) {
@@ -41,6 +34,7 @@ public class EntityAgentController {
         this.components = Map.copyOf(map);
     }
 
+    /** 将 McAction 中的所有组件依次分发执行。 */
     public void apply(Mob mob, McAction action) {
         if (action == null || action.getComponentsCount() == 0) return;
 
@@ -62,6 +56,7 @@ public class EntityAgentController {
         return key.toString();
     }
 
+    /** 对单个动作组件执行类型校验、参数校验和执行。 */
     private static <T extends Message> void applyComponent(ActionComponent<T> component, Mob mob, Any any, String key) {
         if (!any.is(component.protoType())) {
             LOGGER.debug("Action component {} has unexpected payload type", key);

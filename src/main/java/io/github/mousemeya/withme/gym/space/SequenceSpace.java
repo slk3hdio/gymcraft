@@ -8,9 +8,7 @@ import java.util.Map;
  * 序列空间 —— 对应 Gymnasium 中未直接提供的可变长度列表空间。
  * <p>
  * 用于描述 protobuf 中的 repeated 字段，如 nearby_entities、nearby_blocks、inventory slots 等。
- * 内部维护一个元素空间 {@code elementSpace} 和最大长度限制 {@code maxLength}，
- * contains() 依次校验列表长度不超过上限且每个元素均通过 elementSpace 的校验。
- * sample() 返回空列表，符合序列空间的采样安全约定。
+ * 内部维护一个元素空间和最大长度限制。
  * </p>
  *
  * @param <T> 序列中元素的类型
@@ -19,6 +17,10 @@ public class SequenceSpace<T> implements McSpace<List<T>> {
     private final McSpace<T> elementSpace;
     private final int maxLength;
 
+    /**
+     * @param elementSpace 序列元素的类型空间
+     * @param maxLength    序列最大允许长度
+     */
     public SequenceSpace(McSpace<T> elementSpace, int maxLength) {
         if (elementSpace == null) {
             throw new IllegalArgumentException("elementSpace must not be null");

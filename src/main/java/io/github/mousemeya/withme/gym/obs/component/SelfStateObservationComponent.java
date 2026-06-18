@@ -17,19 +17,8 @@ import java.util.Map;
 /**
  * 自身状态观测组件 —— 构建 {@link SelfStateComponent}，包含 Mob 实体的基础属性快照。
  * <p>
- * 输出字段（空间描述符 DictSpace 中的 key）：
- * <ul>
- *   <li>{@code entity_type} —— 实体类型注册表 ID（如 minecraft:zombie）</li>
- *   <li>{@code uuid} —— 实体的 UUID 字符串</li>
- *   <li>{@code health/max_health} —— 当前生命值与最大生命值</li>
- *   <li>{@code position} —— 三维坐标 [x, y, z]</li>
- *   <li>{@code velocity} —— 速度向量 [vx, vy, vz]</li>
- *   <li>{@code yaw/pitch} —— 偏航角与俯仰角（度）</li>
- *   <li>{@code on_ground/in_water/in_lava/alive} —— 状态标志</li>
- *   <li>{@code navigating/at_target} —— 导航状态（来自 AgentControlState）</li>
- *   <li>{@code target_entity_id} —— 当前攻击目标的实体 ID</li>
- *   <li>{@code control_mode} —— 控制模式（observe/own_flags）</li>
- * </ul>
+ * 输出：实体类型、UUID、生命值、位置、速度、姿态、标志位（地面/水中/熔岩/存活）、
+ * 导航状态和当前攻击目标 ID。
  * </p>
  */
 public class SelfStateObservationComponent implements ObservationComponent<SelfStateComponent> {
@@ -82,6 +71,7 @@ public class SelfStateObservationComponent implements ObservationComponent<SelfS
             && Float.isFinite(component.getPitch());
     }
 
+    /** 从 Mob 的当前位置、状态和 AgentControlState 构建自身状态。 */
     @Override
     public SelfStateComponent build(Mob mob, AgentControlState state, ObservationContext context) {
         var builder = SelfStateComponent.newBuilder()

@@ -17,12 +17,10 @@ import net.minecraft.world.item.ItemStack;
 import java.util.Map;
 
 /**
- * 装备与手持物品观测组件 —— 读取 Mob 所有盔甲槽位和手持物品（主手/副手）。
+ * 装备与手持物品观测组件 —— 读取 Mob 所有盔甲槽位和手持物品。
  * <p>
- * 输出为 {@link InventoryComponent}，包含 {@link ItemStackView} 的重复字段列表。
- * 每个 ItemStackView 记录：物品 ID（如 minecraft:diamond_sword）、
- * 数量、槽位索引、是否为空。
- * 仅遍历非空物品槽位以减少数据量，最多输出 8 个槽位。
+ * 仅遍历非空物品槽位，最多输出 8 个槽位。
+ * 每个 ItemStackView 记录：物品 ID、数量、槽位索引、是否为空。
  * </p>
  */
 public class InventoryObservationComponent implements ObservationComponent<InventoryComponent> {
@@ -50,6 +48,7 @@ public class InventoryObservationComponent implements ObservationComponent<Inven
         return component != null && component.getSlotsCount() <= 8;
     }
 
+    /** 遍历 EquipmentSlot 构建非空物品槽位的观测。 */
     @Override
     public InventoryComponent build(Mob mob, AgentControlState state, ObservationContext context) {
         var builder = InventoryComponent.newBuilder();

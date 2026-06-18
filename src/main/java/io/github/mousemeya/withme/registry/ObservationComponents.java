@@ -17,14 +17,6 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  * 所有观测组件基于注册表 ID（如 {@code withme:self}）在运行时唯一标识。
  * 环境构造时引用这些 {@link DeferredHolder} 来获取组件实例并组合成观测空间。
  * </p>
- * <p>
- * 新增观测组件的步骤：
- * <ol>
- *   <li>创建实现 {@code ObservationComponent<T>} 的类</li>
- *   <li>在此类中新增一个 {@code DeferredHolder} 字段</li>
- *   <li>在环境构造器中组合到对应的 observationComponents 列表</li>
- * </ol>
- * </p>
  */
 public final class ObservationComponents {
     public static final DeferredRegister<ObservationComponent<?>> REGISTRY = DeferredRegister.create(
