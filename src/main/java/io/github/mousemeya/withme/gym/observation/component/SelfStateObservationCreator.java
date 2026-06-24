@@ -1,28 +1,27 @@
 package io.github.mousemeya.withme.gym.observation.component;
 
-import io.github.mousemeya.withme.gym.agent.AgentControlState;
+import java.util.Optional;
+import java.util.Map;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.Mob;
+
 import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
-import io.github.mousemeya.withme.gym.observation.ObservationContext;
-import io.github.mousemeya.withme.gym.observationervation.proto.SelfStateComponent;
+import io.github.mousemeya.withme.gym.observation.proto.ProtoSelfState;
 import io.github.mousemeya.withme.gym.space.BooleanSpace;
 import io.github.mousemeya.withme.gym.space.BoxSpace;
 import io.github.mousemeya.withme.gym.space.DictSpace;
 import io.github.mousemeya.withme.gym.space.McSpace;
 import io.github.mousemeya.withme.gym.space.TextSpace;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.entity.Mob;
-
-import java.util.Map;
 
 /**
- * 自身状态观测组件 —— 构建 {@link SelfStateComponent}，包含 Mob 实体的基础属性快照。
+ * 自身状态观测组件 —— 构建 {@link ProtoSelfState}，包含 Mob 实体的基础属性快照。
  * <p>
- * 输出：实体类型、UUID、生命值、位置、速度、姿态、标志位（地面/水中/熔岩/存活）、
- * 导航状态和当前攻击目标 ID。
+ * 输出：实体类型、UUID、生命值、位置、速度、姿态、标志位（地面/水中/熔岩/存活）和当前攻击目标 ID。
  * </p>
  */
-public class SelfStateObservationComponent implements ObservationComponentCreator<SelfStateComponent> {
-    private static final McSpace<?> SPACE = new DictSpace(Map.ofEntries(
+public class SelfStateObservationCreator implements ObservationComponentCreator<ProtoSelfState> {
+    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.ofEntries(
         Map.entry("entity_type", new TextSpace()),
         Map.entry("uuid", new TextSpace()),
         Map.entry("health", new BoxSpace(0, 2048, 1)),
@@ -39,25 +38,30 @@ public class SelfStateObservationComponent implements ObservationComponentCreato
         Map.entry("at_target", new BooleanSpace()),
         Map.entry("target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)),
         Map.entry("control_mode", new TextSpace())
-    ));
+    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private final McSpace<Map<String, Object>> space;
 
-    @Override
-    public Class<SelfStateComponent> protoType() {
-        return SelfStateComponent.class;
+    public SelfStateObservationCreator(Optional<McSpace<Map<String, Object>>> space) {
+        this.space = space.orElse(DEFAULT_SPACE);
     }
 
     @Override
-    public McSpace<?> space() {
-        return SPACE;
+    public Class<ProtoSelfState> protoType() {
+        return ProtoSelfState.class;
     }
 
     @Override
-    public SelfStateComponent sample() {
-        return SelfStateComponent.getDefaultInstance();
+    public McSpace<Map<String, Object>> space() {
+        return space;
     }
 
     @Override
-    public boolean contains(SelfStateComponent component) {
+    public ProtoSelfState sample() {
+        return ProtoSelfState.getDefaultInstance();
+    }
+
+    @Override
+    public boolean contains(ProtoSelfState component) {
         return component != null
             && component.getHealth() >= 0
             && component.getMaxHealth() >= 0
@@ -71,10 +75,9 @@ public class SelfStateObservationComponent implements ObservationComponentCreato
             && Float.isFinite(component.getPitch());
     }
 
-    /** 从 Mob 的当前位置、状态和 AgentControlState 构建自身状态。 */
     @Override
-    public SelfStateComponent build(Mob mob, AgentControlState state, ObservationContext context) {
-        var builder = SelfStateComponent.newBuilder()
+    public ProtoSelfState create(Mob mob) {
+        var builder = ProtoSelfState.newBuilder()
             .setEntityType(BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString())
             .setUuid(mob.getUUID().toString())
             .setHealth(mob.getHealth())
@@ -88,13 +91,8 @@ public class SelfStateObservationComponent implements ObservationComponentCreato
             .setInWater(mob.isInWater())
             .setInLava(mob.isInLava())
             .setAlive(mob.isAlive());
-
-        if (state != null) {
-            builder.setNavigating(state.moveTarget != null);
-            builder.setAtTarget(state.moveTarget != null
-                && mob.blockPosition().distToCenterSqr(state.moveTarget.x, state.moveTarget.y, state.moveTarget.z) < 2.0);
-            if (mob.getTarget() != null) builder.setTargetEntityId(mob.getTarget().getId());
-            builder.setControlMode(state.controlMode.name().toLowerCase());
+        if (mob.getTarget() != null) {
+            builder.setTargetEntityId(mob.getTarget().getId());
         }
         return builder.build();
     }

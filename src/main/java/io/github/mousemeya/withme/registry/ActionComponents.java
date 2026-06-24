@@ -1,5 +1,7 @@
 package io.github.mousemeya.withme.registry;
 
+import java.util.Optional;
+
 import io.github.mousemeya.withme.WithMe;
 import io.github.mousemeya.withme.gym.action.ActionComponentController;
 import io.github.mousemeya.withme.gym.action.component.AttackOnceController;
@@ -26,23 +28,23 @@ public final class ActionComponents {
 
     public static final DeferredHolder<ActionComponentController<?>, MoveToController> MOVE_TO = REGISTRY.register(
         "move_to",
-        MoveToController::new
+        () -> new MoveToController(Optional.empty())
     );
     public static final DeferredHolder<ActionComponentController<?>, StepMoveController> STEP_MOVE = REGISTRY.register(
         "step_move",
-        StepMoveController::new
+        () -> new StepMoveController(Optional.empty())
     );
     public static final DeferredHolder<ActionComponentController<?>, SetAttackTargetController> SET_ATTACK_TARGET = REGISTRY.register(
         "set_attack_target",
-        SetAttackTargetController::new
+        () -> new SetAttackTargetController(Optional.empty())
     );
     public static final DeferredHolder<ActionComponentController<?>, AttackOnceController> ATTACK_ONCE = REGISTRY.register(
         "attack_once",
-        AttackOnceController::new
+        () -> new AttackOnceController(Optional.empty())
     );
     public static final DeferredHolder<ActionComponentController<?>, NoopController> NOOP = REGISTRY.register(
         "noop",
-        NoopController::new
+        () -> new NoopController(Optional.empty())
     );
 
     private ActionComponents() {

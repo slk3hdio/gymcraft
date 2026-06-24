@@ -1,18 +1,18 @@
 package io.github.mousemeya.withme.gym.observation.component;
 
-import io.github.mousemeya.withme.gym.agent.AgentControlState;
+import java.util.Optional;
+import java.util.Map;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.Mob;
+
 import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
-import io.github.mousemeya.withme.gym.observation.ObservationContext;
 import io.github.mousemeya.withme.gym.observation.proto.BlockView;
-import io.github.mousemeya.withme.gym.observationervation.proto.NearbyBlocksComponent;
+import io.github.mousemeya.withme.gym.observation.proto.ProtoNearbyBlocks;
 import io.github.mousemeya.withme.gym.space.DictSpace;
 import io.github.mousemeya.withme.gym.space.McSpace;
 import io.github.mousemeya.withme.gym.space.SequenceSpace;
 import io.github.mousemeya.withme.gym.space.TextSpace;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.entity.Mob;
-
-import java.util.Map;
 
 /**
  * 附近方块观测组件 —— 扫描 Mob 周围 8 格内的所有非空气方块。
@@ -21,36 +21,40 @@ import java.util.Map;
  * 跳过空气方块以降低数据传输量。
  * </p>
  */
-public class NearbyBlocksObservationComponent implements ObservationComponentCreator<NearbyBlocksComponent> {
+public class NearbyBlocksObservationCreator implements ObservationComponentCreator<ProtoNearbyBlocks> {
     private static final int RADIUS = 8;
-    private static final McSpace<?> SPACE = new DictSpace(Map.of(
+    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "blocks", new SequenceSpace<>(new TextSpace(), 4096)
-    ));
+    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private final McSpace<Map<String, Object>> space;
 
-    @Override
-    public Class<NearbyBlocksComponent> protoType() {
-        return NearbyBlocksComponent.class;
+    public NearbyBlocksObservationCreator(Optional<McSpace<Map<String, Object>>> space) {
+        this.space = space.orElse(DEFAULT_SPACE);
     }
 
     @Override
-    public McSpace<?> space() {
-        return SPACE;
+    public Class<ProtoNearbyBlocks> protoType() {
+        return ProtoNearbyBlocks.class;
     }
 
     @Override
-    public NearbyBlocksComponent sample() {
-        return NearbyBlocksComponent.getDefaultInstance();
+    public McSpace<Map<String, Object>> space() {
+        return space;
     }
 
     @Override
-    public boolean contains(NearbyBlocksComponent component) {
+    public ProtoNearbyBlocks sample() {
+        return ProtoNearbyBlocks.getDefaultInstance();
+    }
+
+    @Override
+    public boolean contains(ProtoNearbyBlocks component) {
         return component != null && component.getBlocksCount() <= 4096;
     }
 
-    /** 遍历三维范围，收集非空气方块的坐标、ID 和距离。 */
     @Override
-    public NearbyBlocksComponent build(Mob mob, AgentControlState state, ObservationContext context) {
-        var builder = NearbyBlocksComponent.newBuilder();
+    public ProtoNearbyBlocks create(Mob mob) {
+        var builder = ProtoNearbyBlocks.newBuilder();
         var center = mob.blockPosition();
 
         for (int dx = -RADIUS; dx <= RADIUS; dx++) {

@@ -50,9 +50,9 @@ public class AgentRuntime {
     @SubscribeEvent
     private boolean AfterEntityTick(EntityTickEvent.Post event) {
         // 写入observation
-        if (runningAction != null && actionController.isDone(mob, runningAction)) {
-            pendingObservation = observationBuf.poll();
-        }
+        // if (runningAction != null && actionController.isDone(mob, runningAction)) {
+        //     pendingObservation = observationBuf.poll();
+        // }
         return true;
     }
 
@@ -75,6 +75,6 @@ public class AgentRuntime {
      * </strong>
      */
     public ProtoMcObservation takeObservation(ProtoMcObservation observation) {
-        
+        return null;
     }
 }

@@ -1,9 +1,7 @@
 package io.github.mousemeya.withme.registry;
 
 import io.github.mousemeya.withme.WithMe;
-import io.github.mousemeya.withme.gym.env.CombatEnv;
 import io.github.mousemeya.withme.gym.env.McEnvFactory;
-import io.github.mousemeya.withme.gym.env.NavigationEnv;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -18,15 +16,6 @@ public final class EnvFactories {
     public static final DeferredRegister<McEnvFactory> REGISTRY = DeferredRegister.create(
         RegistryKeys.ENV_FACTORIES,
         WithMe.MODID
-    );
-
-    public static final DeferredHolder<McEnvFactory, McEnvFactory> NAVIGATION = REGISTRY.register(
-        "navigation",
-        () -> NavigationEnv::new
-    );
-    public static final DeferredHolder<McEnvFactory, McEnvFactory> COMBAT = REGISTRY.register(
-        "combat",
-        () -> CombatEnv::new
     );
 
     private EnvFactories() {

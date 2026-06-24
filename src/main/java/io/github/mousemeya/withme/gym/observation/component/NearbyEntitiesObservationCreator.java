@@ -1,65 +1,69 @@
 package io.github.mousemeya.withme.gym.observation.component;
 
-import io.github.mousemeya.withme.gym.agent.AgentControlState;
-import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
-import io.github.mousemeya.withme.gym.observation.ObservationContext;
-import io.github.mousemeya.withme.gym.observation.proto.EntityView;
-import io.github.mousemeya.withme.gym.observationervation.proto.NearbyEntitiesComponent;
-import io.github.mousemeya.withme.gym.space.DictSpace;
-import io.github.mousemeya.withme.gym.space.McSpace;
-import io.github.mousemeya.withme.gym.space.SequenceSpace;
-import io.github.mousemeya.withme.gym.space.TextSpace;
+import java.util.Optional;
+import java.util.Map;
+
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 
-import java.util.Map;
+import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.withme.gym.observation.proto.ProtoEntityView;
+import io.github.mousemeya.withme.gym.observation.proto.ProtoNearbyEntities;
+import io.github.mousemeya.withme.gym.space.DictSpace;
+import io.github.mousemeya.withme.gym.space.McSpace;
+import io.github.mousemeya.withme.gym.space.SequenceSpace;
+import io.github.mousemeya.withme.gym.space.TextSpace;
 
 /**
  * 附近实体观测组件 —— 扫描 Mob 周围 16 格内的所有 {@link LivingEntity}。
  * <p>
- * 每个 EntityView 记录：实体 ID、UUID、类型、坐标、距离、敌对/盟友标志等。
+ * 每个实体记录：ID、UUID、类型、坐标、距离、敌对/盟友标志等。
  * 使用 AABB 批量查询 {@code level.getEntitiesOfClass()}。
  * </p>
  */
-public class NearbyEntitiesObservationComponent implements ObservationComponentCreator<NearbyEntitiesComponent> {
+public class NearbyEntitiesObservationCreator implements ObservationComponentCreator<ProtoNearbyEntities> {
     private static final int RADIUS = 16;
-    private static final McSpace<?> SPACE = new DictSpace(Map.of(
+    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "entities", new SequenceSpace<>(new TextSpace(), 512)
-    ));
+    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private final McSpace<Map<String, Object>> space;
 
-    @Override
-    public Class<NearbyEntitiesComponent> protoType() {
-        return NearbyEntitiesComponent.class;
+    public NearbyEntitiesObservationCreator(Optional<McSpace<Map<String, Object>>> space) {
+        this.space = space.orElse(DEFAULT_SPACE);
     }
 
     @Override
-    public McSpace<?> space() {
-        return SPACE;
+    public Class<ProtoNearbyEntities> protoType() {
+        return ProtoNearbyEntities.class;
     }
 
     @Override
-    public NearbyEntitiesComponent sample() {
-        return NearbyEntitiesComponent.getDefaultInstance();
+    public McSpace<Map<String, Object>> space() {
+        return space;
     }
 
     @Override
-    public boolean contains(NearbyEntitiesComponent component) {
+    public ProtoNearbyEntities sample() {
+        return ProtoNearbyEntities.getDefaultInstance();
+    }
+
+    @Override
+    public boolean contains(ProtoNearbyEntities component) {
         return component != null && component.getEntitiesCount() <= 512;
     }
 
-    /** 扫描 AABB 范围内的所有 LivingEntity，构建实体观测列表。 */
     @Override
-    public NearbyEntitiesComponent build(Mob mob, AgentControlState state, ObservationContext context) {
-        var builder = NearbyEntitiesComponent.newBuilder();
+    public ProtoNearbyEntities create(Mob mob) {
+        var builder = ProtoNearbyEntities.newBuilder();
         var pos = mob.position();
         var aabb = new AABB(pos.x - RADIUS, pos.y - RADIUS, pos.z - RADIUS,
             pos.x + RADIUS, pos.y + RADIUS, pos.z + RADIUS);
 
         for (var entity : mob.level().getEntitiesOfClass(LivingEntity.class, aabb, e -> e != mob)) {
-            builder.addEntities(EntityView.newBuilder()
+            builder.addEntities(ProtoEntityView.newBuilder()
                 .setEntityId(entity.getId())
                 .setEntityType(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString())
                 .setUuid(entity.getUUID().toString())

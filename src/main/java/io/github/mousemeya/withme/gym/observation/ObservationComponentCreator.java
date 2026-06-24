@@ -1,9 +1,12 @@
 package io.github.mousemeya.withme.gym.observation;
 
+import java.util.Map;
+
 import com.google.protobuf.Message;
-import io.github.mousemeya.withme.gym.agent.AgentControlState;
-import io.github.mousemeya.withme.gym.space.McSpace;
 import net.minecraft.world.entity.Mob;
+
+import io.github.mousemeya.withme.gym.space.McSpace;
+
 
 /**
  * 观测组件接口 —— 每个 RL 观测维度的自描述单元。
@@ -19,7 +22,7 @@ public interface ObservationComponentCreator<T extends Message> {
     Class<T> protoType();
 
     /** @return 该观测数据的 Gymnasium 风格空间定义 */
-    McSpace<?> space();
+    McSpace<Map<String, Object>> space();
 
     /** @return 观测数据的默认样本 */
     T sample();
@@ -28,5 +31,5 @@ public interface ObservationComponentCreator<T extends Message> {
     boolean contains(T component);
 
     /** 从当前 Mob 的游戏状态构建实时观测数据。 */
-    T build(Mob mob, AgentControlState state, ObservationContext context);
+    T create(Mob mob);
 }

@@ -82,9 +82,9 @@ public class ActionController {
                 LOGGER.warn("No action component for key: {}", entry.getKey());
                 continue;
             }
-            if (!component.isDone(mob, entry.getValue())) {
-                return false;
-            }
+            // if (!component.isDone(mob, entry.getValue())) {
+            //     return false;
+            // }
         }
         return true;
     }

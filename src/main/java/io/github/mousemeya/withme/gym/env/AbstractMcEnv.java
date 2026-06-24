@@ -33,4 +33,28 @@ public abstract class AbstractMcEnv implements McEnv {
     protected final Mob mob;
     protected final UUID envId;
 
+    public AbstractMcEnv(Mob mob, UUID envId) {
+        this.mob = mob;
+        this.envId = envId;
+    }
+    
+    @Override
+    public ResetResult reset(Integer seed, Map<String, Object> options) {
+        return null;
+    }
+
+    @Override
+    public StepResult step(ProtoMcAction action) {
+        return null;
+    }
+
+    @Override
+    public abstract McSpace<Map<String, Object>> getObservationSpace();
+    @Override
+    public abstract McSpace<Map<String, Object>> getActionSpace();
+    @Override
+    public abstract Map<String, Object> getMetadata();
+    @Override
+    public abstract void close();
+
 }

@@ -1,17 +1,17 @@
 package io.github.mousemeya.withme.gym.observation.component;
 
-import io.github.mousemeya.withme.gym.agent.AgentControlState;
+import java.util.Optional;
+import java.util.Map;
+
+import net.minecraft.world.entity.Mob;
+
 import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
-import io.github.mousemeya.withme.gym.observation.ObservationContext;
-import io.github.mousemeya.withme.gym.observationervation.proto.WorldStateComponent;
+import io.github.mousemeya.withme.gym.observation.proto.ProtoWorldState;
 import io.github.mousemeya.withme.gym.space.BooleanSpace;
 import io.github.mousemeya.withme.gym.space.BoxSpace;
 import io.github.mousemeya.withme.gym.space.DictSpace;
 import io.github.mousemeya.withme.gym.space.McSpace;
 import io.github.mousemeya.withme.gym.space.TextSpace;
-import net.minecraft.world.entity.Mob;
-
-import java.util.Map;
 
 /**
  * 世界状态观测组件 —— 获取 Mob 所在维度的全局环境信息。
@@ -20,39 +20,43 @@ import java.util.Map;
  * 同一 tick 内所有 Mob 的观测结果相同。
  * </p>
  */
-public class WorldStateObservationComponent implements ObservationComponentCreator<WorldStateComponent> {
-    private static final McSpace<?> SPACE = new DictSpace(Map.of(
+public class WorldStateObservationCreator implements ObservationComponentCreator<ProtoWorldState> {
+    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "day_time", new BoxSpace(0, Long.MAX_VALUE, 1),
         "raining", new BooleanSpace(),
         "thundering", new BooleanSpace(),
         "dimension", new TextSpace()
-    ));
+    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private final McSpace<Map<String, Object>> space;
 
-    @Override
-    public Class<WorldStateComponent> protoType() {
-        return WorldStateComponent.class;
+    public WorldStateObservationCreator(Optional<McSpace<Map<String, Object>>> space) {
+        this.space = space.orElse(DEFAULT_SPACE);
     }
 
     @Override
-    public McSpace<?> space() {
-        return SPACE;
+    public Class<ProtoWorldState> protoType() {
+        return ProtoWorldState.class;
     }
 
     @Override
-    public WorldStateComponent sample() {
-        return WorldStateComponent.getDefaultInstance();
+    public McSpace<Map<String, Object>> space() {
+        return space;
     }
 
     @Override
-    public boolean contains(WorldStateComponent component) {
+    public ProtoWorldState sample() {
+        return ProtoWorldState.getDefaultInstance();
+    }
+
+    @Override
+    public boolean contains(ProtoWorldState component) {
         return component != null && component.getDayTime() >= 0;
     }
 
-    /** 从当前维度读取时间、天气和维度 ID。 */
     @Override
-    public WorldStateComponent build(Mob mob, AgentControlState state, ObservationContext context) {
+    public ProtoWorldState create(Mob mob) {
         var level = mob.level();
-        return WorldStateComponent.newBuilder()
+        return ProtoWorldState.newBuilder()
             .setDayTime(level.getGameTime())
             .setRaining(level.isRaining())
             .setThundering(level.isThundering())

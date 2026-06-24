@@ -2,7 +2,7 @@ package io.github.mousemeya.withme;
 
 import io.github.mousemeya.withme.registry.ActionComponents;
 import io.github.mousemeya.withme.registry.EnvFactories;
-import io.github.mousemeya.withme.registry.ObservationComponents;
+import io.github.mousemeya.withme.registry.ObservationCreators;
 import io.github.mousemeya.withme.registry.RegistryKeys;
 
 import org.slf4j.Logger;
@@ -84,7 +84,7 @@ public class WithMe {
         CREATIVE_MODE_TABS.register(modEventBus);
         // Register pluggable RL action/observation/env entries.
         ActionComponents.REGISTRY.register(modEventBus);
-        ObservationComponents.REGISTRY.register(modEventBus);
+        ObservationCreators.REGISTRY.register(modEventBus);
         EnvFactories.REGISTRY.register(modEventBus);
 
         // Register ourselves for server and other game events we are interested in.

@@ -33,7 +33,7 @@ message ProtoSelfState {
 }
 
 message ProtoNearbyEntities {
-  repeated EntityView entities = 1;
+  repeated ProtoEntityView entities = 1;
 }
 
 message BlockView {
@@ -49,7 +49,7 @@ message ProtoNearbyBlocks {
 }
 
 message ProtoInventory {
-  repeated ItemStackView slots = 1;
+  repeated ProtoItemStackView slots = 1;
 }
 
 message ProtoWorldState {

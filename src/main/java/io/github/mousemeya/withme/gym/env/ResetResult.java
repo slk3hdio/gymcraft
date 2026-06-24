@@ -1,6 +1,6 @@
 package io.github.mousemeya.withme.gym.env;
 import java.util.Map;
-import io.github.mousemeya.withme.gym.observation.proto.McObservation;
+import io.github.mousemeya.withme.gym.observation.proto.ProtoMcObservation;
 
 /**
  * reset() 方法的返回值，对应 Gymnasium 的 (observation, info) 二元组。
@@ -9,7 +9,7 @@ import io.github.mousemeya.withme.gym.observation.proto.McObservation;
  * @param info        附加信息字典（如实体 UUID）
  */
 public record ResetResult(
-        McObservation observation,
+        ProtoMcObservation observation,
         Map<String, Object> info
 ) {
 }

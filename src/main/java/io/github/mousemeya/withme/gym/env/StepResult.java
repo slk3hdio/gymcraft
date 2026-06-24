@@ -1,7 +1,7 @@
 package io.github.mousemeya.withme.gym.env;
 
 import java.util.Map;
-import io.github.mousemeya.withme.gym.observation.proto.McObservation;
+import io.github.mousemeya.withme.gym.observation.proto.ProtoMcObservation;
 
 /**
  * step() 方法的返回值，对应 Gymnasium 的 (observation, reward, terminated, truncated, info) 五元组。
@@ -13,7 +13,7 @@ import io.github.mousemeya.withme.gym.observation.proto.McObservation;
  * @param info        附加信息字典
  */
 public record StepResult(
-        McObservation observation,
+        ProtoMcObservation observation,
         double reward,
         boolean terminated,
         boolean truncated,
