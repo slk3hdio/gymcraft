@@ -6,7 +6,7 @@ option java_multiple_files = true;
 option java_package = "io.github.mousemeya.withme.gym.action.proto";
 option java_outer_classname = "ComponentsProto";
 
-message StepMoveComponent {
+message ProtoStepMove {
   float forward = 1;
   float strafe_right = 2;
   float yaw_delta = 3;
@@ -14,7 +14,7 @@ message StepMoveComponent {
   bool jump = 5;
 }
 
-message MoveToComponent {
+message ProtoMoveTo {
   double x = 1;
   double y = 2;
   double z = 3;
@@ -23,14 +23,14 @@ message MoveToComponent {
   int32 timeout_ticks = 6;
 }
 
-message SetAttackTargetComponent {
+message ProtoSetAttackTarget {
   string target_uuid = 1;
   int32 target_entity_id = 2;
 }
 
-message AttackOnceComponent {
+message ProtoAttackOnce {
   int32 target_entity_id = 1;
 }
 
-message NoopComponent {
+message ProtoNoop {
 }

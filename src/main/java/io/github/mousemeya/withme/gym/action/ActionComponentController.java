@@ -1,8 +1,12 @@
 package io.github.mousemeya.withme.gym.action;
 
+import java.util.Collection;
+
 import com.google.protobuf.Message;
-import io.github.mousemeya.withme.gym.space.McSpace;
 import net.minecraft.world.entity.Mob;
+
+import io.github.mousemeya.withme.gym.space.McSpace;
+
 
 /**
  * 动作组件接口 —— 每个 RL 动作类型的自描述单元。
@@ -14,11 +18,20 @@ import net.minecraft.world.entity.Mob;
  *
  * @param <T> 对应 Protobuf 消息类型，需继承 {@link com.google.protobuf.Message}
  */
-public interface ActionComponent<T extends Message> {
+public interface ActionComponentController<T extends Message> {
     /** @return 对应的 Protobuf 消息类，用于 Any 解包和类型校验 */
     Class<T> protoType();
 
-    /** @return 该动作参数的 Gymnasium 风格空间定义 */
+    /** @return 是否支持指定实体类型 */
+    boolean supportEntity(Class<?> entityType);
+
+    /** @return 支持的实体类型列表 */
+    Collection<Class<?>> getSupportedEntities();
+
+    /** 
+     * @return 该动作参数的 Gymnasium 风格空间定义 
+     * <strong>注意：</strong> 如果是{@link io.github.mousemeya.withme.gym.space.DictSpace}类型, 则键名必须和Proto代码中的原始字段名一致
+     */
     McSpace<?> space();
 
     /** @return 动作参数的默认/安全样本 */
@@ -29,4 +42,7 @@ public interface ActionComponent<T extends Message> {
 
     /** 将动作应用到指定的 Mob 实体上。 */
     void apply(Mob mob, T component) throws Exception;
+
+    /** @return 动作是否已完成 */
+    boolean isDone(Mob mob, T component);
 }

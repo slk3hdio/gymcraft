@@ -1,9 +1,9 @@
-package io.github.mousemeya.withme.gym.obs.component;
+package io.github.mousemeya.withme.gym.observation.component;
 
 import io.github.mousemeya.withme.gym.agent.AgentControlState;
-import io.github.mousemeya.withme.gym.obs.ObservationComponent;
-import io.github.mousemeya.withme.gym.obs.ObservationContext;
-import io.github.mousemeya.withme.gym.observation.proto.SelfStateComponent;
+import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.withme.gym.observation.ObservationContext;
+import io.github.mousemeya.withme.gym.observationervation.proto.SelfStateComponent;
 import io.github.mousemeya.withme.gym.space.BooleanSpace;
 import io.github.mousemeya.withme.gym.space.BoxSpace;
 import io.github.mousemeya.withme.gym.space.DictSpace;
@@ -21,7 +21,7 @@ import java.util.Map;
  * 导航状态和当前攻击目标 ID。
  * </p>
  */
-public class SelfStateObservationComponent implements ObservationComponent<SelfStateComponent> {
+public class SelfStateObservationComponent implements ObservationComponentCreator<SelfStateComponent> {
     private static final McSpace<?> SPACE = new DictSpace(Map.ofEntries(
         Map.entry("entity_type", new TextSpace()),
         Map.entry("uuid", new TextSpace()),

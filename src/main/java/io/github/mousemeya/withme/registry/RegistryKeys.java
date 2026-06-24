@@ -1,9 +1,9 @@
 package io.github.mousemeya.withme.registry;
 
 import io.github.mousemeya.withme.WithMe;
-import io.github.mousemeya.withme.gym.action.ActionComponent;
+import io.github.mousemeya.withme.gym.action.ActionComponentController;
 import io.github.mousemeya.withme.gym.env.McEnvFactory;
-import io.github.mousemeya.withme.gym.obs.ObservationComponent;
+import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -15,17 +15,17 @@ import net.neoforged.neoforge.registries.RegistryBuilder;
  * <p>
  * 定义了三个 RL 框架所需的自定义注册表：
  * <ul>
- *   <li>{@code action_components} —— 注册所有 {@link ActionComponent} 实现</li>
- *   <li>{@code observation_components} —— 注册所有 {@link ObservationComponent} 实现</li>
+ *   <li>{@code action_components} —— 注册所有 {@link ActionComponentController} 实现</li>
+ *   <li>{@code observation_components} —— 注册所有 {@link ObservationComponentCreator} 实现</li>
  *   <li>{@code env_factories} —— 注册所有 {@link McEnvFactory} 实现</li>
  * </ul>
  * </p>
  */
 public final class RegistryKeys {
-    public static final ResourceKey<Registry<ActionComponent<?>>> ACTION_COMPONENTS_KEY = ResourceKey.createRegistryKey(
+    public static final ResourceKey<Registry<ActionComponentController<?>>> ACTION_COMPONENTS_KEY = ResourceKey.createRegistryKey(
         Identifier.fromNamespaceAndPath(WithMe.MODID, "action_components")
     );
-    public static final ResourceKey<Registry<ObservationComponent<?>>> OBSERVATION_COMPONENTS_KEY = ResourceKey.createRegistryKey(
+    public static final ResourceKey<Registry<ObservationComponentCreator<?>>> OBSERVATION_COMPONENTS_KEY = ResourceKey.createRegistryKey(
         Identifier.fromNamespaceAndPath(WithMe.MODID, "observation_components")
     );
     public static final ResourceKey<Registry<McEnvFactory>> ENV_FACTORIES_KEY = ResourceKey.createRegistryKey(
@@ -33,9 +33,9 @@ public final class RegistryKeys {
     );
 
     /** 动作组件注册表实例 */
-    public static final Registry<ActionComponent<?>> ACTION_COMPONENTS = new RegistryBuilder<>(ACTION_COMPONENTS_KEY).create();
+    public static final Registry<ActionComponentController<?>> ACTION_COMPONENTS = new RegistryBuilder<>(ACTION_COMPONENTS_KEY).create();
     /** 观测组件注册表实例 */
-    public static final Registry<ObservationComponent<?>> OBSERVATION_COMPONENTS = new RegistryBuilder<>(OBSERVATION_COMPONENTS_KEY).create();
+    public static final Registry<ObservationComponentCreator<?>> OBSERVATION_COMPONENTS = new RegistryBuilder<>(OBSERVATION_COMPONENTS_KEY).create();
     /** 环境工厂注册表实例 */
     public static final Registry<McEnvFactory> ENV_FACTORIES = new RegistryBuilder<>(ENV_FACTORIES_KEY).create();
 

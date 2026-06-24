@@ -1,9 +1,9 @@
-package io.github.mousemeya.withme.gym.obs.component;
+package io.github.mousemeya.withme.gym.observation.component;
 
 import io.github.mousemeya.withme.gym.agent.AgentControlState;
-import io.github.mousemeya.withme.gym.obs.ObservationComponent;
-import io.github.mousemeya.withme.gym.obs.ObservationContext;
-import io.github.mousemeya.withme.gym.observation.proto.WorldStateComponent;
+import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.withme.gym.observation.ObservationContext;
+import io.github.mousemeya.withme.gym.observationervation.proto.WorldStateComponent;
 import io.github.mousemeya.withme.gym.space.BooleanSpace;
 import io.github.mousemeya.withme.gym.space.BoxSpace;
 import io.github.mousemeya.withme.gym.space.DictSpace;
@@ -20,7 +20,7 @@ import java.util.Map;
  * 同一 tick 内所有 Mob 的观测结果相同。
  * </p>
  */
-public class WorldStateObservationComponent implements ObservationComponent<WorldStateComponent> {
+public class WorldStateObservationComponent implements ObservationComponentCreator<WorldStateComponent> {
     private static final McSpace<?> SPACE = new DictSpace(Map.of(
         "day_time", new BoxSpace(0, Long.MAX_VALUE, 1),
         "raining", new BooleanSpace(),

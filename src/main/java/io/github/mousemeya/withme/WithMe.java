@@ -1,7 +1,5 @@
 package io.github.mousemeya.withme;
 
-import io.github.mousemeya.withme.gym.agent.AgentAttachmentHolder;
-import io.github.mousemeya.withme.item.AgentToolItem;
 import io.github.mousemeya.withme.registry.ActionComponents;
 import io.github.mousemeya.withme.registry.EnvFactories;
 import io.github.mousemeya.withme.registry.ObservationComponents;
@@ -61,11 +59,6 @@ public class WithMe {
     public static final DeferredItem<Item> EXAMPLE_ITEM = ITEMS.registerSimpleItem("example_item", p -> p.food(new FoodProperties.Builder()
             .alwaysEdible().nutrition(1).saturationModifier(2f).build()));
 
-    // 注册自定义物品 AgentToolItem，用于在游戏中将 RL 智能体绑定/解绑到 Mob 上
-    // 使用 registerItem 以确保框架自动将物品 ID 注入到 Item.Properties 中
-    public static final DeferredItem<AgentToolItem> AGENT_TOOL = ITEMS.registerItem("agent_tool",
-        AgentToolItem::new);
-
     // Creates a creative tab with the id "withme:example_tab" for the example item, that is placed after the combat tab
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.withme")) //The language key for the title of your CreativeModeTab
@@ -73,7 +66,6 @@ public class WithMe {
             .icon(() -> EXAMPLE_ITEM.get().getDefaultInstance())
             .displayItems((parameters, output) -> {
                 output.accept(EXAMPLE_ITEM.get()); // Add the example item to the tab. For your own tabs, this method is preferred over the event
-                output.accept(AGENT_TOOL.get());
             }).build());
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.
@@ -90,8 +82,6 @@ public class WithMe {
         ITEMS.register(modEventBus);
         // Register the Deferred Register to the mod event bus so tabs get registered
         CREATIVE_MODE_TABS.register(modEventBus);
-        // Register the Attachment types
-        AgentAttachmentHolder.DEFERRED_REGISTER.register(modEventBus);
         // Register pluggable RL action/observation/env entries.
         ActionComponents.REGISTRY.register(modEventBus);
         ObservationComponents.REGISTRY.register(modEventBus);

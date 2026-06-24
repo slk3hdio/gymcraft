@@ -1,7 +1,7 @@
 package io.github.mousemeya.withme.gym.action.component;
 
-import io.github.mousemeya.withme.gym.action.ActionComponent;
-import io.github.mousemeya.withme.gym.action.proto.NoopComponent;
+import io.github.mousemeya.withme.gym.action.ActionComponentController;
+import io.github.mousemeya.withme.gym.action.proto.ProtoNoop;
 import io.github.mousemeya.withme.gym.space.DictSpace;
 import io.github.mousemeya.withme.gym.space.McSpace;
 import net.minecraft.world.entity.Mob;
@@ -14,13 +14,14 @@ import java.util.Map;
  * 参数空间为空字典，apply() 是空实现。在 McActionSpace.sample() 中
  * 被选为默认采样输出。
  * </p>
+ *  TODO: 仿照 {@link AttackOnceController} 修改
  */
-public class NoopActionComponent implements ActionComponent<NoopComponent> {
+public class NoopController implements ActionComponentController<ProtoNoop> {
     private static final McSpace<?> SPACE = new DictSpace(Map.of());
 
     @Override
-    public Class<NoopComponent> protoType() {
-        return NoopComponent.class;
+    public Class<ProtoNoop> protoType() {
+        return ProtoNoop.class;
     }
 
     @Override
@@ -29,16 +30,21 @@ public class NoopActionComponent implements ActionComponent<NoopComponent> {
     }
 
     @Override
-    public NoopComponent sample() {
-        return NoopComponent.getDefaultInstance();
+    public ProtoNoop sample() {
+        return ProtoNoop.getDefaultInstance();
     }
 
     @Override
-    public boolean contains(NoopComponent component) {
+    public boolean contains(ProtoNoop component) {
         return component != null;
     }
 
     @Override
-    public void apply(Mob mob, NoopComponent component) {
+    public void apply(Mob mob, ProtoNoop component) {
+    }
+
+    @Override
+    public boolean isDone(Mob mob, ProtoNoop component) { // 瞬时动作, 立即完成
+        return true;
     }
 }

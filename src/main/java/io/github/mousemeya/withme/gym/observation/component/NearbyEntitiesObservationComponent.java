@@ -1,10 +1,10 @@
-package io.github.mousemeya.withme.gym.obs.component;
+package io.github.mousemeya.withme.gym.observation.component;
 
 import io.github.mousemeya.withme.gym.agent.AgentControlState;
-import io.github.mousemeya.withme.gym.obs.ObservationComponent;
-import io.github.mousemeya.withme.gym.obs.ObservationContext;
+import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.withme.gym.observation.ObservationContext;
 import io.github.mousemeya.withme.gym.observation.proto.EntityView;
-import io.github.mousemeya.withme.gym.observation.proto.NearbyEntitiesComponent;
+import io.github.mousemeya.withme.gym.observationervation.proto.NearbyEntitiesComponent;
 import io.github.mousemeya.withme.gym.space.DictSpace;
 import io.github.mousemeya.withme.gym.space.McSpace;
 import io.github.mousemeya.withme.gym.space.SequenceSpace;
@@ -24,7 +24,7 @@ import java.util.Map;
  * 使用 AABB 批量查询 {@code level.getEntitiesOfClass()}。
  * </p>
  */
-public class NearbyEntitiesObservationComponent implements ObservationComponent<NearbyEntitiesComponent> {
+public class NearbyEntitiesObservationComponent implements ObservationComponentCreator<NearbyEntitiesComponent> {
     private static final int RADIUS = 16;
     private static final McSpace<?> SPACE = new DictSpace(Map.of(
         "entities", new SequenceSpace<>(new TextSpace(), 512)

@@ -9,7 +9,7 @@ option java_multiple_files = true;
 option java_package = "io.github.mousemeya.withme.gym.observation.proto";
 option java_outer_classname = "ComponentsProto";
 
-message SelfStateComponent {
+message ProtoSelfState {
   string entity_type = 1;
   string uuid = 2;
   double health = 3;
@@ -32,7 +32,7 @@ message SelfStateComponent {
   string control_mode = 20;
 }
 
-message NearbyEntitiesComponent {
+message ProtoNearbyEntities {
   repeated EntityView entities = 1;
 }
 
@@ -44,15 +44,15 @@ message BlockView {
   double distance = 5;
 }
 
-message NearbyBlocksComponent {
+message ProtoNearbyBlocks {
   repeated BlockView blocks = 1;
 }
 
-message InventoryComponent {
+message ProtoInventory {
   repeated ItemStackView slots = 1;
 }
 
-message WorldStateComponent {
+message ProtoWorldState {
   int64 day_time = 1;
   bool raining = 2;
   bool thundering = 3;

@@ -6,7 +6,7 @@ option java_multiple_files = true;
 option java_package = "io.github.mousemeya.withme.gym.observation.proto";
 option java_outer_classname = "EntityProto";
 
-message EntityView {
+message ProtoEntityView {
   int32 entity_id = 1;
   string entity_type = 2;
   string uuid = 3;

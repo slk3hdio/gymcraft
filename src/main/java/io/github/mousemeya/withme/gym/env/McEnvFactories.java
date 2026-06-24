@@ -17,7 +17,7 @@ public final class McEnvFactories {
     }
 
     /** 从注册表中查找 envType 对应的工厂并创建环境实例。 */
-    public static EntityMcEnv create(String envType, UUID entityUuid) {
+    public static AbstractMcEnv create(String envType, UUID entityUuid) {
         var id = parseId(envType);
         var factory = RegistryKeys.ENV_FACTORIES.getValue(id);
         if (factory == null) {

@@ -1,7 +1,7 @@
 package io.github.mousemeya.withme.gym.action.component;
 
-import io.github.mousemeya.withme.gym.action.ActionComponent;
-import io.github.mousemeya.withme.gym.action.proto.StepMoveComponent;
+import io.github.mousemeya.withme.gym.action.ActionComponentController;
+import io.github.mousemeya.withme.gym.action.proto.ProtoStepMove;
 import io.github.mousemeya.withme.gym.space.BooleanSpace;
 import io.github.mousemeya.withme.gym.space.BoxSpace;
 import io.github.mousemeya.withme.gym.space.DictSpace;
@@ -16,8 +16,9 @@ import java.util.Map;
  * 适用于需要帧级精细控制的场景（如强化学习中的连续控制策略）。
  * 与 MoveToActionComponent 的路径规划不同，此组件直接控制移动、跳跃和视角。
  * </p>
+ *  TODO: 仿照 {@link AttackOnceController} 修改
  */
-public class StepMoveActionComponent implements ActionComponent<StepMoveComponent> {
+public class StepMoveController implements ActionComponentController<ProtoStepMove> {
     private static final McSpace<?> SPACE = new DictSpace(Map.of(
         "forward", new BoxSpace(-1, 1, 1),
         "strafe_right", new BoxSpace(-1, 1, 1),
@@ -27,8 +28,8 @@ public class StepMoveActionComponent implements ActionComponent<StepMoveComponen
     ));
 
     @Override
-    public Class<StepMoveComponent> protoType() {
-        return StepMoveComponent.class;
+    public Class<ProtoStepMove> protoType() {
+        return ProtoStepMove.class;
     }
 
     @Override
@@ -37,12 +38,12 @@ public class StepMoveActionComponent implements ActionComponent<StepMoveComponen
     }
 
     @Override
-    public StepMoveComponent sample() {
-        return StepMoveComponent.getDefaultInstance();
+    public ProtoStepMove sample() {
+        return ProtoStepMove.getDefaultInstance();
     }
 
     @Override
-    public boolean contains(StepMoveComponent component) {
+    public boolean contains(ProtoStepMove component) {  
         return Float.isFinite(component.getForward())
             && Float.isFinite(component.getStrafeRight())
             && Float.isFinite(component.getYawDelta())
@@ -52,7 +53,7 @@ public class StepMoveActionComponent implements ActionComponent<StepMoveComponen
     }
 
     @Override
-    public void apply(Mob mob, StepMoveComponent component) {
+    public void apply(Mob mob, ProtoStepMove component) {
         mob.getMoveControl().strafe(component.getForward(), component.getStrafeRight());
         if (component.getJump()) {
             mob.getJumpControl().jump();
@@ -61,5 +62,10 @@ public class StepMoveActionComponent implements ActionComponent<StepMoveComponen
             mob.setYRot(mob.getYRot() + component.getYawDelta());
             mob.setXRot(mob.getXRot() + component.getPitchDelta());
         }
+    }
+
+    @Override
+    public boolean isDone(Mob mob, ProtoStepMove component) { // 瞬时动作, 立即完成
+        return true;
     }
 }

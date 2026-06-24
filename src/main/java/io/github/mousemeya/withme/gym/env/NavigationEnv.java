@@ -26,7 +26,7 @@ import io.github.mousemeya.withme.registry.ObservationComponents;
  * 终止条件：Mob 死亡 或 到达目标位置<br>
  * 截断条件：步数超过 1200
  */
-public class NavigationEnv extends EntityMcEnv {
+public class NavigationEnv extends AbstractMcEnv {
     private Vec3 goalPosition;  // 导航目标坐标，通过 reset 的 options 设置
     private int stepCount;      // 当前回合已执行的步数
 

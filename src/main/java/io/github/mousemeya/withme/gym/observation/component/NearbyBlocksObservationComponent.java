@@ -1,10 +1,10 @@
-package io.github.mousemeya.withme.gym.obs.component;
+package io.github.mousemeya.withme.gym.observation.component;
 
 import io.github.mousemeya.withme.gym.agent.AgentControlState;
-import io.github.mousemeya.withme.gym.obs.ObservationComponent;
-import io.github.mousemeya.withme.gym.obs.ObservationContext;
+import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.withme.gym.observation.ObservationContext;
 import io.github.mousemeya.withme.gym.observation.proto.BlockView;
-import io.github.mousemeya.withme.gym.observation.proto.NearbyBlocksComponent;
+import io.github.mousemeya.withme.gym.observationervation.proto.NearbyBlocksComponent;
 import io.github.mousemeya.withme.gym.space.DictSpace;
 import io.github.mousemeya.withme.gym.space.McSpace;
 import io.github.mousemeya.withme.gym.space.SequenceSpace;
@@ -21,7 +21,7 @@ import java.util.Map;
  * 跳过空气方块以降低数据传输量。
  * </p>
  */
-public class NearbyBlocksObservationComponent implements ObservationComponent<NearbyBlocksComponent> {
+public class NearbyBlocksObservationComponent implements ObservationComponentCreator<NearbyBlocksComponent> {
     private static final int RADIUS = 8;
     private static final McSpace<?> SPACE = new DictSpace(Map.of(
         "blocks", new SequenceSpace<>(new TextSpace(), 4096)

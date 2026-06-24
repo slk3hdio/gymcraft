@@ -1,6 +1,6 @@
 package io.github.mousemeya.withme.gym.env;
-import io.github.mousemeya.withme.gym.action.proto.McAction;
-import io.github.mousemeya.withme.gym.observation.proto.McObservation;
+import io.github.mousemeya.withme.gym.action.proto.ProtoMcAction;
+import io.github.mousemeya.withme.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.withme.gym.space.McSpace;
 
 import java.util.Map;
@@ -23,14 +23,14 @@ public interface McEnv {
      * @param action 智能体选择的动作
      * @return 包含新观测、奖励、终止标志、截断标志和额外信息的元组
      */
-    StepResult step(McAction action);
+    StepResult step(ProtoMcAction action);
 
     // --- 核心属性 ---
     /** 返回动作空间 */
-    McSpace<McAction> getActionSpace();
+    McSpace<Map<String, Object>> getActionSpace();
 
     /** 返回观测空间 */
-    McSpace<McObservation> getObservationSpace();
+    McSpace<Map<String, Object>> getObservationSpace();
 
     /** 环境的元数据，如渲染模式 */
     Map<String, Object> getMetadata();

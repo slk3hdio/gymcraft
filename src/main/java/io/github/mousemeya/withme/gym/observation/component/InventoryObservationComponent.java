@@ -1,10 +1,8 @@
-package io.github.mousemeya.withme.gym.obs.component;
+package io.github.mousemeya.withme.gym.observation.component;
 
-import io.github.mousemeya.withme.gym.agent.AgentControlState;
-import io.github.mousemeya.withme.gym.obs.ObservationComponent;
-import io.github.mousemeya.withme.gym.obs.ObservationContext;
-import io.github.mousemeya.withme.gym.observation.proto.InventoryComponent;
+import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.withme.gym.observation.proto.ItemStackView;
+import io.github.mousemeya.withme.gym.observation.proto.ProtoInventory;
 import io.github.mousemeya.withme.gym.space.DictSpace;
 import io.github.mousemeya.withme.gym.space.McSpace;
 import io.github.mousemeya.withme.gym.space.SequenceSpace;
@@ -23,14 +21,14 @@ import java.util.Map;
  * 每个 ItemStackView 记录：物品 ID、数量、槽位索引、是否为空。
  * </p>
  */
-public class InventoryObservationComponent implements ObservationComponent<InventoryComponent> {
+public class InventoryObservationComponent implements ObservationComponentCreator<ProtoInventory> {
     private static final McSpace<?> SPACE = new DictSpace(Map.of(
         "slots", new SequenceSpace<>(new TextSpace(), 8)
     ));
 
     @Override
-    public Class<InventoryComponent> protoType() {
-        return InventoryComponent.class;
+    public Class<ProtoInventory> protoType() {
+        return ProtoInventory.class;
     }
 
     @Override
@@ -39,19 +37,19 @@ public class InventoryObservationComponent implements ObservationComponent<Inven
     }
 
     @Override
-    public InventoryComponent sample() {
-        return InventoryComponent.getDefaultInstance();
+    public ProtoInventory sample() {
+        return ProtoInventory.getDefaultInstance();
     }
 
     @Override
-    public boolean contains(InventoryComponent component) {
+    public boolean contains(ProtoInventory component) {
         return component != null && component.getSlotsCount() <= 8;
     }
 
     /** 遍历 EquipmentSlot 构建非空物品槽位的观测。 */
     @Override
-    public InventoryComponent build(Mob mob, AgentControlState state, ObservationContext context) {
-        var builder = InventoryComponent.newBuilder();
+    public ProtoInventory build(Mob mob, AgentControlState state, ObservationContext context) {
+        var builder = ProtoInventory.newBuilder();
         int slot = 0;
         for (var equipmentSlot : EquipmentSlot.VALUES) {
             if (!equipmentSlot.isArmor() && equipmentSlot != EquipmentSlot.MAINHAND && equipmentSlot != EquipmentSlot.OFFHAND) continue;

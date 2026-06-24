@@ -1,4 +1,4 @@
-package io.github.mousemeya.withme.gym.obs;
+package io.github.mousemeya.withme.gym.observation;
 
 import com.google.protobuf.Message;
 import io.github.mousemeya.withme.gym.agent.AgentControlState;
@@ -14,7 +14,7 @@ import net.minecraft.world.entity.Mob;
  *
  * @param <T> 对应 Protobuf 消息类型
  */
-public interface ObservationComponent<T extends Message> {
+public interface ObservationComponentCreator<T extends Message> {
     /** @return 对应的 Protobuf 消息类 */
     Class<T> protoType();
 
