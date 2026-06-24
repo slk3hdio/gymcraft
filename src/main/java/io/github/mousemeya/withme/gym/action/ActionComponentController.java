@@ -1,6 +1,7 @@
 package io.github.mousemeya.withme.gym.action;
 
 import java.util.Collection;
+import java.util.Map;
 
 import com.google.protobuf.Message;
 import net.minecraft.world.entity.Mob;
@@ -32,7 +33,7 @@ public interface ActionComponentController<T extends Message> {
      * @return 该动作参数的 Gymnasium 风格空间定义 
      * <strong>注意：</strong> 如果是{@link io.github.mousemeya.withme.gym.space.DictSpace}类型, 则键名必须和Proto代码中的原始字段名一致
      */
-    McSpace<?> space();
+    McSpace<Map<String, Object>> space();
 
     /** @return 动作参数的默认/安全样本 */
     T sample();

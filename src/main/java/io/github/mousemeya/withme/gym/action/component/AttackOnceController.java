@@ -54,7 +54,7 @@ public class AttackOnceController implements ActionComponentController<ProtoAtta
     }
 
     @Override
-    public McSpace<?> space() {
+    public McSpace<Map<String, Object>> space() {
         return space;
     }
 
