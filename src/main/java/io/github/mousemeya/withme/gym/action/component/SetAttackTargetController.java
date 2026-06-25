@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.LivingEntity;
 
 import io.github.mousemeya.withme.gym.action.ActionComponentController;
 import io.github.mousemeya.withme.gym.action.proto.ProtoSetAttackTarget;
@@ -14,6 +15,8 @@ import io.github.mousemeya.withme.gym.space.BoxSpace;
 import io.github.mousemeya.withme.gym.space.DictSpace;
 import io.github.mousemeya.withme.gym.space.McSpace;
 import io.github.mousemeya.withme.gym.space.TextSpace;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
 /**
  * 设置攻击目标组件 —— 为 Mob 指定攻击目标实体。

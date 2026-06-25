@@ -7,6 +7,7 @@ import com.google.protobuf.Message;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.withme.gym.space.McSpace;
+import io.github.mousemeya.withme.registry.RegistryKeys;
 
 
 /**
@@ -22,6 +23,15 @@ import io.github.mousemeya.withme.gym.space.McSpace;
 public interface ActionComponentController<T extends Message> {
     /** @return 对应的 Protobuf 消息类，用于 Any 解包和类型校验 */
     Class<T> protoType();
+
+    /** @return 动作组件的注册id */
+    default String getRegisterId() {
+        var key = RegistryKeys.ACTION_COMPONENT_CONTROLLERS.getKey(this);
+        if (key == null) {
+            throw new IllegalStateException("Action component controller is not registered: " + this);
+        }
+        return key.toString();
+    }
 
     /** @return 是否支持指定实体类型 */
     boolean supportEntity(Class<?> entityType);

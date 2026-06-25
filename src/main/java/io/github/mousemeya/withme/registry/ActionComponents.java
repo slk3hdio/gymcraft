@@ -14,7 +14,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
  * 动作组件注册入口 —— 通过 {@link DeferredRegister} 将所有 {@link ActionComponentController} 实现
- * 挂载到 {@link RegistryKeys#ACTION_COMPONENTS} 注册表上。
+ * 挂载到 {@link RegistryKeys#ACTION_COMPONENT_CONTROLLERS} 注册表上。
  * <p>
  * 所有动作组件基于注册表 ID（如 {@code withme:move_to}）在运行时唯一标识。
  * 环境构造时引用这些 {@link DeferredHolder} 来获取组件实例并组合成动作空间。
@@ -22,7 +22,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  */
 public final class ActionComponents {
     public static final DeferredRegister<ActionComponentController<?>> REGISTRY = DeferredRegister.create(
-        RegistryKeys.ACTION_COMPONENTS,
+        RegistryKeys.ACTION_COMPONENT_CONTROLLERS,
         WithMe.MODID
     );
 

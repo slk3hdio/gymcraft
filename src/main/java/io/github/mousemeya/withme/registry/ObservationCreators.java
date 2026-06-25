@@ -14,7 +14,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
  * 观测组件注册入口 —— 通过 {@link DeferredRegister} 将所有 {@link ObservationComponentCreator} 实现
- * 挂载到 {@link RegistryKeys#OBSERVATION_COMPONENTS} 注册表上。
+ * 挂载到 {@link RegistryKeys#OBSERVATION_COMPONENT_CREATORS} 注册表上。
  * <p>
  * 所有观测组件基于注册表 ID（如 {@code withme:self}）在运行时唯一标识。
  * 环境构造时引用这些 {@link DeferredHolder} 来获取组件实例并组合成观测空间。
@@ -22,7 +22,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  */
 public final class ObservationCreators {
     public static final DeferredRegister<ObservationComponentCreator<?>> REGISTRY = DeferredRegister.create(
-        RegistryKeys.OBSERVATION_COMPONENTS,
+        RegistryKeys.OBSERVATION_COMPONENT_CREATORS,
         WithMe.MODID
     );
 

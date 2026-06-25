@@ -33,13 +33,8 @@ public class AgentRuntime {
      * @return
      */
     @SubscribeEvent
-    private boolean BeforeEntityTick(EntityTickEvent.Pre event) {
+    private void BeforeEntityTick(EntityTickEvent.Pre event) {
         // 消费action
-        var action = actionBuf.poll();
-        if (action == null) return false;
-        actionController.apply(mob, action);
-        runningAction = action;
-        return true;
     }
 
     /**
@@ -48,12 +43,11 @@ public class AgentRuntime {
      * @return
      */
     @SubscribeEvent
-    private boolean AfterEntityTick(EntityTickEvent.Post event) {
+    private void AfterEntityTick(EntityTickEvent.Post event) {
         // 写入observation
         // if (runningAction != null && actionController.isDone(mob, runningAction)) {
         //     pendingObservation = observationBuf.poll();
         // }
-        return true;
     }
 
     /**

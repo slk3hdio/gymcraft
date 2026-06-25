@@ -22,10 +22,10 @@ import net.neoforged.neoforge.registries.RegistryBuilder;
  * </p>
  */
 public final class RegistryKeys {
-    public static final ResourceKey<Registry<ActionComponentController<?>>> ACTION_COMPONENTS_KEY = ResourceKey.createRegistryKey(
+    public static final ResourceKey<Registry<ActionComponentController<?>>> ACTION_COMPONENT_CONTROLLERS_KEY = ResourceKey.createRegistryKey(
         Identifier.fromNamespaceAndPath(WithMe.MODID, "action_components")
     );
-    public static final ResourceKey<Registry<ObservationComponentCreator<?>>> OBSERVATION_COMPONENTS_KEY = ResourceKey.createRegistryKey(
+    public static final ResourceKey<Registry<ObservationComponentCreator<?>>> OBSERVATION_COMPONENT_CREATORS_KEY = ResourceKey.createRegistryKey(
         Identifier.fromNamespaceAndPath(WithMe.MODID, "observation_components")
     );
     public static final ResourceKey<Registry<McEnvFactory>> ENV_FACTORIES_KEY = ResourceKey.createRegistryKey(
@@ -33,9 +33,9 @@ public final class RegistryKeys {
     );
 
     /** 动作组件注册表实例 */
-    public static final Registry<ActionComponentController<?>> ACTION_COMPONENTS = new RegistryBuilder<>(ACTION_COMPONENTS_KEY).create();
+    public static final Registry<ActionComponentController<?>> ACTION_COMPONENT_CONTROLLERS = new RegistryBuilder<>(ACTION_COMPONENT_CONTROLLERS_KEY).create();
     /** 观测组件注册表实例 */
-    public static final Registry<ObservationComponentCreator<?>> OBSERVATION_COMPONENTS = new RegistryBuilder<>(OBSERVATION_COMPONENTS_KEY).create();
+    public static final Registry<ObservationComponentCreator<?>> OBSERVATION_COMPONENT_CREATORS = new RegistryBuilder<>(OBSERVATION_COMPONENT_CREATORS_KEY).create();
     /** 环境工厂注册表实例 */
     public static final Registry<McEnvFactory> ENV_FACTORIES = new RegistryBuilder<>(ENV_FACTORIES_KEY).create();
 
@@ -44,8 +44,8 @@ public final class RegistryKeys {
 
     /** 将三个自定义注册表注册到 NeoForge 的根注册表。在 mod 构造时的 NewRegistryEvent 中调用。 */
     public static void register(NewRegistryEvent event) {
-        event.register(ACTION_COMPONENTS);
-        event.register(OBSERVATION_COMPONENTS);
+        event.register(ACTION_COMPONENT_CONTROLLERS);
+        event.register(OBSERVATION_COMPONENT_CREATORS);
         event.register(ENV_FACTORIES);
     }
 }
