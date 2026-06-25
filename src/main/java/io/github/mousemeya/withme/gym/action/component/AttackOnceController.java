@@ -8,7 +8,11 @@ import java.util.List;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
+import io.github.mousemeya.withme.gym.action.ActionApplyResult;
+import io.github.mousemeya.withme.gym.action.ActionControlPolicy;
 import io.github.mousemeya.withme.gym.action.ActionComponentController;
 import io.github.mousemeya.withme.gym.action.proto.ProtoAttackOnce;
 import io.github.mousemeya.withme.gym.space.BoxSpace;
@@ -69,7 +73,7 @@ public class AttackOnceController implements ActionComponentController<ProtoAtta
     }
 
     @Override
-    public void apply(Mob mob, ProtoAttackOnce component) {
+    public ActionApplyResult apply(Mob mob, ProtoAttackOnce component) {
         LivingEntity target = null;
         if (component.getTargetEntityId() > 0) {
             var found = mob.level().getEntity(component.getTargetEntityId());
@@ -79,6 +83,9 @@ public class AttackOnceController implements ActionComponentController<ProtoAtta
         if (target != null && mob.level() instanceof ServerLevel serverLevel && mob.isWithinMeleeAttackRange(target)) {
             mob.doHurtTarget(serverLevel, target);
         }
+        return ActionApplyResult.applied(ActionControlPolicy.none()
+            .disableGoalFlags(Goal.Flag.MOVE, Goal.Flag.LOOK)
+            .setMemoryWithExpiry(MemoryModuleType.ATTACK_COOLING_DOWN, true, 2));
     }
 
     @Override

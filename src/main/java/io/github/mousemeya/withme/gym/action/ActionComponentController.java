@@ -51,8 +51,8 @@ public interface ActionComponentController<T extends Message> {
     /** @return 给定参数是否通过合法性校验 */
     boolean contains(T component);
 
-    /** 将动作应用到指定的 Mob 实体上。 */
-    void apply(Mob mob, T component) throws Exception;
+    /** 将动作应用到指定的 Mob 实体上，并返回对应的控制策略。 */
+    ActionApplyResult apply(Mob mob, T component) throws Exception;
 
     /** @return 动作是否已完成 */
     boolean isDone(Mob mob, T component);

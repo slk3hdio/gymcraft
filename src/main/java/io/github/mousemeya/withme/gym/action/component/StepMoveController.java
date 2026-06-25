@@ -6,7 +6,11 @@ import java.util.Collection;
 import java.util.List;
 
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
+import io.github.mousemeya.withme.gym.action.ActionApplyResult;
+import io.github.mousemeya.withme.gym.action.ActionControlPolicy;
 import io.github.mousemeya.withme.gym.action.ActionComponentController;
 import io.github.mousemeya.withme.gym.action.proto.ProtoStepMove;
 import io.github.mousemeya.withme.gym.space.BooleanSpace;
@@ -75,7 +79,7 @@ public class StepMoveController implements ActionComponentController<ProtoStepMo
     }
 
     @Override
-    public void apply(Mob mob, ProtoStepMove component) {
+    public ActionApplyResult apply(Mob mob, ProtoStepMove component) {
         mob.getMoveControl().strafe(component.getForward(), component.getStrafeRight());
         if (component.getJump()) {
             mob.getJumpControl().jump();
@@ -84,6 +88,12 @@ public class StepMoveController implements ActionComponentController<ProtoStepMo
             mob.setYRot(mob.getYRot() + component.getYawDelta());
             mob.setXRot(mob.getXRot() + component.getPitchDelta());
         }
+        return ActionApplyResult.applied(ActionControlPolicy.none()
+            .disableGoalFlags(Goal.Flag.MOVE, Goal.Flag.LOOK, Goal.Flag.JUMP)
+            .eraseMemory(MemoryModuleType.WALK_TARGET)
+            .eraseMemory(MemoryModuleType.PATH)
+            .eraseMemory(MemoryModuleType.LOOK_TARGET)
+            .stopNavigation());
     }
 
     @Override

@@ -6,7 +6,11 @@ import java.util.Collection;
 import java.util.List;
 
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
+import io.github.mousemeya.withme.gym.action.ActionApplyResult;
+import io.github.mousemeya.withme.gym.action.ActionControlPolicy;
 import io.github.mousemeya.withme.gym.action.ActionComponentController;
 import io.github.mousemeya.withme.gym.action.proto.ProtoMoveTo;
 import io.github.mousemeya.withme.gym.space.BoxSpace;
@@ -76,7 +80,16 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
     }
 
     @Override
-    public void apply(Mob mob, ProtoMoveTo component) {
+    public ActionApplyResult apply(Mob mob, ProtoMoveTo component) {
+        boolean moved = mob.getNavigation().moveTo(component.getX(), component.getY(), component.getZ(), component.getSpeedModifier());
+        var policy = ActionControlPolicy.none()
+            .disableGoalFlags(Goal.Flag.MOVE)
+            .eraseMemory(MemoryModuleType.WALK_TARGET)
+            .eraseMemory(MemoryModuleType.PATH);
+        if (!moved) {
+            policy.stopNavigation();
+        }
+        return ActionApplyResult.applied(policy);
     }
 
     @Override

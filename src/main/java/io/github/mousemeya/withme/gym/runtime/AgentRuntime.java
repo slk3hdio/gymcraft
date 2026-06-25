@@ -7,6 +7,8 @@ import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
 
+import io.github.mousemeya.withme.gym.action.ActionApplyResult;
+import io.github.mousemeya.withme.gym.action.ActionControlPolicy;
 import io.github.mousemeya.withme.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.withme.gym.action.ActionController;
 import io.github.mousemeya.withme.gym.observation.proto.ProtoMcObservation;
@@ -21,6 +23,7 @@ public class AgentRuntime {
 
     private ProtoMcAction runningAction;
     private ProtoMcObservation pendingObservation;
+    private ActionControlPolicy activePolicy = ActionControlPolicy.none();
 
     AgentRuntime(ActionController actionController, Mob mob) {
         this.actionController = actionController;
@@ -34,7 +37,29 @@ public class AgentRuntime {
      */
     @SubscribeEvent
     private void BeforeEntityTick(EntityTickEvent.Pre event) {
-        // 消费action
+        if (!event.getEntity().equals(this.mob)) {
+            return;
+        }
+
+        this.activePolicy.applyTo(this.mob);
+
+        ProtoMcAction action = this.actionBuf.poll();
+        if (action == null) {
+            return;
+        }
+
+        ActionApplyResult result = this.actionController.apply(this.mob, action);
+        if (!result.appliedAnyComponent()) {
+            return;
+        }
+
+        if (this.runningAction != null) {
+            this.activePolicy.releaseFrom(this.mob);
+        }
+
+        this.activePolicy = result.policy();
+        this.activePolicy.applyTo(this.mob);
+        this.runningAction = action;
     }
 
     /**
@@ -44,10 +69,16 @@ public class AgentRuntime {
      */
     @SubscribeEvent
     private void AfterEntityTick(EntityTickEvent.Post event) {
-        // 写入observation
-        // if (runningAction != null && actionController.isDone(mob, runningAction)) {
-        //     pendingObservation = observationBuf.poll();
-        // }
+        if (!event.getEntity().equals(this.mob)) {
+            return;
+        }
+
+        this.activePolicy.applyTo(this.mob);
+        if (this.runningAction != null && this.actionController.isDone(this.mob, this.runningAction)) {
+            this.activePolicy.releaseFrom(this.mob);
+            this.activePolicy = ActionControlPolicy.none();
+            this.runningAction = null;
+        }
     }
 
     /**

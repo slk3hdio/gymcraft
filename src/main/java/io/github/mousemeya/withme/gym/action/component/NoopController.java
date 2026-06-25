@@ -6,7 +6,11 @@ import java.util.Collection;
 import java.util.List;
 
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
+import io.github.mousemeya.withme.gym.action.ActionApplyResult;
+import io.github.mousemeya.withme.gym.action.ActionControlPolicy;
 import io.github.mousemeya.withme.gym.action.ActionComponentController;
 import io.github.mousemeya.withme.gym.action.proto.ProtoNoop;
 import io.github.mousemeya.withme.gym.space.DictSpace;
@@ -62,7 +66,15 @@ public class NoopController implements ActionComponentController<ProtoNoop> {
     }
 
     @Override
-    public void apply(Mob mob, ProtoNoop component) {
+    public ActionApplyResult apply(Mob mob, ProtoNoop component) {
+        return ActionApplyResult.applied(ActionControlPolicy.none()
+            .disableGoalFlags(Goal.Flag.MOVE, Goal.Flag.LOOK, Goal.Flag.JUMP, Goal.Flag.TARGET)
+            .eraseMemory(MemoryModuleType.WALK_TARGET)
+            .eraseMemory(MemoryModuleType.PATH)
+            .eraseMemory(MemoryModuleType.LOOK_TARGET)
+            .eraseMemory(MemoryModuleType.ATTACK_TARGET)
+            .setMemoryWithExpiry(MemoryModuleType.ATTACK_COOLING_DOWN, true, 2)
+            .stopNavigation());
     }
 
     @Override

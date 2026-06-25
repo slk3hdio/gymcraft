@@ -6,9 +6,13 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.LivingEntity;
 
+import io.github.mousemeya.withme.gym.action.ActionApplyResult;
+import io.github.mousemeya.withme.gym.action.ActionControlPolicy;
 import io.github.mousemeya.withme.gym.action.ActionComponentController;
 import io.github.mousemeya.withme.gym.action.proto.ProtoSetAttackTarget;
 import io.github.mousemeya.withme.gym.space.BoxSpace;
@@ -78,7 +82,35 @@ public class SetAttackTargetController implements ActionComponentController<Prot
     }
 
     @Override
-    public void apply(Mob mob, ProtoSetAttackTarget component) {
+    public ActionApplyResult apply(Mob mob, ProtoSetAttackTarget component) {
+        LivingEntity target = findTarget(mob, component);
+        mob.setTarget(target);
+
+        var policy = ActionControlPolicy.none()
+            .disableGoalFlags(Goal.Flag.TARGET)
+            .eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+        if (target == null) {
+            policy.eraseMemory(MemoryModuleType.ATTACK_TARGET);
+        } else {
+            policy.setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        }
+        return ActionApplyResult.applied(policy);
+    }
+
+    private static LivingEntity findTarget(Mob mob, ProtoSetAttackTarget component) {
+        if (component.getTargetEntityId() > 0) {
+            Entity found = mob.level().getEntity(component.getTargetEntityId());
+            if (found instanceof LivingEntity living) {
+                return living;
+            }
+        }
+        if (!component.getTargetUuid().isEmpty() && mob.level() instanceof ServerLevel serverLevel) {
+            Entity found = serverLevel.getEntityInAnyDimension(UUID.fromString(component.getTargetUuid()));
+            if (found instanceof LivingEntity living) {
+                return living;
+            }
+        }
+        return null;
     }
 
     @Override
