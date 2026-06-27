@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import pathlib
-import sys
 from collections.abc import Mapping
 from typing import Any
 
@@ -11,10 +9,6 @@ import gymnasium as gym
 from google.protobuf import json_format, message
 from google.protobuf.any_pb2 import Any as ProtoAny
 from google.protobuf.struct_pb2 import Struct
-
-GENERATED_DIR = pathlib.Path(__file__).with_name("generated")
-if str(GENERATED_DIR) not in sys.path:
-    sys.path.insert(0, str(GENERATED_DIR))
 
 from gymcraft.gym.action import mc_action_pb2
 from gymcraft.gym.rpc import env_service_pb2, env_service_pb2_grpc

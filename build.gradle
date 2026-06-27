@@ -213,6 +213,23 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
 }
 
+var pythonDir = file('src/main/python')
+
+tasks.register('generatePythonStubs', Exec) {
+    group = 'gymcraft'
+    description = 'Generate Python gRPC stubs from proto files'
+    workingDir = pythonDir
+    commandLine = ['uv', 'run', 'generate_stubs.py']
+}
+
+tasks.register('packagePython', Exec) {
+    group = 'gymcraft'
+    description = 'Build Python wheel and sdist'
+    dependsOn 'generatePythonStubs'
+    workingDir = pythonDir
+    commandLine = ['uv', 'build', '--out-dir', "${project.projectDir}/dist"]
+}
+
 // IDEA no longer automatically downloads sources/javadoc jars for dependencies, so we need to explicitly enable the behavior.
 idea {
     module {
