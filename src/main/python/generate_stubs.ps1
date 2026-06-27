@@ -10,6 +10,7 @@ $Args = @(
     "-m", "grpc_tools.protoc",
     "-I", "$ProjectRoot\src\main\proto",
     "--python_out=$Out",
+    "--pyi_out=$Out",
     "--grpc_python_out=$Out",
     "$ProjectRoot\src\main\proto\gymcraft\gym\action\components.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\action\mc_action.proto",

@@ -30,6 +30,7 @@ def main() -> None:
             "-I",
             str(PROTO_DIR),
             f"--python_out={OUT_DIR}",
+            f"--pyi_out={OUT_DIR}",
             f"--grpc_python_out={OUT_DIR}",
             *(str(PROTO_DIR / f) for f in PROTO_FILES),
         ],
