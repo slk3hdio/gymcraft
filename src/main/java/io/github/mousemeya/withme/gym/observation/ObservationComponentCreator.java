@@ -6,6 +6,7 @@ import com.google.protobuf.Message;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.withme.gym.space.McSpace;
+import io.github.mousemeya.withme.registry.RegistryKeys;
 
 
 /**
@@ -20,6 +21,15 @@ import io.github.mousemeya.withme.gym.space.McSpace;
 public interface ObservationComponentCreator<T extends Message> {
     /** @return 对应的 Protobuf 消息类 */
     Class<T> protoType();
+
+    /** @return 观测组件的注册 ID，用于 ProtoMcObservation.components 的键。 */
+    default String getRegisterId() {
+        var key = RegistryKeys.OBSERVATION_COMPONENT_CREATORS.getKey(this);
+        if (key == null) {
+            throw new IllegalStateException("Observation component creator is not registered: " + this);
+        }
+        return key.toString();
+    }
 
     /** @return 该观测数据的 Gymnasium 风格空间定义 */
     McSpace<Map<String, Object>> space();

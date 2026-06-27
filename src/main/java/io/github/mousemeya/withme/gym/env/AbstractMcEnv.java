@@ -1,13 +1,13 @@
 package io.github.mousemeya.withme.gym.env;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Mob;
-import net.neoforged.neoforge.server.ServerLifecycleHooks;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.neoforged.neoforge.common.NeoForge;
 
 import io.github.mousemeya.withme.gym.action.ActionController;
 import io.github.mousemeya.withme.gym.action.ActionComponentController;
@@ -15,6 +15,7 @@ import io.github.mousemeya.withme.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.withme.gym.observation.ObservationCreator;
 import io.github.mousemeya.withme.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.withme.gym.observation.proto.ProtoMcObservation;
+import io.github.mousemeya.withme.gym.runtime.AgentRuntime;
 import io.github.mousemeya.withme.gym.space.McSpace;
 
 
@@ -32,29 +33,125 @@ import io.github.mousemeya.withme.gym.space.McSpace;
 public abstract class AbstractMcEnv implements McEnv {
     protected final Mob mob;
     protected final UUID envId;
+    protected final ActionController actionController;
+    protected final ObservationCreator observationCreator;
+    protected final AgentRuntime agentRuntime;
+    private boolean closed;
 
-    public AbstractMcEnv(Mob mob, UUID envId) {
-        this.mob = mob;
-        this.envId = envId;
+    protected AbstractMcEnv(
+        Mob mob,
+        Collection<ActionComponentController<?>> actionComponents,
+        Collection<ObservationComponentCreator<?>> observationComponents
+    ) {
+        this(mob, new ActionController(actionComponents), new ObservationCreator(observationComponents));
     }
-    
+
+    protected AbstractMcEnv(Mob mob, ActionController actionController, ObservationCreator observationCreator) {
+        this.mob = mob;
+        this.envId = UUID.randomUUID();
+        this.actionController = actionController;
+        this.observationCreator = observationCreator;
+        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
+        NeoForge.EVENT_BUS.register(this.agentRuntime);
+    }
+     
     @Override
     public ResetResult reset(Integer seed, Map<String, Object> options) {
-        return null;
+        this.ensureOpen();
+        this.agentRuntime.clear();
+        this.resetMob(seed, options == null ? Map.of() : options);
+        ProtoMcObservation observation = this.agentRuntime.createObservation();
+        return new ResetResult(observation, this.createResetInfo());
     }
 
     @Override
     public StepResult step(ProtoMcAction action) {
-        return null;
+        this.ensureOpen();
+        try {
+            this.agentRuntime.putAction(action);
+            ProtoMcObservation observation = this.agentRuntime.takeObservation();
+            return new StepResult(
+                observation,
+                this.computeReward(observation),
+                this.isTerminated(observation),
+                this.isTruncated(observation),
+                this.createStepInfo(observation)
+            );
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while stepping environment " + this.envId, e);
+        }
     }
 
     @Override
-    public abstract McSpace<Map<String, Object>> getObservationSpace();
+    public McSpace<Map<String, Object>> getObservationSpace() {
+        return this.observationCreator.space();
+    }
+
     @Override
-    public abstract McSpace<Map<String, Object>> getActionSpace();
+    public McSpace<Map<String, Object>> getActionSpace() {
+        return this.actionController.space();
+    }
+
     @Override
-    public abstract Map<String, Object> getMetadata();
+    public Map<String, Object> getMetadata() {
+        return Map.of(
+            "env_id", this.envId.toString(),
+            "entity_uuid", this.mob.getUUID().toString(),
+            "entity_type", BuiltInRegistries.ENTITY_TYPE.getKey(this.mob.getType()).toString()
+        );
+    }
+
     @Override
-    public abstract void close();
+    public void close() {
+        if (this.closed) {
+            return;
+        }
+        this.agentRuntime.clear();
+        NeoForge.EVENT_BUS.unregister(this.agentRuntime);
+        this.closed = true;
+    }
+
+    protected void resetMob(Integer seed, Map<String, Object> options) {
+        this.mob.getNavigation().stop();
+        this.mob.setTarget(null);
+        this.mob.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        this.mob.getBrain().eraseMemory(MemoryModuleType.PATH);
+        this.mob.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+        this.mob.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+    }
+
+    protected double computeReward(ProtoMcObservation observation) {
+        return 0.0;
+    }
+
+    protected boolean isTerminated(ProtoMcObservation observation) {
+        return !this.mob.isAlive();
+    }
+
+    protected boolean isTruncated(ProtoMcObservation observation) {
+        return false;
+    }
+
+    protected Map<String, Object> createResetInfo() {
+        return Map.of(
+            "env_id", this.envId.toString(),
+            "entity_uuid", this.mob.getUUID().toString()
+        );
+    }
+
+    protected Map<String, Object> createStepInfo(ProtoMcObservation observation) {
+        return Map.of(
+            "env_id", this.envId.toString(),
+            "entity_uuid", this.mob.getUUID().toString(),
+            "game_tick", this.mob.level().getGameTime()
+        );
+    }
+
+    protected void ensureOpen() {
+        if (this.closed) {
+            throw new IllegalStateException("Environment is closed: " + this.envId);
+        }
+    }
 
 }

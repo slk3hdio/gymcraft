@@ -2,6 +2,7 @@ package io.github.mousemeya.withme.registry;
 
 import io.github.mousemeya.withme.WithMe;
 import io.github.mousemeya.withme.gym.env.McEnvFactory;
+import io.github.mousemeya.withme.gym.env.envs.SimpleMobEnvFactory;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -16,6 +17,11 @@ public final class EnvFactories {
     public static final DeferredRegister<McEnvFactory> REGISTRY = DeferredRegister.create(
         RegistryKeys.ENV_FACTORIES,
         WithMe.MODID
+    );
+
+    public static final DeferredHolder<McEnvFactory, SimpleMobEnvFactory> SIMPLE_MOB = REGISTRY.register(
+        "simple_mob",
+        SimpleMobEnvFactory::new
     );
 
     private EnvFactories() {

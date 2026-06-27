@@ -13,6 +13,9 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import io.github.mousemeya.withme.gym.space.DictSpace;
+import io.github.mousemeya.withme.gym.space.McSpace;
+
 /**
  * 动作分发器 —— 解析 {@link ProtoMcAction} 中每个动作组件，按注册表 ID 分发给对应的
  * {@link ActionComponentController} 执行。
@@ -31,6 +34,14 @@ public class ActionController {
             map.put(controller.getRegisterId(), controller);
         }
         this.componentControllers = Map.copyOf(map);
+    }
+
+    public McSpace<Map<String, Object>> space() {
+        var spaces = new LinkedHashMap<String, McSpace<?>>();
+        for (var entry : this.componentControllers.entrySet()) {
+            spaces.put(entry.getKey(), entry.getValue().space());
+        }
+        return new DictSpace(spaces);
     }
 
     /** 将 ProtoMcAction 中的所有组件依次分发执行，并聚合组件返回的控制策略。 */

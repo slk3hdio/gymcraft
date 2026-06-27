@@ -1,7 +1,9 @@
 package io.github.mousemeya.withme.gym.observation;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,8 +11,10 @@ import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import net.minecraft.world.entity.Mob;
 
-import io.github.mousemeya.withme.registry.RegistryKeys;
+import io.github.mousemeya.withme.gym.observation.proto.ProtoObservationHeader;
 import io.github.mousemeya.withme.gym.observation.proto.ProtoMcObservation;
+import io.github.mousemeya.withme.gym.space.DictSpace;
+import io.github.mousemeya.withme.gym.space.McSpace;
 
 
 /**
@@ -24,11 +28,34 @@ public class ObservationCreator {
     private static final Logger LOGGER = LoggerFactory.getLogger(ObservationCreator.class);
     private final List<ObservationComponentCreator<? extends Message>> components;
 
-    ObservationCreator(Collection<ObservationComponentCreator<?>> components) {
+    public ObservationCreator(Collection<ObservationComponentCreator<?>> components) {
         this.components = List.copyOf(components);
     }
 
     public ProtoMcObservation create(Mob mob) {
-        return ProtoMcObservation.newBuilder().build();
+        var builder = ProtoMcObservation.newBuilder()
+            .setHeader(ProtoObservationHeader.newBuilder()
+                .setSchemaVersion(1)
+                .setGameTick(mob.level().getGameTime())
+                .setDimension(mob.level().dimension().identifier().toString())
+                .setAgentId(mob.getUUID().toString())
+                .build());
+
+        for (ObservationComponentCreator<? extends Message> component : this.components) {
+            try {
+                builder.putComponents(component.getRegisterId(), Any.pack(component.create(mob)));
+            } catch (RuntimeException e) {
+                LOGGER.warn("Failed to create observation component {}: {}", component, e.getMessage());
+            }
+        }
+        return builder.build();
+    }
+
+    public McSpace<Map<String, Object>> space() {
+        var spaces = new LinkedHashMap<String, McSpace<?>>();
+        for (ObservationComponentCreator<?> component : this.components) {
+            spaces.put(component.getRegisterId(), component.space());
+        }
+        return new DictSpace(spaces);
     }
 }

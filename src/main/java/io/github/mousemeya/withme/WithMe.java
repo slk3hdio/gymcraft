@@ -4,6 +4,8 @@ import io.github.mousemeya.withme.registry.ActionComponents;
 import io.github.mousemeya.withme.registry.EnvFactories;
 import io.github.mousemeya.withme.registry.ObservationCreators;
 import io.github.mousemeya.withme.registry.RegistryKeys;
+import io.github.mousemeya.withme.item.EnvToolItem;
+import io.github.mousemeya.withme.network.WithMeNetwork;
 
 import org.slf4j.Logger;
 
@@ -58,6 +60,11 @@ public class WithMe {
     // Creates a new food item with the id "withme:example_id", nutrition 1 and saturation 2
     public static final DeferredItem<Item> EXAMPLE_ITEM = ITEMS.registerSimpleItem("example_item", p -> p.food(new FoodProperties.Builder()
             .alwaysEdible().nutrition(1).saturationModifier(2f).build()));
+    public static final DeferredItem<EnvToolItem> ENV_TOOL = ITEMS.registerItem(
+            "env_tool",
+            EnvToolItem::new,
+            properties -> properties.stacksTo(1)
+    );
 
     // Creates a creative tab with the id "withme:example_tab" for the example item, that is placed after the combat tab
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
@@ -66,6 +73,7 @@ public class WithMe {
             .icon(() -> EXAMPLE_ITEM.get().getDefaultInstance())
             .displayItems((parameters, output) -> {
                 output.accept(EXAMPLE_ITEM.get()); // Add the example item to the tab. For your own tabs, this method is preferred over the event
+                output.accept(ENV_TOOL.get());
             }).build());
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.
@@ -75,6 +83,7 @@ public class WithMe {
         modEventBus.addListener(this::commonSetup);
         // Register custom registries before their DeferredRegisters attach entries to them.
         modEventBus.addListener(RegistryKeys::register);
+        modEventBus.addListener(WithMeNetwork::register);
 
         // Register the Deferred Register to the mod event bus so blocks get registered
         BLOCKS.register(modEventBus);
