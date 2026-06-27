@@ -28,13 +28,14 @@ sourceSets.main.resources {
 }
 
 repositories {
-    // Add here additional repositories if required by some of the dependencies below.
     exclusiveContent {
         forRepository {
             mavenCentral()
         }
         filter {
             includeGroup 'com.google.protobuf'
+            includeGroup 'io.grpc'
+            includeGroup 'org.apache.tomcat'
         }
     }
 
@@ -125,6 +126,11 @@ configurations {
 
 dependencies {
     implementation 'com.google.protobuf:protobuf-java:4.30.2'
+    implementation 'com.google.protobuf:protobuf-java-util:4.30.2'
+    implementation 'io.grpc:grpc-netty-shaded:1.72.0'
+    implementation 'io.grpc:grpc-protobuf:1.72.0'
+    implementation 'io.grpc:grpc-stub:1.72.0'
+    compileOnly 'org.apache.tomcat:annotations-api:6.0.53'
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
@@ -151,6 +157,18 @@ dependencies {
 protobuf {
     protoc {
         artifact = 'com.google.protobuf:protoc:4.30.2'
+    }
+    plugins {
+        grpc {
+            artifact = 'io.grpc:protoc-gen-grpc-java:1.72.0'
+        }
+    }
+    generateProtoTasks {
+        all().configureEach { task ->
+            task.plugins {
+                grpc {}
+            }
+        }
     }
 }
 

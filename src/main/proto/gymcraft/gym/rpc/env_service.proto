@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package gymcraft.gym.rpc;
+
+import "google/protobuf/struct.proto";
+import "gymcraft/gym/action/mc_action.proto";
+import "gymcraft/gym/observation/mc_observation.proto";
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.rpc.proto";
+option java_outer_classname = "EnvServiceProto";
+
+service GymEnvService {
+  rpc Connect(ConnectRequest) returns (ConnectResponse);
+  rpc Reset(ResetRequest) returns (ResetResponse);
+  rpc Step(StepRequest) returns (StepResponse);
+  rpc CloseSession(CloseSessionRequest) returns (CloseSessionResponse);
+}
+
+message ConnectRequest {
+  string entity_uuid = 1;
+}
+
+message ConnectResponse {
+  string session_id = 1;
+  string entity_uuid = 2;
+  google.protobuf.Struct metadata = 3;
+  string action_space_json = 4;
+  string observation_space_json = 5;
+}
+
+message ResetRequest {
+  string session_id = 1;
+  optional int32 seed = 2;
+  google.protobuf.Struct options = 3;
+}
+
+message ResetResponse {
+  gymcraft.gym.observation.ProtoMcObservation observation = 1;
+  google.protobuf.Struct info = 2;
+}
+
+message StepRequest {
+  string session_id = 1;
+  gymcraft.gym.action.ProtoMcAction action = 2;
+}
+
+message StepResponse {
+  gymcraft.gym.observation.ProtoMcObservation observation = 1;
+  double reward = 2;
+  bool terminated = 3;
+  bool truncated = 4;
+  google.protobuf.Struct info = 5;
+}
+
+message CloseSessionRequest {
+  string session_id = 1;
+}
+
+message CloseSessionResponse {
+  bool closed = 1;
+}

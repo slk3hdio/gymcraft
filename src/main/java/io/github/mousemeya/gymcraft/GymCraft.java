@@ -5,6 +5,7 @@ import io.github.mousemeya.gymcraft.registry.EnvFactories;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import io.github.mousemeya.gymcraft.item.EnvToolItem;
+import io.github.mousemeya.gymcraft.gym.rpc.GymCraftRpcServer;
 import io.github.mousemeya.gymcraft.network.GymCraftNetwork;
 
 import org.slf4j.Logger;
@@ -19,6 +20,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.ModContainer;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -46,6 +48,8 @@ public class GymCraft {
     public GymCraft(IEventBus modEventBus, ModContainer modContainer) {
         modEventBus.addListener(RegistryKeys::register);
         modEventBus.addListener(GymCraftNetwork::register);
+        NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStarted);
+        NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStopping);
 
         ITEMS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
