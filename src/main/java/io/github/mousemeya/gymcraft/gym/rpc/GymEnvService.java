@@ -3,8 +3,7 @@ package io.github.mousemeya.gymcraft.gym.rpc;
 import java.util.UUID;
 
 import io.github.mousemeya.gymcraft.gym.EnvManager;
-import io.github.mousemeya.gymcraft.gym.env.ResetResult;
-import io.github.mousemeya.gymcraft.gym.env.StepResult;
+
 import io.github.mousemeya.gymcraft.gym.rpc.proto.CloseSessionRequest;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.CloseSessionResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ConnectRequest;
@@ -75,7 +74,7 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
             responseObserver.onNext(ConnectResponse.newBuilder()
                     .setSessionId(session.id())
                     .setEntityUuid(entityUuid.toString())
-                    .setMetadata(ProtoJson.toStruct(env.getMetadata()))
+                    .setMetadata(ProtoJson.toJson(env.getMetadata()))
                     .setActionSpaceJson(ProtoJson.toJson(env.getActionSpace().serialize()))
                     .setObservationSpaceJson(ProtoJson.toJson(env.getObservationSpace().serialize()))
                     .build());
@@ -100,13 +99,10 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
         sessions.get(request.getSessionId()).ifPresentOrElse(session -> {
             session.lock().lock();
             try {
-                ResetResult result = session.env().reset(
+                ResetResponse response = session.env().reset(
                         request.hasSeed() ? request.getSeed() : null,
-                        ProtoJson.fromStruct(request.getOptions()));
-                responseObserver.onNext(ResetResponse.newBuilder()
-                        .setObservation(result.observation())
-                        .setInfo(ProtoJson.toStruct(result.info()))
-                        .build());
+                        ProtoJson.fromJson(request.getOptions()));
+                responseObserver.onNext(response);
                 responseObserver.onCompleted();
             } catch (IllegalStateException e) {
                 responseObserver.onError(Status.FAILED_PRECONDITION.withDescription(e.getMessage()).asRuntimeException());
@@ -138,14 +134,8 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
         sessions.get(request.getSessionId()).ifPresentOrElse(session -> {
             session.lock().lock();
             try {
-                StepResult result = session.env().step(request.getAction());
-                responseObserver.onNext(StepResponse.newBuilder()
-                        .setObservation(result.observation())
-                        .setReward(result.reward())
-                        .setTerminated(result.terminated())
-                        .setTruncated(result.truncated())
-                        .setInfo(ProtoJson.toStruct(result.info()))
-                        .build());
+                StepResponse response = session.env().step(request.getAction());
+                responseObserver.onNext(response);
                 responseObserver.onCompleted();
             } catch (IllegalStateException e) {
                 responseObserver.onError(Status.FAILED_PRECONDITION.withDescription(e.getMessage()).asRuntimeException());

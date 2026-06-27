@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package gymcraft.gym.rpc;
 
-import "google/protobuf/struct.proto";
 import "gymcraft/gym/action/mc_action.proto";
 import "gymcraft/gym/observation/mc_observation.proto";
 
@@ -24,7 +23,7 @@ message ConnectRequest {
 message ConnectResponse {
   string session_id = 1;
   string entity_uuid = 2;
-  google.protobuf.Struct metadata = 3;
+  string metadata = 3;
   string action_space_json = 4;
   string observation_space_json = 5;
 }
@@ -32,12 +31,12 @@ message ConnectResponse {
 message ResetRequest {
   string session_id = 1;
   optional int32 seed = 2;
-  google.protobuf.Struct options = 3;
+  string options = 3;
 }
 
 message ResetResponse {
   gymcraft.gym.observation.ProtoMcObservation observation = 1;
-  google.protobuf.Struct info = 2;
+  string info = 2;
 }
 
 message StepRequest {
@@ -50,7 +49,7 @@ message StepResponse {
   double reward = 2;
   bool terminated = 3;
   bool truncated = 4;
-  google.protobuf.Struct info = 5;
+  string info = 5;
 }
 
 message CloseSessionRequest {

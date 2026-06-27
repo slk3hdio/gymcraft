@@ -4,6 +4,8 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 
+import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
+
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -15,6 +17,8 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
+import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
+import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
@@ -56,12 +60,15 @@ public abstract class AbstractMcEnv implements McEnv {
     }
      
     @Override
-    public ResetResult reset(Integer seed, Map<String, Object> options) {
+    public ResetResponse reset(Integer seed, Map<String, Object> options) {
         this.ensureOpen();
         try {
             this.agentRuntime.putReset(seed, options == null ? Map.of() : options, this::resetMob);
             ProtoMcObservation observation = this.agentRuntime.takeObservation();
-            return new ResetResult(observation, this.createResetInfo());
+            return ResetResponse.newBuilder()
+                    .setObservation(observation)
+                    .setInfo(ProtoJson.toJson(this.createResetInfo()))
+                    .build();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while resetting environment " + this.envId, e);
@@ -69,18 +76,18 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     @Override
-    public StepResult step(ProtoMcAction action) {
+    public StepResponse step(ProtoMcAction action) {
         this.ensureOpen();
         try {
             this.agentRuntime.putAction(action);
             ProtoMcObservation observation = this.agentRuntime.takeObservation();
-            return new StepResult(
-                observation,
-                this.computeReward(observation),
-                this.isTerminated(observation),
-                this.isTruncated(observation),
-                this.createStepInfo(observation)
-            );
+            return StepResponse.newBuilder()
+                    .setObservation(observation)
+                    .setReward(this.computeReward(observation))
+                    .setTerminated(this.isTerminated(observation))
+                    .setTruncated(this.isTruncated(observation))
+                    .setInfo(ProtoJson.toJson(this.createStepInfo(observation)))
+                    .build();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while stepping environment " + this.envId, e);
@@ -145,11 +152,7 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     protected Map<String, Object> createStepInfo(ProtoMcObservation observation) {
-        return Map.of(
-            "env_id", this.envId.toString(),
-            "entity_uuid", this.mob.getUUID().toString(),
-            "game_tick", this.mob.level().getGameTime()
-        );
+        return Map.of();
     }
 
     protected void ensureOpen() {
