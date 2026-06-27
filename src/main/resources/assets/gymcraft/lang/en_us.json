@@ -1,13 +1,4 @@
 {
-  "itemGroup.gymcraft": "Example Mod Tab",
-  "block.gymcraft.example_block": "Example Block",
-  "item.gymcraft.example_item": "Example Item",
-
-  "gymcraft.configuration.title": "GymCraft Configs",
-  "gymcraft.configuration.section.gymcraft.common.toml": "GymCraft Configs",
-  "gymcraft.configuration.section.gymcraft.common.toml.title": "GymCraft Configs",
-  "gymcraft.configuration.items": "Item List",
-  "gymcraft.configuration.logDirtBlock": "Log Dirt Block",
-  "gymcraft.configuration.magicNumberIntroduction": "Magic Number Text",
-  "gymcraft.configuration.magicNumber": "Magic Number"
+  "itemGroup.gymcraft": "GymCraft",
+  "item.gymcraft.env_tool": "Environment Tool"
 }
