@@ -1,5 +1,7 @@
 # GymCraft
 
+> 注: 当前项目处于未完成状态
+
 在 Minecraft 中实现 [Gymnasium](https://gymnasium.farama.org/) 式强化学习环境的 NeoForge 模组。
 
 <p align="center">
