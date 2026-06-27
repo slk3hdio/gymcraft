@@ -112,12 +112,14 @@ gymcraft/
 │   ├── action/        动作控制器（step_move, move_to, attack_once ...）
 │   ├── observation/   观测生成器（self, world, nearby_blocks ...）
 │   ├── env/           环境抽象（McEnv, AbstractMcEnv, SimpleMobEnv）
+│   ├── rpc/           gRPC 桥接（GymCraftRpcServer, GymEnvService）
 │   ├── runtime/       运行时调度（AgentRuntime, ActionControlPolicy）
 │   └── space/         Gymnasium 风格空间（Box, Discrete, Dict ...）
 ├── item/              环境工具物品
 ├── network/           Shift+滚轮选择环境的网络同步
 ├── registry/          NeoForge 自定义注册表
-└── proto/             Protobuf 消息定义
+├── proto/             Protobuf 消息定义（含 gRPC service）
+└── python/            Python RPC 客户端
 ```
 
 ---

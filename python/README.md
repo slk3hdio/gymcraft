@@ -1,12 +1,12 @@
 # GymCraft Python RPC Client
 
-Install dependencies:
+Install dependencies (Python ≥3.10):
 
 ```powershell
 pip install -r python/requirements.txt
 ```
 
-Generate Python stubs from the mod proto files:
+Generate Python gRPC stubs from the mod proto files:
 
 ```powershell
 .\python\generate_stubs.ps1
