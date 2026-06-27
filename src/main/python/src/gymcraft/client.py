@@ -6,9 +6,8 @@ from typing import Any
 
 import grpc
 import gymnasium as gym
-from google.protobuf import json_format, message
+from google.protobuf import message
 from google.protobuf.any_pb2 import Any as ProtoAny
-from google.protobuf.struct_pb2 import Struct
 
 from gymcraft.gym.action import mc_action_pb2
 from gymcraft.gym.rpc import env_service_pb2, env_service_pb2_grpc
@@ -26,7 +25,7 @@ class GymCraftEnv(gym.Env):
         response = self.stub.Connect(env_service_pb2.ConnectRequest(entity_uuid=entity_uuid))
         self.session_id = response.session_id
         self.entity_uuid = response.entity_uuid
-        self.remote_metadata = json_format.MessageToDict(response.metadata)
+        self.remote_metadata = json.loads(response.metadata)
         self.action_space_spec = json.loads(response.action_space_json)
         self.observation_space_spec = json.loads(response.observation_space_json)
 
@@ -35,10 +34,10 @@ class GymCraftEnv(gym.Env):
         request = env_service_pb2.ResetRequest(session_id=self.session_id)
         if seed is not None:
             request.seed = seed
-        request.options.CopyFrom(_to_struct(options or {}))
+        request.options = json.dumps(options or {})
 
         response = self.stub.Reset(request)
-        return response.observation, json_format.MessageToDict(response.info)
+        return response.observation, json.loads(response.info)
 
     def step(self, action: mc_action_pb2.ProtoMcAction | Mapping[str, message.Message]):
         request = env_service_pb2.StepRequest(
@@ -51,7 +50,7 @@ class GymCraftEnv(gym.Env):
             response.reward,
             response.terminated,
             response.truncated,
-            json_format.MessageToDict(response.info),
+            json.loads(response.info),
         )
 
     def close(self) -> None:
@@ -77,8 +76,3 @@ def unpack_component(observation, key: str, message_type: type[message.Message])
     packed.Unpack(payload)
     return payload
 
-
-def _to_struct(value: Mapping[str, Any]) -> Struct:
-    struct = Struct()
-    struct.update(dict(value))
-    return struct
