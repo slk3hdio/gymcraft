@@ -22,7 +22,7 @@ class GymCraftEnv(gym.Env):
         self.channel = grpc.insecure_channel(address)
         self.stub = env_service_pb2_grpc.GymEnvServiceStub(self.channel)
 
-        response = self.stub.Connect(env_service_pb2.ConnectRequest(entity_uuid=entity_uuid))
+        response = self.stub.Connect(env_service_pb2.ConnectRequest(entity_uuid=entity_uuid))  # type: ignore[attr-defined]
         self.session_id = response.session_id
         self.entity_uuid = response.entity_uuid
         self.remote_metadata = json.loads(response.metadata)
@@ -31,7 +31,7 @@ class GymCraftEnv(gym.Env):
 
     def reset(self, *, seed: int | None = None, options: Mapping[str, Any] | None = None):
         super().reset(seed=seed)
-        request = env_service_pb2.ResetRequest(session_id=self.session_id)
+        request = env_service_pb2.ResetRequest(session_id=self.session_id)  # type: ignore[attr-defined]
         if seed is not None:
             request.seed = seed
         request.options = json.dumps(options or {})
@@ -39,8 +39,8 @@ class GymCraftEnv(gym.Env):
         response = self.stub.Reset(request)
         return response.observation, json.loads(response.info)
 
-    def step(self, action: mc_action_pb2.ProtoMcAction | Mapping[str, message.Message]):
-        request = env_service_pb2.StepRequest(
+    def step(self, action: mc_action_pb2.ProtoMcAction | Mapping[str, message.Message]):  # type: ignore[name-defined]
+        request = env_service_pb2.StepRequest(  # type: ignore[attr-defined]
             session_id=self.session_id,
             action=make_action(action) if isinstance(action, Mapping) else action,
         )
@@ -56,13 +56,13 @@ class GymCraftEnv(gym.Env):
     def close(self) -> None:
         session_id = getattr(self, "session_id", None)
         if session_id:
-            self.stub.CloseSession(env_service_pb2.CloseSessionRequest(session_id=session_id))
+            self.stub.CloseSession(env_service_pb2.CloseSessionRequest(session_id=session_id))  # type: ignore[attr-defined]
             self.session_id = ""
         self.channel.close()
 
 
-def make_action(components: Mapping[str, message.Message]) -> mc_action_pb2.ProtoMcAction:
-    action = mc_action_pb2.ProtoMcAction()
+def make_action(components: Mapping[str, message.Message]) -> mc_action_pb2.ProtoMcAction:  # type: ignore[name-defined]
+    action = mc_action_pb2.ProtoMcAction()  # type: ignore[attr-defined]
     for key, payload in components.items():
         packed = ProtoAny()
         packed.Pack(payload)
