@@ -27,6 +27,11 @@ sourceSets.main.resources {
     exclude("src/generated/**/.cache") // datagen cache files
 }
 
+sourceSets.main.java {
+    srcDir(layout.buildDirectory.dir('generated/source/proto/main/java'))
+    srcDir(layout.buildDirectory.dir('generated/source/proto/main/grpc'))
+}
+
 repositories {
     exclusiveContent {
         forRepository {
@@ -235,5 +240,7 @@ idea {
     module {
         downloadSources = true
         downloadJavadoc = true
+        generatedSourceDirs += file('build/generated/source/proto/main/java')
+        generatedSourceDirs += file('build/generated/source/proto/main/grpc')
     }
 }

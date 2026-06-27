@@ -31,3 +31,4 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 - EnvToolItem: Shift+右键创建环境, Shift+滚轮切换类型, Shift+右键删除
 - `registry/AgentStatusData.java` 目前是空占位类
 - `repo/` 既是 maven-publish 目标 (`file://${projectDir}/repo`)，又存放参考资源: `Documentation` (NeoForge 文档)、`minecraft-source-1.26` / `minecraft-source-1.20.1-java` (反编译源码)、`TouhouLittleMaid-1.20` (参考模组)
+- python 库版本(pyproject.toml中的version) 应该和mod版本保持一致

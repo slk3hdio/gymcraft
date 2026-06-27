@@ -116,8 +116,6 @@ GymCraft 实现了对两种原版 AI 系统的压制策略，确保实体只受 
 
 策略在各动作 Controller 的 `apply()` 中动态生成，由 `AgentRuntime` 在 entity tick 前后持续维持。
 
-详见文档：[Mob AI 系统分析](https://github.com/slk3hdio/gymcraft/wiki)
-
 ---
 
 ## 项目结构
