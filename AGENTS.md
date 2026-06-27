@@ -2,28 +2,39 @@
 
 ## Project
 
-NeoForge 模组 (`mod_id=gymcraft`), MC `26.1`, NeoForge `26.1.0.19-beta`, Java **25** 工具链, Gradle 9.2.1.
+NeoForge 模组 (`mod_id=gymcraft`, `io.github.mousemeya.gymcraft`), MC 26.1, NeoForge 26.1.0.19-beta, Java 25 工具链, Gradle 9.2.1.
 
-在 Minecraft 中实现 **Gymnasium 式强化学习环境**（`gym/` 包：`env`、`action`、`observation`、`space`、`runtime`；`McEnv` ≈ Gymnasium `Env`），通过 protobuf 消息通信（ProtoMcAction / ProtoMcObservation）。`rpc/`（Java）和 `src/main/proto/.../rpc/` 均为空——gRPC 层尚未搭建。`GymCraft.java` 仍保留 MDK 模板中的示例方块/物品/标签模板代码，未必是有意为之的功能。
+Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`, 通过 protobuf 通信 (`ProtoMcAction` / `ProtoMcObservation`)。`src/main/proto/.../rpc/` 为空 — gRPC 层未搭建。
 
-## 命令（Windows PowerShell → `.\gradlew`）
+## Commands (Windows PowerShell → `.\gradlew`)
 
 | 用途 | 命令 |
 |---|---|
 | 构建 | `.\gradlew build` |
 | 运行客户端/服务端 | `.\gradlew runClient` / `runServer` |
-| 测试 | `.\gradlew runGameTestServer`（运行所有 gametest 后退出；命名空间 `gymcraft`）或游戏内 `/test` |
-| 数据生成 | `.\gradlew runData` → 输出到 `src/generated/resources/` |
-| 清理/刷新依赖 | `.\gradlew clean` / `.\gradlew --refresh-dependencies` |
+| 测试 | `.\gradlew runGameTestServer` (命名空间 `gymcraft`) |
+| 数据生成 | `.\gradlew runData` → `src/generated/resources/` |
+| 清理 | `.\gradlew clean` |
 
-没有 JUnit 单元测试（`src/test` 为空）；测试手段 = NeoForge GameTest。
+**没有测试文件** — `src/test` 为空，且 `src/` 下无 GameTest Java 文件。GameTest 基础设施已配置但无实际测试。
 
-## 注意点
+## Architecture
 
-- `gradle.properties` 中硬编码了 `org.gradle.java.home=D:/Program Files/Java/jdk-25`——这是本机绝对路径；换机器必须修改或覆盖，否则构建会失败。开启配置缓存 + 并行 + 构建缓存。
-- **Protobuf**：编辑 `src/main/proto/gymcraft/gym/...` 下的 `.proto`；生成的 Java 类（包 `io.github.mousemeya.gymcraft.gym.{action,observation}.proto`，例如 `ProtoMcAction`）是**构建产物，不在源码树中**——切勿手工编辑；修改 `.proto` 后重新构建即可重新生成。protoc / protobuf-java 锁定为 4.30.2。
-- **模组元数据是模板**：编辑 `src/main/templates/META-INF/neoforge.mods.toml`（不要编辑构建产物中的 toml）；`${...}` 占位符以及 mod id/version/group 来自 `gradle.properties`，由 `generateModMetadata` 任务展开。
-- 新增 RL 动作/观测/环境类型必须通过 `registry/` 注册（`ActionComponents`、`ObservationComponents`、`EnvFactories`；键通过 `RegistryKeys::register` 在 `GymCraft` 构造函数中注册）。
-- **风格约定**：gym 相关代码使用中文 Javadoc/注释——请保持一致。Java 编译编码为 UTF-8。
-- **参考文档**: .\repo\Documentation: neoforge官方文档
-- **参考源码**: .\repo\minecraft-source-1.26: 1.26.1 源码
+- **双 @Mod 入口**: `GymCraft.java` (common) + `GymCraftClient.java` (client-only, `dist = Dist.CLIENT`)
+- **注册表** (3 个自定义 NeoForge registry, 在 `RegistryKeys` 用 `RegistryBuilder` 定义):
+  - `action_components` → `ActionComponents` (5 个控制器: `step_move`, `move_to`, `set_attack_target`, `attack_once`, `noop`)
+  - `observation_components` → `ObservationCreators` (5 个生成器: `self`, `world`, `nearby_entities`, `nearby_blocks`, `inventory`)
+  - `env_factories` → `EnvFactories` (1 个环境: `simple_mob`)
+  - 新增类型必须在对应 `*Components`/`EnvFactories` 类中注册 `DeferredHolder`
+- **`EnvManager`** — 实体 UUID → McEnv 的单例管理器 (`ConcurrentHashMap`)
+- **`AgentRuntime`** — 基于 `ArrayBlockingQueue` 的 actor 模型: `putAction` / `takeObservation` 均为阻塞调用 (不可在游戏主线程调用); 通过 `@SubscribeEvent` 在 entity tick pre/post 中消费动作/发布观测
+- **`Config.java`** — 一个 boolean 选项 `agentControlCollisions` (common config)
+
+## Gotchas
+
+- `gradle.properties` 硬编码了 `org.gradle.java.home=D:/Program Files/Java/jdk-25` — 换机器必须修改
+- **Protobuf**: 编辑 `src/main/proto/gymcraft/gym/...` 下的 `.proto`；生成的 Java 类 (`io.github.mousemeya.gymcraft.gym.{action,observation}.proto`) 是构建产物，不在源码树中 — 勿手工编辑; protoc / protobuf-java 锁定为 4.30.2
+- **Mod metadata 模板**: 编辑 `src/main/templates/META-INF/neoforge.mods.toml` (不编辑构建产物); `${...}` 占位符由 `generateModMetadata` 任务展开
+- Java 编译编码 UTF-8, gym 相关代码使用中文 Javadoc/注释
+- EnvToolItem: Shift+右键创建环境, Shift+滚轮切换类型, Shift+Shift+右键删除
+- **参考资源**: `.\repo\Documentation` (NeoForge 文档), `.\repo\minecraft-source-1.26` (1.26.1 源码)

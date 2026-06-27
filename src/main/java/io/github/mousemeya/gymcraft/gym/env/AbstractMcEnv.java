@@ -58,10 +58,14 @@ public abstract class AbstractMcEnv implements McEnv {
     @Override
     public ResetResult reset(Integer seed, Map<String, Object> options) {
         this.ensureOpen();
-        this.agentRuntime.clear();
-        this.resetMob(seed, options == null ? Map.of() : options);
-        ProtoMcObservation observation = this.agentRuntime.createObservation();
-        return new ResetResult(observation, this.createResetInfo());
+        try {
+            this.agentRuntime.putReset(seed, options == null ? Map.of() : options, this::resetMob);
+            ProtoMcObservation observation = this.agentRuntime.takeObservation();
+            return new ResetResult(observation, this.createResetInfo());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while resetting environment " + this.envId, e);
+        }
     }
 
     @Override

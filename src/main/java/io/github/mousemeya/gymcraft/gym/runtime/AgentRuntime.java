@@ -1,7 +1,12 @@
 package io.github.mousemeya.gymcraft.gym.runtime;
 
+import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.UUID;
+import java.util.function.BiConsumer;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -17,20 +22,31 @@ import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 
 
 public class AgentRuntime {
-    private final ArrayBlockingQueue<ProtoMcObservation> observationBuf = new ArrayBlockingQueue<ProtoMcObservation>(1);
-    private final ArrayBlockingQueue<ProtoMcAction> actionBuf = new ArrayBlockingQueue<ProtoMcAction>(1);
+    private static final Logger LOGGER = LoggerFactory.getLogger(AgentRuntime.class);
+    
+    private final Mob mob;
     private final ActionController actionController;
     private final ObservationCreator observationCreator;
-    private final Mob mob;
+
+    private final ArrayBlockingQueue<ProtoMcObservation> observationBuf = new ArrayBlockingQueue<ProtoMcObservation>(1);
+    private final ArrayBlockingQueue<ProtoMcAction> actionBuf = new ArrayBlockingQueue<ProtoMcAction>(1);
+    private final ArrayBlockingQueue<ResetRequest> resetBuf = new ArrayBlockingQueue<ResetRequest>(1);
+    
+    
 
     private ProtoMcAction runningAction;
+    private volatile boolean requestObservation = true;
     private ActionControlPolicy activePolicy = ActionControlPolicy.none();
-    private volatile boolean observationRequested;
+    // private volatile boolean observationRequested;
+    // private boolean resetObservationRequested;
 
     public AgentRuntime(ActionController actionController, ObservationCreator observationCreator, Mob mob) {
         this.actionController = actionController;
         this.observationCreator = observationCreator;
         this.mob = mob;
+    }
+
+    private record ResetRequest(Integer seed, Map<String, Object> options, BiConsumer<Integer, Map<String, Object>> resetter) {
     }
 
        /**
@@ -44,26 +60,26 @@ public class AgentRuntime {
             return;
         }
 
-        this.activePolicy.applyTo(this.mob);
+        // 检测是否需要reset
+        ResetRequest resetRequest = this.resetBuf.poll();
+        if (resetRequest != null) {
+            clear();
+            resetRequest.resetter().accept(resetRequest.seed(), resetRequest.options());
+            return;
+        }
 
+        // 消费动作(如果有)
         ProtoMcAction action = this.actionBuf.poll();
-        if (action == null) {
-            return;
+        if (action != null) {
+            ActionApplyResult result = this.actionController.apply(this.mob, action);
+            if (this.runningAction != null) { // 取消当前动作
+                this.activePolicy.releaseFrom(this.mob);
+            }
+            this.activePolicy = result.policy();
+            this.runningAction = action;
         }
-
-        ActionApplyResult result = this.actionController.apply(this.mob, action);
-        if (!result.appliedAnyComponent()) {
-            this.publishRequestedObservation();
-            return;
-        }
-
-        if (this.runningAction != null) {
-            this.activePolicy.releaseFrom(this.mob);
-        }
-
-        this.activePolicy = result.policy();
+       
         this.activePolicy.applyTo(this.mob);
-        this.runningAction = action;
     }
 
     /**
@@ -77,36 +93,44 @@ public class AgentRuntime {
             return;
         }
 
-        this.activePolicy.applyTo(this.mob);
-        if (this.runningAction != null && this.actionController.isDone(this.mob, this.runningAction)) {
+        if (runningAction != null && actionController.isDone(mob, runningAction)) {// 若动作完成, 则在本tick返回observation
+            requestObservation = true;
+            runningAction = null;
             this.activePolicy.releaseFrom(this.mob);
             this.activePolicy = ActionControlPolicy.none();
-            this.runningAction = null;
-            this.publishRequestedObservation();
         }
-    }
 
-    private void publishRequestedObservation() {
-        if (!this.observationRequested) {
-            return;
+        if (requestObservation) {
+            var oldObservation = this.observationBuf.poll();
+            if (oldObservation != null) { // 这时候理论上不应该有observation
+                LOGGER.warn("Observation buffer is not empty, drop the observation");
+            }
+            ProtoMcObservation observation = this.observationCreator.create(this.mob);
+            this.observationBuf.offer(observation);
+            requestObservation = false;
         }
-        this.observationRequested = false;
-        ProtoMcObservation observation = this.observationCreator.create(this.mob);
-        this.observationBuf.clear();
-        this.observationBuf.offer(observation);
-    }
 
-    public ProtoMcObservation createObservation() {
-        return this.observationCreator.create(this.mob);
+        this.activePolicy.applyTo(this.mob);
     }
 
     public void clear() {
         this.actionBuf.clear();
+        this.resetBuf.clear();
         this.observationBuf.clear();
-        this.observationRequested = false;
         this.activePolicy.releaseFrom(this.mob);
         this.activePolicy = ActionControlPolicy.none();
         this.runningAction = null;
+        this.requestObservation = true;
+    }
+
+    /**
+     * 提交重置请求
+     * <strong>
+     * 注意：有阻塞, 不要在游戏主线程调用
+     * </strong>
+     */
+    public void putReset(Integer seed, Map<String, Object> options, BiConsumer<Integer, Map<String, Object>> resetter) throws InterruptedException {
+        this.resetBuf.put(new ResetRequest(seed, options, resetter));
     }
 
     /**
@@ -117,7 +141,6 @@ public class AgentRuntime {
      * </strong>
      */
     public void putAction(ProtoMcAction action) throws InterruptedException {
-        this.observationRequested = true;
         this.actionBuf.put(action);
     }
 
