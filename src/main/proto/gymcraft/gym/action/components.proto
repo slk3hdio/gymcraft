@@ -1,0 +1,36 @@
+﻿syntax = "proto3";
+
+package gymcraft.gym.action;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.action.proto";
+option java_outer_classname = "ComponentsProto";
+
+message ProtoStepMove {
+  float forward = 1;
+  float strafe_right = 2;
+  float yaw_delta = 3;
+  float pitch_delta = 4;
+  bool jump = 5;
+}
+
+message ProtoMoveTo {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+  float speed_modifier = 4;
+  double stop_distance = 5;
+  int32 timeout_ticks = 6;
+}
+
+message ProtoSetAttackTarget {
+  string target_uuid = 1;
+  int32 target_entity_id = 2;
+}
+
+message ProtoAttackOnce {
+  int32 target_entity_id = 1;
+}
+
+message ProtoNoop {
+}

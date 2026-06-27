@@ -1,0 +1,22 @@
+﻿syntax = "proto3";
+
+package gymcraft.gym.observation;
+
+// import "gymcraft/gym/observation/components.proto";
+import "google/protobuf/any.proto";
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.observation.proto";
+option java_outer_classname = "ObservationProto";
+
+message ProtoObservationHeader {
+  int32 schema_version = 1;
+  int64 game_tick = 2;
+  string dimension = 3;
+  string agent_id = 4;
+}
+
+message ProtoMcObservation {
+  ProtoObservationHeader header = 1;
+  map<string, google.protobuf.Any> components = 2;
+}
