@@ -12,8 +12,19 @@ import sys
 from collections.abc import Mapping
 from typing import Any
 
-from gymcraft.client import GymCraftEnv
+from gymcraft.client import GymCraftEnv, unpack_component
 from gymcraft.gym.action import components_pb2 as action_components
+from gymcraft.gym.observation import components_pb2 as obs_components
+
+# ├─ observation helpers ──────────────────────────────────────────────
+
+SELF_KEY = "gymcraft:self"
+
+
+def _self_position(obs: Any) -> tuple[float, float, float]:
+    """Extract the agent's current (x, y, z) from a ProtoMcObservation."""
+    state = unpack_component(obs, SELF_KEY, obs_components.ProtoSelfState)
+    return state.x, state.y, state.z
 
 # ├─ proto message factories ──────────────────────────────────────────
 
@@ -32,22 +43,26 @@ def _step_move(values: dict[str, Any]) -> Any:
     )
 
 
-def _move_to(values: dict[str, Any]) -> Any:
+def _move_to_nearby(pos: tuple[float, float, float], space_spec: dict[str, Any]) -> Any:
+    """Generate a MoveTo target within <span> blocks of current ground position."""
+    cx, cy, cz = pos
+    span = 20.0
+    subs = space_spec.get("spaces", {})
     return action_components.ProtoMoveTo(
-        x=values["x"],
-        y=values["y"],
-        z=values["z"],
-        speed_modifier=values["speed_modifier"],
-        stop_distance=values["stop_distance"],
-        timeout_ticks=int(values["timeout_ticks"]),  # type: ignore[arg-type]
+        x=cx + random.uniform(-span, span),
+        y=cy,
+        z=cz + random.uniform(-span, span),
+        speed_modifier=_sample_space(subs.get("speed_modifier", {})),
+        stop_distance=_sample_space(subs.get("stop_distance", {})),
+        timeout_ticks=int(_sample_space(subs.get("timeout_ticks", {}))),  # type: ignore[arg-type]
     )
 
 
 COMPONENT_FACTORIES: dict[str, Any] = {
     "gymcraft:noop": _noop,
     "gymcraft:step_move": _step_move,
-    "gymcraft:move_to": _move_to,
 }
+MOVE_TO_KEY = "gymcraft:move_to"
 
 # ├─ random sampling ───────────────────────────────────────────────────
 
@@ -72,13 +87,17 @@ def _sample_space(spec: dict[str, Any]) -> Any:
     return None
 
 
-def _random_action(env: GymCraftEnv) -> dict[str, Any]:
+def _random_action(env: GymCraftEnv, position: tuple[float, float, float]) -> dict[str, Any]:
     """Pick one random action component and fill it with valid random values."""
     spaces = env.action_space_spec.get("spaces", {})
-    # skip attack components (no valid target in random mode)
+
+    use_move_to = random.random() < 0.3 and MOVE_TO_KEY in spaces
+
+    if use_move_to:
+        return {MOVE_TO_KEY: _move_to_nearby(position, spaces[MOVE_TO_KEY])}
+
     safe_keys = [k for k in spaces if k in COMPONENT_FACTORIES]
     if not safe_keys:
-        # fallback: always noop
         return {"gymcraft:noop": action_components.ProtoNoop()}
 
     key = random.choice(safe_keys)
@@ -103,20 +122,23 @@ def main() -> None:
     print(f"Action components: {list(env.action_space_spec.get('spaces', {}).keys())}")
 
     obs, info = env.reset()
-    print(f"Reset ok — info: {info}")
+    pos = _self_position(obs)
+    print(f"Reset ok — pos=({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f})  info: {info}")
 
     total_reward = 0.0
     episodes = 1
 
     try:
         for step_idx in range(args.steps):
-            action = _random_action(env)
+            action = _random_action(env, pos)
             obs, reward, terminated, truncated, info = env.step(action)
             total_reward += reward
 
             comp_key = next(iter(action))
+            pos = _self_position(obs)
             print(
                 f"Step {step_idx:4d} | action={comp_key:30s} | "
+                f"pos=({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f})  "
                 f"reward={reward:+.3f} | total={total_reward:+.3f} | "
                 f"term={terminated} trunc={truncated}"
             )
@@ -125,7 +147,8 @@ def main() -> None:
                 print(f"--- Episode {episodes} ended after {step_idx + 1} steps ---")
                 episodes += 1
                 obs, info = env.reset()
-                print(f"Reset ok — info: {info}")
+                pos = _self_position(obs)
+                print(f"Reset ok — pos=({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f})  info: {info}")
     except KeyboardInterrupt:
         print("\nInterrupted by user")
     finally:
