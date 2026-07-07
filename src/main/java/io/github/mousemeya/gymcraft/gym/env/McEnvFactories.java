@@ -23,7 +23,9 @@ public final class McEnvFactories {
         if (factory == null) {
             throw new IllegalArgumentException("Unknown environment type: " + id);
         }
-        return factory.create(entityUuid);
+        AbstractMcEnv env = factory.create(entityUuid);
+        env.setEnvType(id.toString());
+        return env;
     }
 
     private static Identifier parseId(String envType) {

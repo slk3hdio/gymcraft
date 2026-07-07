@@ -40,6 +40,7 @@ public abstract class AbstractMcEnv implements McEnv {
     protected final ActionController actionController;
     protected final ObservationCreator observationCreator;
     protected final AgentRuntime agentRuntime;
+    private String envType;
     private boolean closed;
 
     protected AbstractMcEnv(
@@ -108,6 +109,7 @@ public abstract class AbstractMcEnv implements McEnv {
     public Map<String, Object> getMetadata() {
         return Map.of(
             "env_id", this.envId.toString(),
+            "env_type", this.envType != null ? this.envType : "",
             "entity_uuid", this.mob.getUUID().toString(),
             "entity_type", BuiltInRegistries.ENTITY_TYPE.getKey(this.mob.getType()).toString()
         );
@@ -153,6 +155,14 @@ public abstract class AbstractMcEnv implements McEnv {
 
     protected Map<String, Object> createStepInfo(ProtoMcObservation observation) {
         return Map.of();
+    }
+
+    public String getEnvType() {
+        return this.envType;
+    }
+
+    void setEnvType(String envType) {
+        this.envType = envType;
     }
 
     protected void ensureOpen() {
