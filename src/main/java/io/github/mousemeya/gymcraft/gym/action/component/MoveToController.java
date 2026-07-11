@@ -5,6 +5,9 @@ import java.util.Map;
 import java.util.Collection;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -29,6 +32,8 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class MoveToController implements ActionComponentController<ProtoMoveTo> {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MoveToController.class);
+
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
         "y", new BoxSpace(-2048, 2048, 1),
@@ -93,6 +98,16 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
         ActionState initialState = moved
             ? ActionState.running("navigating to target", pathDetails(mob, path, component))
             : ActionState.failed(failureDescription(mob, path, component), pathDetails(mob, path, component));
+        LOGGER.info(
+            "GymCraft MoveTo apply entity={} moved={} target=({}, {}, {}) state={} details={}",
+            mob.getUUID(),
+            moved,
+            component.getX(),
+            component.getY(),
+            component.getZ(),
+            initialState.status(),
+            initialState.details()
+        );
         return ActionApplyResult.applied(policy, initialState);
     }
 
@@ -105,21 +120,27 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
         double horizontalDistSq = dx * dx + dz * dz;
         double horizontalDist = Math.sqrt(horizontalDistSq);
         if (horizontalDistSq <= stop * stop) {
-            return ActionState.completed("reached target", Map.of(
+            ActionState state = ActionState.completed("reached target", Map.of(
                 "horizontal_distance", horizontalDist,
                 "vertical_delta", dy,
                 "stop_distance", stop));
+            LOGGER.info("GymCraft MoveTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
+            return state;
         }
         if (mob.getNavigation().isDone()) {
-            return ActionState.failed("navigation ended before reaching target", Map.of(
+            ActionState state = ActionState.failed("navigation ended before reaching target", Map.of(
                 "horizontal_distance", horizontalDist,
                 "vertical_delta", dy,
                 "stop_distance", stop,
                 "navigation_done", true));
+            LOGGER.info("GymCraft MoveTo state entity={} status={} description={} details={}", mob.getUUID(), state.status(), state.description(), state.details());
+            return state;
         }
-        return ActionState.running("navigating", Map.of(
+        ActionState state = ActionState.running("navigating", Map.of(
             "horizontal_distance", horizontalDist,
             "vertical_delta", dy));
+        LOGGER.info("GymCraft MoveTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
+        return state;
     }
 
     private static Map<String, Object> pathDetails(Mob mob, Path path, ProtoMoveTo component) {

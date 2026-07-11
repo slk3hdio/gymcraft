@@ -71,6 +71,9 @@ public class AgentRuntime {
 
     @SubscribeEvent
     private void BeforeEntityTick(EntityTickEvent.Pre event) {
+        if (event.getEntity().level().isClientSide()) {
+            return;
+        }
         if (!event.getEntity().equals(this.mob)) {
             return;
         }
@@ -80,22 +83,37 @@ public class AgentRuntime {
             RuntimeCommand command = this.commandBuf.poll();
             if (command instanceof ResetCommand reset) {
                 try (var resetZone = profiler.zone("reset")) {
+                    LOGGER.info("GymCraft runtime consume reset command entity={}", this.mob.getUUID());
                     this.clearRuntimeState();
                     reset.resetter().accept(reset.seed(), reset.options());
                     this.pendingResult = new PendingResult(ActionState.completed("reset"));
+                    LOGGER.info("GymCraft runtime reset command completed entity={}", this.mob.getUUID());
                 }
                 return;
             }
 
             if (command instanceof ActionCommand actionCommand) {
                 try (var actionZone = profiler.zone("apply_action")) {
+                    LOGGER.info(
+                        "GymCraft runtime consume action command entity={} components={}",
+                        this.mob.getUUID(),
+                        actionCommand.action().getComponentsMap().keySet()
+                    );
                     if (this.runningAction != null) {
                         this.activePolicy.releaseFrom(this.mob);
                         this.pendingResult = new PendingResult(ActionState.interrupted("interrupted by new action"));
+                        LOGGER.info("GymCraft runtime interrupted running action entity={}", this.mob.getUUID());
                     }
 
                     ActionApplyResult result = this.actionController.apply(this.mob, actionCommand.action());
                     this.activePolicy = result.policy();
+                    LOGGER.info(
+                        "GymCraft runtime action applied entity={} initial_status={} description={} details={}",
+                        this.mob.getUUID(),
+                        result.initialState().status(),
+                        result.initialState().description(),
+                        result.initialState().details()
+                    );
                     if (result.initialState().isTerminal()) {
                         this.runningAction = null;
                         this.pendingResult = new PendingResult(result.initialState());
@@ -113,6 +131,9 @@ public class AgentRuntime {
 
     @SubscribeEvent
     private void AfterEntityTick(EntityTickEvent.Post event) {
+        if (event.getEntity().level().isClientSide()) {
+            return;
+        }
         if (!event.getEntity().equals(this.mob)) {
             return;
         }
@@ -123,6 +144,13 @@ public class AgentRuntime {
                 try (var stateZone = profiler.zone("check_action_state")) {
                     ActionState state = this.actionController.getState(this.mob, this.runningAction);
                     if (state.isTerminal()) {
+                        LOGGER.info(
+                            "GymCraft runtime action terminal entity={} status={} description={} details={}",
+                            this.mob.getUUID(),
+                            state.status(),
+                            state.description(),
+                            state.details()
+                        );
                         this.pendingResult = new PendingResult(state);
                         this.runningAction = null;
                         this.activePolicy.releaseFrom(this.mob);
@@ -136,6 +164,13 @@ public class AgentRuntime {
                     ActionState state = this.pendingResult.state();
                     ProtoMcObservation observation = this.observationCreator.create(this.mob, state);
                     this.offerResult(new RuntimeStepResult(observation, state));
+                    LOGGER.info(
+                        "GymCraft runtime published result entity={} status={} description={} game_tick={}",
+                        this.mob.getUUID(),
+                        state.status(),
+                        state.description(),
+                        observation.getHeader().getGameTick()
+                    );
                     this.pendingResult = null;
                 }
             }
@@ -148,6 +183,7 @@ public class AgentRuntime {
 
     /** 清理环境关闭时的所有运行时状态。 */
     public void clear() {
+        LOGGER.info("GymCraft runtime clear entity={}", this.mob.getUUID());
         this.commandBuf.clear();
         this.resultBuf.clear();
         this.clearRuntimeState();
@@ -162,15 +198,29 @@ public class AgentRuntime {
     }
 
     public void putReset(Integer seed, Map<String, Object> options, BiConsumer<Integer, Map<String, Object>> resetter) throws InterruptedException {
+        LOGGER.info("GymCraft runtime enqueue reset entity={} command_queue_size={}", this.mob.getUUID(), this.commandBuf.size());
         this.commandBuf.put(new ResetCommand(seed, options, resetter));
     }
 
     public void putAction(ProtoMcAction action) throws InterruptedException {
+        LOGGER.info(
+            "GymCraft runtime enqueue action entity={} components={} command_queue_size={}",
+            this.mob.getUUID(),
+            action.getComponentsMap().keySet(),
+            this.commandBuf.size()
+        );
         this.commandBuf.put(new ActionCommand(action));
     }
 
     public RuntimeStepResult takeStepResult() throws InterruptedException {
-        return this.resultBuf.take();
+        RuntimeStepResult result = this.resultBuf.take();
+        LOGGER.info(
+            "GymCraft runtime take result entity={} status={} description={}",
+            this.mob.getUUID(),
+            result.actionState().status(),
+            result.actionState().description()
+        );
+        return result;
     }
 
     private void offerResult(RuntimeStepResult result) {
