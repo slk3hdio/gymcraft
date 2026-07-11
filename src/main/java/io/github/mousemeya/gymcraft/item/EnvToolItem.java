@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import io.github.mousemeya.gymcraft.gym.EnvManager;
+import io.github.mousemeya.gymcraft.registry.EnvFactories;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -24,7 +25,7 @@ import net.minecraft.world.item.component.CustomData;
  */
 public class EnvToolItem extends Item {
     private static final String ENV_TYPE_TAG = "gymcraft_env_type";
-    private static final String DEFAULT_ENV_TYPE = "gymcraft:simple_mob";
+    private static final String DEFAULT_ENV_TYPE = EnvFactories.SIMPLE_MOB.getId().toString();
 
     public EnvToolItem(Properties properties) {
         super(properties);

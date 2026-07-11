@@ -7,6 +7,7 @@ import java.util.UUID;
 import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
 
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
@@ -16,7 +17,6 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import io.github.mousemeya.gymcraft.gym.action.ActionController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
-import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnv;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
@@ -38,6 +38,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 环境实现由 NeoForge 自定义注册表中的 McEnvFactory 创建。
  */
 public abstract class AbstractMcEnv implements McEnv {
+    protected final Identifier envTypeId;
     protected final Mob mob;
     protected final UUID envId;
     protected final ActionController actionController;
@@ -46,7 +47,9 @@ public abstract class AbstractMcEnv implements McEnv {
     private boolean closed;
 
     @Override
-    public abstract String getRegisterId();
+    public String getRegisterId() {
+        return this.envTypeId.toString();
+    }
 
     protected static Mob getMobFromEntityUuid(UUID entityUuid) {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
@@ -65,14 +68,16 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     protected AbstractMcEnv(
+        Identifier envTypeId,
         Mob mob,
         Collection<ActionComponentController<?>> actionComponents,
         Collection<ObservationComponentCreator<?>> observationComponents
     ) {
-        this(mob, new ActionController(actionComponents), new ObservationCreator(observationComponents));
+        this(envTypeId, mob, new ActionController(actionComponents), new ObservationCreator(observationComponents));
     }
 
-    protected AbstractMcEnv(Mob mob, ActionController actionController, ObservationCreator observationCreator) {
+    protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionController actionController, ObservationCreator observationCreator) {
+        this.envTypeId = envTypeId;
         this.mob = mob;
         this.envId = UUID.randomUUID();
         this.actionController = actionController;

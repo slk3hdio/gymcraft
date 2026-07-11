@@ -1,14 +1,13 @@
 package io.github.mousemeya.gymcraft.gym.env.envs;
 
 import java.util.List;
-import java.util.UUID;
 
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
-import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 
 
 /**
@@ -18,8 +17,9 @@ import io.github.mousemeya.gymcraft.registry.RegistryKeys;
  * </p>
  */
 public class SimpleMobEnv extends AbstractMcEnv {
-    public SimpleMobEnv(Mob mob) {
+    public SimpleMobEnv(Identifier envTypeId, Mob mob) {
         super(
+            envTypeId,
             mob,
             List.of(
                 ActionComponents.NOOP.get(),
@@ -32,14 +32,9 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ObservationCreators.SELF.get(),
                 ObservationCreators.WORLD.get(),
                 ObservationCreators.NEARBY_ENTITIES.get(),
-                // ObservationCreators.NEARBY_BLOCKS.get(),
+                ObservationCreators.NEARBY_BLOCKS.get(),
                 ObservationCreators.INVENTORY.get()
             )
         );
-    }
-
-    @Override
-    public String getRegisterId() {
-        return RegistryKeys.ENV_FACTORIES.getKey(SimpleMobEnv::new).toString();
     }
 }

@@ -5,6 +5,7 @@ import io.github.mousemeya.gymcraft.registry.EnvFactories;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import io.github.mousemeya.gymcraft.item.EnvToolItem;
+import io.github.mousemeya.gymcraft.item.UuidCopierItem;
 import io.github.mousemeya.gymcraft.gym.rpc.GymCraftRpcServer;
 import io.github.mousemeya.gymcraft.network.GymCraftNetwork;
 
@@ -38,11 +39,19 @@ public class GymCraft {
             EnvToolItem::new,
             properties -> properties.stacksTo(1));
 
+    public static final DeferredItem<UuidCopierItem> UUID_COPIER = ITEMS.registerItem(
+            "uuid_copier",
+            UuidCopierItem::new,
+            properties -> properties.stacksTo(1));
+
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = CREATIVE_MODE_TABS.register("tab",
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.gymcraft"))
                     .icon(() -> ENV_TOOL.get().getDefaultInstance())
-                    .displayItems((params, output) -> output.accept(ENV_TOOL.get()))
+                    .displayItems((params, output) -> {
+                        output.accept(ENV_TOOL.get());
+                        output.accept(UUID_COPIER.get());
+                    })
                     .build());
 
     public GymCraft(IEventBus modEventBus, ModContainer modContainer) {

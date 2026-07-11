@@ -1,5 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.env;
 
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Mob;
 
 /**
@@ -9,5 +10,5 @@ import net.minecraft.world.entity.Mob;
  */
 @FunctionalInterface
 public interface McEnvFactory {
-    McEnv create(Mob mob);
+    McEnv create(Identifier envTypeId, Mob mob);
 }

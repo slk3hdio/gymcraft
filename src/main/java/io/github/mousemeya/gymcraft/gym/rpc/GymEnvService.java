@@ -2,6 +2,7 @@ package io.github.mousemeya.gymcraft.gym.rpc;
 
 import java.util.UUID;
 
+import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.EnvManager;
 
 import io.github.mousemeya.gymcraft.gym.rpc.proto.CloseSessionRequest;
@@ -70,15 +71,20 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
         }
 
         EnvManager.get(entityUuid).ifPresentOrElse(env -> {
-            RpcEnvSessions.Session session = sessions.create(entityUuid, env);
-            responseObserver.onNext(ConnectResponse.newBuilder()
-                    .setSessionId(session.id())
-                    .setEntityUuid(entityUuid.toString())
-                    .setMetadata(ProtoJson.toJson(env.getMetadata()))
-                    .setActionSpaceJson(ProtoJson.toJson(env.getActionSpace().serialize()))
-                    .setObservationSpaceJson(ProtoJson.toJson(env.getObservationSpace().serialize()))
-                    .build());
-            responseObserver.onCompleted();
+            try {
+                RpcEnvSessions.Session session = sessions.create(entityUuid, env);
+                responseObserver.onNext(ConnectResponse.newBuilder()
+                        .setSessionId(session.id())
+                        .setEntityUuid(entityUuid.toString())
+                        .setMetadata(ProtoJson.toJson(env.getMetadata()))
+                        .setActionSpaceJson(ProtoJson.toJson(env.getActionSpace().serialize()))
+                        .setObservationSpaceJson(ProtoJson.toJson(env.getObservationSpace().serialize()))
+                        .build());
+                responseObserver.onCompleted();
+            } catch (RuntimeException e) {
+                GymCraft.LOGGER.warn("Failed to connect GymCraft RPC session for entity {}", entityUuid, e);
+                responseObserver.onError(Status.UNKNOWN.withDescription(e.getMessage()).asRuntimeException());
+            }
         }, () -> responseObserver.onError(Status.NOT_FOUND
                 .withDescription("No existing environment for entity_uuid: " + entityUuid)
                 .asRuntimeException()));

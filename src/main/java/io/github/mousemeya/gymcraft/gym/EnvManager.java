@@ -28,7 +28,7 @@ public final class EnvManager {
         if (factory == null) {
             throw new IllegalArgumentException("Unknown environment type: " + id);
         }
-        McEnv env = factory.create(mob);
+        McEnv env = factory.create(id, mob);
         ENVS_BY_ENTITY.put(mob.getUUID(), env);
         return env;
     }
