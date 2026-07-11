@@ -93,7 +93,12 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
     }
 
     @Override
-    public boolean isDone(Mob mob, ProtoMoveTo component) { 
-        return true; // TODO: 检查是否到达目标位置
+    public boolean isDone(Mob mob, ProtoMoveTo component) {
+        double dx = mob.getX() - component.getX();
+        double dy = mob.getY() - component.getY();
+        double dz = mob.getZ() - component.getZ();
+        double stop = component.getStopDistance();
+        if (dx * dx + dy * dy + dz * dz <= stop * stop) return true;
+        return mob.getNavigation().isDone();
     }
 }

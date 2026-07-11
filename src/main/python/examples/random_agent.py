@@ -52,9 +52,9 @@ def _move_to_nearby(pos: tuple[float, float, float], space_spec: dict[str, Any])
         x=cx + random.uniform(-span, span),
         y=cy,
         z=cz + random.uniform(-span, span),
-        speed_modifier=_sample_space(subs.get("speed_modifier", {})),
-        stop_distance=_sample_space(subs.get("stop_distance", {})),
-        timeout_ticks=int(_sample_space(subs.get("timeout_ticks", {}))),  # type: ignore[arg-type]
+        speed_modifier=1,
+        stop_distance=2,
+        timeout_ticks=200,  # type: ignore[arg-type]
     )
 
 
@@ -93,8 +93,8 @@ def _random_action(env: GymCraftEnv, position: tuple[float, float, float]) -> di
 
     use_move_to = random.random() < 0.3 and MOVE_TO_KEY in spaces
 
-    if use_move_to:
-        return {MOVE_TO_KEY: _move_to_nearby(position, spaces[MOVE_TO_KEY])}
+    # if use_move_to:
+    return {MOVE_TO_KEY: _move_to_nearby(position, spaces[MOVE_TO_KEY])}
 
     safe_keys = [k for k in spaces if k in COMPONENT_FACTORIES]
     if not safe_keys:

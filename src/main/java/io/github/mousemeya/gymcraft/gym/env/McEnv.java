@@ -5,6 +5,7 @@ import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 
 import java.util.Map;
 
@@ -12,6 +13,8 @@ import java.util.Map;
  * 核心环境接口，对应 Gymnasium 的 Env 类。
  */
 public interface McEnv {
+
+    String getRegisterId();
 
     /**
      * 重置环境到初始状态。

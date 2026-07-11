@@ -1,10 +1,13 @@
 package io.github.mousemeya.gymcraft.registry;
 
-import io.github.mousemeya.gymcraft.GymCraft;
-import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
-import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnvFactory;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
+
+import java.util.UUID;
+
+import io.github.mousemeya.gymcraft.GymCraft;
+import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
+import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnv;
 
 /**
  * 环境工厂注册入口 —— 通过 {@link DeferredRegister} 将所有 {@link McEnvFactory} 实现
@@ -19,9 +22,9 @@ public final class EnvFactories {
         GymCraft.MODID
     );
 
-    public static final DeferredHolder<McEnvFactory, SimpleMobEnvFactory> SIMPLE_MOB = REGISTRY.register(
+    public static final DeferredHolder<McEnvFactory, McEnvFactory> SIMPLE_MOB = REGISTRY.register(
         "simple_mob",
-        SimpleMobEnvFactory::new
+        () -> SimpleMobEnv::new
     );
 
     private EnvFactories() {

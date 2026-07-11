@@ -1,14 +1,15 @@
 package io.github.mousemeya.gymcraft.registry;
 
-import io.github.mousemeya.gymcraft.GymCraft;
-import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
-import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
-import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.neoforged.neoforge.registries.NewRegistryEvent;
 import net.neoforged.neoforge.registries.RegistryBuilder;
+
+import io.github.mousemeya.gymcraft.GymCraft;
+import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 
 /**
  * 自定义注册表定义 —— 使用 NeoForge 官方 {@link RegistryBuilder} + {@link NewRegistryEvent} 流程。
@@ -22,6 +23,7 @@ import net.neoforged.neoforge.registries.RegistryBuilder;
  * </p>
  */
 public final class RegistryKeys {
+
     public static final ResourceKey<Registry<ActionComponentController<?>>> ACTION_COMPONENT_CONTROLLERS_KEY = ResourceKey.createRegistryKey(
         Identifier.fromNamespaceAndPath(GymCraft.MODID, "action_components")
     );

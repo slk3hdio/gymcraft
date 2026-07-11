@@ -7,13 +7,16 @@ import java.util.UUID;
 import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
 
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.neoforged.neoforge.common.NeoForge;
-
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import io.github.mousemeya.gymcraft.gym.action.ActionController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
+import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnv;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
@@ -40,8 +43,26 @@ public abstract class AbstractMcEnv implements McEnv {
     protected final ActionController actionController;
     protected final ObservationCreator observationCreator;
     protected final AgentRuntime agentRuntime;
-    private String envType;
     private boolean closed;
+
+    @Override
+    public abstract String getRegisterId();
+
+    protected static Mob getMobFromEntityUuid(UUID entityUuid) {
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null) {
+            throw new IllegalStateException("Cannot create environment before server is available");
+        }
+
+        for (var level : server.getAllLevels()) {
+            Entity entity = level.getEntity(entityUuid);
+            if (entity instanceof Mob mob) {
+                return mob;
+            }
+        }
+
+        throw new IllegalArgumentException("No loaded Mob entity found for UUID: " + entityUuid);
+    }
 
     protected AbstractMcEnv(
         Mob mob,
@@ -109,7 +130,7 @@ public abstract class AbstractMcEnv implements McEnv {
     public Map<String, Object> getMetadata() {
         return Map.of(
             "env_id", this.envId.toString(),
-            "env_type", this.envType != null ? this.envType : "",
+            "env_type_id", this.getRegisterId(),
             "entity_uuid", this.mob.getUUID().toString(),
             "entity_type", BuiltInRegistries.ENTITY_TYPE.getKey(this.mob.getType()).toString()
         );
@@ -155,14 +176,6 @@ public abstract class AbstractMcEnv implements McEnv {
 
     protected Map<String, Object> createStepInfo(ProtoMcObservation observation) {
         return Map.of();
-    }
-
-    public String getEnvType() {
-        return this.envType;
-    }
-
-    void setEnvType(String envType) {
-        this.envType = envType;
     }
 
     protected void ensureOpen() {
