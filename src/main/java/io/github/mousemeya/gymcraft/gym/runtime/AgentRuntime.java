@@ -15,6 +15,7 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
+import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.action.ActionController;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationCreator;
@@ -67,6 +68,8 @@ public class AgentRuntime {
 
     /** 当前正在执行的动作（{@code null} 表示无动作），用于 tick Post 判断完成状态 */
     private ProtoMcAction runningAction;
+    /** 最近一次已完成动作的最终状态 */
+    private ActionState lastActionState = ActionState.completed("initial");
     /**
      * 是否需要在当前 tick 中生成观测。
      * <ul>
@@ -181,8 +184,10 @@ public class AgentRuntime {
         try (var gymcraftZone = profiler.zone("gymcraft_post")) {
             // 动作完成检测
             if (runningAction != null) {
-                try (var isDoneZone = profiler.zone("check_action_done")) {
-                    if (actionController.isDone(mob, runningAction)) {
+                try (var isDoneZone = profiler.zone("check_action_state")) {
+                    ActionState state = actionController.getState(mob, runningAction);
+                    if (state.isTerminal()) {
+                        lastActionState = state;
                         requestObservation = true;
                         runningAction = null;
                         this.activePolicy.releaseFrom(this.mob);
@@ -198,7 +203,7 @@ public class AgentRuntime {
                     if (oldObservation != null) {
                         LOGGER.warn("Observation buffer is not empty, drop the observation");
                     }
-                    ProtoMcObservation observation = this.observationCreator.create(this.mob);
+                    ProtoMcObservation observation = this.observationCreator.create(this.mob, this.lastActionState);
                     this.observationBuf.offer(observation);
                     requestObservation = false;
                 }
@@ -224,6 +229,7 @@ public class AgentRuntime {
         this.activePolicy = ActionControlPolicy.none();
         this.runningAction = null;
         this.requestObservation = true;
+        this.lastActionState = null;
     }
 
     /**
@@ -259,6 +265,12 @@ public class AgentRuntime {
     }
 
     /**
+     * 步执行结果。
+     */
+    public record RuntimeStepResult(ProtoMcObservation observation, ActionState actionState) {
+    }
+
+    /**
      * 从 {@code observationBuf} 阻塞获取观测。
      * <p>
      * 当 tick Post 中游戏主线程生成观测并入队后，此方法返回。
@@ -271,5 +283,13 @@ public class AgentRuntime {
      */
     public ProtoMcObservation takeObservation() throws InterruptedException {
         return this.observationBuf.take();
+    }
+
+    /**
+     * 阻塞获取步执行结果（观测 + 动作状态）。
+     */
+    public RuntimeStepResult takeStepResult() throws InterruptedException {
+        ProtoMcObservation observation = this.observationBuf.take();
+        return new RuntimeStepResult(observation, this.lastActionState);
     }
 }

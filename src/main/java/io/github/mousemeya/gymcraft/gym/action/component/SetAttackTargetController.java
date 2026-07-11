@@ -14,6 +14,7 @@ import net.minecraft.world.entity.LivingEntity;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetAttackTarget;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -94,7 +95,10 @@ public class SetAttackTargetController implements ActionComponentController<Prot
         } else {
             policy.setMemory(MemoryModuleType.ATTACK_TARGET, target);
         }
-        return ActionApplyResult.applied(policy);
+        ActionState state = target != null
+            ? ActionState.completed("attack target set", Map.of("target_uuid", target.getUUID().toString()))
+            : ActionState.completed("attack target cleared");
+        return ActionApplyResult.applied(policy, state);
     }
 
     private static LivingEntity findTarget(Mob mob, ProtoSetAttackTarget component) {
@@ -114,7 +118,7 @@ public class SetAttackTargetController implements ActionComponentController<Prot
     }
 
     @Override
-    public boolean isDone(Mob mob, ProtoSetAttackTarget component) { // 瞬时动作, 立即完成
-        return true;
+    public ActionState getState(Mob mob, ProtoSetAttackTarget component) {
+        return ActionState.completed("set attack target applied");
     }
 }

@@ -46,16 +46,16 @@ def _step_move(values: dict[str, Any]) -> Any:
 def _move_to_nearby(pos: tuple[float, float, float], space_spec: dict[str, Any]) -> Any:
     """Generate a MoveTo target within <span> blocks of current ground position."""
     cx, cy, cz = pos
-    span = 20.0
+    span = 5.0
     subs = space_spec.get("spaces", {})
-    return action_components.ProtoMoveTo(
-        x=cx + random.uniform(-span, span),
+    move_to = action_components.ProtoMoveTo(
+        x=cx + random.choice([-span, span]),
         y=cy,
-        z=cz + random.uniform(-span, span),
-        speed_modifier=1,
-        stop_distance=2,
-        timeout_ticks=200,  # type: ignore[arg-type]
+        z=cz + random.choice([-span, span]),
+        stop_distance=1,
     )
+    print(f"MoveTo: {move_to.x}, {move_to.y}, {move_to.z}")
+    return move_to
 
 
 COMPONENT_FACTORIES: dict[str, Any] = {
@@ -96,13 +96,13 @@ def _random_action(env: GymCraftEnv, position: tuple[float, float, float]) -> di
     # if use_move_to:
     return {MOVE_TO_KEY: _move_to_nearby(position, spaces[MOVE_TO_KEY])}
 
-    safe_keys = [k for k in spaces if k in COMPONENT_FACTORIES]
-    if not safe_keys:
-        return {"gymcraft:noop": action_components.ProtoNoop()}
+    # safe_keys = [k for k in spaces if k in COMPONENT_FACTORIES]
+    # if not safe_keys:
+    #     return {"gymcraft:noop": action_components.ProtoNoop()}
 
-    key = random.choice(safe_keys)
-    values = _sample_space(spaces[key])
-    return {key: COMPONENT_FACTORIES[key](values)}
+    # key = random.choice(safe_keys)
+    # values = _sample_space(spaces[key])
+    # return {key: COMPONENT_FACTORIES[key](values)}
 
 # ├─ main loop ─────────────────────────────────────────────────────────
 

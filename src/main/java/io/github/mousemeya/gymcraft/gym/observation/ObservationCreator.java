@@ -13,6 +13,7 @@ import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoObservationHeader;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
+import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
@@ -32,14 +33,19 @@ public class ObservationCreator {
         this.components = List.copyOf(components);
     }
 
-    public ProtoMcObservation create(Mob mob) {
+    public ProtoMcObservation create(Mob mob, ActionState lastActionState) {
+        var headerBuilder = ProtoObservationHeader.newBuilder()
+            .setSchemaVersion(1)
+            .setGameTick(mob.level().getGameTime())
+            .setDimension(mob.level().dimension().identifier().toString())
+            .setAgentId(mob.getUUID().toString());
+        if (lastActionState != null) {
+            headerBuilder.setLastActionStatus(lastActionState.status().name());
+            headerBuilder.setLastActionDescription(lastActionState.description());
+        }
+
         var builder = ProtoMcObservation.newBuilder()
-            .setHeader(ProtoObservationHeader.newBuilder()
-                .setSchemaVersion(1)
-                .setGameTick(mob.level().getGameTime())
-                .setDimension(mob.level().dimension().identifier().toString())
-                .setAgentId(mob.getUUID().toString())
-                .build());
+            .setHeader(headerBuilder.build());
 
         for (ObservationComponentCreator<? extends Message> component : this.components) {
             try {

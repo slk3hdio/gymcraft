@@ -18,9 +18,7 @@ message ProtoMoveTo {
   double x = 1;
   double y = 2;
   double z = 3;
-  float speed_modifier = 4;
-  double stop_distance = 5;
-  int32 timeout_ticks = 6;
+  double stop_distance = 4;
 }
 
 message ProtoSetAttackTarget {

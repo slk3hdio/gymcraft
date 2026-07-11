@@ -14,6 +14,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoAttackOnce;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -80,16 +81,24 @@ public class AttackOnceController implements ActionComponentController<ProtoAtta
             if (found instanceof LivingEntity living) target = living;
         }
         if (target == null) target = mob.getTarget();
+        boolean attacked = false;
         if (target != null && mob.level() instanceof ServerLevel serverLevel && mob.isWithinMeleeAttackRange(target)) {
             mob.doHurtTarget(serverLevel, target);
+            attacked = true;
         }
+        ActionState state = attacked
+            ? ActionState.completed("attack executed")
+            : ActionState.failed("no target in range", Map.of(
+                "target", target != null ? target.getUUID().toString() : "none",
+                "in_range", target != null && mob.isWithinMeleeAttackRange(target)));
         return ActionApplyResult.applied(ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE, Goal.Flag.LOOK)
-            .setMemoryWithExpiry(MemoryModuleType.ATTACK_COOLING_DOWN, true, 2));
+            .setMemoryWithExpiry(MemoryModuleType.ATTACK_COOLING_DOWN, true, 2),
+            state);
     }
 
     @Override
-    public boolean isDone(Mob mob, ProtoAttackOnce component) { // 瞬时动作, 立即完成
-        return true;
+    public ActionState getState(Mob mob, ProtoAttackOnce component) {
+        return ActionState.completed("attack applied");
     }
 }

@@ -82,32 +82,44 @@ public class ActionController {
         return ActionApplyResult.none();
     }
 
-    public boolean isDone(Mob mob, ProtoMcAction action) {
-        if (action == null || action.getComponentsCount() == 0) return true;
+    public ActionState getState(Mob mob, ProtoMcAction action) {
+        if (action == null || action.getComponentsCount() == 0) {
+            return ActionState.completed("no action components");
+        }
 
+        ActionState merged = null;
         for (var entry : action.getComponentsMap().entrySet()) {
             var controller = componentControllers.get(entry.getKey());
             if (controller == null) {
                 LOGGER.warn("No action component for key: {}", entry.getKey());
                 continue;
             }
-            if (!isComponentDone(controller, mob, entry.getValue(), entry.getKey())) {
-                return false;
-            }
+            ActionState state = getComponentState(controller, mob, entry.getValue(), entry.getKey());
+            merged = mergeState(merged, state);
         }
-        return true;
+        return merged == null ? ActionState.completed("no components processed") : merged;
     }
 
-    private static <T extends Message> boolean isComponentDone(ActionComponentController<T> controller, Mob mob, Any any, String key) {
+    private static <T extends Message> ActionState getComponentState(ActionComponentController<T> controller, Mob mob, Any any, String key) {
         if (!any.is(controller.protoType())) {
             LOGGER.debug("Action component controller {} has unexpected payload type", key);
-            return true;
+            return ActionState.completed("unexpected payload type");
         }
         try {
-            return controller.isDone(mob, any.unpack(controller.protoType()));
+            return controller.getState(mob, any.unpack(controller.protoType()));
         } catch (InvalidProtocolBufferException e) {
             LOGGER.warn("Failed to unpack action component controller {}: {}", key, e.getMessage());
-            return true;
+            return ActionState.failed("unpack error: " + e.getMessage());
         }
+    }
+
+    private static ActionState mergeState(ActionState a, ActionState b) {
+        if (a == null) return b;
+        if (b == null) return a;
+        int cmp = a.status().ordinal() - b.status().ordinal();
+        if (cmp < 0) return b;
+        if (cmp > 0) return a;
+        if (a.status() == ActionStatus.RUNNING) return a;
+        return a;
     }
 }

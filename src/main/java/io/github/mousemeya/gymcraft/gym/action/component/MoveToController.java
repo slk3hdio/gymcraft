@@ -12,6 +12,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveTo;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -28,9 +29,7 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
         "y", new BoxSpace(-2048, 2048, 1),
         "z", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "speed_modifier", new BoxSpace(0, 16, 1),
-        "stop_distance", new BoxSpace(0, 128, 1),
-        "timeout_ticks", new BoxSpace(0, 24000, 1)
+        "stop_distance", new BoxSpace(0, 128, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
     private final McSpace<Map<String, Object>> space;
     private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
@@ -72,16 +71,13 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
         return Double.isFinite(component.getX())
             && Double.isFinite(component.getY())
             && Double.isFinite(component.getZ())
-            && Float.isFinite(component.getSpeedModifier())
-            && component.getSpeedModifier() >= 0
             && Double.isFinite(component.getStopDistance())
-            && component.getStopDistance() >= 0
-            && component.getTimeoutTicks() >= 0;
+            && component.getStopDistance() >= 0;
     }
 
     @Override
     public ActionApplyResult apply(Mob mob, ProtoMoveTo component) {
-        boolean moved = mob.getNavigation().moveTo(component.getX(), component.getY(), component.getZ(), component.getSpeedModifier());
+        boolean moved = mob.getNavigation().moveTo(component.getX(), component.getY(), component.getZ(), 1.0);
         var policy = ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE)
             .eraseMemory(MemoryModuleType.WALK_TARGET)
@@ -89,16 +85,28 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
         if (!moved) {
             policy.stopNavigation();
         }
-        return ActionApplyResult.applied(policy);
+        ActionState initialState = moved
+            ? ActionState.running("navigating to target")
+            : ActionState.failed("unreachable target", Map.of(
+                "x", component.getX(), "y", component.getY(), "z", component.getZ()));
+        return ActionApplyResult.applied(policy, initialState);
     }
 
     @Override
-    public boolean isDone(Mob mob, ProtoMoveTo component) {
+    public ActionState getState(Mob mob, ProtoMoveTo component) {
         double dx = mob.getX() - component.getX();
         double dy = mob.getY() - component.getY();
         double dz = mob.getZ() - component.getZ();
         double stop = component.getStopDistance();
-        if (dx * dx + dy * dy + dz * dz <= stop * stop) return true;
-        return mob.getNavigation().isDone();
+        double distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq <= stop * stop) {
+            return ActionState.completed("reached target", Map.of(
+                "distance", Math.sqrt(distSq), "stop_distance", stop));
+        }
+        if (mob.getNavigation().isDone()) {
+            return ActionState.failed("navigation ended before reaching target", Map.of(
+                "distance", Math.sqrt(distSq), "stop_distance", stop));
+        }
+        return ActionState.running("navigating", Map.of("distance", Math.sqrt(distSq)));
     }
 }

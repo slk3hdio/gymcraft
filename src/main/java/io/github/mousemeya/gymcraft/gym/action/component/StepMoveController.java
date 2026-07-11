@@ -12,6 +12,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoStepMove;
 import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
@@ -93,11 +94,12 @@ public class StepMoveController implements ActionComponentController<ProtoStepMo
             .eraseMemory(MemoryModuleType.WALK_TARGET)
             .eraseMemory(MemoryModuleType.PATH)
             .eraseMemory(MemoryModuleType.LOOK_TARGET)
-            .stopNavigation());
+            .stopNavigation(),
+            ActionState.completed("step movement applied"));
     }
 
     @Override
-    public boolean isDone(Mob mob, ProtoStepMove component) { // 瞬时动作, 立即完成
-        return true;
+    public ActionState getState(Mob mob, ProtoStepMove component) {
+        return ActionState.completed("step movement applied");
     }
 }

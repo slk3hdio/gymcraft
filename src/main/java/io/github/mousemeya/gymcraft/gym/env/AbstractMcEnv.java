@@ -23,6 +23,7 @@ import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime;
+import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime.RuntimeStepResult;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 
@@ -107,13 +108,19 @@ public abstract class AbstractMcEnv implements McEnv {
         this.ensureOpen();
         try {
             this.agentRuntime.putAction(action);
-            ProtoMcObservation observation = this.agentRuntime.takeObservation();
+            RuntimeStepResult result = this.agentRuntime.takeStepResult();
+            Map<String, Object> info = new java.util.LinkedHashMap<>(this.createStepInfo(result.observation()));
+            info.put("action_state", Map.of(
+                "status", result.actionState().status().name().toLowerCase(),
+                "description", result.actionState().description(),
+                "details", result.actionState().details()
+            ));
             return StepResponse.newBuilder()
-                    .setObservation(observation)
-                    .setReward(this.computeReward(observation))
-                    .setTerminated(this.isTerminated(observation))
-                    .setTruncated(this.isTruncated(observation))
-                    .setInfo(ProtoJson.toJson(this.createStepInfo(observation)))
+                    .setObservation(result.observation())
+                    .setReward(this.computeReward(result.observation()))
+                    .setTerminated(this.isTerminated(result.observation()))
+                    .setTruncated(this.isTruncated(result.observation()))
+                    .setInfo(ProtoJson.toJson(info))
                     .build();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

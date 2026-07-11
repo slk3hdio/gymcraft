@@ -12,6 +12,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
@@ -74,11 +75,12 @@ public class NoopController implements ActionComponentController<ProtoNoop> {
             .eraseMemory(MemoryModuleType.LOOK_TARGET)
             .eraseMemory(MemoryModuleType.ATTACK_TARGET)
             .setMemoryWithExpiry(MemoryModuleType.ATTACK_COOLING_DOWN, true, 2)
-            .stopNavigation());
+            .stopNavigation(),
+            ActionState.completed("noop"));
     }
 
     @Override
-    public boolean isDone(Mob mob, ProtoNoop component) { // 瞬时动作, 立即完成
-        return true;
+    public ActionState getState(Mob mob, ProtoNoop component) {
+        return ActionState.completed("noop");
     }
 }
