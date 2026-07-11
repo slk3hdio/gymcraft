@@ -81,6 +81,9 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
                         .setObservationSpaceJson(ProtoJson.toJson(env.getObservationSpace().serialize()))
                         .build());
                 responseObserver.onCompleted();
+            } catch (IllegalStateException e) {
+                GymCraft.LOGGER.warn("Failed to connect GymCraft RPC session for entity {}", entityUuid, e);
+                responseObserver.onError(Status.ALREADY_EXISTS.withDescription(e.getMessage()).asRuntimeException());
             } catch (RuntimeException e) {
                 GymCraft.LOGGER.warn("Failed to connect GymCraft RPC session for entity {}", entityUuid, e);
                 responseObserver.onError(Status.UNKNOWN.withDescription(e.getMessage()).asRuntimeException());

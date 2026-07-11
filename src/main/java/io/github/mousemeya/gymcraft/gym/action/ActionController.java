@@ -46,13 +46,19 @@ public class ActionController {
 
     /** 将 ProtoMcAction 中的所有组件依次分发执行，并聚合组件返回的控制策略。 */
     public ActionApplyResult apply(Mob mob, ProtoMcAction action) {
-        if (action == null || action.getComponentsCount() == 0) return ActionApplyResult.none();
+        if (action == null) {
+            return ActionApplyResult.none(ActionState.failed("action is null"));
+        }
+        if (action.getComponentsCount() == 0) {
+            return ActionApplyResult.none(ActionState.failed("action has no components"));
+        }
 
         var result = ActionApplyResult.none();
         for (var entry : action.getComponentsMap().entrySet()) {
             var controller = componentControllers.get(entry.getKey());
             if (controller == null) {
                 LOGGER.debug("No action component controller for key: {}", entry.getKey());
+                result = result.merge(ActionApplyResult.none(ActionState.failed("unknown action component", Map.of("key", entry.getKey()))));
                 continue;
             }
             result = result.merge(applyComponent(controller, mob, entry.getValue(), entry.getKey()));
@@ -64,22 +70,27 @@ public class ActionController {
     private static <T extends Message> ActionApplyResult applyComponent(ActionComponentController<T> controller, Mob mob, Any any, String key) {
         if (!any.is(controller.protoType())) {
             LOGGER.debug("Action component controller {} has unexpected payload type", key);
-            return ActionApplyResult.none();
+            return ActionApplyResult.none(ActionState.failed("unexpected payload type", Map.of(
+                "key", key,
+                "expected", controller.protoType().getName(),
+                "actual", any.getTypeUrl()
+            )));
         }
         try {
             var payload = any.unpack(controller.protoType());
             if (!controller.contains(payload)) {
                 LOGGER.debug("Action component controller {} payload failed validation", key);
-                return ActionApplyResult.none();
+                return ActionApplyResult.none(ActionState.failed("payload failed validation", Map.of("key", key)));
             }
             var result = controller.apply(mob, payload);
             return result == null ? ActionApplyResult.none() : result;
         } catch (InvalidProtocolBufferException e) {
             LOGGER.warn("Failed to unpack action component controller {}: {}", key, e.getMessage());
+            return ActionApplyResult.none(ActionState.failed("unpack error: " + e.getMessage(), Map.of("key", key)));
         } catch (Exception e) {
             LOGGER.warn("Error applying action component controller {}: {}", key, e.getMessage());
+            return ActionApplyResult.none(ActionState.failed("apply error: " + e.getMessage(), Map.of("key", key)));
         }
-        return ActionApplyResult.none();
     }
 
     public ActionState getState(Mob mob, ProtoMcAction action) {
@@ -116,10 +127,19 @@ public class ActionController {
     private static ActionState mergeState(ActionState a, ActionState b) {
         if (a == null) return b;
         if (b == null) return a;
-        int cmp = a.status().ordinal() - b.status().ordinal();
+        int cmp = priority(a.status()) - priority(b.status());
         if (cmp < 0) return b;
         if (cmp > 0) return a;
         if (a.status() == ActionStatus.RUNNING) return a;
         return a;
+    }
+
+    private static int priority(ActionStatus status) {
+        return switch (status) {
+            case COMPLETED -> 0;
+            case RUNNING -> 1;
+            case INTERRUPTED -> 2;
+            case FAILED -> 3;
+        };
     }
 }

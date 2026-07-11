@@ -5,9 +5,13 @@ import java.util.Map;
 import java.util.Collection;
 import java.util.List;
 
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.level.pathfinder.Path;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
@@ -78,6 +82,7 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
     @Override
     public ActionApplyResult apply(Mob mob, ProtoMoveTo component) {
         boolean moved = mob.getNavigation().moveTo(component.getX(), component.getY(), component.getZ(), 1.0);
+        Path path = mob.getNavigation().getPath();
         var policy = ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE)
             .eraseMemory(MemoryModuleType.WALK_TARGET)
@@ -86,9 +91,8 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
             policy.stopNavigation();
         }
         ActionState initialState = moved
-            ? ActionState.running("navigating to target")
-            : ActionState.failed("unreachable target", Map.of(
-                "x", component.getX(), "y", component.getY(), "z", component.getZ()));
+            ? ActionState.running("navigating to target", pathDetails(mob, path, component))
+            : ActionState.failed(failureDescription(mob, path, component), pathDetails(mob, path, component));
         return ActionApplyResult.applied(policy, initialState);
     }
 
@@ -98,15 +102,73 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
         double dy = mob.getY() - component.getY();
         double dz = mob.getZ() - component.getZ();
         double stop = component.getStopDistance();
-        double distSq = dx * dx + dy * dy + dz * dz;
-        if (distSq <= stop * stop) {
+        double horizontalDistSq = dx * dx + dz * dz;
+        double horizontalDist = Math.sqrt(horizontalDistSq);
+        if (horizontalDistSq <= stop * stop) {
             return ActionState.completed("reached target", Map.of(
-                "distance", Math.sqrt(distSq), "stop_distance", stop));
+                "horizontal_distance", horizontalDist,
+                "vertical_delta", dy,
+                "stop_distance", stop));
         }
         if (mob.getNavigation().isDone()) {
             return ActionState.failed("navigation ended before reaching target", Map.of(
-                "distance", Math.sqrt(distSq), "stop_distance", stop));
+                "horizontal_distance", horizontalDist,
+                "vertical_delta", dy,
+                "stop_distance", stop,
+                "navigation_done", true));
         }
-        return ActionState.running("navigating", Map.of("distance", Math.sqrt(distSq)));
+        return ActionState.running("navigating", Map.of(
+            "horizontal_distance", horizontalDist,
+            "vertical_delta", dy));
+    }
+
+    private static Map<String, Object> pathDetails(Mob mob, Path path, ProtoMoveTo component) {
+        var details = new java.util.LinkedHashMap<String, Object>();
+        details.put("x", component.getX());
+        details.put("y", component.getY());
+        details.put("z", component.getZ());
+        details.put("stop_distance", component.getStopDistance());
+        details.put("mob_type", BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString());
+        details.put("navigation_class", mob.getNavigation().getClass().getSimpleName());
+        details.put("no_ai", mob.isNoAi());
+        details.put("on_ground", mob.onGround());
+        details.put("in_liquid", mob.isInLiquid());
+        details.put("in_water", mob.isInWater());
+        details.put("passenger", mob.isPassenger());
+        details.put("can_update_ground_path", mob.onGround() || mob.isInLiquid() || mob.isPassenger());
+        details.put("mob_block", mob.blockPosition().toShortString());
+        BlockPos below = mob.blockPosition().below();
+        details.put("block_below", BuiltInRegistries.BLOCK.getKey(mob.level().getBlockState(below).getBlock()).toString());
+        BlockPos targetBlock = BlockPos.containing(component.getX(), component.getY(), component.getZ());
+        details.put("target_block", targetBlock.toShortString());
+        details.put("target_chunk_loaded", mob.level().getChunkSource().getChunkNow(
+            SectionPos.blockToSectionCoord(targetBlock.getX()),
+            SectionPos.blockToSectionCoord(targetBlock.getZ())) != null);
+        details.put("path_null", path == null);
+        if (path != null) {
+            details.put("path_node_count", path.getNodeCount());
+            details.put("path_can_reach", path.canReach());
+            details.put("path_done", path.isDone());
+            details.put("path_dist_to_target", path.getDistToTarget());
+            details.put("path_target", path.getTarget().toShortString());
+        }
+        return details;
+    }
+
+    private static String failureDescription(Mob mob, Path path, ProtoMoveTo component) {
+        BlockPos targetBlock = BlockPos.containing(component.getX(), component.getY(), component.getZ());
+        boolean targetChunkLoaded = mob.level().getChunkSource().getChunkNow(
+            SectionPos.blockToSectionCoord(targetBlock.getX()),
+            SectionPos.blockToSectionCoord(targetBlock.getZ())) != null;
+        if (!targetChunkLoaded) {
+            return "target chunk is not loaded";
+        }
+        if (path == null) {
+            return "path not found";
+        }
+        if (!path.canReach()) {
+            return "target cannot be reached by pathfinder";
+        }
+        return "unreachable target";
     }
 }

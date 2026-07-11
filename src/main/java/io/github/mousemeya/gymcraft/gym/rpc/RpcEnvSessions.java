@@ -19,6 +19,8 @@ import io.github.mousemeya.gymcraft.gym.env.McEnv;
 final class RpcEnvSessions {
     /** session_id → Session 的线程安全映射 */
     private final ConcurrentMap<String, Session> sessions = new ConcurrentHashMap<>();
+    /** entity_uuid → session_id，确保同一个环境同一时刻只能被一个客户端连接 */
+    private final ConcurrentMap<UUID, String> sessionsByEntity = new ConcurrentHashMap<>();
 
     /**
      * 创建新的 RPC 会话。
@@ -33,6 +35,10 @@ final class RpcEnvSessions {
      */
     Session create(UUID entityUuid, McEnv env) {
         String sessionId = UUID.randomUUID().toString();
+        String existing = sessionsByEntity.putIfAbsent(entityUuid, sessionId);
+        if (existing != null) {
+            throw new IllegalStateException("Environment is already connected: " + entityUuid);
+        }
         Session session = new Session(sessionId, entityUuid, env);
         sessions.put(sessionId, session);
         return session;
@@ -62,7 +68,15 @@ final class RpcEnvSessions {
      * @return 如果会话存在并被移除返回 {@code true}，否则返回 {@code false}
      */
     boolean close(String sessionId) {
-        return sessionId != null && sessions.remove(sessionId) != null;
+        if (sessionId == null) {
+            return false;
+        }
+        Session session = sessions.remove(sessionId);
+        if (session == null) {
+            return false;
+        }
+        sessionsByEntity.remove(session.entityUuid(), session.id());
+        return true;
     }
 
     /**
@@ -74,6 +88,7 @@ final class RpcEnvSessions {
      */
     void clear() {
         sessions.clear();
+        sessionsByEntity.clear();
     }
 
     /**

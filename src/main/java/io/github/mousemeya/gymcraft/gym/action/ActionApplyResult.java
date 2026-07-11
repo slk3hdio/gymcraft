@@ -9,6 +9,10 @@ public record ActionApplyResult(ActionControlPolicy policy, boolean appliedAnyCo
             ActionState.completed("no components applied"));
     }
 
+    public static ActionApplyResult none(ActionState initialState) {
+        return new ActionApplyResult(ActionControlPolicy.none(), false, initialState);
+    }
+
     public static ActionApplyResult applied(ActionControlPolicy policy) {
         ActionControlPolicy p = policy == null ? ActionControlPolicy.none() : policy;
         return new ActionApplyResult(p, true,
@@ -32,10 +36,19 @@ public record ActionApplyResult(ActionControlPolicy policy, boolean appliedAnyCo
     private static ActionState mergeState(ActionState a, ActionState b) {
         if (a == null) return b;
         if (b == null) return a;
-        int cmp = a.status().ordinal() - b.status().ordinal();
+        int cmp = priority(a.status()) - priority(b.status());
         if (cmp < 0) return b;
         if (cmp > 0) return a;
         if (a.status() == ActionStatus.RUNNING) return a;
         return a;
+    }
+
+    private static int priority(ActionStatus status) {
+        return switch (status) {
+            case COMPLETED -> 0;
+            case RUNNING -> 1;
+            case INTERRUPTED -> 2;
+            case FAILED -> 3;
+        };
     }
 }

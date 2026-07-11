@@ -92,7 +92,7 @@ public abstract class AbstractMcEnv implements McEnv {
         this.ensureOpen();
         try {
             this.agentRuntime.putReset(seed, options == null ? Map.of() : options, this::resetMob);
-            ProtoMcObservation observation = this.agentRuntime.takeObservation();
+            ProtoMcObservation observation = this.agentRuntime.takeStepResult().observation();
             return ResetResponse.newBuilder()
                     .setObservation(observation)
                     .setInfo(ProtoJson.toJson(this.createResetInfo()))
