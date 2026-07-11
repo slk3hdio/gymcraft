@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.minecraft.world.entity.Mob;
+import net.minecraft.util.profiling.Profiler;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
 
@@ -122,27 +123,36 @@ public class AgentRuntime {
             return;
         }
 
-        // 优先处理重置请求
-        ResetRequest resetRequest = this.resetBuf.poll();
-        if (resetRequest != null) {
-            clear();
-            resetRequest.resetter().accept(resetRequest.seed(), resetRequest.options());
-            return;
-        }
-
-        // 消费新动作
-        ProtoMcAction action = this.actionBuf.poll();
-        if (action != null) {
-            ActionApplyResult result = this.actionController.apply(this.mob, action);
-            if (this.runningAction != null) {
-                this.activePolicy.releaseFrom(this.mob);
+        var profiler = Profiler.get();
+        try (var gymcraftZone = profiler.zone("gymcraft_pre")) {
+            // 优先处理重置请求
+            ResetRequest resetRequest = this.resetBuf.poll();
+            if (resetRequest != null) {
+                try (var resetZone = profiler.zone("reset")) {
+                    clear();
+                    resetRequest.resetter().accept(resetRequest.seed(), resetRequest.options());
+                }
+                return;
             }
-            this.activePolicy = result.policy();
-            this.runningAction = action;
-        }
 
-        // 维持 AI 压制策略
-        this.activePolicy.applyTo(this.mob);
+            // 消费新动作
+            ProtoMcAction action = this.actionBuf.poll();
+            if (action != null) {
+                try (var actionZone = profiler.zone("apply_action")) {
+                    ActionApplyResult result = this.actionController.apply(this.mob, action);
+                    if (this.runningAction != null) {
+                        this.activePolicy.releaseFrom(this.mob);
+                    }
+                    this.activePolicy = result.policy();
+                    this.runningAction = action;
+                }
+            }
+
+            // 维持 AI 压制策略
+            try (var policyZone = profiler.zone("apply_policy")) {
+                this.activePolicy.applyTo(this.mob);
+            }
+        }
     }
 
     /**
@@ -167,26 +177,37 @@ public class AgentRuntime {
             return;
         }
 
-        // 动作完成检测
-        if (runningAction != null && actionController.isDone(mob, runningAction)) {
-            requestObservation = true;
-            runningAction = null;
-            this.activePolicy.releaseFrom(this.mob);
-            this.activePolicy = ActionControlPolicy.none();
-        }
-
-        // 生成观测（首次初始化或动作完成后）
-        if (requestObservation) {
-            var oldObservation = this.observationBuf.poll();
-            if (oldObservation != null) {
-                LOGGER.warn("Observation buffer is not empty, drop the observation");
+        var profiler = Profiler.get();
+        try (var gymcraftZone = profiler.zone("gymcraft_post")) {
+            // 动作完成检测
+            if (runningAction != null) {
+                try (var isDoneZone = profiler.zone("check_action_done")) {
+                    if (actionController.isDone(mob, runningAction)) {
+                        requestObservation = true;
+                        runningAction = null;
+                        this.activePolicy.releaseFrom(this.mob);
+                        this.activePolicy = ActionControlPolicy.none();
+                    }
+                }
             }
-            ProtoMcObservation observation = this.observationCreator.create(this.mob);
-            this.observationBuf.offer(observation);
-            requestObservation = false;
-        }
 
-        this.activePolicy.applyTo(this.mob);
+            // 生成观测（首次初始化或动作完成后）
+            if (requestObservation) {
+                try (var observationZone = profiler.zone("create_observation")) {
+                    var oldObservation = this.observationBuf.poll();
+                    if (oldObservation != null) {
+                        LOGGER.warn("Observation buffer is not empty, drop the observation");
+                    }
+                    ProtoMcObservation observation = this.observationCreator.create(this.mob);
+                    this.observationBuf.offer(observation);
+                    requestObservation = false;
+                }
+            }
+
+            try (var policyZone = profiler.zone("apply_policy")) {
+                this.activePolicy.applyTo(this.mob);
+            }
+        }
     }
 
     /**
