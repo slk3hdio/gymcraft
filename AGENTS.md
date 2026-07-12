@@ -24,7 +24,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 
 ## Gotchas
 
-- `gradle.properties` 硬编码了 `org.gradle.java.home=D:/Program Files/Java/jdk-25` — 换机器必须修改
+- Gradle 使用 `JAVA_HOME` 环境变量确定 JDK 路径；确保 `JAVA_HOME` 指向 JDK 25
 - **Python 桩**: 改 `.proto` 后需 `.\gradlew generatePythonStubs` (或 `src/main/python/generate_stubs.ps1`) 重新生成 `*_pb2.py` / `*_pb2_grpc.py`；同样是生成物，勿手改
 - **Mod metadata 模板**: 编辑 `src/main/templates/META-INF/neoforge.mods.toml` (不编辑构建产物); `${...}` 占位符由 `generateModMetadata` 任务展开
 - Java 编译编码 UTF-8, gym 相关代码使用中文 Javadoc/注释
