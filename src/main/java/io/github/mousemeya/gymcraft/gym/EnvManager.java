@@ -5,11 +5,9 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import net.minecraft.resources.Identifier;
-// import io.github.mousemeya.gymcraft.gym.env.McEnvFactories;
 import net.minecraft.world.entity.Mob;
 
 /**
@@ -22,11 +20,11 @@ public final class EnvManager {
     private EnvManager() {
     }
 
-    public static McEnv create(String envType, Mob mob) {
+    public static McEnv create(String envType, Mob mob) throws IllegalArgumentException {
         var id = Identifier.parse(envType);
         var factory = RegistryKeys.ENV_FACTORIES.getValue(id);
         if (factory == null) {
-            throw new IllegalArgumentException("Unknown environment type: " + id);
+            throw new IllegalArgumentException("Invalid environment type: " + id);
         }
         McEnv env = factory.create(id, mob);
         ENVS_BY_ENTITY.put(mob.getUUID(), env);

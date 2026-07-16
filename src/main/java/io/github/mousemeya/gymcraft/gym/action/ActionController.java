@@ -5,7 +5,6 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.mojang.logging.LogUtils;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
-import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import net.minecraft.world.entity.Mob;
 import org.slf4j.Logger;
 

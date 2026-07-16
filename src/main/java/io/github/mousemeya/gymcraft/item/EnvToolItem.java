@@ -8,7 +8,6 @@ import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.registry.EnvFactories;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
@@ -48,7 +47,12 @@ public class EnvToolItem extends Item {
         }
 
         String envType = getSelectedEnvType(stack);
-        EnvManager.create(envType, mob);
+        try {
+            EnvManager.create(envType, mob);
+        } catch (IllegalArgumentException e) {
+            player.sendSystemMessage(Component.literal(e.getMessage()));
+            return InteractionResult.SUCCESS;
+        }
         player.sendSystemMessage(Component.literal("Created environment " + envType + " for " + mob.getUUID()));
         return InteractionResult.SUCCESS;
     }
