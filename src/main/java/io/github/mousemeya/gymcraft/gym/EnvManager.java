@@ -26,6 +26,10 @@ public final class EnvManager {
         if (factory == null) {
             throw new IllegalArgumentException("Invalid environment type: " + id);
         }
+        McEnv oldEnv = ENVS_BY_ENTITY.remove(mob.getUUID());
+        if (oldEnv != null) {
+            oldEnv.close();
+        }
         McEnv env = factory.create(id, mob);
         ENVS_BY_ENTITY.put(mob.getUUID(), env);
         return env;

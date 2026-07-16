@@ -8,6 +8,7 @@ import java.util.List;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
@@ -34,7 +35,7 @@ public class AttackOnceController implements ActionComponentController<ProtoAtta
         "target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
     private final McSpace<Map<String, Object>> space;
-    private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(LivingEntity.class);
+    private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
 
     public AttackOnceController(Optional<McSpace<Map<String, Object>>> space) {
         this.space = space.orElse(DEFAULT_SPACE);
@@ -46,6 +47,11 @@ public class AttackOnceController implements ActionComponentController<ProtoAtta
             if (supported.isAssignableFrom(entityType)) return true;
         }
         return false;
+    }
+
+    @Override
+    public boolean supports(Mob mob) {
+        return this.supportEntity(mob.getClass()) && mob.getAttribute(Attributes.ATTACK_DAMAGE) != null;
     }
 
     @Override

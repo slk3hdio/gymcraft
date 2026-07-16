@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
@@ -48,6 +49,11 @@ public class SetAttackTargetController implements ActionComponentController<Prot
             if (supported.isAssignableFrom(entityType)) return true;
         }
         return false;
+    }
+
+    @Override
+    public boolean supports(Mob mob) {
+        return this.supportEntity(mob.getClass()) && mob.getAttribute(Attributes.ATTACK_DAMAGE) != null;
     }
 
     @Override
@@ -95,9 +101,9 @@ public class SetAttackTargetController implements ActionComponentController<Prot
         } else {
             policy.setMemory(MemoryModuleType.ATTACK_TARGET, target);
         }
-        ActionState state = target != null
-            ? ActionState.completed("attack target set", Map.of("target_uuid", target.getUUID().toString()))
-            : ActionState.completed("attack target cleared");
+        ActionState state = target != null && isValidTarget(mob, target)
+            ? ActionState.running("attack target set", targetDetails(target))
+            : ActionState.completed("attack target cleared or invalid");
         return ActionApplyResult.applied(policy, state);
     }
 
@@ -119,6 +125,36 @@ public class SetAttackTargetController implements ActionComponentController<Prot
 
     @Override
     public ActionState getState(Mob mob, ProtoSetAttackTarget component) {
-        return ActionState.completed("set attack target applied");
+        LivingEntity target = findTarget(mob, component);
+        if (target == null) {
+            return ActionState.completed("target no longer loaded");
+        }
+        if (!target.isAlive()) {
+            return ActionState.completed("target died", targetDetails(target));
+        }
+        if (!isValidTarget(mob, target)) {
+            return ActionState.completed("target is no longer valid", targetDetails(target));
+        }
+        LivingEntity currentTarget = mob.getTarget();
+        if (currentTarget == null || !currentTarget.getUUID().equals(target.getUUID())) {
+            return ActionState.completed("target was cleared or replaced", targetDetails(target));
+        }
+        return ActionState.running("tracking attack target", targetDetails(target));
+    }
+
+    private static boolean isValidTarget(Mob mob, LivingEntity target) {
+        return target != mob
+            && target.isAlive()
+            && mob.canAttack(target)
+            && !mob.isAlliedTo(target);
+    }
+
+    private static Map<String, Object> targetDetails(LivingEntity target) {
+        return Map.of(
+            "target_uuid", target.getUUID().toString(),
+            "target_entity_id", target.getId(),
+            "target_alive", target.isAlive(),
+            "target_health", target.getHealth()
+        );
     }
 }

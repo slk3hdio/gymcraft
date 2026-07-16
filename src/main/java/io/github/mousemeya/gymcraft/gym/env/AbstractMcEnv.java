@@ -15,6 +15,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
+
 import io.github.mousemeya.gymcraft.gym.action.ActionController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
@@ -41,7 +42,6 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  */
 public abstract class AbstractMcEnv implements McEnv {
     protected final Identifier envTypeId;
-    protected final Mob mob;
     protected final UUID envId;
     protected final ActionController actionController;
     protected final ObservationCreator observationCreator;
@@ -99,53 +99,40 @@ public abstract class AbstractMcEnv implements McEnv {
 
     protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionController actionController, ObservationCreator observationCreator) {
         this.envTypeId = envTypeId;
-        this.mob = mob;
         this.envId = UUID.randomUUID();
         this.actionController = actionController;
         this.observationCreator = observationCreator;
-        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
+        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob, this::resetMob);
         NeoForge.EVENT_BUS.register(this.agentRuntime);
     }
-     
+      
     @Override
     public ResetResponse reset(Integer seed, Map<String, Object> options) {
         this.ensureOpen();
-        try {
-            this.agentRuntime.putReset(seed, options == null ? Map.of() : options, this::resetMob);
-            ProtoMcObservation observation = this.agentRuntime.takeStepResult().observation();
-            return ResetResponse.newBuilder()
-                    .setObservation(observation)
-                    .setInfo(ProtoJson.toJson(this.createResetInfo()))
-                    .build();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while resetting environment " + this.envId, e);
-        }
+        RuntimeStepResult result = this.agentRuntime.reset(seed, options == null ? Map.of() : options);
+        return ResetResponse.newBuilder()
+            .setObservation(result.observation())
+            .setInfo(ProtoJson.toJson(this.createResetInfo()))
+            .build();
     }
 
     @Override
     public StepResponse step(ProtoMcAction action) {
-        this.ensureOpen();
-        try {
-            this.agentRuntime.putAction(action);
-            RuntimeStepResult result = this.agentRuntime.takeStepResult();
-            Map<String, Object> info = new java.util.LinkedHashMap<>(this.createStepInfo(result.observation()));
-            info.put("action_state", Map.of(
-                "status", result.actionState().status().name().toLowerCase(),
-                "description", result.actionState().description(),
-                "details", result.actionState().details()
-            ));
-            return StepResponse.newBuilder()
-                    .setObservation(result.observation())
-                    .setReward(this.computeReward(result.observation()))
-                    .setTerminated(this.isTerminated(result.observation()))
-                    .setTruncated(this.isTruncated(result.observation()))
-                    .setInfo(ProtoJson.toJson(info))
-                    .build();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while stepping environment " + this.envId, e);
-        }
+        this.ensureReady();
+        RuntimeStepResult result = this.agentRuntime.step(action);
+        Map<String, Object> info = new java.util.LinkedHashMap<>(this.createStepInfo(result.observation()));
+        info.put("action_state", Map.of(
+            "status", result.actionState().status().name().toLowerCase(),
+            "description", result.actionState().description(),
+            "details", result.actionState().details()
+        ));
+        return StepResponse.newBuilder()
+            .setObservation(result.observation())
+            .setReward(this.computeReward(result.observation()))
+            .setTerminated(this.isTerminated(result.observation()))
+            .setTruncated(this.isTruncated(result.observation()))
+            .setInfo(ProtoJson.toJson(info))
+            .build();
     }
 
     @Override
@@ -163,8 +150,8 @@ public abstract class AbstractMcEnv implements McEnv {
         return Map.of(
             "env_id", this.envId.toString(),
             "env_type_id", this.getRegisterId(),
-            "entity_uuid", this.mob.getUUID().toString(),
-            "entity_type", BuiltInRegistries.ENTITY_TYPE.getKey(this.mob.getType()).toString()
+            "entity_uuid", this.mob().getUUID().toString(),
+            "entity_type", BuiltInRegistries.ENTITY_TYPE.getKey(this.mob().getType()).toString()
         );
     }
 
@@ -178,13 +165,13 @@ public abstract class AbstractMcEnv implements McEnv {
         this.closed = true;
     }
 
-    protected void resetMob(Integer seed, Map<String, Object> options) {
-        this.mob.getNavigation().stop();
-        this.mob.setTarget(null);
-        this.mob.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        this.mob.getBrain().eraseMemory(MemoryModuleType.PATH);
-        this.mob.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
-        this.mob.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+    protected void resetMob(Mob mob, Integer seed, Map<String, Object> options) {
+        mob.getNavigation().stop();
+        mob.setTarget(null);
+        mob.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        mob.getBrain().eraseMemory(MemoryModuleType.PATH);
+        mob.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+        mob.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
     }
 
     protected double computeReward(ProtoMcObservation observation) {
@@ -192,7 +179,7 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     protected boolean isTerminated(ProtoMcObservation observation) {
-        return !this.mob.isAlive();
+        return !this.mob().isAlive();
     }
 
     protected boolean isTruncated(ProtoMcObservation observation) {
@@ -202,7 +189,7 @@ public abstract class AbstractMcEnv implements McEnv {
     protected Map<String, Object> createResetInfo() {
         return Map.of(
             "env_id", this.envId.toString(),
-            "entity_uuid", this.mob.getUUID().toString()
+            "entity_uuid", this.mob().getUUID().toString()
         );
     }
 
@@ -214,6 +201,17 @@ public abstract class AbstractMcEnv implements McEnv {
         if (this.closed) {
             throw new IllegalStateException("Environment is closed: " + this.envId);
         }
+    }
+
+    protected void ensureReady() {
+        this.ensureOpen();
+        if (!this.mob().isAlive()) {
+            throw new IllegalStateException("Environment entity is dead: " + this.mob().getUUID());
+        }
+    }
+
+    protected Mob mob() {
+        return this.agentRuntime.mob();
     }
 
 }
