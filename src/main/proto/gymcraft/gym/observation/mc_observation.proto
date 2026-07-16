@@ -12,10 +12,9 @@ option java_outer_classname = "ObservationProto";
 message ProtoObservationHeader {
   int32 schema_version = 1;
   int64 game_tick = 2;
-  string dimension = 3;
-  string agent_id = 4;
-  string last_action_status = 5;
-  string last_action_description = 6;
+  string agent_id = 3;
+  string last_action_status = 4;
+  string last_action_description = 5;
 }
 
 message ProtoMcObservation {

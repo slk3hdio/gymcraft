@@ -1,6 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.env;
 
 import java.util.Collection;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.UUID;
 
@@ -74,7 +75,26 @@ public abstract class AbstractMcEnv implements McEnv {
         Collection<ActionComponentController<?>> actionComponents,
         Collection<ObservationComponentCreator<?>> observationComponents
     ) {
-        this(envTypeId, mob, new ActionController(actionComponents), new ObservationCreator(observationComponents));
+        this(envTypeId, mob, new ActionController(validateActionComponents(mob, actionComponents)), new ObservationCreator(observationComponents));
+    }
+
+    private static Collection<ActionComponentController<?>> validateActionComponents(
+        Mob mob,
+        Collection<ActionComponentController<?>> actionComponents
+    ) {
+        var unsupported = new ArrayList<String>();
+        for (ActionComponentController<?> component : actionComponents) {
+            if (!component.supports(mob)) {
+                unsupported.add(component.getRegisterId());
+            }
+        }
+        if (!unsupported.isEmpty()) {
+            String mobType = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString();
+            throw new IllegalArgumentException(
+                "Cannot create environment for mob " + mobType + " (" + mob.getUUID() + ") because unsupported actions are registered: " + unsupported
+            );
+        }
+        return actionComponents;
     }
 
     protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionController actionController, ObservationCreator observationCreator) {

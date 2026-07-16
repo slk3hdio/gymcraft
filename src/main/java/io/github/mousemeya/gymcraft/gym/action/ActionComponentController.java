@@ -36,6 +36,11 @@ public interface ActionComponentController<T extends Message> {
     /** @return 是否支持指定实体类型 */
     boolean supportEntity(Class<?> entityType);
 
+    /** @return 是否支持指定实体实例 */
+    default boolean supports(Mob mob) {
+        return this.supportEntity(mob.getClass());
+    }
+
     /** @return 支持的实体类型列表 */
     Collection<Class<?>> getSupportedEntities();
 

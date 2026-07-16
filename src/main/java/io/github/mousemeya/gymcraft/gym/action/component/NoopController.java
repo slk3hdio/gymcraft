@@ -36,7 +36,7 @@ public class NoopController implements ActionComponentController<ProtoNoop> {
     @Override
     public boolean supportEntity(Class<?> entityType) {
         for (var supported : SUPPORTED_ENTITIES) {
-            if (entityType.isAssignableFrom(supported)) return true;
+            if (supported.isAssignableFrom(entityType)) return true;
         }
         return false;
     }

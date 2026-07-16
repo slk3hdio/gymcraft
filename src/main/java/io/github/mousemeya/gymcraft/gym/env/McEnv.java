@@ -1,12 +1,9 @@
 package io.github.mousemeya.gymcraft.gym.env;
 
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
-import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.registry.RegistryKeys;
-
 import java.util.Map;
 
 /**

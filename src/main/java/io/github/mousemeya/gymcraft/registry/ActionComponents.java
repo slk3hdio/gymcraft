@@ -30,22 +30,22 @@ public final class ActionComponents {
         "move_to",
         () -> new MoveToController(Optional.empty())
     );
-    public static final DeferredHolder<ActionComponentController<?>, StepMoveController> STEP_MOVE = REGISTRY.register(
-        "step_move",
-        () -> new StepMoveController(Optional.empty())
-    );
+    // public static final DeferredHolder<ActionComponentController<?>, StepMoveController> STEP_MOVE = REGISTRY.register(
+    //     "step_move",
+    //     () -> new StepMoveController(Optional.empty())
+    // );
     public static final DeferredHolder<ActionComponentController<?>, SetAttackTargetController> SET_ATTACK_TARGET = REGISTRY.register(
         "set_attack_target",
         () -> new SetAttackTargetController(Optional.empty())
     );
-    public static final DeferredHolder<ActionComponentController<?>, AttackOnceController> ATTACK_ONCE = REGISTRY.register(
-        "attack_once",
-        () -> new AttackOnceController(Optional.empty())
-    );
-    public static final DeferredHolder<ActionComponentController<?>, NoopController> NOOP = REGISTRY.register(
-        "noop",
-        () -> new NoopController(Optional.empty())
-    );
+    // public static final DeferredHolder<ActionComponentController<?>, AttackOnceController> ATTACK_ONCE = REGISTRY.register(
+    //     "attack_once",
+    //     () -> new AttackOnceController(Optional.empty())
+    // );
+    // public static final DeferredHolder<ActionComponentController<?>, NoopController> NOOP = REGISTRY.register(
+    //     "noop",
+    //     () -> new NoopController(Optional.empty())
+    // );
 
     private ActionComponents() {
     }

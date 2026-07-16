@@ -37,7 +37,7 @@ public class ObservationCreator {
         var headerBuilder = ProtoObservationHeader.newBuilder()
             .setSchemaVersion(1)
             .setGameTick(mob.level().getGameTime())
-            .setDimension(mob.level().dimension().identifier().toString())
+            // .setDimension(mob.level().dimension().identifier().toString())
             .setAgentId(mob.getUUID().toString());
         if (lastActionState != null) {
             headerBuilder.setLastActionStatus(lastActionState.status().name());
