@@ -12,6 +12,7 @@ Typical death test:
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import time
 from typing import Any
@@ -73,7 +74,8 @@ def move_once(env: GymCraftEnv, state: obs_components.ProtoSelfState, span: floa
             stop_distance=2.0,
         )
     }
-    obs, reward, terminated, truncated, info = env.step(action)
+    resp = env.step(action)
+    obs, reward, terminated, truncated, info = resp.observation, resp.reward, resp.terminated, resp.truncated, json.loads(resp.info)
     print(
         f"move_to target=({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}) "
         f"reward={reward:+.3f} term={terminated} trunc={truncated} action_state={info.get('action_state', {})}"
@@ -100,7 +102,8 @@ def main() -> None:
         print(f"connected entity={args.entity_uuid} address={args.address}")
         print(f"action_keys={sorted(action_keys)}")
 
-        obs, reset_info = env.reset()
+        resp = env.reset()
+        obs, reset_info = resp.observation, json.loads(resp.info)
         print(f"initial reset info={reset_info}")
         initial = print_self("initial", obs)
 
@@ -118,7 +121,8 @@ def main() -> None:
         if not args.no_prompt:
             input("Move/kill the agent in-game, then press Enter to call reset() again...")
 
-        obs, reset_info = env.reset()
+        resp = env.reset()
+        obs, reset_info = resp.observation, json.loads(resp.info)
         print(f"second reset info={reset_info}")
         restored = print_self("restored", obs)
 

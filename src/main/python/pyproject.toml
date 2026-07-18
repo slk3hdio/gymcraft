@@ -20,8 +20,38 @@ where = ["src"]
 include = ["gymcraft", "gymcraft.*"]
 
 [tool.mypy]
-ignore_missing_imports = true
+python_version = "3.11"
+files = ["src/gymcraft", "examples"]
+exclude = ["src/gymcraft/gym/"]
+
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+
+no_implicit_optional = true
+strict_equality = true
+show_error_codes = true
+pretty = true
 
 [[tool.mypy.overrides]]
-module = ["gymcraft.gym.action", "gymcraft.gym.action.*", "gymcraft.gym.observation", "gymcraft.gym.observation.*", "gymcraft.gym.rpc", "gymcraft.gym.rpc.*"]
+module = [
+  "gymcraft.gym.*",
+]
 follow_imports = "skip"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+  "grpc.*",
+  "gymnasium.*",
+  "google.*",
+]
+ignore_missing_imports = true
+

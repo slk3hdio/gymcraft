@@ -10,6 +10,7 @@ present in the remote action space, it also sends attack_once.
 from __future__ import annotations
 
 import argparse
+import json
 from typing import Any
 
 from gymcraft.client import GymCraftEnv, unpack_component
@@ -100,7 +101,8 @@ def main() -> None:
         if SET_ATTACK_TARGET_KEY not in action_keys:
             raise RuntimeError(f"remote env does not expose {SET_ATTACK_TARGET_KEY}")
 
-        obs, reset_info = env.reset()
+        resp = env.reset()
+        obs, reset_info = resp.observation, json.loads(resp.info)
         print_header("reset", obs)
         print(f"reset info={reset_info}")
         print_nearby(obs, args.limit)
@@ -118,7 +120,8 @@ def main() -> None:
         set_target_action = {
             SET_ATTACK_TARGET_KEY: action_components.ProtoSetAttackTarget(target_entity_id=target.entity_id)
         }
-        obs, reward, terminated, truncated, info = env.step(set_target_action)
+        resp = env.step(set_target_action)
+        obs, reward, terminated, truncated, info = resp.observation, resp.reward, resp.terminated, resp.truncated, json.loads(resp.info)
         print(f"set_attack_target reward={reward:+.3f} term={terminated} trunc={truncated}")
         print_header("set_attack_target", obs, info)
         print_nearby(obs, args.limit)
@@ -130,7 +133,8 @@ def main() -> None:
         attack_action = {
             ATTACK_ONCE_KEY: action_components.ProtoAttackOnce(target_entity_id=target.entity_id)
         }
-        obs, reward, terminated, truncated, info = env.step(attack_action)
+        resp = env.step(attack_action)
+        obs, reward, terminated, truncated, info = resp.observation, resp.reward, resp.terminated, resp.truncated, json.loads(resp.info)
         print(f"attack_once reward={reward:+.3f} term={terminated} trunc={truncated}")
         print_header("attack_once", obs, info)
         print_nearby(obs, args.limit)

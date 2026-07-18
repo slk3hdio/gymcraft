@@ -6,6 +6,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import random
 import time
@@ -81,7 +82,8 @@ def main() -> None:
     print(f"Move span={args.span}  stop_distance={args.stop_dist}")
     print()
 
-    obs, info = env.reset()
+    resp = env.reset()
+    obs, info = resp.observation, json.loads(resp.info)
     pos = _self_position(obs)
     status = obs.header.last_action_status or "(none)"
     desc = obs.header.last_action_description or "(none)"
@@ -107,7 +109,8 @@ def main() -> None:
 
             # — step —
             t0 = time.perf_counter()
-            obs, reward, terminated, truncated, info = env.step(action)
+            resp = env.step(action)
+            obs, reward, terminated, truncated, info = resp.observation, resp.reward, resp.terminated, resp.truncated, json.loads(resp.info)
             elapsed = time.perf_counter() - t0
             action_times.append(elapsed)
 
@@ -159,7 +162,8 @@ def main() -> None:
 
             if terminated or truncated:
                 print(f"         ── episode ended (term={terminated} trunc={truncated}) ──")
-                obs, info = env.reset()
+                resp = env.reset()
+                obs, info = resp.observation, json.loads(resp.info)
                 new_pos = _self_position(obs)
                 stuck_count = 0
 

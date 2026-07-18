@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, TypeVar, cast
 
 import grpc
 import gymnasium as gym
@@ -13,7 +13,10 @@ from gymcraft.gym.action import mc_action_pb2
 from gymcraft.gym.rpc import env_service_pb2, env_service_pb2_grpc
 
 
-class GymCraftEnv(gym.Env):
+_TMessage = TypeVar("_TMessage", bound=message.Message)
+
+
+class GymCraftEnv(gym.Env[Any, Any]):
     metadata = {"render_modes": []}
 
     def __init__(self, entity_uuid: str, address: str = "localhost:50051") -> None:
@@ -29,7 +32,7 @@ class GymCraftEnv(gym.Env):
         self.action_space_spec = json.loads(response.action_space_json)
         self.observation_space_spec = json.loads(response.observation_space_json)
 
-    def reset(self, *, seed: int | None = None, options: Mapping[str, Any] | None = None):
+    def reset(self, *, seed: int | None = None, options: Mapping[str, Any] | None = None) -> env_service_pb2.ResetResponse:
         super().reset(seed=seed)
         request = env_service_pb2.ResetRequest(session_id=self.session_id)
         if seed is not None:
@@ -37,21 +40,17 @@ class GymCraftEnv(gym.Env):
         request.options = json.dumps(options or {})
 
         response = self.stub.Reset(request)
-        return response.observation, json.loads(response.info)
+        assert isinstance(response, env_service_pb2.ResetResponse)
+        return response
 
-    def step(self, action: mc_action_pb2.ProtoMcAction | Mapping[str, message.Message]):
+    def step(self, action: mc_action_pb2.ProtoMcAction | Mapping[str, message.Message]) -> env_service_pb2.StepResponse:
         request = env_service_pb2.StepRequest(
             session_id=self.session_id,
             action=make_action(action) if isinstance(action, Mapping) else action,
         )
         response = self.stub.Step(request)
-        return (
-            response.observation,
-            response.reward,
-            response.terminated,
-            response.truncated,
-            json.loads(response.info),
-        )
+        assert isinstance(response, env_service_pb2.StepResponse)
+        return response
 
     def close(self) -> None:
         session_id = getattr(self, "session_id", None)
@@ -70,9 +69,13 @@ def make_action(components: Mapping[str, message.Message]) -> mc_action_pb2.Prot
     return action
 
 
-def unpack_component(observation, key: str, message_type: type[message.Message]):
+def unpack_component(
+    observation: Any,
+    key: str,
+    message_type: type[_TMessage],
+) -> _TMessage:
     packed = observation.components[key]
-    payload = message_type()
+    payload = cast(_TMessage, message_type())
     packed.Unpack(payload)
     return payload
 

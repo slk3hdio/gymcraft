@@ -10,6 +10,7 @@ same MoveTo action and prints the returned observation/action state.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 from typing import Any
 
@@ -76,7 +77,8 @@ def main() -> None:
         print(f"connected entity={args.entity_uuid} address={args.address}")
         print(f"action_keys={list(env.action_space_spec.get('spaces', {}).keys())}")
 
-        obs, reset_info = env.reset()
+        resp = env.reset()
+        obs, reset_info = resp.observation, json.loads(resp.info)
         print_state("reset", obs)
         print(f"reset info={reset_info}")
 
@@ -98,7 +100,8 @@ def main() -> None:
 
         previous = start
         for i in range(args.steps):
-            obs, reward, terminated, truncated, info = env.step(action)
+            resp = env.step(action)
+            obs, reward, terminated, truncated, info = resp.observation, resp.reward, resp.terminated, resp.truncated, json.loads(resp.info)
             pos = self_position(obs)
             moved = horizontal_distance(previous, pos)
             dist = horizontal_distance(pos, target)
