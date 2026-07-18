@@ -31,5 +31,6 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 - Java 编译编码 UTF-8, gym 相关代码使用中文 Javadoc/注释
 - EnvToolItem: Shift+右键创建环境, Shift+滚轮切换类型, Shift+右键删除
 - `registry/AgentStatusData.java` 目前是空占位类
+- 使用 `gh` 查看/操作包含中文的 GitHub issue 前，需先设置 PowerShell 控制台输出编码: `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`，否则中文会显示为乱码
 - `repo/` 既是 maven-publish 目标 (`file://${projectDir}/repo`)，又存放参考资源: `Documentation` (NeoForge 文档)、`minecraft-source-1.26` / `minecraft-source-1.20.1-java` (反编译源码)、`TouhouLittleMaid-1.20` (参考模组)
 - python 库版本(pyproject.toml中的version) 应该和mod版本保持一致
