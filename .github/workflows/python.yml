@@ -29,6 +29,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: src/main/python/uv.lock
 
+      - name: Grant gradlew execute permission
+        run: chmod +x gradlew
+
       - name: Generate Python gRPC stubs
         run: ./gradlew generatePythonStubs
 
