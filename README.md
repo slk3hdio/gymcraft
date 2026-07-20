@@ -15,31 +15,77 @@
 
 ## 概述
 
-GymCraft 把 Minecraft 中的实体（Mob）转换为标准 RL 环境，提供与 Gymnasium 兼容的
-`reset() → step(action) → (obs, reward, terminated, truncated, info)` 交互接口。
+GymCraft 把 Minecraft 中的实体（Mob）转换为标准 RL 环境，提供 Gymnasium 风格的
+`reset()` / `step(action)` 交互接口。
 环境在游戏内由 **Environment Tool** 物品创建并绑定到实体 UUID，外部 RL Agent 通过
 **gRPC**（默认端口 `50051`）连接已存在的环境进行训练。
 
 ### 核心架构
 
+项目由 **三端** 协作：**Proto** 定义共享契约，**Java** 在 Minecraft 服务端执行环境逻辑，**Python** 在外部驱动 RL 训练。
+
+```mermaid
+graph TB
+    subgraph Proto["Proto (共享契约) — src/main/proto/"]
+        direction LR
+        P1["gym/rpc/<br/>gRPC service"]
+        P2["gym/action/<br/>ProtoMcAction"]
+        P3["gym/observation/<br/>ProtoMcObservation"]
+    end
+
+    Proto -- "protoc → Java 桩" --> Java
+    Proto -- "protoc → Python 桩" --> Python
+
+    subgraph Java["Java (服务端) — Minecraft 模组"]
+        J1["GymCraftRpcServer"]
+        J2["EnvManager"]
+        J3["AgentRuntime"]
+        J4["ActionController"]
+        J5["ObservationCreator"]
+    end
+
+    subgraph Python["Python (客户端) — gymcraft 包"]
+        PY1["GymCraftEnv<br/>(gym.Env)"]
+        PY2["Agent（用户代码）"]
+        PY1 --> PY2
+    end
+
+    Java <== "gRPC :50051<br/>Connect / Reset / Step / CloseSession" ==> Python
 ```
-外部 RL Agent (Python / gymnasium.Env)
-        │  gRPC :50051  (GymEnvService)
-        │  Connect ─ Reset ─ Step ─ CloseSession
-        ▼
-GymCraft 模组 (Minecraft Server)
-        ├─ ProtoMcAction (动作) ──►
-        │    ├─ step_move / move_to
-        │    ├─ set_attack_target / attack_once
-        │    └─ noop
-        │
-        ◄── ProtoMcObservation (观测) ──
-             ├─ self (生命/位置/速度/姿态/目标)
-             ├─ world (时间/天气/维度)
-             ├─ nearby_entities (周围实体)
-             ├─ nearby_blocks (周围方块)
-             └─ inventory (背包/装备)
+
+#### 数据流
+
+```mermaid
+sequenceDiagram
+    participant Agent as Agent (Python)
+    participant RPC as gRPC :50051
+    participant Runtime as AgentRuntime (Java)
+    participant World as Minecraft World
+
+    Agent->>RPC: step(ProtoMcAction)
+    RPC->>Runtime: 提交动作, CompletableFuture 阻塞等待
+
+    World-->>Runtime: BeforeEntityTick
+    Runtime->>Runtime: 压制原版 AI (Goal/Brain)
+    Runtime->>Runtime: ActionController.apply() 执行动作
+
+    World-->>Runtime: AfterEntityTick
+    Runtime->>Runtime: ObservationCreator.create() 收集观测
+
+    Runtime->>RPC: ProtoMcObservation + reward + done
+    RPC->>Agent: StepResponse
 ```
+
+#### 关键 Java 类
+
+| 类 | 职责 |
+|----|------|
+| `GymCraftRpcServer` | 随 `ServerStartedEvent` 启动 gRPC，实现 `GymEnvService` |
+| `EnvManager` | 按 entity UUID 管理 `AbstractMcEnv` 生命周期 |
+| `AgentRuntime` | 在 entity tick 事件中驱动动作/观测，用 `CompletableFuture` 阻塞 rpc 线程 |
+| `ActionComponentController` | 动作组件接口，`apply()` 施加控制、`getState()` 返回完成状态 |
+| `ObservationCreator` | 观测组件接口，`create()` 从实体/世界读取数据并序列化 |
+| `EntitySnapshot` | 实体状态快照，reset 时据此重建同 UUID 的 mob |
 
 ---
 
@@ -72,19 +118,30 @@ uv sync                              # 安装依赖
 
 ```python
 from gymcraft import GymCraftEnv
+from gymcraft import unpack_component
 from gymcraft.gym.action import components_pb2 as action_components
+from gymcraft.gym.observation import components_pb2 as observation_components
 
 # 按实体 UUID 连接已存在的环境（默认 localhost:50051）
 env = GymCraftEnv("entity-uuid-here")
 
-obs, info = env.reset()
-obs, reward, terminated, truncated, info = env.step({
+reset_response = env.reset()
+self_obs = unpack_component(
+    reset_response.observation,
+    "gymcraft:self",
+    observation_components.ProtoSelfObservation,
+)
+
+step_response = env.step({
     "gymcraft:step_move": action_components.ProtoStepMove(forward=1.0, jump=True),
 })
+reward = step_response.reward
+terminated = step_response.terminated
+truncated = step_response.truncated
 env.close()
 ```
 
-> `step()` 接受 `{组件 ID: protobuf 消息}` 字典，内部由 `make_action()` 打包为 `ProtoMcAction`。
+> `reset()` 返回 `ResetResponse`，`step()` 返回 `StepResponse`。`step()` 接受 `{组件 ID: protobuf 消息}` 字典，内部由 `make_action()` 打包为 `ProtoMcAction`。
 
 ---
 
@@ -158,8 +215,27 @@ src/main/
 | `self` | 自身状态（HP、位置、速度、姿态、目标） |
 | `world` | 世界状态（时间、天气、维度） |
 | `nearby_entities` | 周围范围内的所有生物 |
-| `nearby_blocks` | 周围范围内的非空气方块 |
+| `nearby_blocks` | 周围空气连通域可见表面的非空气方块 |
 | `inventory` | 装备栏与手持物品 |
+
+---
+
+## Python 检查与打包
+
+```powershell
+# 生成 Python gRPC 桩
+.\gradlew generatePythonStubs
+
+# 类型检查
+cd src\main\python
+uv run mypy src examples
+
+# 打包 wheel/sdist
+cd ..\..\..
+.\gradlew packagePython
+```
+
+GitHub Actions 在 push 到 `master` 或 pull request 时执行同样流程：生成 Python gRPC 桩、运行 mypy、打包 Python 分发文件，并上传 `gymcraft-python-dist` artifact。Linux runner 上会先执行 `chmod +x gradlew`，避免 `./gradlew: Permission denied`。
 
 ---
 

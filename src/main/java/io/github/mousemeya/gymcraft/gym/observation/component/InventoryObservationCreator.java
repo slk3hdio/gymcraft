@@ -1,7 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
 import java.util.Map;
-import java.util.Optional;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -27,10 +26,8 @@ public class InventoryObservationCreator implements ObservationComponentCreator<
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "slots", new SequenceSpace<>(new TextSpace(), 8)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final McSpace<Map<String, Object>> space;
 
-    public InventoryObservationCreator(Optional<McSpace<Map<String, Object>>> space) {
-        this.space = space.orElse(DEFAULT_SPACE);
+    public InventoryObservationCreator() {
     }
 
     @Override
@@ -39,8 +36,8 @@ public class InventoryObservationCreator implements ObservationComponentCreator<
     }
 
     @Override
-    public McSpace<Map<String, Object>> space() {
-        return space;
+    public McSpace<Map<String, Object>> defaultSpace() {
+        return DEFAULT_SPACE;
     }
 
     @Override
@@ -49,7 +46,7 @@ public class InventoryObservationCreator implements ObservationComponentCreator<
     }
 
     @Override
-    public boolean contains(ProtoInventory component) {
+    public boolean contains(ProtoInventory component, McSpace<Map<String, Object>> space) {
         return component != null && component.getSlotsCount() <= 8;
     }
 

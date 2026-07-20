@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.registry;
 
-import java.util.Optional;
-
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.component.AttackOnceController;
@@ -28,23 +26,23 @@ public final class ActionComponents {
 
     public static final DeferredHolder<ActionComponentController<?>, MoveToController> MOVE_TO = REGISTRY.register(
         "move_to",
-        () -> new MoveToController(Optional.empty())
+        MoveToController::new
     );
     // public static final DeferredHolder<ActionComponentController<?>, StepMoveController> STEP_MOVE = REGISTRY.register(
     //     "step_move",
-    //     () -> new StepMoveController(Optional.empty())
+    //     StepMoveController::new
     // );
     public static final DeferredHolder<ActionComponentController<?>, SetAttackTargetController> SET_ATTACK_TARGET = REGISTRY.register(
         "set_attack_target",
-        () -> new SetAttackTargetController(Optional.empty())
+        SetAttackTargetController::new
     );
     // public static final DeferredHolder<ActionComponentController<?>, AttackOnceController> ATTACK_ONCE = REGISTRY.register(
     //     "attack_once",
-    //     () -> new AttackOnceController(Optional.empty())
+    //     AttackOnceController::new
     // );
     // public static final DeferredHolder<ActionComponentController<?>, NoopController> NOOP = REGISTRY.register(
     //     "noop",
-    //     () -> new NoopController(Optional.empty())
+    //     NoopController::new
     // );
 
     private ActionComponents() {

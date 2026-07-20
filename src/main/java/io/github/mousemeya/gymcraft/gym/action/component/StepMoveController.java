@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import java.util.Optional;
 import java.util.Map;
 import java.util.Collection;
 import java.util.List;
@@ -34,11 +33,9 @@ public class StepMoveController implements ActionComponentController<ProtoStepMo
         "pitch_delta", new BoxSpace(-90, 90, 1),
         "jump", new BooleanSpace()
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final McSpace<Map<String, Object>> space;
     private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
 
-    public StepMoveController(Optional<McSpace<Map<String, Object>>> space) {
-        this.space = space.orElse(DEFAULT_SPACE);
+    public StepMoveController() {
     }
 
     @Override
@@ -60,8 +57,8 @@ public class StepMoveController implements ActionComponentController<ProtoStepMo
     }
 
     @Override
-    public McSpace<Map<String, Object>> space() {
-        return space;
+    public McSpace<Map<String, Object>> defaultSpace() {
+        return DEFAULT_SPACE;
     }
 
     @Override
@@ -70,13 +67,14 @@ public class StepMoveController implements ActionComponentController<ProtoStepMo
     }
 
     @Override
-    public boolean contains(ProtoStepMove component) {  
-        return Float.isFinite(component.getForward())
-            && Float.isFinite(component.getStrafeRight())
-            && Float.isFinite(component.getYawDelta())
-            && Float.isFinite(component.getPitchDelta())
-            && component.getForward() >= -1 && component.getForward() <= 1
-            && component.getStrafeRight() >= -1 && component.getStrafeRight() <= 1;
+    public boolean contains(ProtoStepMove component, McSpace<Map<String, Object>> space) {
+        return component != null && space.contains(Map.of(
+            "forward", component.getForward(),
+            "strafe_right", component.getStrafeRight(),
+            "yaw_delta", component.getYawDelta(),
+            "pitch_delta", component.getPitchDelta(),
+            "jump", component.getJump()
+        ));
     }
 
     @Override

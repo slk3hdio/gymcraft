@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import java.util.Optional;
 import java.util.Map;
 import java.util.Collection;
 import java.util.List;
@@ -36,11 +35,9 @@ public class SetAttackTargetController implements ActionComponentController<Prot
         "target_uuid", new TextSpace(),
         "target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final McSpace<Map<String, Object>> space;
     private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
 
-    public SetAttackTargetController(Optional<McSpace<Map<String, Object>>> space) {
-        this.space = space.orElse(DEFAULT_SPACE);
+    public SetAttackTargetController() {
     }
 
     @Override
@@ -67,8 +64,8 @@ public class SetAttackTargetController implements ActionComponentController<Prot
     }
 
     @Override
-    public McSpace<Map<String, Object>> space() {
-        return space;
+    public McSpace<Map<String, Object>> defaultSpace() {
+        return DEFAULT_SPACE;
     }
 
     @Override
@@ -77,8 +74,13 @@ public class SetAttackTargetController implements ActionComponentController<Prot
     }
 
     @Override
-    public boolean contains(ProtoSetAttackTarget component) {
-        if (component.getTargetEntityId() < 0) return false;
+    public boolean contains(ProtoSetAttackTarget component, McSpace<Map<String, Object>> space) {
+        if (component == null || !space.contains(Map.of(
+            "target_uuid", component.getTargetUuid(),
+            "target_entity_id", component.getTargetEntityId()
+        ))) {
+            return false;
+        }
         if (component.getTargetUuid().isEmpty()) return true;
         try {
             UUID.fromString(component.getTargetUuid());

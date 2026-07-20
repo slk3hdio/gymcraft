@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Optional;
 import java.util.Map;
 
 import net.minecraft.world.entity.Mob;
@@ -27,10 +26,8 @@ public class WorldStateObservationCreator implements ObservationComponentCreator
         "thundering", new BooleanSpace(),
         "dimension", new TextSpace()
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final McSpace<Map<String, Object>> space;
 
-    public WorldStateObservationCreator(Optional<McSpace<Map<String, Object>>> space) {
-        this.space = space.orElse(DEFAULT_SPACE);
+    public WorldStateObservationCreator() {
     }
 
     @Override
@@ -39,8 +36,8 @@ public class WorldStateObservationCreator implements ObservationComponentCreator
     }
 
     @Override
-    public McSpace<Map<String, Object>> space() {
-        return space;
+    public McSpace<Map<String, Object>> defaultSpace() {
+        return DEFAULT_SPACE;
     }
 
     @Override
@@ -49,7 +46,7 @@ public class WorldStateObservationCreator implements ObservationComponentCreator
     }
 
     @Override
-    public boolean contains(ProtoWorldState component) {
+    public boolean contains(ProtoWorldState component, McSpace<Map<String, Object>> space) {
         return component != null && component.getDayTime() >= 0;
     }
 

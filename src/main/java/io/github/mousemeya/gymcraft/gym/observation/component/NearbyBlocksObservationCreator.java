@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Optional;
 import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -37,13 +36,11 @@ public class NearbyBlocksObservationCreator implements ObservationComponentCreat
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "blocks", new SequenceSpace<>(new TextSpace(), MAX_BLOCKS)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final McSpace<Map<String, Object>> space;
 
     private record VisibleBlock(BlockPos pos, BlockState state, double distance) {
     }
 
-    public NearbyBlocksObservationCreator(Optional<McSpace<Map<String, Object>>> space) {
-        this.space = space.orElse(DEFAULT_SPACE);
+    public NearbyBlocksObservationCreator() {
     }
 
     @Override
@@ -52,8 +49,8 @@ public class NearbyBlocksObservationCreator implements ObservationComponentCreat
     }
 
     @Override
-    public McSpace<Map<String, Object>> space() {
-        return space;
+    public McSpace<Map<String, Object>> defaultSpace() {
+        return DEFAULT_SPACE;
     }
 
     @Override
@@ -62,7 +59,7 @@ public class NearbyBlocksObservationCreator implements ObservationComponentCreat
     }
 
     @Override
-    public boolean contains(ProtoNearbyBlocks component) {
+    public boolean contains(ProtoNearbyBlocks component, McSpace<Map<String, Object>> space) {
         return component != null && component.getBlocksCount() <= MAX_BLOCKS;
     }
 

@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import java.util.Optional;
 import java.util.Map;
 import java.util.Collection;
 import java.util.List;
@@ -26,11 +25,9 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  */
 public class NoopController implements ActionComponentController<ProtoNoop> {
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of()); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final McSpace<Map<String, Object>> space;
     private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
 
-    public NoopController(Optional<McSpace<Map<String, Object>>> space) {
-        this.space = space.orElse(DEFAULT_SPACE);
+    public NoopController() {
     }
 
     @Override
@@ -52,8 +49,8 @@ public class NoopController implements ActionComponentController<ProtoNoop> {
     }
 
     @Override
-    public McSpace<Map<String, Object>> space() {
-        return space;
+    public McSpace<Map<String, Object>> defaultSpace() {
+        return DEFAULT_SPACE;
     }
 
     @Override
@@ -62,8 +59,8 @@ public class NoopController implements ActionComponentController<ProtoNoop> {
     }
 
     @Override
-    public boolean contains(ProtoNoop component) {
-        return component != null;
+    public boolean contains(ProtoNoop component, McSpace<Map<String, Object>> space) {
+        return component != null && space.contains(Map.of());
     }
 
     @Override

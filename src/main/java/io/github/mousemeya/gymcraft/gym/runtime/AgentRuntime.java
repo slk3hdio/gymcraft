@@ -19,11 +19,11 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
-import io.github.mousemeya.gymcraft.gym.action.ActionController;
+import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
-import io.github.mousemeya.gymcraft.gym.observation.ObservationCreator;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 
 /**
@@ -37,8 +37,8 @@ public class AgentRuntime {
     private static final Logger LOGGER = LoggerFactory.getLogger(AgentRuntime.class);
 
     private Mob mob;
-    private final ActionController actionController;
-    private final ObservationCreator observationCreator;
+    private final ActionDispatcher actionController;
+    private final ObservationComposer observationCreator;
     private final EntitySnapshot initialSnapshot;
     private final ResetHandler resetHandler;
 
@@ -56,7 +56,7 @@ public class AgentRuntime {
         void reset(Mob mob, Integer seed, Map<String, Object> options);
     }
 
-    public AgentRuntime(ActionController actionController, ObservationCreator observationCreator, Mob mob, ResetHandler resetHandler) {
+    public AgentRuntime(ActionDispatcher actionController, ObservationComposer observationCreator, Mob mob, ResetHandler resetHandler) {
         this.actionController = actionController;
         this.observationCreator = observationCreator;
         this.mob = mob;

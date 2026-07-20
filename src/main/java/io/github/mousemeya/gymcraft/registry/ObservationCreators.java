@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.registry;
 
-import java.util.Optional;
-
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.InventoryObservationCreator;
@@ -28,23 +26,23 @@ public final class ObservationCreators {
 
     public static final DeferredHolder<ObservationComponentCreator<?>, SelfStateObservationCreator> SELF = REGISTRY.register(
         "self",
-        () -> new SelfStateObservationCreator(Optional.empty())
+        SelfStateObservationCreator::new
     );
     public static final DeferredHolder<ObservationComponentCreator<?>, NearbyEntitiesObservationCreator> NEARBY_ENTITIES = REGISTRY.register(
         "nearby_entities",
-        () -> new NearbyEntitiesObservationCreator(Optional.empty())
+        NearbyEntitiesObservationCreator::new
     );
     public static final DeferredHolder<ObservationComponentCreator<?>, NearbyBlocksObservationCreator> NEARBY_BLOCKS = REGISTRY.register(
         "nearby_blocks",
-        () -> new NearbyBlocksObservationCreator(Optional.empty())
+        NearbyBlocksObservationCreator::new
     );
     public static final DeferredHolder<ObservationComponentCreator<?>, InventoryObservationCreator> INVENTORY = REGISTRY.register(
         "inventory",
-        () -> new InventoryObservationCreator(Optional.empty())
+        InventoryObservationCreator::new
     );
     public static final DeferredHolder<ObservationComponentCreator<?>, WorldStateObservationCreator> WORLD = REGISTRY.register(
         "world",
-        () -> new WorldStateObservationCreator(Optional.empty())
+        WorldStateObservationCreator::new
     );
 
     private ObservationCreators() {

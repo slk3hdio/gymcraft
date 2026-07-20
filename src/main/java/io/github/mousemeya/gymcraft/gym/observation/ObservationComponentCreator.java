@@ -32,13 +32,13 @@ public interface ObservationComponentCreator<T extends Message> {
     }
 
     /** @return 该观测数据的 Gymnasium 风格空间定义 */
-    McSpace<Map<String, Object>> space();
+    McSpace<Map<String, Object>> defaultSpace();
 
     /** @return 观测数据的默认样本 */
     T sample();
 
-    /** @return 给定观测值是否通过合法性校验 */
-    boolean contains(T component);
+    /** @return 给定观测值是否通过指定 env 级空间的合法性校验 */
+    boolean contains(T component, McSpace<Map<String, Object>> space);
 
     /** 从当前 Mob 的游戏状态构建实时观测数据。 */
     T create(Mob mob);

@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Optional;
 import java.util.Map;
 
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -29,10 +28,8 @@ public class NearbyEntitiesObservationCreator implements ObservationComponentCre
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "entities", new SequenceSpace<>(new TextSpace(), 512)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final McSpace<Map<String, Object>> space;
 
-    public NearbyEntitiesObservationCreator(Optional<McSpace<Map<String, Object>>> space) {
-        this.space = space.orElse(DEFAULT_SPACE);
+    public NearbyEntitiesObservationCreator() {
     }
 
     @Override
@@ -41,8 +38,8 @@ public class NearbyEntitiesObservationCreator implements ObservationComponentCre
     }
 
     @Override
-    public McSpace<Map<String, Object>> space() {
-        return space;
+    public McSpace<Map<String, Object>> defaultSpace() {
+        return DEFAULT_SPACE;
     }
 
     @Override
@@ -51,7 +48,7 @@ public class NearbyEntitiesObservationCreator implements ObservationComponentCre
     }
 
     @Override
-    public boolean contains(ProtoNearbyEntities component) {
+    public boolean contains(ProtoNearbyEntities component, McSpace<Map<String, Object>> space) {
         return component != null && component.getEntitiesCount() <= 512;
     }
 

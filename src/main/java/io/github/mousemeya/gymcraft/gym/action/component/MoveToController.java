@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import java.util.Optional;
 import java.util.Map;
 import java.util.Collection;
 import java.util.List;
@@ -40,11 +39,9 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
         "z", new BoxSpace(-30_000_000, 30_000_000, 1),
         "stop_distance", new BoxSpace(0, 128, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final McSpace<Map<String, Object>> space;
     private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
 
-    public MoveToController(Optional<McSpace<Map<String, Object>>> space) {
-        this.space = space.orElse(DEFAULT_SPACE);
+    public MoveToController() {
     }
 
     @Override
@@ -66,8 +63,8 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
     }
 
     @Override
-    public McSpace<Map<String, Object>> space() {
-        return space;
+    public McSpace<Map<String, Object>> defaultSpace() {
+        return DEFAULT_SPACE;
     }
 
     @Override
@@ -76,12 +73,13 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
     }
 
     @Override
-    public boolean contains(ProtoMoveTo component) {    
-        return Double.isFinite(component.getX())
-            && Double.isFinite(component.getY())
-            && Double.isFinite(component.getZ())
-            && Double.isFinite(component.getStopDistance())
-            && component.getStopDistance() >= 0;
+    public boolean contains(ProtoMoveTo component, McSpace<Map<String, Object>> space) {
+        return component != null && space.contains(Map.of(
+            "x", component.getX(),
+            "y", component.getY(),
+            "z", component.getZ(),
+            "stop_distance", component.getStopDistance()
+        ));
     }
 
     @Override

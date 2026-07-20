@@ -48,13 +48,13 @@ public interface ActionComponentController<T extends Message> {
      * @return 该动作参数的 Gymnasium 风格空间定义 
      * <strong>注意：</strong> 如果是{@link io.github.mousemeya.gymcraft.gym.space.DictSpace}类型, 则键名必须和Proto代码中的原始字段名一致
      */
-    McSpace<Map<String, Object>> space();
+    McSpace<Map<String, Object>> defaultSpace();
 
     /** @return 动作参数的默认/安全样本 */
     T sample();
 
-    /** @return 给定参数是否通过合法性校验 */
-    boolean contains(T component);
+    /** @return 给定参数是否通过指定 env 级空间的合法性校验 */
+    boolean contains(T component, McSpace<Map<String, Object>> space);
 
     /** 将动作应用到指定的 Mob 实体上，并返回对应的控制策略。 */
     ActionApplyResult apply(Mob mob, T component) throws Exception;

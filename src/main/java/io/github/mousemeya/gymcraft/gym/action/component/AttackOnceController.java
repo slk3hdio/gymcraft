@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import java.util.Optional;
 import java.util.Map;
 import java.util.Collection;
 import java.util.List;
@@ -34,11 +33,9 @@ public class AttackOnceController implements ActionComponentController<ProtoAtta
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of( //统一使用McSpace<Map<String, Object>>
         "target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final McSpace<Map<String, Object>> space;
     private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
 
-    public AttackOnceController(Optional<McSpace<Map<String, Object>>> space) {
-        this.space = space.orElse(DEFAULT_SPACE);
+    public AttackOnceController() {
     }
 
     @Override
@@ -65,8 +62,8 @@ public class AttackOnceController implements ActionComponentController<ProtoAtta
     }
 
     @Override
-    public McSpace<Map<String, Object>> space() {
-        return space;
+    public McSpace<Map<String, Object>> defaultSpace() {
+        return DEFAULT_SPACE;
     }
 
     @Override
@@ -75,8 +72,8 @@ public class AttackOnceController implements ActionComponentController<ProtoAtta
     }
 
     @Override
-    public boolean contains(ProtoAttackOnce component) {
-        return space.contains(Map.of("target_entity_id", component.getTargetEntityId())); // TODO: 使用Message.getDescriptorForType()获取字段名以自动检测
+    public boolean contains(ProtoAttackOnce component, McSpace<Map<String, Object>> space) {
+        return component != null && space.contains(Map.of("target_entity_id", component.getTargetEntityId()));
     }
 
     @Override

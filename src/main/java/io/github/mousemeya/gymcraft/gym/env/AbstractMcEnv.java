@@ -16,10 +16,10 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
-import io.github.mousemeya.gymcraft.gym.action.ActionController;
+import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
-import io.github.mousemeya.gymcraft.gym.observation.ObservationCreator;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
@@ -43,8 +43,8 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 public abstract class AbstractMcEnv implements McEnv {
     protected final Identifier envTypeId;
     protected final UUID envId;
-    protected final ActionController actionController;
-    protected final ObservationCreator observationCreator;
+    protected final ActionDispatcher actionController;
+    protected final ObservationComposer observationCreator;
     protected final AgentRuntime agentRuntime;
     private boolean closed;
 
@@ -75,7 +75,7 @@ public abstract class AbstractMcEnv implements McEnv {
         Collection<ActionComponentController<?>> actionComponents,
         Collection<ObservationComponentCreator<?>> observationComponents
     ) {
-        this(envTypeId, mob, new ActionController(validateActionComponents(mob, actionComponents)), new ObservationCreator(observationComponents));
+        this(envTypeId, mob, new ActionDispatcher(validateActionComponents(mob, actionComponents)), new ObservationComposer(observationComponents));
     }
 
     private static Collection<ActionComponentController<?>> validateActionComponents(
@@ -97,7 +97,7 @@ public abstract class AbstractMcEnv implements McEnv {
         return actionComponents;
     }
 
-    protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionController actionController, ObservationCreator observationCreator) {
+    protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionDispatcher actionController, ObservationComposer observationCreator) {
         this.envTypeId = envTypeId;
         this.envId = UUID.randomUUID();
         this.actionController = actionController;
@@ -143,6 +143,30 @@ public abstract class AbstractMcEnv implements McEnv {
     @Override
     public McSpace<Map<String, Object>> getActionSpace() {
         return this.actionController.space();
+    }
+
+    /** 设置指定动作组件在当前 env 中使用的参数空间。 */
+    public void setActionComponentSpace(String componentId, McSpace<Map<String, Object>> space) {
+        this.ensureOpen();
+        this.actionController.setComponentSpace(componentId, space);
+    }
+
+    /** 获取指定动作组件在当前 env 中使用的参数空间。 */
+    public McSpace<Map<String, Object>> getActionComponentSpace(String componentId) {
+        this.ensureOpen();
+        return this.actionController.getComponentSpace(componentId);
+    }
+
+    /** 设置指定观测组件在当前 env 中使用的观测空间。 */
+    public void setObservationComponentSpace(String componentId, McSpace<Map<String, Object>> space) {
+        this.ensureOpen();
+        this.observationCreator.setComponentSpace(componentId, space);
+    }
+
+    /** 获取指定观测组件在当前 env 中使用的观测空间。 */
+    public McSpace<Map<String, Object>> getObservationComponentSpace(String componentId) {
+        this.ensureOpen();
+        return this.observationCreator.getComponentSpace(componentId);
     }
 
     @Override

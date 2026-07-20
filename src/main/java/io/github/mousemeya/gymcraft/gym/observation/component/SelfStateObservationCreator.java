@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Optional;
 import java.util.Map;
 
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -39,10 +38,8 @@ public class SelfStateObservationCreator implements ObservationComponentCreator<
         Map.entry("target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)),
         Map.entry("control_mode", new TextSpace())
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final McSpace<Map<String, Object>> space;
 
-    public SelfStateObservationCreator(Optional<McSpace<Map<String, Object>>> space) {
-        this.space = space.orElse(DEFAULT_SPACE);
+    public SelfStateObservationCreator() {
     }
 
     @Override
@@ -51,8 +48,8 @@ public class SelfStateObservationCreator implements ObservationComponentCreator<
     }
 
     @Override
-    public McSpace<Map<String, Object>> space() {
-        return space;
+    public McSpace<Map<String, Object>> defaultSpace() {
+        return DEFAULT_SPACE;
     }
 
     @Override
@@ -61,7 +58,7 @@ public class SelfStateObservationCreator implements ObservationComponentCreator<
     }
 
     @Override
-    public boolean contains(ProtoSelfState component) {
+    public boolean contains(ProtoSelfState component, McSpace<Map<String, Object>> space) {
         return component != null
             && component.getHealth() >= 0
             && component.getMaxHealth() >= 0

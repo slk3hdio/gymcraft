@@ -22,25 +22,50 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 校验流程：类型匹配 → 参数合法性 → 执行；任意步骤失败仅跳过，不影响其他组件。
  * </p>
  */
-public class ActionController {
+public class ActionDispatcher {
     private static final Logger LOGGER = LogUtils.getLogger();
-    private final Map<String, ActionComponentController<?>> componentControllers;
+    private final Map<String, ActionComponentBinding<?>> componentBindings;
 
-    /** @param controllers 该控制器可处理的所有动作组件实例 */
-    public ActionController(Collection<ActionComponentController<?>> controllers) {
-        var map = new LinkedHashMap<String, ActionComponentController<?>>();
+    /** @param controllers 该分发器可处理的所有动作组件实例 */
+    public ActionDispatcher(Collection<ActionComponentController<?>> controllers) {
+        var map = new LinkedHashMap<String, ActionComponentBinding<?>>();
         for (var controller : controllers) {
-            map.put(controller.getRegisterId(), controller);
+            map.put(controller.getRegisterId(), ActionComponentBinding.usingDefaultSpace(controller));
         }
-        this.componentControllers = Map.copyOf(map);
+        this.componentBindings = map;
+    }
+
+    /** @param bindings 该分发器可处理的所有 env 级动作组件绑定 */
+    public ActionDispatcher(Collection<ActionComponentBinding<?>> bindings, boolean ignored) {
+        var map = new LinkedHashMap<String, ActionComponentBinding<?>>();
+        for (var binding : bindings) {
+            map.put(binding.controller().getRegisterId(), binding);
+        }
+        this.componentBindings = map;
     }
 
     public McSpace<Map<String, Object>> space() {
         var spaces = new LinkedHashMap<String, McSpace<?>>();
-        for (var entry : this.componentControllers.entrySet()) {
+        for (var entry : this.componentBindings.entrySet()) {
             spaces.put(entry.getKey(), entry.getValue().space());
         }
         return new DictSpace(spaces);
+    }
+
+    public void setComponentSpace(String componentId, McSpace<Map<String, Object>> space) {
+        ActionComponentBinding<?> binding = this.componentBindings.get(componentId);
+        if (binding == null) {
+            throw new IllegalArgumentException("Unknown action component: " + componentId);
+        }
+        this.componentBindings.put(componentId, replaceSpace(binding, space));
+    }
+
+    public McSpace<Map<String, Object>> getComponentSpace(String componentId) {
+        ActionComponentBinding<?> binding = this.componentBindings.get(componentId);
+        if (binding == null) {
+            throw new IllegalArgumentException("Unknown action component: " + componentId);
+        }
+        return binding.space();
     }
 
     /** 将 ProtoMcAction 中的所有组件依次分发执行，并聚合组件返回的控制策略。 */
@@ -54,19 +79,20 @@ public class ActionController {
 
         var result = ActionApplyResult.none();
         for (var entry : action.getComponentsMap().entrySet()) {
-            var controller = componentControllers.get(entry.getKey());
-            if (controller == null) {
+            var binding = componentBindings.get(entry.getKey());
+            if (binding == null) {
                 LOGGER.debug("No action component controller for key: {}", entry.getKey());
                 result = result.merge(ActionApplyResult.none(ActionState.failed("unknown action component", Map.of("key", entry.getKey()))));
                 continue;
             }
-            result = result.merge(applyComponent(controller, mob, entry.getValue(), entry.getKey()));
+            result = result.merge(applyComponent(binding, mob, entry.getValue(), entry.getKey()));
         }
         return result;
     }
 
     /** 对单个动作组件执行类型校验、参数校验和执行。 */
-    private static <T extends Message> ActionApplyResult applyComponent(ActionComponentController<T> controller, Mob mob, Any any, String key) {
+    private static <T extends Message> ActionApplyResult applyComponent(ActionComponentBinding<T> binding, Mob mob, Any any, String key) {
+        ActionComponentController<T> controller = binding.controller();
         if (!any.is(controller.protoType())) {
             LOGGER.debug("Action component controller {} has unexpected payload type", key);
             return ActionApplyResult.none(ActionState.failed("unexpected payload type", Map.of(
@@ -77,7 +103,7 @@ public class ActionController {
         }
         try {
             var payload = any.unpack(controller.protoType());
-            if (!controller.contains(payload)) {
+            if (!controller.contains(payload, binding.space())) {
                 LOGGER.debug("Action component controller {} payload failed validation", key);
                 return ActionApplyResult.none(ActionState.failed("payload failed validation", Map.of("key", key)));
             }
@@ -99,15 +125,22 @@ public class ActionController {
 
         ActionState merged = null;
         for (var entry : action.getComponentsMap().entrySet()) {
-            var controller = componentControllers.get(entry.getKey());
-            if (controller == null) {
+            var binding = componentBindings.get(entry.getKey());
+            if (binding == null) {
                 LOGGER.warn("No action component for key: {}", entry.getKey());
                 continue;
             }
-            ActionState state = getComponentState(controller, mob, entry.getValue(), entry.getKey());
+            ActionState state = getComponentState(binding.controller(), mob, entry.getValue(), entry.getKey());
             merged = mergeState(merged, state);
         }
         return merged == null ? ActionState.completed("no components processed") : merged;
+    }
+
+    private static <T extends Message> ActionComponentBinding<T> replaceSpace(
+        ActionComponentBinding<T> binding,
+        McSpace<Map<String, Object>> space
+    ) {
+        return binding.withSpace(space);
     }
 
     private static <T extends Message> ActionState getComponentState(ActionComponentController<T> controller, Mob mob, Any any, String key) {
