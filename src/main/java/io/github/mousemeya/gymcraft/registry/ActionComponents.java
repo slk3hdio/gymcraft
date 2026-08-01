@@ -3,8 +3,10 @@ package io.github.mousemeya.gymcraft.registry;
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.component.AttackOnceController;
+import io.github.mousemeya.gymcraft.gym.action.component.BreakBlockController;
 import io.github.mousemeya.gymcraft.gym.action.component.MoveToController;
 import io.github.mousemeya.gymcraft.gym.action.component.NoopController;
+import io.github.mousemeya.gymcraft.gym.action.component.PlaceBlockController;
 import io.github.mousemeya.gymcraft.gym.action.component.SetAttackTargetController;
 import io.github.mousemeya.gymcraft.gym.action.component.StepMoveController;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -35,6 +37,14 @@ public final class ActionComponents {
     public static final DeferredHolder<ActionComponentController<?>, SetAttackTargetController> SET_ATTACK_TARGET = REGISTRY.register(
         "set_attack_target",
         SetAttackTargetController::new
+    );
+    public static final DeferredHolder<ActionComponentController<?>, BreakBlockController> BREAK_BLOCK = REGISTRY.register(
+        "break_block",
+        BreakBlockController::new
+    );
+    public static final DeferredHolder<ActionComponentController<?>, PlaceBlockController> PLACE_BLOCK = REGISTRY.register(
+        "place_block",
+        PlaceBlockController::new
     );
     // public static final DeferredHolder<ActionComponentController<?>, AttackOnceController> ATTACK_ONCE = REGISTRY.register(
     //     "attack_once",

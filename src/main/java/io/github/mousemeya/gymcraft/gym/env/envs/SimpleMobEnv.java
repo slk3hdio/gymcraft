@@ -25,7 +25,9 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 // ActionComponents.NOOP.get(),
                 // ActionComponents.STEP_MOVE.get(),
                 ActionComponents.MOVE_TO.get(),
-                ActionComponents.SET_ATTACK_TARGET.get()
+                ActionComponents.SET_ATTACK_TARGET.get(),
+                ActionComponents.BREAK_BLOCK.get(),
+                ActionComponents.PLACE_BLOCK.get()
                 // ActionComponents.ATTACK_ONCE.get()
             ),
             List.of(

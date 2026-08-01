@@ -1,4 +1,4 @@
-﻿syntax = "proto3";
+syntax = "proto3";
 
 package gymcraft.gym.action;
 
@@ -31,4 +31,18 @@ message ProtoAttackOnce {
 }
 
 message ProtoNoop {
+}
+
+message ProtoBreakBlock {
+  int32 x = 1;
+  int32 y = 2;
+  int32 z = 3;
+}
+
+message ProtoPlaceBlock {
+  int32 x = 1;
+  int32 y = 2;
+  int32 z = 3;
+  // 放置时点击的相邻方块面, Direction 3D data value: 0=DOWN 1=UP 2=NORTH 3=SOUTH 4=WEST 5=EAST
+  int32 face = 4;
 }

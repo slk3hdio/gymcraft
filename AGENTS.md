@@ -16,7 +16,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 ## Architecture
 
 - **三个自定义 NeoForge registry** (在 `RegistryKeys` 用 `RegistryBuilder` + `NewRegistryEvent` 定义):
-  - `action_components` → `ActionComponents` (5 个控制器: `step_move`, `move_to`, `set_attack_target`, `attack_once`, `noop`)
+  - `action_components` → `ActionComponents` (7 个控制器: `step_move`, `move_to`, `set_attack_target`, `attack_once`, `noop`, `break_block`, `place_block`; 后两者经 `MobHandSimulator` 用 FakePlayer 复用原版破坏/放置逻辑)
   - `observation_components` → `ObservationCreators` (5 个生成器: `self`, `world`, `nearby_entities`, `nearby_blocks`, `inventory`)
   - `env_factories` → `EnvFactories` (1 个环境: `simple_mob`)
   - 新增类型必须在对应 `*Components`/`EnvFactories` 类中注册 `DeferredHolder`

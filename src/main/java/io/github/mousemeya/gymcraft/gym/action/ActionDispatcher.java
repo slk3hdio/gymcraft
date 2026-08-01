@@ -118,6 +118,56 @@ public class ActionDispatcher {
         }
     }
 
+    /** 将 RUNNING 中动作的所有组件逐 tick 分发到对应控制器的 {@code tick} 回调。 */
+    public void tick(Mob mob, ProtoMcAction action) {
+        if (action == null) {
+            return;
+        }
+        for (var entry : action.getComponentsMap().entrySet()) {
+            var binding = componentBindings.get(entry.getKey());
+            if (binding == null) {
+                continue;
+            }
+            dispatchComponentCallback(binding.controller(), mob, entry.getValue(), entry.getKey(), true);
+        }
+    }
+
+    /** RUNNING 中的动作被打断时，将中断事件分发到各组件控制器做状态清理。 */
+    public void onInterrupt(Mob mob, ProtoMcAction action) {
+        if (action == null) {
+            return;
+        }
+        for (var entry : action.getComponentsMap().entrySet()) {
+            var binding = componentBindings.get(entry.getKey());
+            if (binding == null) {
+                continue;
+            }
+            dispatchComponentCallback(binding.controller(), mob, entry.getValue(), entry.getKey(), false);
+        }
+    }
+
+    private static <T extends Message> void dispatchComponentCallback(
+        ActionComponentController<T> controller,
+        Mob mob,
+        Any any,
+        String key,
+        boolean isTick
+    ) {
+        if (!any.is(controller.protoType())) {
+            return;
+        }
+        try {
+            var payload = any.unpack(controller.protoType());
+            if (isTick) {
+                controller.tick(mob, payload);
+            } else {
+                controller.onInterrupt(mob, payload);
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Error in {} callback of action component controller {}: {}", isTick ? "tick" : "onInterrupt", key, e.getMessage());
+        }
+    }
+
     public ActionState getState(Mob mob, ProtoMcAction action) {
         if (action == null || action.getComponentsCount() == 0) {
             return ActionState.completed("no action components");

@@ -59,6 +59,22 @@ public interface ActionComponentController<T extends Message> {
     /** 将动作应用到指定的 Mob 实体上，并返回对应的控制策略。 */
     ActionApplyResult apply(Mob mob, T component) throws Exception;
 
+    /**
+     * 每 tick 回调 —— 动作处于 RUNNING 状态期间由运行时逐 tick 调用一次。
+     * <p>
+     * 用于推进持续性动作的进度（如按 tick 累计挖掘进度）。默认为空实现。
+     * </p>
+     */
+    default void tick(Mob mob, T component) {
+    }
+
+    /**
+     * 中断回调 —— RUNNING 中的动作被新动作/重置/死亡打断时调用，用于清理跨 tick 状态。
+     * 默认为空实现。
+     */
+    default void onInterrupt(Mob mob, T component) {
+    }
+
     /** @return 动作当前状态 */
     ActionState getState(Mob mob, T component);
 }

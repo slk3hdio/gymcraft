@@ -242,6 +242,7 @@ public class AgentRuntime {
 
             if (this.pendingResult != null && this.pendingResult.isRunning()) {
                 try (var stateZone = profiler.zone("check_action_state")) {
+                    this.actionController.tick(this.mob, this.pendingResult.action());
                     ActionState state = this.actionController.getState(this.mob, this.pendingResult.action());
                     if (state.isTerminal()) {
                         LOGGER.info(
@@ -308,6 +309,9 @@ public class AgentRuntime {
             "removed", this.mob.isRemoved()
         ));
         this.clearRuntimeState();
+        if (this.pendingResult != null && this.pendingResult.isRunning()) {
+            this.actionController.onInterrupt(this.mob, this.pendingResult.action());
+        }
         ProtoMcObservation observation = this.observationCreator.create(this.mob, deathState);
         this.completeQueuedActions(deathState, observation);
         if (this.pendingResult != null) {
@@ -326,6 +330,7 @@ public class AgentRuntime {
         if (this.pendingResult == null || !this.pendingResult.isRunning()) {
             return;
         }
+        this.actionController.onInterrupt(this.mob, this.pendingResult.action());
         ActionState state = ActionState.interrupted(description);
         ProtoMcObservation observation = this.observationCreator.create(this.mob, state);
         this.completeResult(this.pendingResult.future(), new RuntimeStepResult(observation, state));
