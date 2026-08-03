@@ -29,7 +29,7 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ActionComponents.MOVE_TO.get(),
                 ActionComponents.SET_ATTACK_TARGET.get(),
                 ActionComponents.BREAK_BLOCK.get(),
-                ActionComponents.PLACE_BLOCK.get(),
+                ActionComponents.SET_BLOCK.get(),
                 ActionComponents.ATTACK_ONCE.get()
             ),
             List.of(

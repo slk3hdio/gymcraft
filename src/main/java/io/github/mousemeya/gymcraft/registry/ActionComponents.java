@@ -7,15 +7,15 @@ import io.github.mousemeya.gymcraft.gym.action.component.AttackOnceController;
 import io.github.mousemeya.gymcraft.gym.action.component.BreakBlockController;
 import io.github.mousemeya.gymcraft.gym.action.component.MoveToController;
 import io.github.mousemeya.gymcraft.gym.action.component.NoopController;
-import io.github.mousemeya.gymcraft.gym.action.component.PlaceBlockController;
 import io.github.mousemeya.gymcraft.gym.action.component.SetAttackTargetController;
+import io.github.mousemeya.gymcraft.gym.action.component.SetBlockController;
 import io.github.mousemeya.gymcraft.gym.action.component.StepMoveController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoAttackOnce;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoBreakBlock;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveTo;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
-import io.github.mousemeya.gymcraft.gym.action.proto.ProtoPlaceBlock;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetAttackTarget;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoStepMove;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -52,9 +52,9 @@ public final class ActionComponents {
         "break_block",
         BreakBlockController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoPlaceBlock>> PLACE_BLOCK = REGISTRY.register(
-        "place_block",
-        PlaceBlockController.Factory::new
+    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoSetBlock>> SET_BLOCK = REGISTRY.register(
+        "set_block",
+        SetBlockController.Factory::new
     );
     public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoAttackOnce>> ATTACK_ONCE = REGISTRY.register(
         "attack_once",

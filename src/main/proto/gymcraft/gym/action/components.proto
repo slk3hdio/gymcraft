@@ -39,10 +39,10 @@ message ProtoBreakBlock {
   int32 z = 3;
 }
 
-message ProtoPlaceBlock {
+message ProtoSetBlock {
   int32 x = 1;
   int32 y = 2;
   int32 z = 3;
-  // 放置时点击的相邻方块面, Direction 3D data value: 0=DOWN 1=UP 2=NORTH 3=SOUTH 4=WEST 5=EAST
-  int32 face = 4;
+  // 方块描述, 与 /setblock 语法一致: "minecraft:stone" 或 "minecraft:oak_stairs[facing=north]", 可带 {nbt}
+  string block = 4;
 }
