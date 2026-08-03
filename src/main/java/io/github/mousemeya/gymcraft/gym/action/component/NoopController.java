@@ -1,8 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.Map;
-import java.util.Collection;
-import java.util.List;
 
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -10,7 +8,8 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
-import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -23,24 +22,10 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 被选为默认采样输出。
  * </p>
  */
-public class NoopController implements ActionComponentController<ProtoNoop> {
+public class NoopController extends AbstractActionComponentController<ProtoNoop> {
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of()); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
 
     public NoopController() {
-    }
-
-    @Override
-    public boolean supportEntity(Class<?> entityType) {
-        for (var supported : SUPPORTED_ENTITIES) {
-            if (supported.isAssignableFrom(entityType)) return true;
-        }
-        return false;
-    }
-
-    @Override
-    public Collection<Class<?>> getSupportedEntities() {
-        return SUPPORTED_ENTITIES;
     }
 
     @Override
@@ -54,13 +39,8 @@ public class NoopController implements ActionComponentController<ProtoNoop> {
     }
 
     @Override
-    public ProtoNoop sample() {
-        return ProtoNoop.getDefaultInstance();
-    }
-
-    @Override
-    public boolean contains(ProtoNoop component, McSpace<Map<String, Object>> space) {
-        return component != null && space.contains(Map.of());
+    public boolean contains(ProtoNoop component) {
+        return component != null && this.space().contains(Map.of());
     }
 
     @Override
@@ -79,5 +59,15 @@ public class NoopController implements ActionComponentController<ProtoNoop> {
     @Override
     public ActionState getState(Mob mob, ProtoNoop component) {
         return ActionState.completed("noop");
+    }
+
+    /**
+     * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements ActionComponentFactory<ProtoNoop> {
+        @Override
+        public NoopController create() {
+            return new NoopController();
+        }
     }
 }

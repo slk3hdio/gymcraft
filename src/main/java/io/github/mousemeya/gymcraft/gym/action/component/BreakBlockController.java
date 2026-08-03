@@ -1,10 +1,8 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+
+import javax.annotation.Nullable;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +18,8 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
-import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoBreakBlock;
@@ -43,7 +42,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 清理进度与裂纹动画。
  * </p>
  */
-public class BreakBlockController implements ActionComponentController<ProtoBreakBlock> {
+public class BreakBlockController extends AbstractActionComponentController<ProtoBreakBlock> {
     private static final Logger LOGGER = LoggerFactory.getLogger(BreakBlockController.class);
 
     /** 原版生存模式默认方块交互距离 ({@code Attributes.BLOCK_INTERACTION_RANGE} 默认值)。 */
@@ -56,10 +55,9 @@ public class BreakBlockController implements ActionComponentController<ProtoBrea
         "y", new BoxSpace(-2048, 2048, 1),
         "z", new BoxSpace(-30_000_000, 30_000_000, 1)
     ));
-    private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
-
-    /** 每个 Mob 的跨 tick 挖掘状态（仅服务端 tick 线程访问）。 */
-    private final Map<UUID, MiningState> miningStates = new HashMap<>();
+    /** 当前环境实例的跨 tick 挖掘状态（仅服务端 tick 线程访问）。 */
+    @Nullable
+    private MiningState miningState;
 
     /** 单个 Mob 的挖掘进度。 */
     private static final class MiningState {
@@ -78,23 +76,10 @@ public class BreakBlockController implements ActionComponentController<ProtoBrea
     }
 
     @Override
-    public boolean supportEntity(Class<?> entityType) {
-        for (var supported : SUPPORTED_ENTITIES) {
-            if (supported.isAssignableFrom(entityType)) return true;
-        }
-        return false;
-    }
-
-    @Override
     public boolean supports(Mob mob) {
         // 必须具备手持功能:空手视为可持有,手中有物品时按原版规则确认该 Mob 能持有它
         ItemStack held = mob.getMainHandItem();
         return this.supportEntity(mob.getClass()) && (held.isEmpty() || mob.canHoldItem(held));
-    }
-
-    @Override
-    public Collection<Class<?>> getSupportedEntities() {
-        return SUPPORTED_ENTITIES;
     }
 
     @Override
@@ -108,16 +93,11 @@ public class BreakBlockController implements ActionComponentController<ProtoBrea
     }
 
     @Override
-    public ProtoBreakBlock sample() {
-        return ProtoBreakBlock.getDefaultInstance();
-    }
-
-    @Override
-    public boolean contains(ProtoBreakBlock component, McSpace<Map<String, Object>> space) {
-        return component != null && space.contains(Map.of(
-            "x", component.getX(),
-            "y", component.getY(),
-            "z", component.getZ()
+    public boolean contains(ProtoBreakBlock component) {
+        return component != null && this.space().contains(Map.of(
+            "x", new double[] { component.getX() },
+            "y", new double[] { component.getY() },
+            "z", new double[] { component.getZ() }
         ));
     }
 
@@ -149,7 +129,7 @@ public class BreakBlockController implements ActionComponentController<ProtoBrea
         MiningState mining = new MiningState(pos);
         mining.progress = progress;
         mining.ticks = 1;
-        this.miningStates.put(mob.getUUID(), mining);
+        this.miningState = mining;
         level.destroyBlockProgress(mob.getId(), pos, crackStage(progress));
         LOGGER.info("GymCraft BreakBlock apply entity={} pos={} initial_progress={}", mob.getUUID(), pos.toShortString(), progress);
         return ActionApplyResult.applied(policy, ActionState.running("mining", miningDetails(mining)));
@@ -157,13 +137,13 @@ public class BreakBlockController implements ActionComponentController<ProtoBrea
 
     @Override
     public void tick(Mob mob, ProtoBreakBlock component) {
-        MiningState mining = this.miningStates.get(mob.getUUID());
+        MiningState mining = this.miningState;
         if (mining == null || mining.terminal != null) {
             return;
         }
         BlockPos pos = new BlockPos(component.getX(), component.getY(), component.getZ());
         if (!pos.equals(mining.pos) || !(mob.level() instanceof ServerLevel level)) {
-            this.miningStates.remove(mob.getUUID());
+            this.miningState = null;
             return;
         }
 
@@ -189,7 +169,8 @@ public class BreakBlockController implements ActionComponentController<ProtoBrea
 
     @Override
     public void onInterrupt(Mob mob, ProtoBreakBlock component) {
-        MiningState mining = this.miningStates.remove(mob.getUUID());
+        MiningState mining = this.miningState;
+        this.miningState = null;
         if (mining != null && mob.level() instanceof ServerLevel level) {
             // 清除客户端裂纹动画
             level.destroyBlockProgress(mob.getId(), mining.pos, -1);
@@ -198,12 +179,12 @@ public class BreakBlockController implements ActionComponentController<ProtoBrea
 
     @Override
     public ActionState getState(Mob mob, ProtoBreakBlock component) {
-        MiningState mining = this.miningStates.get(mob.getUUID());
+        MiningState mining = this.miningState;
         if (mining == null) {
             return ActionState.failed("no mining in progress");
         }
         if (mining.terminal != null) {
-            this.miningStates.remove(mob.getUUID());
+            this.miningState = null;
             return mining.terminal;
         }
         return ActionState.running("mining", miningDetails(mining));
@@ -267,5 +248,15 @@ public class BreakBlockController implements ActionComponentController<ProtoBrea
             "pos", pos.toShortString(),
             "block", blockState.getBlock().toString()
         );
+    }
+
+    /**
+     * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements ActionComponentFactory<ProtoBreakBlock> {
+        @Override
+        public BreakBlockController create() {
+            return new BreakBlockController();
+        }
     }
 }

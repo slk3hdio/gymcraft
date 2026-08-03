@@ -1,8 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.Map;
-import java.util.Collection;
-import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,9 +13,10 @@ import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.level.pathfinder.Path;
 
+import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
-import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveTo;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
@@ -30,7 +29,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 参数空间包含坐标、速度修正值、停止距离和超时时间。
  * </p>
  */
-public class MoveToController implements ActionComponentController<ProtoMoveTo> {
+public class MoveToController extends AbstractActionComponentController<ProtoMoveTo> {
     private static final Logger LOGGER = LoggerFactory.getLogger(MoveToController.class);
 
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
@@ -39,22 +38,8 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
         "z", new BoxSpace(-30_000_000, 30_000_000, 1),
         "stop_distance", new BoxSpace(0, 128, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
 
     public MoveToController() {
-    }
-
-    @Override
-    public boolean supportEntity(Class<?> entityType) {
-        for (var supported : SUPPORTED_ENTITIES) {
-            if (supported.isAssignableFrom(entityType)) return true;
-        }
-        return false;
-    }
-
-    @Override
-    public Collection<Class<?>> getSupportedEntities() {
-        return SUPPORTED_ENTITIES;
     }
 
     @Override
@@ -68,17 +53,12 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
     }
 
     @Override
-    public ProtoMoveTo sample() {
-        return ProtoMoveTo.getDefaultInstance();
-    }
-
-    @Override
-    public boolean contains(ProtoMoveTo component, McSpace<Map<String, Object>> space) {
-        return component != null && space.contains(Map.of(
-            "x", component.getX(),
-            "y", component.getY(),
-            "z", component.getZ(),
-            "stop_distance", component.getStopDistance()
+    public boolean contains(ProtoMoveTo component) {
+        return component != null && this.space().contains(Map.of(
+            "x", new double[] { component.getX() },
+            "y", new double[] { component.getY() },
+            "z", new double[] { component.getZ() },
+            "stop_distance", new double[] { component.getStopDistance() }
         ));
     }
 
@@ -189,5 +169,15 @@ public class MoveToController implements ActionComponentController<ProtoMoveTo> 
             return "target cannot be reached by pathfinder";
         }
         return "unreachable target";
+    }
+
+    /**
+     * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements ActionComponentFactory<ProtoMoveTo> {
+        @Override
+        public MoveToController create() {
+            return new MoveToController();
+        }
     }
 }

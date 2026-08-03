@@ -1,8 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.Map;
-import java.util.Collection;
-import java.util.List;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
@@ -13,7 +11,8 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
-import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoAttackOnce;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
@@ -29,31 +28,17 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 仅在近战攻击范围内才实际执行攻击。
  * </p>
  */
-public class AttackOnceController implements ActionComponentController<ProtoAttackOnce> {
+public class AttackOnceController extends AbstractActionComponentController<ProtoAttackOnce> {
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of( //统一使用McSpace<Map<String, Object>>
         "target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
 
     public AttackOnceController() {
     }
 
     @Override
-    public boolean supportEntity(Class<?> entityType) {
-        for (var supported : SUPPORTED_ENTITIES) {
-            if (supported.isAssignableFrom(entityType)) return true;
-        }
-        return false;
-    }
-
-    @Override
     public boolean supports(Mob mob) {
         return this.supportEntity(mob.getClass()) && mob.getAttribute(Attributes.ATTACK_DAMAGE) != null;
-    }
-
-    @Override
-    public Collection<Class<?>> getSupportedEntities() {
-        return SUPPORTED_ENTITIES;
     }
 
     @Override
@@ -67,13 +52,8 @@ public class AttackOnceController implements ActionComponentController<ProtoAtta
     }
 
     @Override
-    public ProtoAttackOnce sample() {
-        return ProtoAttackOnce.getDefaultInstance();
-    }
-
-    @Override
-    public boolean contains(ProtoAttackOnce component, McSpace<Map<String, Object>> space) {
-        return component != null && space.contains(Map.of("target_entity_id", component.getTargetEntityId()));
+    public boolean contains(ProtoAttackOnce component) {
+        return component != null && this.space().contains(Map.of("target_entity_id", new double[] { component.getTargetEntityId() }));
     }
 
     @Override
@@ -103,5 +83,15 @@ public class AttackOnceController implements ActionComponentController<ProtoAtta
     @Override
     public ActionState getState(Mob mob, ProtoAttackOnce component) {
         return ActionState.completed("attack applied");
+    }
+
+    /**
+     * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements ActionComponentFactory<ProtoAttackOnce> {
+        @Override
+        public AttackOnceController create() {
+            return new AttackOnceController();
+        }
     }
 }

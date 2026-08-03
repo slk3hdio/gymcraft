@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -21,7 +19,8 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
-import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoPlaceBlock;
@@ -43,7 +42,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 该动作为瞬时动作,应用后立即返回终态。
  * </p>
  */
-public class PlaceBlockController implements ActionComponentController<ProtoPlaceBlock> {
+public class PlaceBlockController extends AbstractActionComponentController<ProtoPlaceBlock> {
     private static final Logger LOGGER = LoggerFactory.getLogger(PlaceBlockController.class);
 
     /** 原版生存模式默认方块交互距离 ({@code Attributes.BLOCK_INTERACTION_RANGE} 默认值)。 */
@@ -55,17 +54,8 @@ public class PlaceBlockController implements ActionComponentController<ProtoPlac
         "z", new BoxSpace(-30_000_000, 30_000_000, 1),
         "face", new BoxSpace(0, 5, 1)
     ));
-    private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
 
     public PlaceBlockController() {
-    }
-
-    @Override
-    public boolean supportEntity(Class<?> entityType) {
-        for (var supported : SUPPORTED_ENTITIES) {
-            if (supported.isAssignableFrom(entityType)) return true;
-        }
-        return false;
     }
 
     @Override
@@ -73,11 +63,6 @@ public class PlaceBlockController implements ActionComponentController<ProtoPlac
         // 必须具备手持功能:空手视为可持有,手中有物品时按原版规则确认该 Mob 能持有它
         ItemStack held = mob.getMainHandItem();
         return this.supportEntity(mob.getClass()) && (held.isEmpty() || mob.canHoldItem(held));
-    }
-
-    @Override
-    public Collection<Class<?>> getSupportedEntities() {
-        return SUPPORTED_ENTITIES;
     }
 
     @Override
@@ -91,17 +76,12 @@ public class PlaceBlockController implements ActionComponentController<ProtoPlac
     }
 
     @Override
-    public ProtoPlaceBlock sample() {
-        return ProtoPlaceBlock.getDefaultInstance();
-    }
-
-    @Override
-    public boolean contains(ProtoPlaceBlock component, McSpace<Map<String, Object>> space) {
-        return component != null && space.contains(Map.of(
-            "x", component.getX(),
-            "y", component.getY(),
-            "z", component.getZ(),
-            "face", component.getFace()
+    public boolean contains(ProtoPlaceBlock component) {
+        return component != null && this.space().contains(Map.of(
+            "x", new double[] { component.getX() },
+            "y", new double[] { component.getY() },
+            "z", new double[] { component.getZ() },
+            "face", new double[] { component.getFace() }
         ));
     }
 
@@ -183,5 +163,15 @@ public class PlaceBlockController implements ActionComponentController<ProtoPlac
             ));
         }
         return null;
+    }
+
+    /**
+     * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements ActionComponentFactory<ProtoPlaceBlock> {
+        @Override
+        public PlaceBlockController create() {
+            return new PlaceBlockController();
+        }
     }
 }

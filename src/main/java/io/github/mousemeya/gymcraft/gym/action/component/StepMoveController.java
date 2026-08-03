@@ -1,8 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.Map;
-import java.util.Collection;
-import java.util.List;
 
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -10,7 +8,8 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
-import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoStepMove;
 import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
@@ -25,7 +24,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 与 MoveToActionComponent 的路径规划不同，此组件直接控制移动、跳跃和视角。
  * </p>
  */
-public class StepMoveController implements ActionComponentController<ProtoStepMove> {
+public class StepMoveController extends AbstractActionComponentController<ProtoStepMove> {
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "forward", new BoxSpace(-1, 1, 1),
         "strafe_right", new BoxSpace(-1, 1, 1),
@@ -33,22 +32,8 @@ public class StepMoveController implements ActionComponentController<ProtoStepMo
         "pitch_delta", new BoxSpace(-90, 90, 1),
         "jump", new BooleanSpace()
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    private final Collection<Class<?>> SUPPORTED_ENTITIES = List.of(Mob.class);
 
     public StepMoveController() {
-    }
-
-    @Override
-    public boolean supportEntity(Class<?> entityType) {
-        for (var supported : SUPPORTED_ENTITIES) {
-            if (supported.isAssignableFrom(entityType)) return true;
-        }
-        return false;
-    }
-
-    @Override
-    public Collection<Class<?>> getSupportedEntities() {
-        return SUPPORTED_ENTITIES;
     }
 
     @Override
@@ -62,17 +47,12 @@ public class StepMoveController implements ActionComponentController<ProtoStepMo
     }
 
     @Override
-    public ProtoStepMove sample() {
-        return ProtoStepMove.getDefaultInstance();
-    }
-
-    @Override
-    public boolean contains(ProtoStepMove component, McSpace<Map<String, Object>> space) {
-        return component != null && space.contains(Map.of(
-            "forward", component.getForward(),
-            "strafe_right", component.getStrafeRight(),
-            "yaw_delta", component.getYawDelta(),
-            "pitch_delta", component.getPitchDelta(),
+    public boolean contains(ProtoStepMove component) {
+        return component != null && this.space().contains(Map.of(
+            "forward", new double[] { component.getForward() },
+            "strafe_right", new double[] { component.getStrafeRight() },
+            "yaw_delta", new double[] { component.getYawDelta() },
+            "pitch_delta", new double[] { component.getPitchDelta() },
             "jump", component.getJump()
         ));
     }
@@ -99,5 +79,15 @@ public class StepMoveController implements ActionComponentController<ProtoStepMo
     @Override
     public ActionState getState(Mob mob, ProtoStepMove component) {
         return ActionState.completed("step movement applied");
+    }
+
+    /**
+     * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements ActionComponentFactory<ProtoStepMove> {
+        @Override
+        public StepMoveController create() {
+            return new StepMoveController();
+        }
     }
 }

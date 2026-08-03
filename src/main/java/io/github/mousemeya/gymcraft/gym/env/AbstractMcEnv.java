@@ -1,7 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.env;
 
 import java.util.Collection;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.UUID;
 
@@ -17,7 +16,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
-import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
+import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
@@ -72,29 +71,10 @@ public abstract class AbstractMcEnv implements McEnv {
     protected AbstractMcEnv(
         Identifier envTypeId,
         Mob mob,
-        Collection<ActionComponentController<?>> actionComponents,
+        Collection<ActionComponentFactory<?>> actionComponentFactories,
         Collection<ObservationComponentCreator<?>> observationComponents
     ) {
-        this(envTypeId, mob, new ActionDispatcher(validateActionComponents(mob, actionComponents)), new ObservationComposer(observationComponents));
-    }
-
-    private static Collection<ActionComponentController<?>> validateActionComponents(
-        Mob mob,
-        Collection<ActionComponentController<?>> actionComponents
-    ) {
-        var unsupported = new ArrayList<String>();
-        for (ActionComponentController<?> component : actionComponents) {
-            if (!component.supports(mob)) {
-                unsupported.add(component.getRegisterId());
-            }
-        }
-        if (!unsupported.isEmpty()) {
-            String mobType = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString();
-            throw new IllegalArgumentException(
-                "Cannot create environment for mob " + mobType + " (" + mob.getUUID() + ") because unsupported actions are registered: " + unsupported
-            );
-        }
-        return actionComponents;
+        this(envTypeId, mob, new ActionDispatcher(mob, actionComponentFactories), new ObservationComposer(observationComponents));
     }
 
     protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionDispatcher actionController, ObservationComposer observationCreator) {

@@ -6,6 +6,8 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
+import io.github.mousemeya.gymcraft.gym.env.McEnv;
+import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 
@@ -38,5 +40,15 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ObservationCreators.INVENTORY.get()
             )
         );
+    }
+
+    /**
+     * 环境工厂 —— 注册表引用该内部轻量 {@link McEnvFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements McEnvFactory {
+        @Override
+        public SimpleMobEnv create(Identifier envTypeId, Mob mob) {
+            return new SimpleMobEnv(envTypeId, mob);
+        }
     }
 }
