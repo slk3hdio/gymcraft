@@ -15,6 +15,11 @@ dependencies = [
     "protobuf>=6.33.6",
 ]
 
+[dependency-groups]
+dev = [
+    "grpcio-tools>=1.81.1",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["gymcraft", "gymcraft.*"]
