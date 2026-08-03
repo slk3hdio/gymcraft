@@ -22,26 +22,19 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * <p>
  * 在 create() 时依次调用每个组件的 create() 方法，
  * 将返回的 Protobuf 消息通过 Any 打包后放入最终的 McObservation。
+ * 组合器持有每个观测类型在当前环境中创建的独立 creator 实例（id → 实例）。
  * </p>
  */
 public class ObservationComposer {
     private static final Logger LOGGER = LoggerFactory.getLogger(ObservationComposer.class);
-    private final Map<String, ObservationComponentBinding<?>> componentBindings;
+    private final Map<String, ObservationComponentCreator<?>> components;
 
-    public ObservationComposer(Collection<ObservationComponentCreator<?>> components) {
-        var map = new LinkedHashMap<String, ObservationComponentBinding<?>>();
-        for (var component : components) {
-            map.put(component.getRegisterId(), ObservationComponentBinding.usingDefaultSpace(component));
+    public ObservationComposer(Collection<ObservationComponentFactory<?>> factories) {
+        var map = new LinkedHashMap<String, ObservationComponentCreator<?>>();
+        for (var factory : factories) {
+            map.put(factory.getRegisterId(), factory.create());
         }
-        this.componentBindings = map;
-    }
-
-    public ObservationComposer(Collection<ObservationComponentBinding<?>> bindings, boolean ignored) {
-        var map = new LinkedHashMap<String, ObservationComponentBinding<?>>();
-        for (var binding : bindings) {
-            map.put(binding.creator().getRegisterId(), binding);
-        }
-        this.componentBindings = map;
+        this.components = map;
     }
 
     public ProtoMcObservation create(Mob mob, ActionState lastActionState) {
@@ -58,12 +51,11 @@ public class ObservationComposer {
         var builder = ProtoMcObservation.newBuilder()
             .setHeader(headerBuilder.build());
 
-        for (ObservationComponentBinding<?> binding : this.componentBindings.values()) {
-            ObservationComponentCreator<? extends Message> component = binding.creator();
+        for (var entry : this.components.entrySet()) {
             try {
-                builder.putComponents(component.getRegisterId(), Any.pack(component.create(mob)));
+                builder.putComponents(entry.getKey(), Any.pack(entry.getValue().create(mob)));
             } catch (RuntimeException e) {
-                LOGGER.warn("Failed to create observation component {}: {}", component, e.getMessage());
+                LOGGER.warn("Failed to create observation component {}: {}", entry.getKey(), e.getMessage());
             }
         }
         return builder.build();
@@ -71,32 +63,25 @@ public class ObservationComposer {
 
     public McSpace<Map<String, Object>> space() {
         var spaces = new LinkedHashMap<String, McSpace<?>>();
-        for (var entry : this.componentBindings.entrySet()) {
+        for (var entry : this.components.entrySet()) {
             spaces.put(entry.getKey(), entry.getValue().space());
         }
         return new DictSpace(spaces);
     }
 
     public void setComponentSpace(String componentId, McSpace<Map<String, Object>> space) {
-        ObservationComponentBinding<?> binding = this.componentBindings.get(componentId);
-        if (binding == null) {
+        ObservationComponentCreator<?> creator = this.components.get(componentId);
+        if (creator == null) {
             throw new IllegalArgumentException("Unknown observation component: " + componentId);
         }
-        this.componentBindings.put(componentId, replaceSpace(binding, space));
+        creator.setSpace(space);
     }
 
     public McSpace<Map<String, Object>> getComponentSpace(String componentId) {
-        ObservationComponentBinding<?> binding = this.componentBindings.get(componentId);
-        if (binding == null) {
+        ObservationComponentCreator<?> creator = this.components.get(componentId);
+        if (creator == null) {
             throw new IllegalArgumentException("Unknown observation component: " + componentId);
         }
-        return binding.space();
-    }
-
-    private static <T extends Message> ObservationComponentBinding<T> replaceSpace(
-        ObservationComponentBinding<T> binding,
-        McSpace<Map<String, Object>> space
-    ) {
-        return binding.withSpace(space);
+        return creator.space();
     }
 }

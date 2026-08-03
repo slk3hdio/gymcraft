@@ -4,7 +4,8 @@ import java.util.Map;
 
 import net.minecraft.world.entity.Mob;
 
-import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoWorldState;
 import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
@@ -19,7 +20,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * 同一 tick 内所有 Mob 的观测结果相同。
  * </p>
  */
-public class WorldStateObservationCreator implements ObservationComponentCreator<ProtoWorldState> {
+public class WorldStateObservationCreator extends AbstractObservationComponentCreator<ProtoWorldState> {
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "day_time", new BoxSpace(0, Long.MAX_VALUE, 1),
         "raining", new BooleanSpace(),
@@ -41,12 +42,7 @@ public class WorldStateObservationCreator implements ObservationComponentCreator
     }
 
     @Override
-    public ProtoWorldState sample() {
-        return ProtoWorldState.getDefaultInstance();
-    }
-
-    @Override
-    public boolean contains(ProtoWorldState component, McSpace<Map<String, Object>> space) {
+    public boolean contains(ProtoWorldState component) {
         return component != null && component.getDayTime() >= 0;
     }
 
@@ -59,5 +55,15 @@ public class WorldStateObservationCreator implements ObservationComponentCreator
             .setThundering(level.isThundering())
             .setDimension(level.dimension().identifier().toString())
             .build();
+    }
+
+    /**
+     * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements ObservationComponentFactory<ProtoWorldState> {
+        @Override
+        public WorldStateObservationCreator create() {
+            return new WorldStateObservationCreator();
+        }
     }
 }

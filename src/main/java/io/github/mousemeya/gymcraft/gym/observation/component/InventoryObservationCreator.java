@@ -7,7 +7,8 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 
-import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoInventory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoItemStackView;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -22,7 +23,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * 每个物品视图记录：物品 ID、数量、槽位索引、是否为空。
  * </p>
  */
-public class InventoryObservationCreator implements ObservationComponentCreator<ProtoInventory> {
+public class InventoryObservationCreator extends AbstractObservationComponentCreator<ProtoInventory> {
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "slots", new SequenceSpace<>(new TextSpace(), 8)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
@@ -41,12 +42,7 @@ public class InventoryObservationCreator implements ObservationComponentCreator<
     }
 
     @Override
-    public ProtoInventory sample() {
-        return ProtoInventory.getDefaultInstance();
-    }
-
-    @Override
-    public boolean contains(ProtoInventory component, McSpace<Map<String, Object>> space) {
+    public boolean contains(ProtoInventory component) {
         return component != null && component.getSlotsCount() <= 8;
     }
 
@@ -70,5 +66,15 @@ public class InventoryObservationCreator implements ObservationComponentCreator<
             .setSlot(slot)
             .setEmpty(stack.isEmpty())
             .build();
+    }
+
+    /**
+     * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements ObservationComponentFactory<ProtoInventory> {
+        @Override
+        public InventoryObservationCreator create() {
+            return new InventoryObservationCreator();
+        }
     }
 }

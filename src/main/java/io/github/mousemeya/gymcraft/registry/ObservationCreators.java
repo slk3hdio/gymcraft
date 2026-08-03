@@ -2,47 +2,54 @@ package io.github.mousemeya.gymcraft.registry;
 
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.component.InventoryObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.NearbyBlocksObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.NearbyEntitiesObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.SelfStateObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.WorldStateObservationCreator;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoInventory;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyBlocks;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyEntities;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoSelfState;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoWorldState;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
- * 观测组件注册入口 —— 通过 {@link DeferredRegister} 将所有 {@link ObservationComponentCreator} 实现
- * 挂载到 {@link RegistryKeys#OBSERVATION_COMPONENT_CREATORS} 注册表上。
+ * 观测组件注册入口 —— 通过 {@link DeferredRegister} 将所有 {@link ObservationComponentFactory} 实现
+ * 挂载到 {@link RegistryKeys#OBSERVATION_COMPONENT_FACTORIES} 注册表上。
  * <p>
- * 所有观测组件基于注册表 ID（如 {@code GymCraft:self}）在运行时唯一标识。
- * 环境构造时引用这些 {@link DeferredHolder} 来获取组件实例并组合成观测空间。
+ * 与 action 体系一致：注册对象为各 creator 类内定义并实现的轻量 {@code Factory} 类；
+ * 环境构造时通过 {@code factory.create()} 为每个环境创建独立的
+ * {@link ObservationComponentCreator} 实例。
  * </p>
  */
 public final class ObservationCreators {
-    public static final DeferredRegister<ObservationComponentCreator<?>> REGISTRY = DeferredRegister.create(
-        RegistryKeys.OBSERVATION_COMPONENT_CREATORS,
+    public static final DeferredRegister<ObservationComponentFactory<?>> REGISTRY = DeferredRegister.create(
+        RegistryKeys.OBSERVATION_COMPONENT_FACTORIES,
         GymCraft.MODID
     );
 
-    public static final DeferredHolder<ObservationComponentCreator<?>, SelfStateObservationCreator> SELF = REGISTRY.register(
+    public static final DeferredHolder<ObservationComponentFactory<?>, ObservationComponentFactory<ProtoSelfState>> SELF = REGISTRY.register(
         "self",
-        SelfStateObservationCreator::new
+        SelfStateObservationCreator.Factory::new
     );
-    public static final DeferredHolder<ObservationComponentCreator<?>, NearbyEntitiesObservationCreator> NEARBY_ENTITIES = REGISTRY.register(
+    public static final DeferredHolder<ObservationComponentFactory<?>, ObservationComponentFactory<ProtoNearbyEntities>> NEARBY_ENTITIES = REGISTRY.register(
         "nearby_entities",
-        NearbyEntitiesObservationCreator::new
+        NearbyEntitiesObservationCreator.Factory::new
     );
-    public static final DeferredHolder<ObservationComponentCreator<?>, NearbyBlocksObservationCreator> NEARBY_BLOCKS = REGISTRY.register(
+    public static final DeferredHolder<ObservationComponentFactory<?>, ObservationComponentFactory<ProtoNearbyBlocks>> NEARBY_BLOCKS = REGISTRY.register(
         "nearby_blocks",
-        NearbyBlocksObservationCreator::new
+        NearbyBlocksObservationCreator.Factory::new
     );
-    public static final DeferredHolder<ObservationComponentCreator<?>, InventoryObservationCreator> INVENTORY = REGISTRY.register(
+    public static final DeferredHolder<ObservationComponentFactory<?>, ObservationComponentFactory<ProtoInventory>> INVENTORY = REGISTRY.register(
         "inventory",
-        InventoryObservationCreator::new
+        InventoryObservationCreator.Factory::new
     );
-    public static final DeferredHolder<ObservationComponentCreator<?>, WorldStateObservationCreator> WORLD = REGISTRY.register(
+    public static final DeferredHolder<ObservationComponentFactory<?>, ObservationComponentFactory<ProtoWorldState>> WORLD = REGISTRY.register(
         "world",
-        WorldStateObservationCreator::new
+        WorldStateObservationCreator.Factory::new
     );
 
     private ObservationCreators() {

@@ -40,10 +40,10 @@ public final class ActionComponents {
         "move_to",
         MoveToController.Factory::new
     );
-    // public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoStepMove>> STEP_MOVE = REGISTRY.register(
-    //     "step_move",
-    //     StepMoveController.Factory::new
-    // );
+    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoStepMove>> STEP_MOVE = REGISTRY.register(
+        "step_move",
+        StepMoveController.Factory::new
+    );
     public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoSetAttackTarget>> SET_ATTACK_TARGET = REGISTRY.register(
         "set_attack_target",
         SetAttackTargetController.Factory::new
@@ -56,14 +56,14 @@ public final class ActionComponents {
         "place_block",
         PlaceBlockController.Factory::new
     );
-    // public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoAttackOnce>> ATTACK_ONCE = REGISTRY.register(
-    //     "attack_once",
-    //     AttackOnceController.Factory::new
-    // );
-    // public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoNoop>> NOOP = REGISTRY.register(
-    //     "noop",
-    //     NoopController.Factory::new
-    // );
+    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoAttackOnce>> ATTACK_ONCE = REGISTRY.register(
+        "attack_once",
+        AttackOnceController.Factory::new
+    );
+    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoNoop>> NOOP = REGISTRY.register(
+        "noop",
+        NoopController.Factory::new
+    );
 
     private ActionComponents() {
     }

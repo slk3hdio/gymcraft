@@ -24,13 +24,13 @@ public class SimpleMobEnv extends AbstractMcEnv {
             envTypeId,
             mob,
             List.of(
-                // ActionComponents.NOOP.get(),
-                // ActionComponents.STEP_MOVE.get(),
+                ActionComponents.NOOP.get(),
+                ActionComponents.STEP_MOVE.get(),
                 ActionComponents.MOVE_TO.get(),
                 ActionComponents.SET_ATTACK_TARGET.get(),
                 ActionComponents.BREAK_BLOCK.get(),
-                ActionComponents.PLACE_BLOCK.get()
-                // ActionComponents.ATTACK_ONCE.get()
+                ActionComponents.PLACE_BLOCK.get(),
+                ActionComponents.ATTACK_ONCE.get()
             ),
             List.of(
                 ObservationCreators.SELF.get(),

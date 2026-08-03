@@ -13,7 +13,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
-import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.BlockView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyBlocks;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -29,7 +30,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * 中大量扫描天空空气。
  * </p>
  */
-public class NearbyBlocksObservationCreator implements ObservationComponentCreator<ProtoNearbyBlocks> {
+public class NearbyBlocksObservationCreator extends AbstractObservationComponentCreator<ProtoNearbyBlocks> {
     private static final int RADIUS = 8;
     private static final int MAX_VISITED = 2048;
     private static final int MAX_BLOCKS = 1024;
@@ -54,12 +55,7 @@ public class NearbyBlocksObservationCreator implements ObservationComponentCreat
     }
 
     @Override
-    public ProtoNearbyBlocks sample() {
-        return ProtoNearbyBlocks.getDefaultInstance();
-    }
-
-    @Override
-    public boolean contains(ProtoNearbyBlocks component, McSpace<Map<String, Object>> space) {
+    public boolean contains(ProtoNearbyBlocks component) {
         return component != null && component.getBlocksCount() <= MAX_BLOCKS;
     }
 
@@ -142,5 +138,15 @@ public class NearbyBlocksObservationCreator implements ObservationComponentCreat
 
     private static double distance(BlockPos center, BlockPos pos) {
         return Math.sqrt(center.distSqr(pos));
+    }
+
+    /**
+     * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements ObservationComponentFactory<ProtoNearbyBlocks> {
+        @Override
+        public NearbyBlocksObservationCreator create() {
+            return new NearbyBlocksObservationCreator();
+        }
     }
 }

@@ -19,7 +19,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
-import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
@@ -72,7 +72,7 @@ public abstract class AbstractMcEnv implements McEnv {
         Identifier envTypeId,
         Mob mob,
         Collection<ActionComponentFactory<?>> actionComponentFactories,
-        Collection<ObservationComponentCreator<?>> observationComponents
+        Collection<ObservationComponentFactory<?>> observationComponents
     ) {
         this(envTypeId, mob, new ActionDispatcher(mob, actionComponentFactories), new ObservationComposer(observationComponents));
     }

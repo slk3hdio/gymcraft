@@ -8,7 +8,8 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 
-import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoEntityView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyEntities;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -23,7 +24,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * 使用 AABB 批量查询 {@code level.getEntitiesOfClass()}。
  * </p>
  */
-public class NearbyEntitiesObservationCreator implements ObservationComponentCreator<ProtoNearbyEntities> {
+public class NearbyEntitiesObservationCreator extends AbstractObservationComponentCreator<ProtoNearbyEntities> {
     private static final int RADIUS = 16;
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "entities", new SequenceSpace<>(new TextSpace(), 512)
@@ -43,12 +44,7 @@ public class NearbyEntitiesObservationCreator implements ObservationComponentCre
     }
 
     @Override
-    public ProtoNearbyEntities sample() {
-        return ProtoNearbyEntities.getDefaultInstance();
-    }
-
-    @Override
-    public boolean contains(ProtoNearbyEntities component, McSpace<Map<String, Object>> space) {
+    public boolean contains(ProtoNearbyEntities component) {
         return component != null && component.getEntitiesCount() <= 512;
     }
 
@@ -72,5 +68,15 @@ public class NearbyEntitiesObservationCreator implements ObservationComponentCre
                 .build());
         }
         return builder.build();
+    }
+
+    /**
+     * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements ObservationComponentFactory<ProtoNearbyEntities> {
+        @Override
+        public NearbyEntitiesObservationCreator create() {
+            return new NearbyEntitiesObservationCreator();
+        }
     }
 }

@@ -5,7 +5,8 @@ import java.util.Map;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Mob;
 
-import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoSelfState;
 import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
@@ -19,7 +20,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * 输出：实体类型、UUID、生命值、位置、速度、姿态、标志位（地面/水中/熔岩/存活）和当前攻击目标 ID。
  * </p>
  */
-public class SelfStateObservationCreator implements ObservationComponentCreator<ProtoSelfState> {
+public class SelfStateObservationCreator extends AbstractObservationComponentCreator<ProtoSelfState> {
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.ofEntries(
         Map.entry("entity_type", new TextSpace()),
         Map.entry("uuid", new TextSpace()),
@@ -53,12 +54,7 @@ public class SelfStateObservationCreator implements ObservationComponentCreator<
     }
 
     @Override
-    public ProtoSelfState sample() {
-        return ProtoSelfState.getDefaultInstance();
-    }
-
-    @Override
-    public boolean contains(ProtoSelfState component, McSpace<Map<String, Object>> space) {
+    public boolean contains(ProtoSelfState component) {
         return component != null
             && component.getHealth() >= 0
             && component.getMaxHealth() >= 0
@@ -92,5 +88,15 @@ public class SelfStateObservationCreator implements ObservationComponentCreator<
             builder.setTargetEntityId(mob.getTarget().getId());
         }
         return builder.build();
+    }
+
+    /**
+     * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
+     */
+    public static final class Factory implements ObservationComponentFactory<ProtoSelfState> {
+        @Override
+        public SelfStateObservationCreator create() {
+            return new SelfStateObservationCreator();
+        }
     }
 }
