@@ -1,16 +1,21 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.WeakHashMap;
 
 import com.mojang.authlib.GameProfile;
+import com.mojang.datafixers.util.Pair;
 
+import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
@@ -62,5 +67,22 @@ final class MobHandSimulator {
     /** 执行原版逻辑后,把假玩家主手槽位的最终物品写回 Mob（覆盖工具损坏等引用变化）。 */
     static void syncBackToMob(Mob mob, FakePlayer fakePlayer) {
         mob.setItemInHand(InteractionHand.MAIN_HAND, fakePlayer.getMainHandItem());
+        broadcastMainHandToTrackingPlayers(mob);
+    }
+
+    /**
+     * 手动向跟踪玩家广播主手物品。原版实体装备的增量同步依赖 {@code detectEquipmentUpdates}
+     * 逐 tick 比对，在动作执行后并不总是立刻生效，导致客户端渲染仍显示旧的手持物品；
+     * 这里在写回主手后立即广播 {@link ClientboundSetEquipmentPacket}，保证客户端刷新。
+     */
+    private static void broadcastMainHandToTrackingPlayers(Mob mob) {
+        if (mob.level().isClientSide()) {
+            return;
+        }
+        List<Pair<EquipmentSlot, ItemStack>> slots = List.of(
+            Pair.of(EquipmentSlot.MAINHAND, mob.getMainHandItem().copy())
+        );
+        var packet = new ClientboundSetEquipmentPacket(mob.getId(), slots);
+        ((ServerLevel) mob.level()).getChunkSource().sendToTrackingPlayers(mob, packet);
     }
 }

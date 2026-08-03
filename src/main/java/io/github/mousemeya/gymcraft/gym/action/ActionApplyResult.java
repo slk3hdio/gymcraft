@@ -28,7 +28,11 @@ public record ActionApplyResult(ActionControlPolicy policy, boolean appliedAnyCo
         if (other == null) {
             return this;
         }
-        ActionState merged = mergeState(this.initialState, other.initialState);
+        // 累积结果若尚未应用任何组件（初始 none 占位），直接采用实际组件的结果状态，
+        // 避免占位状态 "no components applied" 覆盖真实终态（如同 priority 的 COMPLETED）。
+        ActionState merged = this.appliedAnyComponent
+            ? mergeState(this.initialState, other.initialState)
+            : other.initialState;
         return new ActionApplyResult(this.policy.merge(other.policy()),
             this.appliedAnyComponent || other.appliedAnyComponent(), merged);
     }
