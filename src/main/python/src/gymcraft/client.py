@@ -9,7 +9,7 @@ import gymnasium as gym
 from google.protobuf import message
 from google.protobuf.any_pb2 import Any as ProtoAny
 
-from gymcraft.gym.action import mc_action_pb2
+from gymcraft.gym.action import action_pb2
 from gymcraft.gym.rpc import env_service_pb2, env_service_pb2_grpc
 
 
@@ -43,7 +43,7 @@ class GymCraftEnv(gym.Env[Any, Any]):
         assert isinstance(response, env_service_pb2.ResetResponse)
         return response
 
-    def step(self, action: mc_action_pb2.ProtoMcAction | Mapping[str, message.Message]) -> env_service_pb2.StepResponse:
+    def step(self, action: action_pb2.ProtoMcAction | Mapping[str, message.Message]) -> env_service_pb2.StepResponse:
         request = env_service_pb2.StepRequest(
             session_id=self.session_id,
             action=make_action(action) if isinstance(action, Mapping) else action,
@@ -60,8 +60,8 @@ class GymCraftEnv(gym.Env[Any, Any]):
         self.channel.close()
 
 
-def make_action(components: Mapping[str, message.Message]) -> mc_action_pb2.ProtoMcAction:
-    action = mc_action_pb2.ProtoMcAction()
+def make_action(components: Mapping[str, message.Message]) -> action_pb2.ProtoMcAction:
+    action = action_pb2.ProtoMcAction()
     for key, payload in components.items():
         packed = ProtoAny()
         packed.Pack(payload)

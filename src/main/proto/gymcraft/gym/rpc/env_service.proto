@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package gymcraft.gym.rpc;
 
-import "gymcraft/gym/action/mc_action.proto";
-import "gymcraft/gym/observation/mc_observation.proto";
+import "gymcraft/gym/action/action.proto";
+import "gymcraft/gym/observation/observation.proto";
 
 option java_multiple_files = true;
 option java_package = "io.github.mousemeya.gymcraft.gym.rpc.proto";

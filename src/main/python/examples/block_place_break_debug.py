@@ -26,8 +26,8 @@ from collections.abc import Iterable
 from typing import Any
 
 from gymcraft.client import GymCraftEnv, unpack_component
-from gymcraft.gym.action import components_pb2 as action_components
-from gymcraft.gym.observation import components_pb2 as obs_components
+from gymcraft.gym.action.components import break_block_pb2, noop_pb2, set_block_pb2
+from gymcraft.gym.observation.components import inventory_pb2, nearby_blocks_pb2, self_pb2
 
 SELF_KEY = "gymcraft:self"
 NEARBY_BLOCKS_KEY = "gymcraft:nearby_blocks"
@@ -39,23 +39,23 @@ NOOP_KEY = "gymcraft:noop"
 Pos = tuple[int, int, int]
 
 
-def unpack_self(obs: Any) -> obs_components.ProtoSelfState:
-    return unpack_component(obs, SELF_KEY, obs_components.ProtoSelfState)
+def unpack_self(obs: Any) -> self_pb2.ProtoSelfState:
+    return unpack_component(obs, SELF_KEY, self_pb2.ProtoSelfState)
 
 
-def unpack_nearby_blocks(obs: Any) -> obs_components.ProtoNearbyBlocks:
-    return unpack_component(obs, NEARBY_BLOCKS_KEY, obs_components.ProtoNearbyBlocks)
+def unpack_nearby_blocks(obs: Any) -> nearby_blocks_pb2.ProtoNearbyBlocks:
+    return unpack_component(obs, NEARBY_BLOCKS_KEY, nearby_blocks_pb2.ProtoNearbyBlocks)
 
 
-def unpack_inventory(obs: Any) -> obs_components.ProtoInventory:
-    return unpack_component(obs, INVENTORY_KEY, obs_components.ProtoInventory)
+def unpack_inventory(obs: Any) -> inventory_pb2.ProtoInventory:
+    return unpack_component(obs, INVENTORY_KEY, inventory_pb2.ProtoInventory)
 
 
-def eye_distance(self_state: obs_components.ProtoSelfState, pos: Pos) -> float:
+def eye_distance(self_state: self_pb2.ProtoSelfState, pos: Pos) -> float:
     return math.dist((self_state.x, self_state.y + 1.62, self_state.z), (pos[0] + 0.5, pos[1] + 0.5, pos[2] + 0.5))
 
 
-def overlaps_self(self_state: obs_components.ProtoSelfState, pos: Pos) -> bool:
+def overlaps_self(self_state: self_pb2.ProtoSelfState, pos: Pos) -> bool:
     center_x = pos[0] + 0.5
     center_y = pos[1] + 0.5
     center_z = pos[2] + 0.5
@@ -74,7 +74,7 @@ def print_header(prefix: str, obs: Any, info: dict[str, Any] | None = None) -> N
         print(f"{prefix} info_action_state={info.get('action_state', {})}")
 
 
-def print_self(obs: Any) -> obs_components.ProtoSelfState:
+def print_self(obs: Any) -> self_pb2.ProtoSelfState:
     state = unpack_self(obs)
     print(
         f"self type={state.entity_type} uuid={state.uuid} "
@@ -110,8 +110,9 @@ def print_nearby_blocks(obs: Any, limit: int) -> set[Pos]:
 def held_item_id(obs: Any) -> str | None:
     """Return the first non-empty inventory slot's item id, or None."""
     for slot in unpack_inventory(obs).slots:
+        item_id: str = slot.item_id
         if not slot.empty:
-            return slot.item_id
+            return item_id
     return None
 
 
@@ -198,7 +199,7 @@ def main() -> None:
         if args.no_reset:
             if NOOP_KEY not in action_keys:
                 raise RuntimeError(f"--no-reset requires {NOOP_KEY} in the action space to obtain an observation")
-            resp = env.step({NOOP_KEY: action_components.ProtoNoop()})
+            resp = env.step({NOOP_KEY: noop_pb2.ProtoNoop()})
             print("no_reset: skipped reset; obtained observation via noop step")
         else:
             resp = env.reset()
@@ -232,7 +233,7 @@ def main() -> None:
                 resp = step_and_print(
                     env,
                     "set_block",
-                    {SET_BLOCK_KEY: action_components.ProtoSetBlock(x=target[0], y=target[1], z=target[2], block=block_id or "")},
+                    {SET_BLOCK_KEY: set_block_pb2.ProtoSetBlock(x=target[0], y=target[1], z=target[2], block=block_id or "")},
                 )
                 obs = resp.observation
                 placed_positions.append(target)
@@ -254,7 +255,7 @@ def main() -> None:
         step_and_print(
             env,
             "break_block",
-            {BREAK_BLOCK_KEY: action_components.ProtoBreakBlock(x=break_pos[0], y=break_pos[1], z=break_pos[2])},
+            {BREAK_BLOCK_KEY: break_block_pb2.ProtoBreakBlock(x=break_pos[0], y=break_pos[1], z=break_pos[2])},
         )
     finally:
         env.close()

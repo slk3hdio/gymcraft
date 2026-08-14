@@ -2,14 +2,13 @@
 
 package gymcraft.gym.action;
 
-// import "gymcraft/gym/action/components.proto";
 import "google/protobuf/any.proto";
 
 option java_multiple_files = true;
 option java_package = "io.github.mousemeya.gymcraft.gym.action.proto";
-option java_outer_classname = "McActionProto";
+option java_outer_classname = "ActionProto";
 
-message ProtoMcAction{
-    map<string, google.protobuf.Any> components = 1; 
+message ProtoMcAction {
+  map<string, google.protobuf.Any> components = 1;
 }
 

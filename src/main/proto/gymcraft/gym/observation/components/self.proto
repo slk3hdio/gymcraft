@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package gymcraft.gym.observation;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.observation.proto";
+option java_outer_classname = "SelfStateProto";
+
+message ProtoSelfState {
+  string entity_type = 1;
+  string uuid = 2;
+  double health = 3;
+  double max_health = 4;
+  double x = 5;
+  double y = 6;
+  double z = 7;
+  double vx = 8;
+  double vy = 9;
+  double vz = 10;
+  float yaw = 11;
+  float pitch = 12;
+  bool on_ground = 13;
+  bool in_water = 14;
+  bool in_lava = 15;
+  bool alive = 16;
+  bool navigating = 17;
+  bool at_target = 18;
+  int32 target_entity_id = 19;
+  string control_mode = 20;
+}

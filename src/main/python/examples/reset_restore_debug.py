@@ -18,22 +18,22 @@ import time
 from typing import Any
 
 from gymcraft.client import GymCraftEnv, unpack_component
-from gymcraft.gym.action import components_pb2 as action_components
-from gymcraft.gym.observation import components_pb2 as obs_components
+from gymcraft.gym.action.components import move_to_pb2
+from gymcraft.gym.observation.components import self_pb2
 
 SELF_KEY = "gymcraft:self"
 MOVE_TO_KEY = "gymcraft:move_to"
 
 
-def unpack_self(obs: Any) -> obs_components.ProtoSelfState:
-    return unpack_component(obs, SELF_KEY, obs_components.ProtoSelfState)
+def unpack_self(obs: Any) -> self_pb2.ProtoSelfState:
+    return unpack_component(obs, SELF_KEY, self_pb2.ProtoSelfState)
 
 
-def horizontal_distance(a: obs_components.ProtoSelfState, b: obs_components.ProtoSelfState) -> float:
+def horizontal_distance(a: self_pb2.ProtoSelfState, b: self_pb2.ProtoSelfState) -> float:
     return math.hypot(a.x - b.x, a.z - b.z)
 
 
-def print_self(prefix: str, obs: Any) -> obs_components.ProtoSelfState:
+def print_self(prefix: str, obs: Any) -> self_pb2.ProtoSelfState:
     state = unpack_self(obs)
     print(
         f"{prefix} type={state.entity_type} uuid={state.uuid} alive={state.alive} "
@@ -49,7 +49,7 @@ def print_self(prefix: str, obs: Any) -> obs_components.ProtoSelfState:
     return state
 
 
-def same_chunk_target(state: obs_components.ProtoSelfState, span: float) -> tuple[float, float, float]:
+def same_chunk_target(state: self_pb2.ProtoSelfState, span: float) -> tuple[float, float, float]:
     chunk_x = math.floor(state.x) >> 4
     chunk_z = math.floor(state.z) >> 4
     candidates = [
@@ -64,10 +64,10 @@ def same_chunk_target(state: obs_components.ProtoSelfState, span: float) -> tupl
     return chunk_x * 16 + 8.5, state.y, chunk_z * 16 + 8.5
 
 
-def move_once(env: GymCraftEnv, state: obs_components.ProtoSelfState, span: float) -> tuple[Any, dict[str, Any]]:
+def move_once(env: GymCraftEnv, state: self_pb2.ProtoSelfState, span: float) -> tuple[Any, dict[str, Any]]:
     target = same_chunk_target(state, span)
     action = {
-        MOVE_TO_KEY: action_components.ProtoMoveTo(
+        MOVE_TO_KEY: move_to_pb2.ProtoMoveTo(
             x=target[0],
             y=target[1],
             z=target[2],

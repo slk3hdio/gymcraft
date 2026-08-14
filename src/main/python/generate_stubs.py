@@ -9,12 +9,23 @@ PROTO_DIR = PROJECT_ROOT / "src" / "main" / "proto"
 OUT_DIR = SCRIPT_DIR / "src"
 
 PROTO_FILES = [
-    "gymcraft/gym/action/components.proto",
-    "gymcraft/gym/action/mc_action.proto",
-    "gymcraft/gym/observation/inventory.proto",
-    "gymcraft/gym/observation/entity.proto",
-    "gymcraft/gym/observation/components.proto",
-    "gymcraft/gym/observation/mc_observation.proto",
+    "gymcraft/gym/action/action.proto",
+    "gymcraft/gym/action/components/step_move.proto",
+    "gymcraft/gym/action/components/move_to.proto",
+    "gymcraft/gym/action/components/set_attack_target.proto",
+    "gymcraft/gym/action/components/attack_once.proto",
+    "gymcraft/gym/action/components/noop.proto",
+    "gymcraft/gym/action/components/break_block.proto",
+    "gymcraft/gym/action/components/set_block.proto",
+    "gymcraft/gym/observation/observation.proto",
+    "gymcraft/gym/observation/common/entity_view.proto",
+    "gymcraft/gym/observation/common/block_view.proto",
+    "gymcraft/gym/observation/common/item_stack_view.proto",
+    "gymcraft/gym/observation/components/self.proto",
+    "gymcraft/gym/observation/components/world.proto",
+    "gymcraft/gym/observation/components/nearby_entities.proto",
+    "gymcraft/gym/observation/components/nearby_blocks.proto",
+    "gymcraft/gym/observation/components/inventory.proto",
     "gymcraft/gym/rpc/env_service.proto",
 ]
 

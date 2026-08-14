@@ -119,8 +119,8 @@ uv sync                              # 安装依赖
 ```python
 from gymcraft import GymCraftEnv
 from gymcraft import unpack_component
-from gymcraft.gym.action import components_pb2 as action_components
-from gymcraft.gym.observation import components_pb2 as observation_components
+from gymcraft.gym.action.components import step_move_pb2
+from gymcraft.gym.observation.components import self_pb2
 
 # 按实体 UUID 连接已存在的环境（默认 localhost:50051）
 env = GymCraftEnv("entity-uuid-here")
@@ -129,11 +129,11 @@ reset_response = env.reset()
 self_obs = unpack_component(
     reset_response.observation,
     "gymcraft:self",
-    observation_components.ProtoSelfObservation,
+    self_pb2.ProtoSelfState,
 )
 
 step_response = env.step({
-    "gymcraft:step_move": action_components.ProtoStepMove(forward=1.0, jump=True),
+    "gymcraft:step_move": step_move_pb2.ProtoStepMove(forward=1.0, jump=True),
 })
 reward = step_response.reward
 terminated = step_response.terminated

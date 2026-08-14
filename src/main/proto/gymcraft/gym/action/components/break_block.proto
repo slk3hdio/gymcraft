@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package gymcraft.gym.action;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.action.proto";
+option java_outer_classname = "BreakBlockProto";
+
+message ProtoBreakBlock {
+  int32 x = 1;
+  int32 y = 2;
+  int32 z = 3;
+}

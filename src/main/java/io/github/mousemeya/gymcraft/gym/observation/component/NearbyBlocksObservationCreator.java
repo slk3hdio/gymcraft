@@ -15,7 +15,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
-import io.github.mousemeya.gymcraft.gym.observation.proto.BlockView;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoBlockView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyBlocks;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
@@ -106,7 +106,7 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
 
         for (VisibleBlock block : visibleBlocks.values()) {
             BlockPos pos = block.pos();
-            builder.addBlocks(BlockView.newBuilder()
+            builder.addBlocks(ProtoBlockView.newBuilder()
                 .setX(pos.getX()).setY(pos.getY()).setZ(pos.getZ())
                 .setBlockId(BuiltInRegistries.BLOCK.getKey(block.state().getBlock()).toString())
                 .setDistance(block.distance())

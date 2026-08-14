@@ -14,20 +14,20 @@ import math
 from typing import Any
 
 from gymcraft.client import GymCraftEnv, unpack_component
-from gymcraft.gym.action import components_pb2 as action_components
-from gymcraft.gym.observation import components_pb2 as obs_components
+from gymcraft.gym.action.components import move_to_pb2
+from gymcraft.gym.observation.components import nearby_blocks_pb2, self_pb2
 
 SELF_KEY = "gymcraft:self"
 NEARBY_BLOCKS_KEY = "gymcraft:nearby_blocks"
 MOVE_TO_KEY = "gymcraft:move_to"
 
 
-def unpack_self(obs: Any) -> obs_components.ProtoSelfState:
-    return unpack_component(obs, SELF_KEY, obs_components.ProtoSelfState)
+def unpack_self(obs: Any) -> self_pb2.ProtoSelfState:
+    return unpack_component(obs, SELF_KEY, self_pb2.ProtoSelfState)
 
 
-def unpack_nearby_blocks(obs: Any) -> obs_components.ProtoNearbyBlocks:
-    return unpack_component(obs, NEARBY_BLOCKS_KEY, obs_components.ProtoNearbyBlocks)
+def unpack_nearby_blocks(obs: Any) -> nearby_blocks_pb2.ProtoNearbyBlocks:
+    return unpack_component(obs, NEARBY_BLOCKS_KEY, nearby_blocks_pb2.ProtoNearbyBlocks)
 
 
 def horizontal_distance(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
@@ -111,7 +111,7 @@ def main() -> None:
         )
 
         action = {
-            MOVE_TO_KEY: action_components.ProtoMoveTo(
+            MOVE_TO_KEY: move_to_pb2.ProtoMoveTo(
                 x=target[0],
                 y=target[1],
                 z=target[2],

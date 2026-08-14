@@ -1,10 +1,10 @@
-﻿syntax = "proto3";
+syntax = "proto3";
 
 package gymcraft.gym.observation;
 
 option java_multiple_files = true;
 option java_package = "io.github.mousemeya.gymcraft.gym.observation.proto";
-option java_outer_classname = "EntityProto";
+option java_outer_classname = "EntityViewProto";
 
 message ProtoEntityView {
   int32 entity_id = 1;

@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package gymcraft.gym.observation;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.observation.proto";
+option java_outer_classname = "WorldStateProto";
+
+message ProtoWorldState {
+  int64 day_time = 1;
+  bool raining = 2;
+  bool thundering = 3;
+  string dimension = 4;
+}

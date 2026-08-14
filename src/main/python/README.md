@@ -27,19 +27,19 @@ Create an environment in-game with the env tool, then connect by entity UUID:
 ```python
 from gymcraft import GymCraftEnv
 from gymcraft import unpack_component
-from gymcraft.gym.action import components_pb2 as action_components
-from gymcraft.gym.observation import components_pb2 as observation_components
+from gymcraft.gym.action.components import noop_pb2
+from gymcraft.gym.observation.components import self_pb2
 
 env = GymCraftEnv("entity-uuid-here")
 reset_response = env.reset()
 self_obs = unpack_component(
     reset_response.observation,
     "gymcraft:self",
-    observation_components.ProtoSelfObservation,
+    self_pb2.ProtoSelfState,
 )
 
 step_response = env.step({
-    "gymcraft:noop": action_components.ProtoNoop(),
+    "gymcraft:noop": noop_pb2.ProtoNoop(),
 })
 reward = step_response.reward
 terminated = step_response.terminated

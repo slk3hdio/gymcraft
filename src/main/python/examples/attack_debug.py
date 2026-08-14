@@ -14,8 +14,8 @@ import json
 from typing import Any
 
 from gymcraft.client import GymCraftEnv, unpack_component
-from gymcraft.gym.action import components_pb2 as action_components
-from gymcraft.gym.observation import components_pb2 as obs_components
+from gymcraft.gym.action.components import attack_once_pb2, set_attack_target_pb2
+from gymcraft.gym.observation.components import nearby_entities_pb2, self_pb2
 
 SELF_KEY = "gymcraft:self"
 NEARBY_ENTITIES_KEY = "gymcraft:nearby_entities"
@@ -23,12 +23,12 @@ SET_ATTACK_TARGET_KEY = "gymcraft:set_attack_target"
 ATTACK_ONCE_KEY = "gymcraft:attack_once"
 
 
-def unpack_self(obs: Any) -> obs_components.ProtoSelfState:
-    return unpack_component(obs, SELF_KEY, obs_components.ProtoSelfState)
+def unpack_self(obs: Any) -> self_pb2.ProtoSelfState:
+    return unpack_component(obs, SELF_KEY, self_pb2.ProtoSelfState)
 
 
-def unpack_nearby_entities(obs: Any) -> obs_components.ProtoNearbyEntities:
-    return unpack_component(obs, NEARBY_ENTITIES_KEY, obs_components.ProtoNearbyEntities)
+def unpack_nearby_entities(obs: Any) -> nearby_entities_pb2.ProtoNearbyEntities:
+    return unpack_component(obs, NEARBY_ENTITIES_KEY, nearby_entities_pb2.ProtoNearbyEntities)
 
 
 def print_header(prefix: str, obs: Any, info: dict[str, Any] | None = None) -> None:
@@ -118,7 +118,7 @@ def main() -> None:
         )
 
         set_target_action = {
-            SET_ATTACK_TARGET_KEY: action_components.ProtoSetAttackTarget(target_entity_id=target.entity_id)
+            SET_ATTACK_TARGET_KEY: set_attack_target_pb2.ProtoSetAttackTarget(target_entity_id=target.entity_id)
         }
         resp = env.step(set_target_action)
         obs, reward, terminated, truncated, info = resp.observation, resp.reward, resp.terminated, resp.truncated, json.loads(resp.info)
@@ -131,7 +131,7 @@ def main() -> None:
             return
 
         attack_action = {
-            ATTACK_ONCE_KEY: action_components.ProtoAttackOnce(target_entity_id=target.entity_id)
+            ATTACK_ONCE_KEY: attack_once_pb2.ProtoAttackOnce(target_entity_id=target.entity_id)
         }
         resp = env.step(attack_action)
         obs, reward, terminated, truncated, info = resp.observation, resp.reward, resp.terminated, resp.truncated, json.loads(resp.info)
