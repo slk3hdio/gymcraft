@@ -10,12 +10,14 @@ import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.profiling.Profiler;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
@@ -23,6 +25,8 @@ import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
+import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
+import io.github.mousemeya.gymcraft.gym.menu.MenuSessionHooks;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 
@@ -232,12 +236,20 @@ public class AgentRuntime {
         this.interruptPendingAction("interrupted by reset");
         this.completeQueuedActions(ActionState.interrupted("interrupted by reset"));
         this.clearRuntimeState();
+        // 集中清理入口：关闭旧 Mob 上的菜单会话与附件
+        this.cleanupAgentState(this.mob, "reset");
 
         // ② 用初始快照还原实体
         Mob restoredMob = this.initialSnapshot.restore();
         LOGGER.info("GymCraft runtime reset restore entity old={} new={}", this.mob.getUUID(), restoredMob.getUUID());
-        // ③ 移除旧实体并加入还原实体（整体替换受控引用）
+        // ③ 移除旧实体并加入还原实体（整体替换受控引用）；
+        //    丢弃前把旧实体携带的物品全部掉落，任何路径都不允许静默删除物品
         if (!this.mob.isRemoved()) {
+            var dropped = AgentInventoryLayout.dropAllItems(this.mob);
+            if (!dropped.isEmpty()) {
+                LOGGER.info("GymCraft runtime reset dropped {} carried item stacks from old entity {}: {}",
+                    dropped.size(), this.mob.getUUID(), dropped);
+            }
             this.mob.discard();
         }
         if (!(restoredMob.level() instanceof ServerLevel level)) {
@@ -336,6 +348,8 @@ public class AgentRuntime {
         try (var gymcraftZone = profiler.zone("gymcraft_post")) {
             // 实体死亡：统一发布死亡失败结果，本 tick 到此结束
             if (!this.mob.isAlive()) {
+                // 集中清理入口：实体销毁前关闭菜单会话并清理附件（每 tick 触发，内部幂等）
+                this.cleanupAgentState(this.mob, "entity died");
                 this.publishDeathResultIfNeeded();
                 return;
             }
@@ -399,7 +413,30 @@ public class AgentRuntime {
         }
         // 释放控制策略、停止寻路并清空待发布状态
         this.clearRuntimeState();
+        // 集中清理入口：环境关闭时关闭菜单会话并清理附件
+        this.cleanupAgentState(this.mob, "clear");
         this.pendingResult = null;
+    }
+
+    /**
+     * 统一的 Agent 会话/附件清理入口（reset、实体死亡、clear 共用）。
+     * <p>
+     * 菜单关闭与附件清理由本运行时直接驱动：经 {@link MenuSessionHooks}
+     * 幂等关闭 Mob 的菜单会话（附件随会话关闭移除）。菜单操作只允许在服务端
+     * tick 线程执行；reset/死亡路径本就在 tick 线程，clear 可能来自 gRPC 线程，
+     * 此时安排到服务端 tick 线程执行。
+     * </p>
+     *
+     * @param mob    需要清理会话/附件的实体
+     * @param reason 清理原因（用于日志）
+     */
+    private void cleanupAgentState(Mob mob, String reason) {
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server != null && !server.isSameThread()) {
+            server.execute(() -> MenuSessionHooks.closeFor(mob, reason));
+            return;
+        }
+        MenuSessionHooks.closeFor(mob, reason);
     }
 
     /** 释放当前控制策略并停止寻路，恢复实体 AI 的控制权。 */

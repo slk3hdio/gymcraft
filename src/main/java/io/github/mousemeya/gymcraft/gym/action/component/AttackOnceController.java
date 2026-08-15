@@ -90,7 +90,7 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
      */
     public static final class Factory implements ActionComponentFactory<ProtoAttackOnce> {
         @Override
-        public AttackOnceController create() {
+        public AttackOnceController create(Mob mob) {
             return new AttackOnceController();
         }
     }

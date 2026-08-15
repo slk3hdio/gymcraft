@@ -75,7 +75,7 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
      */
     public static final class Factory implements ObservationComponentFactory<ProtoNearbyEntities> {
         @Override
-        public NearbyEntitiesObservationCreator create() {
+        public NearbyEntitiesObservationCreator create(Mob mob) {
             return new NearbyEntitiesObservationCreator();
         }
     }

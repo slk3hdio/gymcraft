@@ -95,7 +95,7 @@ public class SelfStateObservationCreator extends AbstractObservationComponentCre
      */
     public static final class Factory implements ObservationComponentFactory<ProtoSelfState> {
         @Override
-        public SelfStateObservationCreator create() {
+        public SelfStateObservationCreator create(Mob mob) {
             return new SelfStateObservationCreator();
         }
     }

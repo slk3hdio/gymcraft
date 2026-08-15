@@ -176,7 +176,7 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
      */
     public static final class Factory implements ActionComponentFactory<ProtoMoveTo> {
         @Override
-        public MoveToController create() {
+        public MoveToController create(Mob mob) {
             return new MoveToController();
         }
     }

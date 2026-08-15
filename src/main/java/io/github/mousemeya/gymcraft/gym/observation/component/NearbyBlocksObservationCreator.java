@@ -145,7 +145,7 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
      */
     public static final class Factory implements ObservationComponentFactory<ProtoNearbyBlocks> {
         @Override
-        public NearbyBlocksObservationCreator create() {
+        public NearbyBlocksObservationCreator create(Mob mob) {
             return new NearbyBlocksObservationCreator();
         }
     }

@@ -29,10 +29,10 @@ public class ObservationComposer {
     private static final Logger LOGGER = LoggerFactory.getLogger(ObservationComposer.class);
     private final Map<String, ObservationComponentCreator<?>> components;
 
-    public ObservationComposer(Collection<ObservationComponentFactory<?>> factories) {
+    public ObservationComposer(Mob mob, Collection<ObservationComponentFactory<?>> factories) {
         var map = new LinkedHashMap<String, ObservationComponentCreator<?>>();
         for (var factory : factories) {
-            map.put(factory.getRegisterId(), factory.create());
+            map.put(factory.getRegisterId(), factory.create(mob));
         }
         this.components = map;
     }

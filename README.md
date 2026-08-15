@@ -108,6 +108,8 @@ sequenceDiagram
 3. 对生物 **Shift + 右键** 创建环境（环境绑定到该实体的 UUID）
 4. 再次 **Shift + 右键** 删除环境
 
+专用服务器/RCON 场景可用等价指令：`/gymcraft env create <target> [type]` 与 `/gymcraft env remove <target>`。
+
 ### 3. 用 Python 客户端连接
 
 ```powershell
@@ -181,8 +183,10 @@ GymCraft 实现了对两种原版 AI 系统的压制策略，确保实体只受 
 src/main/
 ├── java/io/github/mousemeya/gymcraft/
 │   ├── gym/
-│   │   ├── action/         动作控制器（step_move, move_to, attack_once ...）
-│   │   ├── observation/    观测生成器（self, world, nearby_blocks ...）
+│   │   ├── action/         动作控制器（step_move, move_to, open_menu, move_menu_item ...）
+│   │   ├── observation/    观测生成器（self, world, nearby_blocks, menu ...）
+│   │   ├── menu/           逻辑菜单会话（LogicalMenuSession(s), AgentInventoryBridge, MenuAdapters）
+│   │   ├── inventory/      Agent 统一物品栏布局（AgentInventoryLayout，slot_id 分配）
 │   │   ├── env/            环境抽象（McEnv, AbstractMcEnv, SimpleMobEnv）
 │   │   ├── rpc/            gRPC 桥接（GymCraftRpcServer, GymEnvService, ProtoJson）
 │   │   ├── runtime/        运行时调度（AgentRuntime）
@@ -207,6 +211,12 @@ src/main/
 | `set_attack_target` | 设置攻击目标 |
 | `attack_once` | 单次近战攻击 |
 | `noop` | 空操作（实体保持静止） |
+| `break_block` | 破坏方块（FakePlayer 复用原版破坏逻辑） |
+| `set_block` | 放置/替换方块（复用 /setblock 解析链路） |
+| `open_menu` | 打开逻辑菜单会话（目标：方块 / 实体 / 自身背包），details 返回 `session_id` |
+| `close_menu` | 按 `session_id` 关闭当前菜单会话 |
+| `move_menu_item` | 在会话槽位间移动物品（slot_id 寻址，受 stale 校验保护） |
+| `click_menu_button` | 点击菜单按钮（讲台翻页、切石机选配方等已适配菜单） |
 
 ## 观测组件
 
@@ -216,7 +226,11 @@ src/main/
 | `world` | 世界状态（时间、天气、维度） |
 | `nearby_entities` | 周围范围内的所有生物 |
 | `nearby_blocks` | 周围空气连通域可见表面的非空气方块 |
-| `inventory` | 装备栏与手持物品 |
+| `menu` | 当前菜单会话（session_id、槽位/物品、类别、属性、按钮）；无会话时 `open=false` |
+
+### 逻辑菜单
+
+`open_menu` 在服务端建立逻辑菜单会话（方块 / 实体 / 自身背包三类目标），不要求真实客户端打开 Screen。所有槽位用统一的 `slot_id` 寻址：0–7 为装备槽、8 起为 Mob 自带容器槽、菜单自有槽随会话分配。`move_menu_item` / `click_menu_button` 受快照 stale 校验保护——先取最新 `menu` 观测再发动作即可；状态过期时动作安全失败（`stale_menu_state=true`），不修改物品。已适配按钮：讲台翻页/取书、切石机选配方、织布机选图案。完整示例见 `src/main/python/examples/menu_debug.py`，设计文档见 `docs/menu-interaction-implementation-plan.md`。
 
 ---
 
@@ -233,6 +247,9 @@ uv run mypy src examples
 # 打包 wheel/sdist
 cd ..\..\..
 .\gradlew packagePython
+
+# 服务端 GameTest（无需客户端）
+.\gradlew runGameTestServer
 ```
 
 GitHub Actions 在 push 到 `master` 或 pull request 时执行同样流程：生成 Python gRPC 桩、运行 mypy、打包 Python 分发文件，并上传 `gymcraft-python-dist` artifact。Linux runner 上会先执行 `chmod +x gradlew`，避免 `./gradlew: Permission denied`。

@@ -145,7 +145,7 @@ public class SetAttackTargetController extends AbstractActionComponentController
      */
     public static final class Factory implements ActionComponentFactory<ProtoSetAttackTarget> {
         @Override
-        public SetAttackTargetController create() {
+        public SetAttackTargetController create(Mob mob) {
             return new SetAttackTargetController();
         }
     }

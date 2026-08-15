@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package gymcraft.gym.observation;
+
+import "gymcraft/gym/observation/common/slot.proto";
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.observation.proto";
+option java_outer_classname = "MenuProto";
+
+message ProtoMenuObservation {
+  bool open = 1;
+  uint64 session_id = 2;
+  string menu_type = 3;
+  string title = 4;
+  repeated ProtoSlotView slots = 5;
+  repeated ProtoMenuProperty properties = 6;
+  repeated ProtoMenuButton buttons = 7;
+}
+
+message ProtoMenuProperty {
+  int32 data_slot = 1;
+  string name = 2;
+  int32 value = 3;
+}
+
+message ProtoMenuButton {
+  int32 button_id = 1;
+  string name = 2;
+  bool enabled = 3;
+}

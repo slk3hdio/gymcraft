@@ -8,14 +8,12 @@ empty block position above a nearby solid block unless --place-pos is provided,
 sends set_block, then sends break_block for the placed or selected target.
 
 set_block follows /setblock semantics: the block to place is given as a block id
-string (e.g. "minecraft:stone" or "minecraft:oak_stairs[facing=north]"). By default
-the first non-empty inventory slot's item id is used as the block id; override it
-with --block. The entity must hold the matching block item in its main hand;
+string (e.g. "minecraft:stone" or "minecraft:oak_stairs[facing=north]") via
+--block. The entity must hold the matching block item in its main hand;
 one item is consumed per successful placement.
 
 --place-count N places N blocks consecutively (auto-selecting a new target each
-iteration when --place-pos is not given); the inventory is printed after every
-placement so item consumption can be observed.
+iteration when --place-pos is not given).
 """
 from __future__ import annotations
 
@@ -27,11 +25,10 @@ from typing import Any
 
 from gymcraft.client import GymCraftEnv, unpack_component
 from gymcraft.gym.action.components import break_block_pb2, noop_pb2, set_block_pb2
-from gymcraft.gym.observation.components import inventory_pb2, nearby_blocks_pb2, self_pb2
+from gymcraft.gym.observation.components import nearby_blocks_pb2, self_pb2
 
 SELF_KEY = "gymcraft:self"
 NEARBY_BLOCKS_KEY = "gymcraft:nearby_blocks"
-INVENTORY_KEY = "gymcraft:inventory"
 SET_BLOCK_KEY = "gymcraft:set_block"
 BREAK_BLOCK_KEY = "gymcraft:break_block"
 NOOP_KEY = "gymcraft:noop"
@@ -45,10 +42,6 @@ def unpack_self(obs: Any) -> self_pb2.ProtoSelfState:
 
 def unpack_nearby_blocks(obs: Any) -> nearby_blocks_pb2.ProtoNearbyBlocks:
     return unpack_component(obs, NEARBY_BLOCKS_KEY, nearby_blocks_pb2.ProtoNearbyBlocks)
-
-
-def unpack_inventory(obs: Any) -> inventory_pb2.ProtoInventory:
-    return unpack_component(obs, INVENTORY_KEY, inventory_pb2.ProtoInventory)
 
 
 def eye_distance(self_state: self_pb2.ProtoSelfState, pos: Pos) -> float:
@@ -84,18 +77,6 @@ def print_self(obs: Any) -> self_pb2.ProtoSelfState:
     return state
 
 
-def print_inventory(obs: Any, observation_keys: set[str]) -> None:
-    if INVENTORY_KEY not in observation_keys:
-        print(f"inventory unavailable: {INVENTORY_KEY} is not in observation space")
-        return
-
-    slots = unpack_inventory(obs).slots
-    print(f"inventory slots={len(slots)}")
-    for slot in slots[:10]:
-        if not slot.empty:
-            print(f"  slot={slot.slot} item={slot.item_id} count={slot.count}")
-
-
 def print_nearby_blocks(obs: Any, limit: int) -> set[Pos]:
     blocks = sorted(unpack_nearby_blocks(obs).blocks, key=lambda block: block.distance)
     print(f"nearby_blocks count={len(blocks)}")
@@ -105,15 +86,6 @@ def print_nearby_blocks(obs: Any, limit: int) -> set[Pos]:
             f"id={block.block_id} dist={block.distance:.3f}"
         )
     return {(block.x, block.y, block.z) for block in blocks}
-
-
-def held_item_id(obs: Any) -> str | None:
-    """Return the first non-empty inventory slot's item id, or None."""
-    for slot in unpack_inventory(obs).slots:
-        item_id: str = slot.item_id
-        if not slot.empty:
-            return item_id
-    return None
 
 
 def candidate_place_positions(support: Pos) -> Iterable[Pos]:
@@ -173,7 +145,7 @@ def main() -> None:
     parser.add_argument("--place-pos", nargs=3, type=int, metavar=("X", "Y", "Z"), help="Block position to place into")
     parser.add_argument("--place-count", type=int, default=1, help="How many blocks to place consecutively")
     parser.add_argument("--break-pos", nargs=3, type=int, metavar=("X", "Y", "Z"), help="Block position to break")
-    parser.add_argument("--block", default=None, help='Block id to set, e.g. "minecraft:stone" or "minecraft:oak_stairs[facing=north]"; defaults to the held item id')
+    parser.add_argument("--block", default=None, help='Block id to set, e.g. "minecraft:stone" or "minecraft:oak_stairs[facing=north]"')
     parser.add_argument("--max-reach", type=float, default=4.5, help="Maximum eye distance used by auto target selection")
     parser.add_argument("--limit", type=int, default=20, help="How many nearby blocks to print")
     parser.add_argument("--skip-place", action="store_true", help="Only run break_block")
@@ -207,13 +179,12 @@ def main() -> None:
         obs = resp.observation
         print_header("connect", obs)
         print_self(obs)
-        print_inventory(obs, observation_keys)
         occupied = print_nearby_blocks(obs, args.limit)
 
         place_pos = parse_pos(args.place_pos)
-        block_id = args.block or held_item_id(obs)
+        block_id = args.block
         if not args.skip_place and block_id is None:
-            raise RuntimeError("no held block item found in inventory; provide --block")
+            raise RuntimeError("provide --block (the gymcraft:inventory observation component was removed)")
         placed_positions: list[Pos] = []
         if not args.skip_place:
             for i in range(args.place_count):
@@ -237,7 +208,6 @@ def main() -> None:
                 )
                 obs = resp.observation
                 placed_positions.append(target)
-                print_inventory(obs, observation_keys)
                 if not action_completed(resp):
                     print(f"set_block #{i + 1} did not complete; stopping placement loop")
                     break

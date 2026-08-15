@@ -86,7 +86,7 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
      */
     public static final class Factory implements ActionComponentFactory<ProtoStepMove> {
         @Override
-        public StepMoveController create() {
+        public StepMoveController create(Mob mob) {
             return new StepMoveController();
         }
     }

@@ -74,7 +74,7 @@ public abstract class AbstractMcEnv implements McEnv {
         Collection<ActionComponentFactory<?>> actionComponentFactories,
         Collection<ObservationComponentFactory<?>> observationComponents
     ) {
-        this(envTypeId, mob, new ActionDispatcher(mob, actionComponentFactories), new ObservationComposer(observationComponents));
+        this(envTypeId, mob, new ActionDispatcher(mob, actionComponentFactories), new ObservationComposer(mob, observationComponents));
     }
 
     protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionDispatcher actionController, ObservationComposer observationCreator) {

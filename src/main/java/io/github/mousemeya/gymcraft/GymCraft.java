@@ -2,10 +2,13 @@ package io.github.mousemeya.gymcraft;
 
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.EnvFactories;
+import io.github.mousemeya.gymcraft.registry.ModAttachments;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import io.github.mousemeya.gymcraft.item.EnvToolItem;
 import io.github.mousemeya.gymcraft.item.UuidCopierItem;
+import io.github.mousemeya.gymcraft.command.GymCraftCommands;
+import io.github.mousemeya.gymcraft.gametest.GymCraftGameTests;
 import io.github.mousemeya.gymcraft.gym.rpc.GymCraftRpcServer;
 import io.github.mousemeya.gymcraft.network.GymCraftNetwork;
 
@@ -58,6 +61,7 @@ public class GymCraft {
         modEventBus.addListener(GymCraftNetwork::register);
         NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStarted);
         NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStopping);
+        NeoForge.EVENT_BUS.addListener(GymCraftCommands::register);
 
         ITEMS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
@@ -65,6 +69,11 @@ public class GymCraft {
         ActionComponents.REGISTRY.register(modEventBus);
         ObservationCreators.REGISTRY.register(modEventBus);
         EnvFactories.REGISTRY.register(modEventBus);
+        ModAttachments.REGISTRY.register(modEventBus);
+
+        // GameTest：测试函数注册表常驻（无运行副作用），测试实例仅在 GameTest 启用时装配
+        GymCraftGameTests.TEST_FUNCTIONS.register(modEventBus);
+        modEventBus.addListener(GymCraftGameTests::register);
 
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }

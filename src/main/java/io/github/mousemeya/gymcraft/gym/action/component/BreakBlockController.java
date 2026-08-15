@@ -255,7 +255,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
      */
     public static final class Factory implements ActionComponentFactory<ProtoBreakBlock> {
         @Override
-        public BreakBlockController create() {
+        public BreakBlockController create(Mob mob) {
             return new BreakBlockController();
         }
     }

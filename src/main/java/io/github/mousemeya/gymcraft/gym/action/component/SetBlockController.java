@@ -186,7 +186,7 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
      */
     public static final class Factory implements ActionComponentFactory<ProtoSetBlock> {
         @Override
-        public SetBlockController create() {
+        public SetBlockController create(Mob mob) {
             return new SetBlockController();
         }
     }

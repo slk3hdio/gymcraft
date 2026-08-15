@@ -66,7 +66,7 @@ public class NoopController extends AbstractActionComponentController<ProtoNoop>
      */
     public static final class Factory implements ActionComponentFactory<ProtoNoop> {
         @Override
-        public NoopController create() {
+        public NoopController create(Mob mob) {
             return new NoopController();
         }
     }

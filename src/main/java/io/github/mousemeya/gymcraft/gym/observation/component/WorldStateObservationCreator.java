@@ -62,7 +62,7 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
      */
     public static final class Factory implements ObservationComponentFactory<ProtoWorldState> {
         @Override
-        public WorldStateObservationCreator create() {
+        public WorldStateObservationCreator create(Mob mob) {
             return new WorldStateObservationCreator();
         }
     }

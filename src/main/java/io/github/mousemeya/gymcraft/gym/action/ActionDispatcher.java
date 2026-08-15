@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -22,7 +23,14 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * {@link ActionComponentController} 执行。
  * <p>
  * 校验流程：类型匹配 → 参数合法性 → 执行；任意步骤失败仅跳过，不影响其他组件。
- * 分发器持有每个动作类型在当前环境中创建的独立 controller 实例（id → 实例）。
+ * 分发器持有每个动作类型在当前环境中创建的独立 controller 实例（id → 实例，
+ * {@link LinkedHashMap} 保持工厂声明顺序）。
+ * </p>
+ * <p>
+ * 执行顺序约定：apply/tick/onInterrupt/getState 一律按环境声明顺序
+ * （{@link #components} 的迭代顺序）处理 action 中实际出现的组件，
+ * 不依赖 protobuf map 的迭代顺序；每个组件的 {@link ActionState} 单独收集，
+ * 总体状态经 {@link ActionState#aggregate} 按组件聚合契约生成。
  * </p>
  */
 public class ActionDispatcher {
@@ -34,7 +42,7 @@ public class ActionDispatcher {
         var map = new LinkedHashMap<String, ActionComponentController<?>>();
         var unsupported = new ArrayList<String>();
         for (var factory : factories) {
-            var controller = factory.create();
+            var controller = factory.create(mob);
             if (!controller.supports(mob)) {
                 unsupported.add(factory.getRegisterId());
             }
@@ -74,7 +82,12 @@ public class ActionDispatcher {
         return controller.space();
     }
 
-    /** 将 ProtoMcAction 中的所有组件依次分发执行，并聚合组件返回的控制策略。 */
+    /**
+     * 将 ProtoMcAction 中的组件按环境声明顺序依次分发执行，并聚合组件返回的控制策略与状态。
+     * <p>
+     * proto 中出现但未注册的组件不产生执行副作用，以 failed 状态按 proto map 顺序并入聚合。
+     * </p>
+     */
     public ActionApplyResult apply(Mob mob, ProtoMcAction action) {
         if (action == null) {
             return ActionApplyResult.none(ActionState.failed("action is null"));
@@ -83,17 +96,30 @@ public class ActionDispatcher {
             return ActionApplyResult.none(ActionState.failed("action has no components"));
         }
 
-        var result = ActionApplyResult.none();
-        for (var entry : action.getComponentsMap().entrySet()) {
-            var controller = components.get(entry.getKey());
-            if (controller == null) {
-                LOGGER.debug("No action component controller for key: {}", entry.getKey());
-                result = result.merge(ActionApplyResult.none(ActionState.failed("unknown action component", Map.of("key", entry.getKey()))));
+        var policy = ActionControlPolicy.none();
+        boolean appliedAny = false;
+        List<Map.Entry<String, ActionState>> componentStates = new ArrayList<>();
+        // 按环境声明顺序执行 action 中实际出现的组件
+        for (var entry : this.components.entrySet()) {
+            var any = action.getComponentsMap().get(entry.getKey());
+            if (any == null) {
                 continue;
             }
-            result = result.merge(applyComponent(controller, mob, entry.getValue(), entry.getKey()));
+            var result = applyComponent(entry.getValue(), mob, any, entry.getKey());
+            policy = policy.merge(result.policy());
+            appliedAny |= result.appliedAnyComponent();
+            componentStates.add(Map.entry(entry.getKey(), result.initialState()));
         }
-        return result;
+        // proto 中出现但未注册的组件：以 failed 状态并入聚合
+        for (var entry : action.getComponentsMap().entrySet()) {
+            if (this.components.containsKey(entry.getKey())) {
+                continue;
+            }
+            LOGGER.debug("No action component controller for key: {}", entry.getKey());
+            componentStates.add(Map.entry(entry.getKey(),
+                ActionState.failed("unknown action component", Map.of("key", entry.getKey()))));
+        }
+        return new ActionApplyResult(policy, appliedAny, ActionState.aggregate(componentStates));
     }
 
     /** 对单个动作组件执行类型校验、参数校验和执行。 */
@@ -123,31 +149,31 @@ public class ActionDispatcher {
         }
     }
 
-    /** 将 RUNNING 中动作的所有组件逐 tick 分发到对应控制器的 {@code tick} 回调。 */
+    /** 将 RUNNING 中动作的所有组件按环境声明顺序逐 tick 分发到对应控制器的 {@code tick} 回调。 */
     public void tick(Mob mob, ProtoMcAction action) {
         if (action == null) {
             return;
         }
-        for (var entry : action.getComponentsMap().entrySet()) {
-            var controller = components.get(entry.getKey());
-            if (controller == null) {
+        for (var entry : this.components.entrySet()) {
+            var any = action.getComponentsMap().get(entry.getKey());
+            if (any == null) {
                 continue;
             }
-            dispatchComponentCallback(controller, mob, entry.getValue(), entry.getKey(), true);
+            dispatchComponentCallback(entry.getValue(), mob, any, entry.getKey(), true);
         }
     }
 
-    /** RUNNING 中的动作被打断时，将中断事件分发到各组件控制器做状态清理。 */
+    /** RUNNING 中的动作被打断时，按环境声明顺序将中断事件分发到各组件控制器做状态清理。 */
     public void onInterrupt(Mob mob, ProtoMcAction action) {
         if (action == null) {
             return;
         }
-        for (var entry : action.getComponentsMap().entrySet()) {
-            var controller = components.get(entry.getKey());
-            if (controller == null) {
+        for (var entry : this.components.entrySet()) {
+            var any = action.getComponentsMap().get(entry.getKey());
+            if (any == null) {
                 continue;
             }
-            dispatchComponentCallback(controller, mob, entry.getValue(), entry.getKey(), false);
+            dispatchComponentCallback(entry.getValue(), mob, any, entry.getKey(), false);
         }
     }
 
@@ -173,22 +199,28 @@ public class ActionDispatcher {
         }
     }
 
+    /**
+     * 按环境声明顺序查询 action 中各组件的当前状态，并经 {@link ActionState#aggregate} 聚合。
+     */
     public ActionState getState(Mob mob, ProtoMcAction action) {
         if (action == null || action.getComponentsCount() == 0) {
             return ActionState.completed("no action components");
         }
 
-        ActionState merged = null;
-        for (var entry : action.getComponentsMap().entrySet()) {
-            var controller = components.get(entry.getKey());
-            if (controller == null) {
-                LOGGER.warn("No action component for key: {}", entry.getKey());
+        List<Map.Entry<String, ActionState>> componentStates = new ArrayList<>();
+        for (var entry : this.components.entrySet()) {
+            var any = action.getComponentsMap().get(entry.getKey());
+            if (any == null) {
                 continue;
             }
-            ActionState state = getComponentState(controller, mob, entry.getValue(), entry.getKey());
-            merged = mergeState(merged, state);
+            componentStates.add(Map.entry(entry.getKey(), getComponentState(entry.getValue(), mob, any, entry.getKey())));
         }
-        return merged == null ? ActionState.completed("no components processed") : merged;
+        for (var key : action.getComponentsMap().keySet()) {
+            if (!this.components.containsKey(key)) {
+                LOGGER.warn("No action component for key: {}", key);
+            }
+        }
+        return ActionState.aggregate(componentStates);
     }
 
     private static <T extends Message> ActionState getComponentState(ActionComponentController<T> controller, Mob mob, Any any, String key) {
@@ -202,24 +234,5 @@ public class ActionDispatcher {
             LOGGER.warn("Failed to unpack action component controller {}: {}", key, e.getMessage());
             return ActionState.failed("unpack error: " + e.getMessage());
         }
-    }
-
-    private static ActionState mergeState(ActionState a, ActionState b) {
-        if (a == null) return b;
-        if (b == null) return a;
-        int cmp = priority(a.status()) - priority(b.status());
-        if (cmp < 0) return b;
-        if (cmp > 0) return a;
-        if (a.status() == ActionStatus.RUNNING) return a;
-        return a;
-    }
-
-    private static int priority(ActionStatus status) {
-        return switch (status) {
-            case COMPLETED -> 0;
-            case RUNNING -> 1;
-            case INTERRUPTED -> 2;
-            case FAILED -> 3;
-        };
     }
 }

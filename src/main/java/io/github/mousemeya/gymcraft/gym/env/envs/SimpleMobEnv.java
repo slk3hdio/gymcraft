@@ -30,14 +30,18 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ActionComponents.SET_ATTACK_TARGET.get(),
                 ActionComponents.BREAK_BLOCK.get(),
                 ActionComponents.SET_BLOCK.get(),
-                ActionComponents.ATTACK_ONCE.get()
+                ActionComponents.ATTACK_ONCE.get(),
+                ActionComponents.OPEN_MENU.get(),
+                ActionComponents.CLOSE_MENU.get(),
+                ActionComponents.MOVE_MENU_ITEM.get(),
+                ActionComponents.CLICK_MENU_BUTTON.get()
             ),
             List.of(
                 ObservationCreators.SELF.get(),
                 ObservationCreators.WORLD.get(),
                 ObservationCreators.NEARBY_ENTITIES.get(),
                 ObservationCreators.NEARBY_BLOCKS.get(),
-                ObservationCreators.INVENTORY.get()
+                ObservationCreators.MENU.get()
             )
         );
     }
