@@ -136,6 +136,76 @@ dependencies {
     implementation 'io.grpc:grpc-protobuf:1.72.0'
     implementation 'io.grpc:grpc-stub:1.72.0'
     compileOnly 'org.apache.tomcat:annotations-api:6.0.53'
+
+    // JarJar: 把 gRPC/protobuf 运行时依赖内嵌进模组 jar（用户端无需单独提供）。
+    // grpc-netty-shaded 不含 grpc-core/api/context 等类, 需逐个显式内嵌;
+    // guava/gson 由 Minecraft 本体提供, 不内嵌避免版本冲突。
+    jarJar(implementation('io.grpc:grpc-netty-shaded')) {
+        version {
+            strictly '[1.72.0,1.73.0)'
+            prefer '1.72.0'
+        }
+    }
+    jarJar(implementation('io.grpc:grpc-core')) {
+        version {
+            strictly '[1.72.0,1.73.0)'
+            prefer '1.72.0'
+        }
+    }
+    jarJar(implementation('io.grpc:grpc-api')) {
+        version {
+            strictly '[1.72.0,1.73.0)'
+            prefer '1.72.0'
+        }
+    }
+    jarJar(implementation('io.grpc:grpc-context')) {
+        version {
+            strictly '[1.72.0,1.73.0)'
+            prefer '1.72.0'
+        }
+    }
+    jarJar(implementation('io.grpc:grpc-util')) {
+        version {
+            strictly '[1.72.0,1.73.0)'
+            prefer '1.72.0'
+        }
+    }
+    jarJar(implementation('io.grpc:grpc-protobuf')) {
+        version {
+            strictly '[1.72.0,1.73.0)'
+            prefer '1.72.0'
+        }
+    }
+    jarJar(implementation('io.grpc:grpc-protobuf-lite')) {
+        version {
+            strictly '[1.72.0,1.73.0)'
+            prefer '1.72.0'
+        }
+    }
+    jarJar(implementation('io.grpc:grpc-stub')) {
+        version {
+            strictly '[1.72.0,1.73.0)'
+            prefer '1.72.0'
+        }
+    }
+    jarJar(implementation('io.perfmark:perfmark-api')) {
+        version {
+            strictly '[0.27.0,0.28.0)'
+            prefer '0.27.0'
+        }
+    }
+    jarJar(implementation('com.google.api.grpc:proto-google-common-protos')) {
+        version {
+            strictly '[2.51.0,2.52.0)'
+            prefer '2.51.0'
+        }
+    }
+    jarJar(implementation('com.google.protobuf:protobuf-java')) {
+        version {
+            strictly '[4.30.2,4.31.0)'
+            prefer '4.30.2'
+        }
+    }
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
