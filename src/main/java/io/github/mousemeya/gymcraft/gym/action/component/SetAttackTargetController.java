@@ -35,11 +35,13 @@ public class SetAttackTargetController extends AbstractActionComponentController
         "target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
-    public SetAttackTargetController() {
+    public SetAttackTargetController(Mob mob) {
+        super(mob);
     }
 
     @Override
-    public boolean supports(Mob mob) {
+    public boolean supports() {
+        Mob mob = this.mob();
         return this.supportEntity(mob.getClass()) && mob.getAttribute(Attributes.ATTACK_DAMAGE) != null;
     }
 
@@ -71,7 +73,8 @@ public class SetAttackTargetController extends AbstractActionComponentController
     }
 
     @Override
-    public ActionApplyResult apply(Mob mob, ProtoSetAttackTarget component) {
+    public ActionApplyResult apply(ProtoSetAttackTarget component) {
+        Mob mob = this.mob();
         LivingEntity target = findTarget(mob, component);
         mob.setTarget(target);
 
@@ -106,7 +109,8 @@ public class SetAttackTargetController extends AbstractActionComponentController
     }
 
     @Override
-    public ActionState getState(Mob mob, ProtoSetAttackTarget component) {
+    public ActionState getState(ProtoSetAttackTarget component) {
+        Mob mob = this.mob();
         LivingEntity target = findTarget(mob, component);
         if (target == null) {
             return ActionState.completed("target no longer loaded");
@@ -146,7 +150,7 @@ public class SetAttackTargetController extends AbstractActionComponentController
     public static final class Factory implements ActionComponentFactory<ProtoSetAttackTarget> {
         @Override
         public SetAttackTargetController create(Mob mob) {
-            return new SetAttackTargetController();
+            return new SetAttackTargetController(mob);
         }
     }
 }

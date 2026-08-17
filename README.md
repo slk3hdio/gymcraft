@@ -118,30 +118,22 @@ uv sync                              # 安装依赖
 
 ```python
 from gymcraft import GymCraftEnv
-from gymcraft import unpack_component
 from gymcraft.gym.action.components import step_move_pb2
-from gymcraft.gym.observation.components import self_pb2
 
 # 按实体 UUID 连接已存在的环境（默认 localhost:50051）
 env = GymCraftEnv("entity-uuid-here")
 
-reset_response = env.reset()
-self_obs = unpack_component(
-    reset_response.observation,
-    "gymcraft:self",
-    self_pb2.ProtoSelfState,
-)
+obs, reset_info = env.reset()          # (observation, info)
+self_state = obs["gymcraft:self"]      # 组件键即完整注册 id（含 gymcraft: 前缀）
 
-step_response = env.step({
+obs, reward, terminated, truncated, step_info = env.step({
+    "timeout_seconds": 0.0,            # 动作级超时（秒），<= 0 表示不限制
     "gymcraft:step_move": step_move_pb2.ProtoStepMove(forward=1.0, jump=True),
 })
-reward = step_response.reward
-terminated = step_response.terminated
-truncated = step_response.truncated
 env.close()
 ```
 
-> `reset()` 返回 `ResetResponse`，`step()` 返回 `StepResponse`。`step()` 接受 `{组件 ID: protobuf 消息}` 字典，内部由 `make_action()` 打包为 `ProtoMcAction`。
+> `reset()` 返回 `(observation, info)`，`step()` 返回 `(observation, reward, terminated, truncated, info)`（Gymnasium 风格），其中 `observation` 是解包后的 `Observation` dict（`header` + 组件键），`make_action()` 负责把动作 dict 打包为 wire 上的 `ProtoMcAction`，`unpack_observation()` 把原始 `ProtoMcObservation` 转回 `Observation`——`reset()`/`step()` 内部已自动完成。
 
 ---
 
@@ -158,7 +150,7 @@ env.close()
 
 - 服务端实现 `GymCraftRpcServer`，随 `ServerStartedEvent` 启动、`ServerStoppingEvent` 关闭。
 - 配置项（common config）：`rpcEnabled`（默认 `true`）、`rpcPort`（默认 `50051`）。
-- 动作/观测以 protobuf 传输；`info` / `options` / `metadata` 为 `google.protobuf.Struct`。
+- 动作/观测以 protobuf 传输；`info` / `options` / `metadata` 为 JSON 字符串。
 
 ---
 

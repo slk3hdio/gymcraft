@@ -72,11 +72,13 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         }
     }
 
-    public BreakBlockController() {
+    public BreakBlockController(Mob mob) {
+        super(mob);
     }
 
     @Override
-    public boolean supports(Mob mob) {
+    public boolean supports() {
+        Mob mob = this.mob();
         // 必须具备手持功能:空手视为可持有,手中有物品时按原版规则确认该 Mob 能持有它
         ItemStack held = mob.getMainHandItem();
         return this.supportEntity(mob.getClass()) && (held.isEmpty() || mob.canHoldItem(held));
@@ -102,7 +104,8 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     }
 
     @Override
-    public ActionApplyResult apply(Mob mob, ProtoBreakBlock component) {
+    public ActionApplyResult apply(ProtoBreakBlock component) {
+        Mob mob = this.mob();
         if (!(mob.level() instanceof ServerLevel level)) {
             return ActionApplyResult.none(ActionState.failed("not in a server level"));
         }
@@ -136,7 +139,8 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     }
 
     @Override
-    public void tick(Mob mob, ProtoBreakBlock component) {
+    public void tick(ProtoBreakBlock component) {
+        Mob mob = this.mob();
         MiningState mining = this.miningState;
         if (mining == null || mining.terminal != null) {
             return;
@@ -168,7 +172,8 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     }
 
     @Override
-    public void onInterrupt(Mob mob, ProtoBreakBlock component) {
+    public void onInterrupt(ProtoBreakBlock component) {
+        Mob mob = this.mob();
         MiningState mining = this.miningState;
         this.miningState = null;
         if (mining != null && mob.level() instanceof ServerLevel level) {
@@ -178,7 +183,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     }
 
     @Override
-    public ActionState getState(Mob mob, ProtoBreakBlock component) {
+    public ActionState getState(ProtoBreakBlock component) {
         MiningState mining = this.miningState;
         if (mining == null) {
             return ActionState.failed("no mining in progress");
@@ -256,7 +261,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     public static final class Factory implements ActionComponentFactory<ProtoBreakBlock> {
         @Override
         public BreakBlockController create(Mob mob) {
-            return new BreakBlockController();
+            return new BreakBlockController(mob);
         }
     }
 }

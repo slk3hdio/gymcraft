@@ -50,7 +50,8 @@ public class ClickMenuButtonController extends AbstractActionComponentController
         "button_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
     ));
 
-    public ClickMenuButtonController() {
+    public ClickMenuButtonController(Mob mob) {
+        super(mob);
     }
 
     @Override
@@ -72,7 +73,8 @@ public class ClickMenuButtonController extends AbstractActionComponentController
     }
 
     @Override
-    public ActionApplyResult apply(Mob mob, ProtoClickMenuButton component) {
+    public ActionApplyResult apply(ProtoClickMenuButton component) {
+        Mob mob = this.mob();
         int buttonId = component.getButtonId();
         LogicalMenuSession session = LogicalMenuSessions.current(mob);
         if (session == null) {
@@ -172,7 +174,7 @@ public class ClickMenuButtonController extends AbstractActionComponentController
     }
 
     @Override
-    public ActionState getState(Mob mob, ProtoClickMenuButton component) {
+    public ActionState getState(ProtoClickMenuButton component) {
         return ActionState.completed("click menu button applied");
     }
 
@@ -182,7 +184,7 @@ public class ClickMenuButtonController extends AbstractActionComponentController
     public static final class Factory implements ActionComponentFactory<ProtoClickMenuButton> {
         @Override
         public ClickMenuButtonController create(Mob mob) {
-            return new ClickMenuButtonController();
+            return new ClickMenuButtonController(mob);
         }
     }
 }

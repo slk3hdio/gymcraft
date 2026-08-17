@@ -49,7 +49,7 @@ message StepResponse {
   double reward = 2;
   bool terminated = 3;
   bool truncated = 4;
-  string info = 5;
+  string info = 5; // 详细信息的JSON字符串表示
 }
 
 message CloseSessionRequest {

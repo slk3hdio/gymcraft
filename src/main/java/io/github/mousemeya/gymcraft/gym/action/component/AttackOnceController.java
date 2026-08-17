@@ -33,11 +33,13 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
         "target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
-    public AttackOnceController() {
+    public AttackOnceController(Mob mob) {
+        super(mob);
     }
 
     @Override
-    public boolean supports(Mob mob) {
+    public boolean supports() {
+        Mob mob = this.mob();
         return this.supportEntity(mob.getClass()) && mob.getAttribute(Attributes.ATTACK_DAMAGE) != null;
     }
 
@@ -57,7 +59,8 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
     }
 
     @Override
-    public ActionApplyResult apply(Mob mob, ProtoAttackOnce component) {
+    public ActionApplyResult apply(ProtoAttackOnce component) {
+        Mob mob = this.mob();
         LivingEntity target = null;
         if (component.getTargetEntityId() > 0) {
             var found = mob.level().getEntity(component.getTargetEntityId());
@@ -81,7 +84,7 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
     }
 
     @Override
-    public ActionState getState(Mob mob, ProtoAttackOnce component) {
+    public ActionState getState(ProtoAttackOnce component) {
         return ActionState.completed("attack applied");
     }
 
@@ -91,7 +94,7 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
     public static final class Factory implements ActionComponentFactory<ProtoAttackOnce> {
         @Override
         public AttackOnceController create(Mob mob) {
-            return new AttackOnceController();
+            return new AttackOnceController(mob);
         }
     }
 }

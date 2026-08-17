@@ -97,7 +97,7 @@ public final class MenuGameTestSupport {
     }
 
     public static ActionState moveMenuItem(Mob mob, long sessionId, int sourceSlotId, int targetSlotId, int count) {
-        return new MoveMenuItemController().apply(mob, ProtoMoveMenuItem.newBuilder()
+        return new MoveMenuItemController(mob).apply(ProtoMoveMenuItem.newBuilder()
             .setSessionId(sessionId)
             .setSourceSlotId(sourceSlotId)
             .setTargetSlotId(targetSlotId)
@@ -106,13 +106,13 @@ public final class MenuGameTestSupport {
     }
 
     public static ActionState closeMenu(Mob mob, long sessionId) {
-        return new CloseMenuController().apply(mob, ProtoCloseMenu.newBuilder()
+        return new CloseMenuController(mob).apply(ProtoCloseMenu.newBuilder()
             .setSessionId(sessionId)
             .build()).initialState();
     }
 
     public static ActionState clickButton(Mob mob, long sessionId, int buttonId) {
-        return new ClickMenuButtonController().apply(mob, ProtoClickMenuButton.newBuilder()
+        return new ClickMenuButtonController(mob).apply(ProtoClickMenuButton.newBuilder()
             .setSessionId(sessionId)
             .setButtonId(buttonId)
             .build()).initialState();

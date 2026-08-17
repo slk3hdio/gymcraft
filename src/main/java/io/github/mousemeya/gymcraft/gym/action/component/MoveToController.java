@@ -39,7 +39,8 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         "stop_distance", new BoxSpace(0, 128, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
-    public MoveToController() {
+    public MoveToController(Mob mob) {
+        super(mob);
     }
 
     @Override
@@ -63,7 +64,8 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
     }
 
     @Override
-    public ActionApplyResult apply(Mob mob, ProtoMoveTo component) {
+    public ActionApplyResult apply(ProtoMoveTo component) {
+        Mob mob = this.mob();
         boolean moved = mob.getNavigation().moveTo(component.getX(), component.getY(), component.getZ(), 1.0);
         Path path = mob.getNavigation().getPath();
         var policy = ActionControlPolicy.none()
@@ -90,7 +92,8 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
     }
 
     @Override
-    public ActionState getState(Mob mob, ProtoMoveTo component) {
+    public ActionState getState(ProtoMoveTo component) {
+        Mob mob = this.mob();
         double dx = mob.getX() - component.getX();
         double dy = mob.getY() - component.getY();
         double dz = mob.getZ() - component.getZ();
@@ -177,7 +180,7 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
     public static final class Factory implements ActionComponentFactory<ProtoMoveTo> {
         @Override
         public MoveToController create(Mob mob) {
-            return new MoveToController();
+            return new MoveToController(mob);
         }
     }
 }

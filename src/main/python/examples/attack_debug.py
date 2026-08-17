@@ -11,29 +11,32 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Any
+from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv, unpack_component
+from gymcraft.client import GymCraftEnv
 from gymcraft.gym.action.components import attack_once_pb2, set_attack_target_pb2
 from gymcraft.gym.observation.components import nearby_entities_pb2, self_pb2
-
-SELF_KEY = "gymcraft:self"
-NEARBY_ENTITIES_KEY = "gymcraft:nearby_entities"
-SET_ATTACK_TARGET_KEY = "gymcraft:set_attack_target"
-ATTACK_ONCE_KEY = "gymcraft:attack_once"
+from gymcraft.type_info import (
+    ACTION_ATTACK_ONCE,
+    ACTION_SET_ATTACK_TARGET,
+    OBS_NEARBY_ENTITIES,
+    OBS_SELF,
+    TIMEOUT_SECONDS,
+)
 
 
 def unpack_self(obs: Any) -> self_pb2.ProtoSelfState:
-    return unpack_component(obs, SELF_KEY, self_pb2.ProtoSelfState)
+    return cast(self_pb2.ProtoSelfState, obs[OBS_SELF])
 
 
 def unpack_nearby_entities(obs: Any) -> nearby_entities_pb2.ProtoNearbyEntities:
-    return unpack_component(obs, NEARBY_ENTITIES_KEY, nearby_entities_pb2.ProtoNearbyEntities)
+    return cast(nearby_entities_pb2.ProtoNearbyEntities, obs[OBS_NEARBY_ENTITIES])
 
 
 def print_header(prefix: str, obs: Any, info: dict[str, Any] | None = None) -> None:
-    status = obs.header.last_action_status or "(none)"
-    desc = obs.header.last_action_description or "(none)"
+    header = obs["header"]
+    status = header.last_action_status or "(none)"
+    desc = header.last_action_description or "(none)"
     print(f"{prefix} header=[{status}] {desc}")
     if info is not None:
         print(f"{prefix} info_action_state={info.get('action_state', {})}")
@@ -96,13 +99,13 @@ def main() -> None:
         print(f"action_keys={sorted(action_keys)}")
         print(f"observation_keys={sorted(observation_keys)}")
 
-        if NEARBY_ENTITIES_KEY not in observation_keys:
-            raise RuntimeError(f"remote env does not expose {NEARBY_ENTITIES_KEY}")
-        if SET_ATTACK_TARGET_KEY not in action_keys:
-            raise RuntimeError(f"remote env does not expose {SET_ATTACK_TARGET_KEY}")
+        if OBS_NEARBY_ENTITIES not in observation_keys:
+            raise RuntimeError(f"remote env does not expose {OBS_NEARBY_ENTITIES}")
+        if ACTION_SET_ATTACK_TARGET not in action_keys:
+            raise RuntimeError(f"remote env does not expose {ACTION_SET_ATTACK_TARGET}")
 
-        resp = env.reset()
-        obs, reset_info = resp.observation, json.loads(resp.info)
+        obs, raw_reset_info = env.reset()
+        reset_info = json.loads(raw_reset_info)
         print_header("reset", obs)
         print(f"reset info={reset_info}")
         print_nearby(obs, args.limit)
@@ -117,24 +120,28 @@ def main() -> None:
             f"uuid={target.uuid} dist={target.distance:.3f} hostile={target.hostile}"
         )
 
-        set_target_action = {
-            SET_ATTACK_TARGET_KEY: set_attack_target_pb2.ProtoSetAttackTarget(target_entity_id=target.entity_id)
-        }
-        resp = env.step(set_target_action)
-        obs, reward, terminated, truncated, info = resp.observation, resp.reward, resp.terminated, resp.truncated, json.loads(resp.info)
+        obs, reward, terminated, truncated, raw_info = env.step({
+            TIMEOUT_SECONDS: 0.0,
+            ACTION_SET_ATTACK_TARGET: set_attack_target_pb2.ProtoSetAttackTarget(
+                target_entity_id=target.entity_id
+            ),
+        })
+        info = json.loads(raw_info)
         print(f"set_attack_target reward={reward:+.3f} term={terminated} trunc={truncated}")
         print_header("set_attack_target", obs, info)
         print_nearby(obs, args.limit)
 
-        if ATTACK_ONCE_KEY not in action_keys:
-            print(f"skip attack_once: {ATTACK_ONCE_KEY} is not in action space")
+        if ACTION_ATTACK_ONCE not in action_keys:
+            print(f"skip attack_once: {ACTION_ATTACK_ONCE} is not in action space")
             return
 
-        attack_action = {
-            ATTACK_ONCE_KEY: attack_once_pb2.ProtoAttackOnce(target_entity_id=target.entity_id)
-        }
-        resp = env.step(attack_action)
-        obs, reward, terminated, truncated, info = resp.observation, resp.reward, resp.terminated, resp.truncated, json.loads(resp.info)
+        obs, reward, terminated, truncated, raw_info = env.step({
+            TIMEOUT_SECONDS: 0.0,
+            ACTION_ATTACK_ONCE: attack_once_pb2.ProtoAttackOnce(
+                target_entity_id=target.entity_id
+            ),
+        })
+        info = json.loads(raw_info)
         print(f"attack_once reward={reward:+.3f} term={terminated} trunc={truncated}")
         print_header("attack_once", obs, info)
         print_nearby(obs, args.limit)

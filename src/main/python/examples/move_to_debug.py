@@ -14,16 +14,14 @@ import json
 import math
 from typing import Any
 
-from gymcraft.client import GymCraftEnv, unpack_component
+from gymcraft.client import GymCraftEnv
 from gymcraft.gym.action.components import move_to_pb2
 from gymcraft.gym.observation.components import self_pb2
-
-SELF_KEY = "gymcraft:self"
-MOVE_TO_KEY = "gymcraft:move_to"
+from gymcraft.type_info import ACTION_MOVE_TO, Action, OBS_SELF, TIMEOUT_SECONDS
 
 
 def self_position(obs: Any) -> tuple[float, float, float]:
-    state = unpack_component(obs, SELF_KEY, self_pb2.ProtoSelfState)
+    state = obs[OBS_SELF]
     return state.x, state.y, state.z
 
 
@@ -52,8 +50,9 @@ def same_chunk_target(pos: tuple[float, float, float], span: float) -> tuple[flo
 
 def print_state(prefix: str, obs: Any, info: dict[str, Any] | None = None) -> None:
     pos = self_position(obs)
-    header_status = obs.header.last_action_status or "(none)"
-    header_desc = obs.header.last_action_description or "(none)"
+    header = obs["header"]
+    header_status = header.last_action_status or "(none)"
+    header_desc = header.last_action_description or "(none)"
     print(
         f"{prefix} pos=({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}) "
         f"header=[{header_status}] {header_desc}"
@@ -77,8 +76,8 @@ def main() -> None:
         print(f"connected entity={args.entity_uuid} address={args.address}")
         print(f"action_keys={list(env.action_space_spec.get('spaces', {}).keys())}")
 
-        resp = env.reset()
-        obs, reset_info = resp.observation, json.loads(resp.info)
+        obs, raw_reset_info = env.reset()
+        reset_info = json.loads(raw_reset_info)
         print_state("reset", obs)
         print(f"reset info={reset_info}")
 
@@ -89,19 +88,20 @@ def main() -> None:
             f"initial_dist={horizontal_distance(start, target):.3f} stop_dist={args.stop_dist:.3f}"
         )
 
-        action = {
-            MOVE_TO_KEY: move_to_pb2.ProtoMoveTo(
+        action: Action = {
+            TIMEOUT_SECONDS: 0.0,
+            ACTION_MOVE_TO: move_to_pb2.ProtoMoveTo(
                 x=target[0],
                 y=target[1],
                 z=target[2],
                 stop_distance=args.stop_dist,
-            )
+            ),
         }
 
         previous = start
         for i in range(args.steps):
-            resp = env.step(action)
-            obs, reward, terminated, truncated, info = resp.observation, resp.reward, resp.terminated, resp.truncated, json.loads(resp.info)
+            obs, reward, terminated, truncated, raw_info = env.step(action)
+            info = json.loads(raw_info)
             pos = self_position(obs)
             moved = horizontal_distance(previous, pos)
             dist = horizontal_distance(pos, target)
@@ -111,7 +111,7 @@ def main() -> None:
             )
             print_state(f"step={i}", obs, info)
 
-            desc = obs.header.last_action_description
+            desc = obs["header"].last_action_description
             if desc == "reached target" or dist <= args.stop_dist:
                 print(f"done reached target at step={i}")
                 break

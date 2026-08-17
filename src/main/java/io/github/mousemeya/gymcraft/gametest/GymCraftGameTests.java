@@ -93,6 +93,10 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AGGREGATE_ORDER =
         TEST_FUNCTIONS.register("aggregate_declaration_order_and_isolation", () -> ActionAggregateGameTests::aggregateDeclarationOrder);
 
+    // ===== 14.7 动作超时 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ACTION_TIMEOUT_FAILS =
+        TEST_FUNCTIONS.register("action_timeout_fails", () -> ActionTimeoutGameTests::actionTimeoutFails);
+
     // ===== 14.6 按钮 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LECTERN_PAGE_BOUNDS =
         TEST_FUNCTIONS.register("button_lectern_page_bounds", () -> MenuButtonGameTests::lecternPageBounds);

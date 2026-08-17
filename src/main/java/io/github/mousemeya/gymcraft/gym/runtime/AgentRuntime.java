@@ -259,8 +259,9 @@ public class AgentRuntime {
             throw new IllegalStateException("Failed to add restored entity to level: " + restoredMob.getUUID());
         }
 
-        // ④ 替换受控实体，调用环境重置回调并生成重置观测
+        // ④ 替换受控实体，同步更新动作控制器绑定的 Mob，调用环境重置回调并生成重置观测
         this.mob = restoredMob;
+        this.actionController.setMob(restoredMob);
         this.resetHandler.reset(restoredMob, seed, options);
         ActionState state = ActionState.completed("reset");
         return new RuntimeStepResult(this.observationCreator.create(restoredMob, state), state);
@@ -303,7 +304,7 @@ public class AgentRuntime {
                     }
 
                     // 应用动作，得到初始状态与本次动作携带的控制策略
-                    ActionApplyResult result = this.actionController.apply(this.mob, request.action());
+                    ActionApplyResult result = this.actionController.apply(request.action());
                     this.activePolicy = result.policy();
                     LOGGER.info(
                         "GymCraft runtime action applied entity={} initial_status={} description={} details={}",
@@ -357,8 +358,8 @@ public class AgentRuntime {
             // RUNNING 动作：推进逐 tick 进度并检查是否产生终态
             if (this.pendingResult != null && this.pendingResult.isRunning()) {
                 try (var stateZone = profiler.zone("check_action_state")) {
-                    this.actionController.tick(this.mob, this.pendingResult.action());
-                    ActionState state = this.actionController.getState(this.mob, this.pendingResult.action());
+                    this.actionController.tick(this.pendingResult.action());
+                    ActionState state = this.actionController.getState(this.pendingResult.action());
                     if (state.isTerminal()) {
                         LOGGER.info(
                             "GymCraft runtime action terminal entity={} status={} description={} details={}",
@@ -467,7 +468,7 @@ public class AgentRuntime {
         this.clearRuntimeState();
         // RUNNING 动作需要调用 onInterrupt 清理跨 tick 状态
         if (this.pendingResult != null && this.pendingResult.isRunning()) {
-            this.actionController.onInterrupt(this.mob, this.pendingResult.action());
+            this.actionController.onInterrupt(this.pendingResult.action());
         }
         // 以同一观测/状态完成排队动作与当前动作
         ProtoMcObservation observation = this.observationCreator.create(this.mob, deathState);
@@ -499,7 +500,7 @@ public class AgentRuntime {
             return;
         }
         // 通知动作组件清理跨 tick 状态（如挖掘进度、裂纹动画）
-        this.actionController.onInterrupt(this.mob, this.pendingResult.action());
+        this.actionController.onInterrupt(this.pendingResult.action());
         // 以 interrupted 状态生成观测并完成该动作的 future
         ActionState state = ActionState.interrupted(description);
         ProtoMcObservation observation = this.observationCreator.create(this.mob, state);

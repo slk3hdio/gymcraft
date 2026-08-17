@@ -37,7 +37,8 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
         "entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
     ));
 
-    public OpenMenuController() {
+    public OpenMenuController(Mob mob) {
+        super(mob);
     }
 
     @Override
@@ -80,7 +81,8 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
     }
 
     @Override
-    public ActionApplyResult apply(Mob mob, ProtoOpenMenu component) {
+    public ActionApplyResult apply(ProtoOpenMenu component) {
+        Mob mob = this.mob();
         OpenMenuTarget target = toTarget(component);
         if (target == null) {
             return ActionApplyResult.none(ActionState.failed("menu target is not set"));
@@ -106,7 +108,7 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
     }
 
     @Override
-    public ActionState getState(Mob mob, ProtoOpenMenu component) {
+    public ActionState getState(ProtoOpenMenu component) {
         return ActionState.completed("open menu applied");
     }
 
@@ -138,7 +140,7 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
     public static final class Factory implements ActionComponentFactory<ProtoOpenMenu> {
         @Override
         public OpenMenuController create(Mob mob) {
-            return new OpenMenuController();
+            return new OpenMenuController(mob);
         }
     }
 }

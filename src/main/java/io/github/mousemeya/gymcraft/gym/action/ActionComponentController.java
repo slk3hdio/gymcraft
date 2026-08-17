@@ -19,6 +19,11 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 通用实现（实体支持列表、参数空间字段、默认采样等）由
  * {@link AbstractActionComponentController} 承载，具体动作继承该基类即可。
  * </p>
+ * <p>
+ * 每个 controller 实例绑定一个 {@link Mob}（构造时传入），{@link #apply}、{@link #tick}、
+ * {@link #onInterrupt}、{@link #getState} 等均操作该绑定实体，无需每次调用传入；
+ * reset 重建实体后由运行时通过 {@link #setMob(Mob)} 更新绑定。
+ * </p>
  *
  * @param <T> 对应 Protobuf 消息类型，需继承 {@link com.google.protobuf.Message}
  */
@@ -26,8 +31,14 @@ public interface ActionComponentController<T extends Message> {
     /** @return 对应的 Protobuf 消息类，用于 Any 解包和类型校验 */
     Class<T> protoType();
 
-    /** @return 是否支持指定实体实例 */
-    boolean supports(Mob mob);
+    /** @return 当前控制器绑定的目标 Mob */
+    Mob mob();
+
+    /** 更新当前控制器绑定的目标 Mob（reset 重建实体后由运行时调用）。 */
+    void setMob(Mob mob);
+
+    /** @return 是否支持当前绑定的实体实例 */
+    boolean supports();
 
     /** 
      * @return 该动作参数的 Gymnasium 风格空间定义 
@@ -47,8 +58,8 @@ public interface ActionComponentController<T extends Message> {
     /** @return 给定参数是否通过该实例参数空间的合法性校验 */
     boolean contains(T component);
 
-    /** 将动作应用到指定的 Mob 实体上，并返回对应的控制策略。 */
-    ActionApplyResult apply(Mob mob, T component) throws Exception;
+    /** 将动作应用到绑定的 Mob 实体上，并返回对应的控制策略。 */
+    ActionApplyResult apply(T component) throws Exception;
 
     /**
      * 每 tick 回调 —— 动作处于 RUNNING 状态期间由运行时逐 tick 调用一次。
@@ -56,16 +67,16 @@ public interface ActionComponentController<T extends Message> {
      * 用于推进持续性动作的进度（如按 tick 累计挖掘进度）。默认为空实现。
      * </p>
      */
-    default void tick(Mob mob, T component) {
+    default void tick(T component) {
     }
 
     /**
      * 中断回调 —— RUNNING 中的动作被新动作/重置/死亡打断时调用，用于清理跨 tick 状态。
      * 默认为空实现。
      */
-    default void onInterrupt(Mob mob, T component) {
+    default void onInterrupt(T component) {
     }
 
     /** @return 动作当前状态 */
-    ActionState getState(Mob mob, T component);
+    ActionState getState(T component);
 }

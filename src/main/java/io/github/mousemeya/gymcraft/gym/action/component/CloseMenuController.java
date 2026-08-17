@@ -30,7 +30,8 @@ public class CloseMenuController extends AbstractActionComponentController<Proto
         "session_id", new BoxSpace(0, Long.MAX_VALUE, 1)
     ));
 
-    public CloseMenuController() {
+    public CloseMenuController(Mob mob) {
+        super(mob);
     }
 
     @Override
@@ -51,7 +52,8 @@ public class CloseMenuController extends AbstractActionComponentController<Proto
     }
 
     @Override
-    public ActionApplyResult apply(Mob mob, ProtoCloseMenu component) {
+    public ActionApplyResult apply(ProtoCloseMenu component) {
+        Mob mob = this.mob();
         LogicalMenuSession session = LogicalMenuSessions.current(mob);
         if (session == null) {
             return ActionApplyResult.none(ActionState.failed("no open menu session"));
@@ -70,7 +72,7 @@ public class CloseMenuController extends AbstractActionComponentController<Proto
     }
 
     @Override
-    public ActionState getState(Mob mob, ProtoCloseMenu component) {
+    public ActionState getState(ProtoCloseMenu component) {
         return ActionState.completed("close menu applied");
     }
 
@@ -80,7 +82,7 @@ public class CloseMenuController extends AbstractActionComponentController<Proto
     public static final class Factory implements ActionComponentFactory<ProtoCloseMenu> {
         @Override
         public CloseMenuController create(Mob mob) {
-            return new CloseMenuController();
+            return new CloseMenuController(mob);
         }
     }
 }

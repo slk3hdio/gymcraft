@@ -25,7 +25,8 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 public class NoopController extends AbstractActionComponentController<ProtoNoop> {
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of()); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
-    public NoopController() {
+    public NoopController(Mob mob) {
+        super(mob);
     }
 
     @Override
@@ -44,7 +45,7 @@ public class NoopController extends AbstractActionComponentController<ProtoNoop>
     }
 
     @Override
-    public ActionApplyResult apply(Mob mob, ProtoNoop component) {
+    public ActionApplyResult apply(ProtoNoop component) {
         return ActionApplyResult.applied(ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE, Goal.Flag.LOOK, Goal.Flag.JUMP, Goal.Flag.TARGET)
             .eraseMemory(MemoryModuleType.WALK_TARGET)
@@ -57,7 +58,7 @@ public class NoopController extends AbstractActionComponentController<ProtoNoop>
     }
 
     @Override
-    public ActionState getState(Mob mob, ProtoNoop component) {
+    public ActionState getState(ProtoNoop component) {
         return ActionState.completed("noop");
     }
 
@@ -67,7 +68,7 @@ public class NoopController extends AbstractActionComponentController<ProtoNoop>
     public static final class Factory implements ActionComponentFactory<ProtoNoop> {
         @Override
         public NoopController create(Mob mob) {
-            return new NoopController();
+            return new NoopController(mob);
         }
     }
 }

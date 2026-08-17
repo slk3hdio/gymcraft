@@ -53,7 +53,7 @@ public final class MenuRegressionGameTests {
                 .build()))
             .build();
 
-        var state = dispatcher.apply(mob, action).initialState();
+        var state = dispatcher.apply(action).initialState();
         assertEquals(helper, ActionStatus.COMPLETED, state.status(),
             "open_menu(self) should complete: " + state.description());
         @SuppressWarnings("unchecked")

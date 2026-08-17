@@ -33,7 +33,8 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
         "jump", new BooleanSpace()
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
-    public StepMoveController() {
+    public StepMoveController(Mob mob) {
+        super(mob);
     }
 
     @Override
@@ -58,7 +59,8 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
     }
 
     @Override
-    public ActionApplyResult apply(Mob mob, ProtoStepMove component) {
+    public ActionApplyResult apply(ProtoStepMove component) {
+        Mob mob = this.mob();
         mob.getMoveControl().strafe(component.getForward(), component.getStrafeRight());
         if (component.getJump()) {
             mob.getJumpControl().jump();
@@ -77,7 +79,7 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
     }
 
     @Override
-    public ActionState getState(Mob mob, ProtoStepMove component) {
+    public ActionState getState(ProtoStepMove component) {
         return ActionState.completed("step movement applied");
     }
 
@@ -87,7 +89,7 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
     public static final class Factory implements ActionComponentFactory<ProtoStepMove> {
         @Override
         public StepMoveController create(Mob mob) {
-            return new StepMoveController();
+            return new StepMoveController(mob);
         }
     }
 }

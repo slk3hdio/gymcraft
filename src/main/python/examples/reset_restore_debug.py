@@ -15,18 +15,16 @@ import argparse
 import json
 import math
 import time
-from typing import Any
+from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv, unpack_component
+from gymcraft.client import GymCraftEnv
 from gymcraft.gym.action.components import move_to_pb2
 from gymcraft.gym.observation.components import self_pb2
-
-SELF_KEY = "gymcraft:self"
-MOVE_TO_KEY = "gymcraft:move_to"
+from gymcraft.type_info import ACTION_MOVE_TO, Action, OBS_SELF, TIMEOUT_SECONDS
 
 
 def unpack_self(obs: Any) -> self_pb2.ProtoSelfState:
-    return unpack_component(obs, SELF_KEY, self_pb2.ProtoSelfState)
+    return cast(self_pb2.ProtoSelfState, obs[OBS_SELF])
 
 
 def horizontal_distance(a: self_pb2.ProtoSelfState, b: self_pb2.ProtoSelfState) -> float:
@@ -42,9 +40,10 @@ def print_self(prefix: str, obs: Any) -> self_pb2.ProtoSelfState:
         f"vel=({state.vx:.3f}, {state.vy:.3f}, {state.vz:.3f}) "
         f"target_entity_id={state.target_entity_id} navigating={state.navigating}"
     )
+    header = obs["header"]
     print(
-        f"{prefix} header=[{obs.header.last_action_status or '(none)'}] "
-        f"{obs.header.last_action_description or '(none)'} game_tick={obs.header.game_tick}"
+        f"{prefix} header=[{header.last_action_status or '(none)'}] "
+        f"{header.last_action_description or '(none)'} game_tick={header.game_tick}"
     )
     return state
 
@@ -66,16 +65,17 @@ def same_chunk_target(state: self_pb2.ProtoSelfState, span: float) -> tuple[floa
 
 def move_once(env: GymCraftEnv, state: self_pb2.ProtoSelfState, span: float) -> tuple[Any, dict[str, Any]]:
     target = same_chunk_target(state, span)
-    action = {
-        MOVE_TO_KEY: move_to_pb2.ProtoMoveTo(
+    action: Action = {
+        TIMEOUT_SECONDS: 0.0,
+        ACTION_MOVE_TO: move_to_pb2.ProtoMoveTo(
             x=target[0],
             y=target[1],
             z=target[2],
             stop_distance=2.0,
-        )
+        ),
     }
-    resp = env.step(action)
-    obs, reward, terminated, truncated, info = resp.observation, resp.reward, resp.terminated, resp.truncated, json.loads(resp.info)
+    obs, reward, terminated, truncated, raw_info = env.step(action)
+    info = json.loads(raw_info)
     print(
         f"move_to target=({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}) "
         f"reward={reward:+.3f} term={terminated} trunc={truncated} action_state={info.get('action_state', {})}"
@@ -102,14 +102,14 @@ def main() -> None:
         print(f"connected entity={args.entity_uuid} address={args.address}")
         print(f"action_keys={sorted(action_keys)}")
 
-        resp = env.reset()
-        obs, reset_info = resp.observation, json.loads(resp.info)
+        obs, raw_reset_info = env.reset()
+        reset_info = json.loads(raw_reset_info)
         print(f"initial reset info={reset_info}")
         initial = print_self("initial", obs)
 
         if args.move_span > 0:
-            if MOVE_TO_KEY not in action_keys:
-                print(f"skip move_to: {MOVE_TO_KEY} is not in action space")
+            if ACTION_MOVE_TO not in action_keys:
+                print(f"skip move_to: {ACTION_MOVE_TO} is not in action space")
             else:
                 obs, _ = move_once(env, initial, args.move_span)
                 print_self("after_move", obs)
@@ -121,8 +121,8 @@ def main() -> None:
         if not args.no_prompt:
             input("Move/kill the agent in-game, then press Enter to call reset() again...")
 
-        resp = env.reset()
-        obs, reset_info = resp.observation, json.loads(resp.info)
+        obs, raw_reset_info = env.reset()
+        reset_info = json.loads(raw_reset_info)
         print(f"second reset info={reset_info}")
         restored = print_self("restored", obs)
 

@@ -21,27 +21,30 @@ import argparse
 import json
 import math
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv, unpack_component
+from gymcraft.client import GymCraftEnv
 from gymcraft.gym.action.components import break_block_pb2, noop_pb2, set_block_pb2
 from gymcraft.gym.observation.components import nearby_blocks_pb2, self_pb2
-
-SELF_KEY = "gymcraft:self"
-NEARBY_BLOCKS_KEY = "gymcraft:nearby_blocks"
-SET_BLOCK_KEY = "gymcraft:set_block"
-BREAK_BLOCK_KEY = "gymcraft:break_block"
-NOOP_KEY = "gymcraft:noop"
+from gymcraft.type_info import (
+    ACTION_BREAK_BLOCK,
+    ACTION_NOOP,
+    ACTION_SET_BLOCK,
+    Action,
+    OBS_NEARBY_BLOCKS,
+    OBS_SELF,
+    TIMEOUT_SECONDS,
+)
 
 Pos = tuple[int, int, int]
 
 
 def unpack_self(obs: Any) -> self_pb2.ProtoSelfState:
-    return unpack_component(obs, SELF_KEY, self_pb2.ProtoSelfState)
+    return cast(self_pb2.ProtoSelfState, obs[OBS_SELF])
 
 
 def unpack_nearby_blocks(obs: Any) -> nearby_blocks_pb2.ProtoNearbyBlocks:
-    return unpack_component(obs, NEARBY_BLOCKS_KEY, nearby_blocks_pb2.ProtoNearbyBlocks)
+    return cast(nearby_blocks_pb2.ProtoNearbyBlocks, obs[OBS_NEARBY_BLOCKS])
 
 
 def eye_distance(self_state: self_pb2.ProtoSelfState, pos: Pos) -> float:
@@ -60,8 +63,9 @@ def overlaps_self(self_state: self_pb2.ProtoSelfState, pos: Pos) -> bool:
 
 
 def print_header(prefix: str, obs: Any, info: dict[str, Any] | None = None) -> None:
-    status = obs.header.last_action_status or "(none)"
-    desc = obs.header.last_action_description or "(none)"
+    header = obs["header"]
+    status = header.last_action_status or "(none)"
+    desc = header.last_action_description or "(none)"
     print(f"{prefix} header=[{status}] {desc}")
     if info is not None:
         print(f"{prefix} info_action_state={info.get('action_state', {})}")
@@ -126,16 +130,12 @@ def parse_pos(raw: list[int] | None) -> Pos | None:
     return raw[0], raw[1], raw[2]
 
 
-def step_and_print(env: GymCraftEnv, label: str, action: dict[str, Any]) -> Any:
-    resp = env.step(action)
-    info = json.loads(resp.info)
-    print(f"{label} reward={resp.reward:+.3f} term={resp.terminated} trunc={resp.truncated}")
-    print_header(label, resp.observation, info)
-    return resp
-
-
-def action_completed(resp: Any) -> bool:
-    return bool(resp.observation.header.last_action_status == "COMPLETED")
+def step_and_print(env: GymCraftEnv, label: str, action: Action) -> tuple[Any, bool]:
+    obs, reward, terminated, truncated, raw_info = env.step(action)
+    info = json.loads(raw_info)
+    print(f"{label} reward={reward:+.3f} term={terminated} trunc={truncated}")
+    print_header(label, obs, info)
+    return obs, obs["header"].last_action_status == "COMPLETED"
 
 
 def main() -> None:
@@ -161,22 +161,24 @@ def main() -> None:
         print(f"action_keys={sorted(action_keys)}")
         print(f"observation_keys={sorted(observation_keys)}")
 
-        if NEARBY_BLOCKS_KEY not in observation_keys:
-            raise RuntimeError(f"remote env does not expose {NEARBY_BLOCKS_KEY}")
-        if not args.skip_place and SET_BLOCK_KEY not in action_keys:
-            raise RuntimeError(f"remote env does not expose {SET_BLOCK_KEY}")
-        if not args.skip_break and BREAK_BLOCK_KEY not in action_keys:
-            raise RuntimeError(f"remote env does not expose {BREAK_BLOCK_KEY}")
+        if OBS_NEARBY_BLOCKS not in observation_keys:
+            raise RuntimeError(f"remote env does not expose {OBS_NEARBY_BLOCKS}")
+        if not args.skip_place and ACTION_SET_BLOCK not in action_keys:
+            raise RuntimeError(f"remote env does not expose {ACTION_SET_BLOCK}")
+        if not args.skip_break and ACTION_BREAK_BLOCK not in action_keys:
+            raise RuntimeError(f"remote env does not expose {ACTION_BREAK_BLOCK}")
 
         if args.no_reset:
-            if NOOP_KEY not in action_keys:
-                raise RuntimeError(f"--no-reset requires {NOOP_KEY} in the action space to obtain an observation")
-            resp = env.step({NOOP_KEY: noop_pb2.ProtoNoop()})
+            if ACTION_NOOP not in action_keys:
+                raise RuntimeError(f"--no-reset requires {ACTION_NOOP} in the action space to obtain an observation")
+            obs, _, _, _, _ = env.step({
+                TIMEOUT_SECONDS: 0.0,
+                ACTION_NOOP: noop_pb2.ProtoNoop(),
+            })
             print("no_reset: skipped reset; obtained observation via noop step")
         else:
-            resp = env.reset()
-            print(f"reset info={json.loads(resp.info)}")
-        obs = resp.observation
+            obs, raw_reset_info = env.reset()
+            print(f"reset info={json.loads(raw_reset_info)}")
         print_header("connect", obs)
         print_self(obs)
         occupied = print_nearby_blocks(obs, args.limit)
@@ -201,14 +203,21 @@ def main() -> None:
                 if target in occupied:
                     print(f"warning: place target {target} appears occupied in nearby_blocks")
                 print(f"set_block #{i + 1} target={target} block={block_id}")
-                resp = step_and_print(
+                obs, completed = step_and_print(
                     env,
                     "set_block",
-                    {SET_BLOCK_KEY: set_block_pb2.ProtoSetBlock(x=target[0], y=target[1], z=target[2], block=block_id or "")},
+                    {
+                        TIMEOUT_SECONDS: 0.0,
+                        ACTION_SET_BLOCK: set_block_pb2.ProtoSetBlock(
+                            x=target[0],
+                            y=target[1],
+                            z=target[2],
+                            block=block_id or "",
+                        ),
+                    },
                 )
-                obs = resp.observation
                 placed_positions.append(target)
-                if not action_completed(resp):
+                if not completed:
                     print(f"set_block #{i + 1} did not complete; stopping placement loop")
                     break
 
@@ -225,7 +234,14 @@ def main() -> None:
         step_and_print(
             env,
             "break_block",
-            {BREAK_BLOCK_KEY: break_block_pb2.ProtoBreakBlock(x=break_pos[0], y=break_pos[1], z=break_pos[2])},
+            {
+                TIMEOUT_SECONDS: 0.0,
+                ACTION_BREAK_BLOCK: break_block_pb2.ProtoBreakBlock(
+                    x=break_pos[0],
+                    y=break_pos[1],
+                    z=break_pos[2],
+                ),
+            },
         )
     finally:
         env.close()

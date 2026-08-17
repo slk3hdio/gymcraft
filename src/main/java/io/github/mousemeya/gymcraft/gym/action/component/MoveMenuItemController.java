@@ -64,7 +64,8 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
         "count", new BoxSpace(0, Integer.MAX_VALUE, 1)
     ));
 
-    public MoveMenuItemController() {
+    public MoveMenuItemController(Mob mob) {
+        super(mob);
     }
 
     @Override
@@ -88,7 +89,8 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
     }
 
     @Override
-    public ActionApplyResult apply(Mob mob, ProtoMoveMenuItem component) {
+    public ActionApplyResult apply(ProtoMoveMenuItem component) {
+        Mob mob = this.mob();
         LogicalMenuSession session = LogicalMenuSessions.current(mob);
         if (session == null) {
             return ActionApplyResult.none(ActionState.failed("no open menu session"));
@@ -382,7 +384,7 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
     }
 
     @Override
-    public ActionState getState(Mob mob, ProtoMoveMenuItem component) {
+    public ActionState getState(ProtoMoveMenuItem component) {
         return ActionState.completed("move menu item applied");
     }
 
@@ -392,7 +394,7 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
     public static final class Factory implements ActionComponentFactory<ProtoMoveMenuItem> {
         @Override
         public MoveMenuItemController create(Mob mob) {
-            return new MoveMenuItemController();
+            return new MoveMenuItemController(mob);
         }
     }
 }

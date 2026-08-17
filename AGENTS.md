@@ -12,7 +12,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 |---|---|
 | 生成 Python gRPC 桩 | `.\gradlew generatePythonStubs` (= `uv run generate_stubs.py`) |
 | 打包 Python wheel/sdist | `.\gradlew packagePython` → `dist/` (依赖 `generatePythonStubs`) |
-| 运行 GameTest | `.\gradlew runGameTestServer`（34 个 gymcraft 测试 + 原版 always_pass） |
+| 运行 GameTest | `.\gradlew runGameTestServer`（35 个 gymcraft 测试 + 原版 always_pass） |
 
 ## Architecture
 
@@ -43,6 +43,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 - **1.26 `AbstractContainerMenu#getType()` 对 menuType 为 null 的菜单抛 `UnsupportedOperationException`**（"Unable to construct this menu by type"）；self 背包菜单（`AgentInventoryMenu`）无类型是设计如此，读取菜单类型必须经 `gym/menu/MenuTypeUtil`（`typeOf`/`idOf`），不得直接调 `getType()`
 - **菜单会话 slot_id 布局** (`gym/inventory/AgentInventoryLayout` + `gym/menu/AgentInventoryBridge`): slot_id 0–7 = 装备槽（按 `EquipmentSlot.getId()` 升序：MAINHAND=0, FEET=1, LEGS=2, CHEST=3, HEAD=4, OFFHAND=5, BODY=6, SADDLE=7），8 起 = Mob 自带容器槽；菜单自有槽排在 Agent 槽之后。桥接 FakePlayer 固定映射常量见 `AgentInventoryBridge`（BODY→格35、SADDLE→格34、容器槽从格1起，上限 33）。槽位 category：装备槽名 / `"container"` / `"menu"`（菜单自有槽）
 - **stale 校验**: `move_menu_item`/`click_menu_button` 依赖观测基线——基线由每次 step/reset 返回的 `gymcraft:menu` 观测提交，动作前先拿到最新观测即可；`close_menu` 只验 `session_id`，不验基线。`session_id` 从 open_menu 的 ActionState details 或菜单观测读取
+- **动作级超时**: `ProtoMcAction.timeout_seconds`（秒，<=0 不限制）由 `ActionDispatcher` 按 20 tick/秒换算；`apply` 绑定动作并清零计时，`tick` 累加，超时当 tick 改走 onInterrupt 清理组件，`getState` 对该动作直接返回 `failed("action timeout")`（details 含 `timeout_seconds`/`elapsed_ticks`）
 - `registry/AgentStatusData.java` 目前是空占位类
 - 使用 `gh` 查看/操作包含中文的 GitHub issue 前，需先设置 PowerShell 控制台输出编码: `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`，否则中文会显示为乱码
 - `repo/` 既是 maven-publish 目标 (`file://${projectDir}/repo`)，又存放参考资源: `Documentation` (NeoForge 文档)、`minecraft-source-1.26` / `minecraft-source-1.20.1-java` (反编译源码)、`TouhouLittleMaid-1.20` (参考模组)

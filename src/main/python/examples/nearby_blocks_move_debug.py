@@ -11,23 +11,20 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from typing import Any
+from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv, unpack_component
+from gymcraft.client import GymCraftEnv
 from gymcraft.gym.action.components import move_to_pb2
 from gymcraft.gym.observation.components import nearby_blocks_pb2, self_pb2
-
-SELF_KEY = "gymcraft:self"
-NEARBY_BLOCKS_KEY = "gymcraft:nearby_blocks"
-MOVE_TO_KEY = "gymcraft:move_to"
+from gymcraft.type_info import ACTION_MOVE_TO, Action, OBS_NEARBY_BLOCKS, OBS_SELF, TIMEOUT_SECONDS
 
 
 def unpack_self(obs: Any) -> self_pb2.ProtoSelfState:
-    return unpack_component(obs, SELF_KEY, self_pb2.ProtoSelfState)
+    return cast(self_pb2.ProtoSelfState, obs[OBS_SELF])
 
 
 def unpack_nearby_blocks(obs: Any) -> nearby_blocks_pb2.ProtoNearbyBlocks:
-    return unpack_component(obs, NEARBY_BLOCKS_KEY, nearby_blocks_pb2.ProtoNearbyBlocks)
+    return cast(nearby_blocks_pb2.ProtoNearbyBlocks, obs[OBS_NEARBY_BLOCKS])
 
 
 def horizontal_distance(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
@@ -41,11 +38,12 @@ def block_top_target(block: Any) -> tuple[float, float, float]:
 def print_self(prefix: str, obs: Any) -> tuple[float, float, float]:
     state = unpack_self(obs)
     pos = (state.x, state.y, state.z)
+    header = obs["header"]
     print(
         f"{prefix} pos=({state.x:.3f}, {state.y:.3f}, {state.z:.3f}) "
         f"alive={state.alive} navigating={state.navigating} "
-        f"header=[{obs.header.last_action_status or '(none)'}] "
-        f"{obs.header.last_action_description or '(none)'}"
+        f"header=[{header.last_action_status or '(none)'}] "
+        f"{header.last_action_description or '(none)'}"
     )
     return pos
 
@@ -88,14 +86,13 @@ def main() -> None:
         print(f"action_keys={sorted(action_keys)}")
         print(f"observation_keys={sorted(observation_keys)}")
 
-        if MOVE_TO_KEY not in action_keys:
-            raise RuntimeError(f"remote env does not expose {MOVE_TO_KEY}")
-        if NEARBY_BLOCKS_KEY not in observation_keys:
-            raise RuntimeError(f"remote env does not expose {NEARBY_BLOCKS_KEY}")
+        if ACTION_MOVE_TO not in action_keys:
+            raise RuntimeError(f"remote env does not expose {ACTION_MOVE_TO}")
+        if OBS_NEARBY_BLOCKS not in observation_keys:
+            raise RuntimeError(f"remote env does not expose {OBS_NEARBY_BLOCKS}")
 
-        resp = env.reset()
-        obs = resp.observation
-        reset_info = json.loads(resp.info)
+        obs, raw_reset_info = env.reset()
+        reset_info = json.loads(raw_reset_info)
         print(f"reset info={reset_info}")
         pos = print_self("reset", obs)
 
@@ -110,32 +107,32 @@ def main() -> None:
             f"target=({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f})"
         )
 
-        action = {
-            MOVE_TO_KEY: move_to_pb2.ProtoMoveTo(
+        action: Action = {
+            TIMEOUT_SECONDS: 0.0,
+            ACTION_MOVE_TO: move_to_pb2.ProtoMoveTo(
                 x=target[0],
                 y=target[1],
                 z=target[2],
                 stop_distance=args.stop_dist,
-            )
+            ),
         }
 
         previous = pos
         for step_idx in range(args.steps):
-            resp = env.step(action)
-            obs = resp.observation
-            info = json.loads(resp.info)
+            obs, reward, terminated, truncated, raw_info = env.step(action)
+            info = json.loads(raw_info)
             pos = print_self(f"step={step_idx}", obs)
             moved = horizontal_distance(previous, pos)
             dist = horizontal_distance(pos, target)
             print(
                 f"step={step_idx} moved={moved:.3f} dist_to_target={dist:.3f} "
-                f"reward={resp.reward:+.3f} term={resp.terminated} trunc={resp.truncated} "
+                f"reward={reward:+.3f} term={terminated} trunc={truncated} "
                 f"action_state={info.get('action_state', {})}"
             )
-            if dist <= args.stop_dist or obs.header.last_action_description == "reached target":
+            if dist <= args.stop_dist or obs["header"].last_action_description == "reached target":
                 print(f"done reached block top at step={step_idx}")
                 break
-            if resp.terminated or resp.truncated:
+            if terminated or truncated:
                 print("episode ended before reaching target")
                 break
             previous = pos

@@ -39,7 +39,7 @@ public final class ActionAggregateGameTests {
             .putComponents("bogus", Any.pack(ProtoNoop.getDefaultInstance()))
             .build();
 
-        var state = dispatcher.apply(mob, action).initialState();
+        var state = dispatcher.apply(action).initialState();
         // close_menu 无会话失败，优先级最高 → 总体 FAILED
         assertEquals(helper, ActionStatus.FAILED, state.status(), "aggregate status");
         assertEquals(helper,

@@ -26,28 +26,20 @@ Create an environment in-game with the env tool, then connect by entity UUID:
 
 ```python
 from gymcraft import GymCraftEnv
-from gymcraft import unpack_component
 from gymcraft.gym.action.components import noop_pb2
-from gymcraft.gym.observation.components import self_pb2
 
 env = GymCraftEnv("entity-uuid-here")
-reset_response = env.reset()
-self_obs = unpack_component(
-    reset_response.observation,
-    "gymcraft:self",
-    self_pb2.ProtoSelfState,
-)
+obs, reset_info = env.reset()  # (observation, info)
+self_state = obs["gymcraft:self"]
 
-step_response = env.step({
+obs, reward, terminated, truncated, step_info = env.step({
+    "timeout_seconds": 0.0,  # seconds; <= 0 means no limit
     "gymcraft:noop": noop_pb2.ProtoNoop(),
 })
-reward = step_response.reward
-terminated = step_response.terminated
-truncated = step_response.truncated
 env.close()
 ```
 
-`reset()` returns `ResetResponse`, and `step()` returns `StepResponse`. Use `unpack_component()` to unpack protobuf observation components.
+`reset()` returns `(observation, info)` and `step()` returns `(observation, reward, terminated, truncated, info)` (Gymnasium-style). The observation is the unpacked `Observation` dict: a `header` plus component keys that are full registration ids such as `gymcraft:self`, `gymcraft:nearby_blocks`, `gymcraft:menu`. `make_action()` packs an `Action` dict (component keys + optional `timeout_seconds`) into the wire `ProtoMcAction`, and `unpack_observation()` converts a raw `ProtoMcObservation` back to an `Observation`; both are applied automatically inside `reset()`/`step()`.
 
 Typecheck the Python client:
 

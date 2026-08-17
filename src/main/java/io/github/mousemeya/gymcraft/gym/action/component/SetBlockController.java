@@ -62,11 +62,13 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
         "block", new TextSpace()
     ));
 
-    public SetBlockController() {
+    public SetBlockController(Mob mob) {
+        super(mob);
     }
 
     @Override
-    public boolean supports(Mob mob) {
+    public boolean supports() {
+        Mob mob = this.mob();
         // 必须具备手持功能:空手视为可持有,手中有物品时按原版规则确认该 Mob 能持有它
         ItemStack held = mob.getMainHandItem();
         return this.supportEntity(mob.getClass()) && (held.isEmpty() || mob.canHoldItem(held));
@@ -93,7 +95,8 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
     }
 
     @Override
-    public ActionApplyResult apply(Mob mob, ProtoSetBlock component) {
+    public ActionApplyResult apply(ProtoSetBlock component) {
+        Mob mob = this.mob();
         if (!(mob.level() instanceof ServerLevel level)) {
             return ActionApplyResult.none(ActionState.failed("not in a server level"));
         }
@@ -149,7 +152,7 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
     }
 
     @Override
-    public ActionState getState(Mob mob, ProtoSetBlock component) {
+    public ActionState getState(ProtoSetBlock component) {
         return ActionState.completed("set block applied");
     }
 
@@ -187,7 +190,7 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
     public static final class Factory implements ActionComponentFactory<ProtoSetBlock> {
         @Override
         public SetBlockController create(Mob mob) {
-            return new SetBlockController();
+            return new SetBlockController(mob);
         }
     }
 }

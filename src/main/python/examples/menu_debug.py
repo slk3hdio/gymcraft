@@ -20,9 +20,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Any
+from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv, unpack_component
+from gymcraft.client import GymCraftEnv
 from gymcraft.gym.action.components import (
     click_menu_button_pb2,
     close_menu_pb2,
@@ -30,12 +30,15 @@ from gymcraft.gym.action.components import (
     open_menu_pb2,
 )
 from gymcraft.gym.observation.components import menu_pb2
-
-MENU_KEY = "gymcraft:menu"
-OPEN_MENU_KEY = "gymcraft:open_menu"
-CLOSE_MENU_KEY = "gymcraft:close_menu"
-MOVE_MENU_ITEM_KEY = "gymcraft:move_menu_item"
-CLICK_MENU_BUTTON_KEY = "gymcraft:click_menu_button"
+from gymcraft.type_info import (
+    ACTION_CLICK_MENU_BUTTON,
+    ACTION_CLOSE_MENU,
+    ACTION_MOVE_MENU_ITEM,
+    ACTION_OPEN_MENU,
+    Action,
+    OBS_MENU,
+    TIMEOUT_SECONDS,
+)
 
 # Agent-owned slot categories: equipment slot names plus the mob's native container.
 # Everything else in a session is a menu-owned slot (category "menu").
@@ -43,7 +46,7 @@ MENU_CATEGORY = "menu"
 
 
 def menu_observation(obs: Any) -> menu_pb2.ProtoMenuObservation:
-    return unpack_component(obs, MENU_KEY, menu_pb2.ProtoMenuObservation)
+    return cast(menu_pb2.ProtoMenuObservation, obs[OBS_MENU])
 
 
 def action_state(info: dict[str, Any]) -> dict[str, Any]:
@@ -51,9 +54,9 @@ def action_state(info: dict[str, Any]) -> dict[str, Any]:
     return state if isinstance(state, dict) else {}
 
 
-def step_and_report(env: GymCraftEnv, label: str, action: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
-    resp = env.step(action)
-    obs, info = resp.observation, json.loads(resp.info)
+def step_and_report(env: GymCraftEnv, label: str, action: Action) -> tuple[Any, dict[str, Any]]:
+    obs, _, _, _, raw_info = env.step(action)
+    info = json.loads(raw_info)
     state = action_state(info)
     print(
         f"{label} status={state.get('status', '?')} "
@@ -120,7 +123,8 @@ def move_item_demo(
     count = source.item.count
     print(f"move_demo {count}x {source.item.item_id}: slot {source.slot_id} -> slot {target.slot_id}")
     obs, _ = step_and_report(env, "move_out", {
-        MOVE_MENU_ITEM_KEY: move_menu_item_pb2.ProtoMoveMenuItem(
+        TIMEOUT_SECONDS: 0.0,
+        ACTION_MOVE_MENU_ITEM: move_menu_item_pb2.ProtoMoveMenuItem(
             session_id=session_id,
             source_slot_id=source.slot_id,
             target_slot_id=target.slot_id,
@@ -135,7 +139,8 @@ def move_item_demo(
 
     print(f"move_demo move back: slot {target.slot_id} -> slot {source.slot_id}")
     obs, _ = step_and_report(env, "move_back", {
-        MOVE_MENU_ITEM_KEY: move_menu_item_pb2.ProtoMoveMenuItem(
+        TIMEOUT_SECONDS: 0.0,
+        ACTION_MOVE_MENU_ITEM: move_menu_item_pb2.ProtoMoveMenuItem(
             session_id=session_id,
             source_slot_id=target.slot_id,
             target_slot_id=source.slot_id,
@@ -157,7 +162,8 @@ def click_button_demo(env: GymCraftEnv, session_id: int, menu: menu_pb2.ProtoMen
         return
     print(f"click_demo clicking button {button.name}(button_id={button.button_id})")
     obs, _ = step_and_report(env, "click_button", {
-        CLICK_MENU_BUTTON_KEY: click_menu_button_pb2.ProtoClickMenuButton(
+        TIMEOUT_SECONDS: 0.0,
+        ACTION_CLICK_MENU_BUTTON: click_menu_button_pb2.ProtoClickMenuButton(
             session_id=session_id,
             button_id=button.button_id,
         ),
@@ -167,7 +173,8 @@ def click_button_demo(env: GymCraftEnv, session_id: int, menu: menu_pb2.ProtoMen
 
 def close_menu(env: GymCraftEnv, session_id: int) -> Any:
     obs, _ = step_and_report(env, "close_menu", {
-        CLOSE_MENU_KEY: close_menu_pb2.ProtoCloseMenu(session_id=session_id),
+        TIMEOUT_SECONDS: 0.0,
+        ACTION_CLOSE_MENU: close_menu_pb2.ProtoCloseMenu(session_id=session_id),
     })
     return obs
 
@@ -199,19 +206,21 @@ def main() -> None:
         action_keys = set(env.action_space_spec.get("spaces", {}).keys())
         print(f"connected entity={args.entity_uuid} address={args.address}")
         print(f"action_keys={sorted(action_keys)}")
-        required = {OPEN_MENU_KEY, CLOSE_MENU_KEY, MOVE_MENU_ITEM_KEY, CLICK_MENU_BUTTON_KEY}
+        required = {ACTION_OPEN_MENU, ACTION_CLOSE_MENU, ACTION_MOVE_MENU_ITEM, ACTION_CLICK_MENU_BUTTON}
         missing = sorted(required - action_keys)
         if missing:
             print(f"warning: action space is missing menu components: {missing}")
 
-        resp = env.reset()
-        obs = resp.observation
-        print(f"reset info={json.loads(resp.info)}")
+        obs, raw_reset_info = env.reset()
+        print(f"reset info={json.loads(raw_reset_info)}")
         print_menu("reset", menu_observation(obs))
 
         # 1. Self inventory menu
         obs, info = step_and_report(env, "open_self", {
-            OPEN_MENU_KEY: open_menu_pb2.ProtoOpenMenu(self=open_menu_pb2.ProtoSelfMenuTarget()),
+            TIMEOUT_SECONDS: 0.0,
+            ACTION_OPEN_MENU: open_menu_pb2.ProtoOpenMenu(
+                self=open_menu_pb2.ProtoSelfMenuTarget(),
+            ),
         })
         menu = menu_observation(obs)
         print_menu("open_self", menu)
@@ -225,7 +234,8 @@ def main() -> None:
             return
         x, y, z = args.block
         obs, info = step_and_report(env, "open_block", {
-            OPEN_MENU_KEY: open_menu_pb2.ProtoOpenMenu(
+            TIMEOUT_SECONDS: 0.0,
+            ACTION_OPEN_MENU: open_menu_pb2.ProtoOpenMenu(
                 block=open_menu_pb2.ProtoBlockMenuTarget(x=x, y=y, z=z),
             ),
         })

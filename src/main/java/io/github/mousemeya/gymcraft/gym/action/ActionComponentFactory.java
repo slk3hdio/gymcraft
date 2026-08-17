@@ -14,9 +14,9 @@ import io.github.mousemeya.gymcraft.registry.RegistryKeys;
  * 与 {@code env_factories} 注册的 {@code McEnvFactory} 同构。
  * </p>
  * <p>
- * 约定：组件的具体方法（{@code apply} 等）仍以每次调用传入的当前 Mob 为准——
- * reset 后 Mob 实例会被替换，组件不得缓存工厂传入的 Mob 引用用于后续操作；
- * 工厂参数仅用于创建期校验（如 {@code supports}）。
+ * 约定：工厂通过 {@link #create(Mob)} 把目标 Mob 绑定到新建的 controller 上，
+ * {@code apply}/{@code tick}/{@code onInterrupt}/{@code getState} 均直接操作该绑定实体，
+ * 无需每次调用传入；reset 重建实体后由运行时调用 {@code setMob} 更新绑定。
  * </p>
  *
  * @param <T> 对应 Protobuf 消息类型，需继承 {@link com.google.protobuf.Message}
