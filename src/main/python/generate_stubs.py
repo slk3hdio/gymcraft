@@ -15,6 +15,7 @@ PROTO_FILES = [
     "gymcraft/gym/action/components/set_attack_target.proto",
     "gymcraft/gym/action/components/attack_once.proto",
     "gymcraft/gym/action/components/noop.proto",
+    "gymcraft/gym/action/components/jump.proto",
     "gymcraft/gym/action/components/break_block.proto",
     "gymcraft/gym/action/components/set_block.proto",
     "gymcraft/gym/action/components/open_menu.proto",

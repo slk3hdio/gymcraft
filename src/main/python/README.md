@@ -29,7 +29,9 @@ from gymcraft import GymCraftEnv
 from gymcraft.gym.action.components import noop_pb2
 
 env = GymCraftEnv("entity-uuid-here")
-obs, reset_info = env.reset()  # (observation, info)
+obs, reset_info = env.reset(options={
+    "disable_vanilla_ai": True,
+})  # Fully disable vanilla AI until the next reset; defaults to False.
 self_state = obs["gymcraft:self"]
 
 obs, reward, terminated, truncated, step_info = env.step({

@@ -19,6 +19,7 @@ from gymcraft.gym.action.components.attack_once_pb2 import ProtoAttackOnce
 from gymcraft.gym.action.components.break_block_pb2 import ProtoBreakBlock
 from gymcraft.gym.action.components.click_menu_button_pb2 import ProtoClickMenuButton
 from gymcraft.gym.action.components.close_menu_pb2 import ProtoCloseMenu
+from gymcraft.gym.action.components.jump_pb2 import ProtoJump
 from gymcraft.gym.action.components.move_menu_item_pb2 import ProtoMoveMenuItem
 from gymcraft.gym.action.components.move_to_pb2 import ProtoMoveTo
 from gymcraft.gym.action.components.noop_pb2 import ProtoNoop
@@ -40,6 +41,7 @@ ACTION_MOVE_TO: Final = "gymcraft:move_to"
 ACTION_SET_ATTACK_TARGET: Final = "gymcraft:set_attack_target"
 ACTION_ATTACK_ONCE: Final = "gymcraft:attack_once"
 ACTION_NOOP: Final = "gymcraft:noop"
+ACTION_JUMP: Final = "gymcraft:jump"
 ACTION_BREAK_BLOCK: Final = "gymcraft:break_block"
 ACTION_SET_BLOCK: Final = "gymcraft:set_block"
 ACTION_OPEN_MENU: Final = "gymcraft:open_menu"
@@ -72,6 +74,7 @@ Action = TypedDict(
         "gymcraft:set_attack_target": NotRequired[ProtoSetAttackTarget],
         "gymcraft:attack_once": NotRequired[ProtoAttackOnce],
         "gymcraft:noop": NotRequired[ProtoNoop],
+        "gymcraft:jump": NotRequired[ProtoJump],
         "gymcraft:break_block": NotRequired[ProtoBreakBlock],
         "gymcraft:set_block": NotRequired[ProtoSetBlock],
         "gymcraft:open_menu": NotRequired[ProtoOpenMenu],

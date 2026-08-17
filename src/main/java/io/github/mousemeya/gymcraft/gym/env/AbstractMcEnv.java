@@ -40,11 +40,16 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 环境实现由 NeoForge 自定义注册表中的 McEnvFactory 创建。
  */
 public abstract class AbstractMcEnv implements McEnv {
+    /** reset options：是否在环境运行期间完全禁用原版 AI。 */
+    public static final String DISABLE_VANILLA_AI_OPTION = "disable_vanilla_ai";
+
     protected final Identifier envTypeId;
     protected final UUID envId;
     protected final ActionDispatcher actionController;
     protected final ObservationComposer observationCreator;
     protected final AgentRuntime agentRuntime;
+    private final boolean initialNoAi;
+    private boolean disableVanillaAi;
     private boolean closed;
 
     @Override
@@ -82,6 +87,7 @@ public abstract class AbstractMcEnv implements McEnv {
         this.envId = UUID.randomUUID();
         this.actionController = actionController;
         this.observationCreator = observationCreator;
+        this.initialNoAi = mob.isNoAi();
         this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob, this::resetMob);
         NeoForge.EVENT_BUS.register(this.agentRuntime);
     }
@@ -89,7 +95,10 @@ public abstract class AbstractMcEnv implements McEnv {
     @Override
     public ResetResponse reset(Integer seed, Map<String, Object> options) {
         this.ensureOpen();
-        RuntimeStepResult result = this.agentRuntime.reset(seed, options == null ? Map.of() : options);
+        Map<String, Object> resetOptions = options == null ? Map.of() : options;
+        boolean requestedDisableVanillaAi = parseDisableVanillaAi(resetOptions);
+        RuntimeStepResult result = this.agentRuntime.reset(seed, resetOptions);
+        this.disableVanillaAi = requestedDisableVanillaAi;
         return ResetResponse.newBuilder()
             .setObservation(result.observation())
             .setInfo(ProtoJson.toJson(this.createResetInfo()))
@@ -155,7 +164,8 @@ public abstract class AbstractMcEnv implements McEnv {
             "env_id", this.envId.toString(),
             "env_type_id", this.getRegisterId(),
             "entity_uuid", this.mob().getUUID().toString(),
-            "entity_type", BuiltInRegistries.ENTITY_TYPE.getKey(this.mob().getType()).toString()
+            "entity_type", BuiltInRegistries.ENTITY_TYPE.getKey(this.mob().getType()).toString(),
+            DISABLE_VANILLA_AI_OPTION, this.disableVanillaAi
         );
     }
 
@@ -166,6 +176,7 @@ public abstract class AbstractMcEnv implements McEnv {
         }
         this.agentRuntime.clear();
         NeoForge.EVENT_BUS.unregister(this.agentRuntime);
+        this.mob().setNoAi(this.initialNoAi);
         this.closed = true;
     }
 
@@ -176,6 +187,9 @@ public abstract class AbstractMcEnv implements McEnv {
         mob.getBrain().eraseMemory(MemoryModuleType.PATH);
         mob.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
         mob.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+        boolean requestedDisableVanillaAi = parseDisableVanillaAi(options);
+        this.agentRuntime.setDisableVanillaAi(requestedDisableVanillaAi);
+        this.disableVanillaAi = requestedDisableVanillaAi;
     }
 
     protected double computeReward(ProtoMcObservation observation) {
@@ -193,7 +207,21 @@ public abstract class AbstractMcEnv implements McEnv {
     protected Map<String, Object> createResetInfo() {
         return Map.of(
             "env_id", this.envId.toString(),
-            "entity_uuid", this.mob().getUUID().toString()
+            "entity_uuid", this.mob().getUUID().toString(),
+            DISABLE_VANILLA_AI_OPTION, this.disableVanillaAi
+        );
+    }
+
+    private static boolean parseDisableVanillaAi(Map<String, Object> options) {
+        Object value = options.get(DISABLE_VANILLA_AI_OPTION);
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        throw new IllegalArgumentException(
+            "Reset option '" + DISABLE_VANILLA_AI_OPTION + "' must be a boolean"
         );
     }
 

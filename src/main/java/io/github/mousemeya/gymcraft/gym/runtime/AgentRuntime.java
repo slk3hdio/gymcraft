@@ -54,6 +54,7 @@ public class AgentRuntime {
     @Nullable
     private PendingResult pendingResult;
     private ActionControlPolicy activePolicy = ActionControlPolicy.none();
+    private boolean disableVanillaAi;
 
     /** 环境重置回调，由具体环境实现还原逻辑。 */
     @FunctionalInterface
@@ -121,6 +122,12 @@ public class AgentRuntime {
     /** @return 当前受控的 Mob 实体（reset 后可能是还原出的新实例） */
     public Mob mob() {
         return this.mob;
+    }
+
+    /** 设置环境级原版 AI 策略；开启后会在每个实体 tick 前后持续维持 NoAI。 */
+    public void setDisableVanillaAi(boolean disableVanillaAi) {
+        this.disableVanillaAi = disableVanillaAi;
+        this.mob.setNoAi(disableVanillaAi);
     }
 
     /**
@@ -324,7 +331,7 @@ public class AgentRuntime {
 
             // 在原版 AI tick 之前施加控制策略（压制 goal flags / navigation / brain memory）
             try (var policyZone = profiler.zone("apply_policy")) {
-                this.activePolicy.applyTo(this.mob);
+                this.applyControlPolicy();
             }
         }
     }
@@ -395,9 +402,15 @@ public class AgentRuntime {
 
             // tick 末尾再次施加策略：清理本 tick 内原版 AI 留下的残留状态
             try (var policyZone = profiler.zone("apply_policy")) {
-                this.activePolicy.applyTo(this.mob);
+                this.applyControlPolicy();
             }
         }
+    }
+
+    /** 同时维持环境级 NoAI 与当前动作按需生成的细粒度控制策略。 */
+    private void applyControlPolicy() {
+        this.mob.setNoAi(this.disableVanillaAi);
+        this.activePolicy.applyTo(this.mob);
     }
 
     /** 清理环境关闭时的所有运行时状态。 */

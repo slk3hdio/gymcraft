@@ -123,7 +123,9 @@ from gymcraft.gym.action.components import step_move_pb2
 # 按实体 UUID 连接已存在的环境（默认 localhost:50051）
 env = GymCraftEnv("entity-uuid-here")
 
-obs, reset_info = env.reset()          # (observation, info)
+obs, reset_info = env.reset(options={
+    "disable_vanilla_ai": True,        # 全程关闭原版 AI；默认 False
+})                                      # (observation, info)
 self_state = obs["gymcraft:self"]      # 组件键即完整注册 id（含 gymcraft: 前缀）
 
 obs, reward, terminated, truncated, step_info = env.step({
@@ -164,6 +166,10 @@ GymCraft 实现了对两种原版 AI 系统的压制策略，确保实体只受 
 | **Brain 系统** (现代生物) | 清除 `WALK_TARGET/LOOK_TARGET/ATTACK_TARGET` Memory |
 
 策略在各动作 Controller 的 `apply()` 中动态生成，由 `AgentRuntime` 在 entity tick 前后持续维持。
+
+`reset(options={"disable_vanilla_ai": true})` 会在整个环境运行期间设置并持续维持实体的
+`NoAI`；设为 `false`（默认）时启用原版 AI，仅按当前 Controller 的策略进行局部压制。
+每次 reset 都会重新读取该选项，省略时按 `false` 处理。
 
 ---
 

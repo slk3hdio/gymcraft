@@ -12,12 +12,12 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 |---|---|
 | 生成 Python gRPC 桩 | `.\gradlew generatePythonStubs` (= `uv run generate_stubs.py`) |
 | 打包 Python wheel/sdist | `.\gradlew packagePython` → `dist/` (依赖 `generatePythonStubs`) |
-| 运行 GameTest | `.\gradlew runGameTestServer`（35 个 gymcraft 测试 + 原版 always_pass） |
+| 运行 GameTest | `.\gradlew runGameTestServer`（36 个 gymcraft 测试 + 原版 always_pass） |
 
 ## Architecture
 
 - **三个自定义 NeoForge registry** (在 `RegistryKeys` 用 `RegistryBuilder` + `NewRegistryEvent` 定义):
-  - `action_components` → `ActionComponents` (11 个控制器: `step_move`, `move_to`, `set_attack_target`, `attack_once`, `noop`, `break_block`, `set_block`, `open_menu`, `close_menu`, `move_menu_item`, `click_menu_button`; `break_block` 经 `MobHandSimulator` 用 FakePlayer 复用原版破坏逻辑, `set_block` 复用 /setblock 的 `BlockStateParser`/`BlockInput` 链路；菜单 4 件套用逻辑菜单会话 `gym/menu/LogicalMenuSession*`)
+  - `action_components` → `ActionComponents` (12 个控制器: `step_move`, `move_to`, `set_attack_target`, `attack_once`, `noop`, `jump`, `break_block`, `set_block`, `open_menu`, `close_menu`, `move_menu_item`, `click_menu_button`; `jump` 是瞬时动作，经 `JumpControl.jump()` 提交跳跃意图；`break_block` 经 `MobHandSimulator` 用 FakePlayer 复用原版破坏逻辑, `set_block` 复用 /setblock 的 `BlockStateParser`/`BlockInput` 链路；菜单 4 件套用逻辑菜单会话 `gym/menu/LogicalMenuSession*`)
   - `observation_components` → `ObservationCreators` (5 个生成器: `self`, `world`, `nearby_entities`, `nearby_blocks`, `menu`；旧 `inventory` 组件已随菜单交互改造移除)
   - `env_factories` → `EnvFactories` (1 个环境: `simple_mob`)
   - 新增类型必须在对应 `*Components`/`EnvFactories` 类中注册 `DeferredHolder`

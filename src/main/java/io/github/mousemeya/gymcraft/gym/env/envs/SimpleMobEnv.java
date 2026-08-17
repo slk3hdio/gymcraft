@@ -31,6 +31,7 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ActionComponents.BREAK_BLOCK.get(),
                 ActionComponents.SET_BLOCK.get(),
                 ActionComponents.ATTACK_ONCE.get(),
+                ActionComponents.JUMP.get(),
                 ActionComponents.OPEN_MENU.get(),
                 ActionComponents.CLOSE_MENU.get(),
                 ActionComponents.MOVE_MENU_ITEM.get(),
