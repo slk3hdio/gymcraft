@@ -147,7 +147,7 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
 
         // 放置音效与 GameEvent, 与 BlockItem.place 一致
         BlockState placedState = level.getBlockState(pos);
-        SoundType soundType = placedState.getSoundType();
+        SoundType soundType = placedState.getSoundType(level, pos, mob);
         level.playSound(null, pos, soundType.getPlaceSound(), SoundSource.BLOCKS,
             (soundType.getVolume() + 1.0F) / 2.0F, soundType.getPitch() * 0.8F);
         level.gameEvent(mob, GameEvent.BLOCK_PLACE, pos);
@@ -186,7 +186,7 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
                 "requested_block", parsed.blockState().getBlock().toString()
             ));
         }
-        if (!level.hasChunkAt(pos)) {
+        if (!level.isLoaded(pos)) {
             return ActionState.failed("target chunk is not loaded", Map.of("pos", pos.toShortString()));
         }
         if (!level.getBlockState(pos).canBeReplaced()) {

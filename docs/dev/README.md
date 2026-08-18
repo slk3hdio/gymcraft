@@ -178,6 +178,6 @@ cd ..\..\..
 ## 技术版本
 
 - Minecraft 26.1
-- NeoForge 26.1.0.19-beta
+- NeoForge 26.1.2.95 (Minecraft 26.1.2)
 - Java 25 / Gradle 9.2.1
 - Python 3.11+ / uv / Gymnasium / grpcio

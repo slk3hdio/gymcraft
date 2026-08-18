@@ -37,7 +37,7 @@ jobs:
 
       - name: Typecheck Python code
         working-directory: src/main/python
-        run: uv run mypy src examples
+        run: uv run mypy src debug demos
 
       - name: Package Python client
         run: ./gradlew packagePython

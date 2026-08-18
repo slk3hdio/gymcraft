@@ -98,6 +98,7 @@ def train(args: argparse.Namespace) -> None:
                 "block_count": args.block_count,
                 "target_height": args.target_height,
             })
+            assert OBS_SELF in obs
             initial = obs[OBS_SELF]
             origin_x, origin_z, base_y = math.floor(initial.x), math.floor(initial.z), initial.y
             state = encode_state(obs, args.block_count, origin_x, origin_z, base_y)

@@ -52,8 +52,10 @@ public final class SetBlockGameTests {
         var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
         var blocker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new BlockPos(4, 2, 2));
 
-        assertObstructedPlacement(helper, mob, blocker.blockPosition(), "other entity obstruction");
-        helper.succeed();
+        helper.runAfterDelay(1, () -> {
+            assertObstructedPlacement(helper, mob, blocker.blockPosition(), "other entity obstruction");
+            helper.succeed();
+        });
     }
 
     /**

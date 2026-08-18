@@ -217,7 +217,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
 
     /** 目标合法性校验,返回 null 表示可挖掘。 */
     private ActionState validateTarget(Mob mob, ServerLevel level, BlockPos pos, BlockState blockState) {
-        if (!level.hasChunkAt(pos)) {
+        if (!level.isLoaded(pos)) {
             return ActionState.failed("target chunk is not loaded", targetDetails(pos, blockState));
         }
         if (blockState.isAir()) {
