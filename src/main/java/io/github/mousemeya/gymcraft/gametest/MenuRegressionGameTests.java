@@ -149,4 +149,28 @@ public final class MenuRegressionGameTests {
         assertEquals(helper, 1, helmets, "dropped helmet not found in world");
         helper.succeed();
     }
+
+    /**
+     * reset 语义回归：{@code AgentInventoryLayout.clearAllItems} 必须清空 Mob 携带的全部
+     * 物品且不掉落到世界（reset 语义改为直接删除，而非掉落）。
+     */
+    public static void clearAllItemsRemovesWithoutDrop(GameTestHelper helper) {
+        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STICK, 8));
+        mob.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.LEATHER_HELMET));
+
+        AgentInventoryLayout.clearAllItems(mob);
+        assertTrue(helper, mob.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty(), "mainhand not cleared");
+        assertTrue(helper, mob.getItemBySlot(EquipmentSlot.HEAD).isEmpty(), "head not cleared");
+        var mobPos = helper.absolutePos(new BlockPos(2, 2, 2));
+        var items = helper.getLevel().getEntitiesOfClass(
+            net.minecraft.world.entity.item.ItemEntity.class, new net.minecraft.world.phys.AABB(mobPos).inflate(5.0));
+        int sticks = items.stream().filter(e -> e.getItem().is(Items.STICK))
+            .mapToInt(e -> e.getItem().getCount()).sum();
+        int helmets = items.stream().filter(e -> e.getItem().is(Items.LEATHER_HELMET))
+            .mapToInt(e -> e.getItem().getCount()).sum();
+        assertEquals(helper, 0, sticks, "clearAllItems must not drop sticks");
+        assertEquals(helper, 0, helmets, "clearAllItems must not drop helmet");
+        helper.succeed();
+    }
 }

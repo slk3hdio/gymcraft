@@ -29,12 +29,30 @@ public class ObservationComposer {
     private static final Logger LOGGER = LoggerFactory.getLogger(ObservationComposer.class);
     private final Map<String, ObservationComponentCreator<?>> components;
 
-    public ObservationComposer(Mob mob, Collection<ObservationComponentFactory<?>> factories) {
+    public ObservationComposer(Mob mob, Collection<? extends ObservationComponentFactory<?, ?>> factories) {
         var map = new LinkedHashMap<String, ObservationComponentCreator<?>>();
         for (var factory : factories) {
             map.put(factory.getRegisterId(), factory.create(mob));
         }
         this.components = map;
+    }
+
+    /**
+     * 按工厂注册 id 获取当前环境的组件 creator 实例，并通过工厂类型令牌校验具体类型。
+     *
+     * @param factory 目标观测组件工厂
+     * @param <T> protobuf 消息类型
+     * @param <C> 具体观测生成器类型
+     * @return 当前环境中的具体观测生成器实例
+     */
+    public <T extends Message, C extends ObservationComponentCreator<T>> C getComponent(
+        ObservationComponentFactory<T, C> factory
+    ) {
+        ObservationComponentCreator<?> creator = this.components.get(factory.getRegisterId());
+        if (creator == null) {
+            throw new IllegalArgumentException("Unknown observation component: " + factory.getRegisterId());
+        }
+        return factory.componentType().cast(creator);
     }
 
     public ProtoMcObservation create(Mob mob, ActionState lastActionState) {

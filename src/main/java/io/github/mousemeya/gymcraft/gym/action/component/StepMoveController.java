@@ -86,10 +86,20 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ActionComponentFactory<ProtoStepMove> {
+    public static final class Factory implements ActionComponentFactory<ProtoStepMove, StepMoveController> {
         @Override
         public StepMoveController create(Mob mob) {
             return new StepMoveController(mob);
+        }
+
+        /**
+         * 返回该工厂创建的具体动作控制器类型。
+         *
+         * @return StepMoveController 的运行时类型
+         */
+        @Override
+        public Class<StepMoveController> componentType() {
+            return StepMoveController.class;
         }
     }
 }

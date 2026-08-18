@@ -29,14 +29,26 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * 按 Minecraft 面剔除逻辑需要渲染时加入观测。扩展时优先处理贴近可渲染表面的空间，避免开阔地形
  * 中大量扫描天空空气。
  * </p>
+ * <p>
+ * 默认值可通过环境构造期 setter 覆盖（调用后同步重建观测空间）：
+ * {@link #setRadius(int)}（搜索半径，默认 8）、{@link #setMaxBlocks(int)}
+ * （返回方块数上限，默认 128）、{@link #setMaxVisited(int)}（遍历节点数上限，默认 2048）。
+ * </p>
  */
 public class NearbyBlocksObservationCreator extends AbstractObservationComponentCreator<ProtoNearbyBlocks> {
-    private static final int RADIUS = 8;
-    private static final int MAX_VISITED = 2048;
-    private static final int MAX_BLOCKS = 1024;
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "blocks", new SequenceSpace<>(new TextSpace(), MAX_BLOCKS)
-    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    /** 默认搜索半径。 */
+    public static final int DEFAULT_RADIUS = 8;
+    /** 默认遍历节点数上限。 */
+    public static final int DEFAULT_MAX_VISITED = 256;
+    /** 默认返回方块数上限。 */
+    public static final int DEFAULT_MAX_BLOCKS = 128;
+
+    /** 当前环境实例的搜索半径。 */
+    private int radius = DEFAULT_RADIUS;
+    /** 当前环境实例的返回方块数上限。 */
+    private int maxBlocks = DEFAULT_MAX_BLOCKS;
+    /** 当前环境实例的遍历节点数上限。 */
+    private int maxVisited = DEFAULT_MAX_VISITED;
 
     private record VisibleBlock(BlockPos pos, BlockState state, double distance) {
     }
@@ -51,12 +63,37 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
 
     @Override
     public McSpace<Map<String, Object>> defaultSpace() {
-        return DEFAULT_SPACE;
+        return buildSpace(DEFAULT_MAX_BLOCKS);
     }
 
     @Override
     public boolean contains(ProtoNearbyBlocks component) {
-        return component != null && component.getBlocksCount() <= MAX_BLOCKS;
+        return component != null && component.getBlocksCount() <= this.maxBlocks;
+    }
+
+    /** 设置搜索半径（必须为正数），并重建观测空间。 */
+    public void setRadius(int radius) {
+        if (radius <= 0) {
+            throw new IllegalArgumentException("radius must be positive, got: " + radius);
+        }
+        this.radius = radius;
+    }
+
+    /** 设置返回方块数上限（必须为正数），并重建观测空间。 */
+    public void setMaxBlocks(int maxBlocks) {
+        if (maxBlocks <= 0) {
+            throw new IllegalArgumentException("max_blocks must be positive, got: " + maxBlocks);
+        }
+        this.maxBlocks = maxBlocks;
+        this.setSpace(buildSpace(maxBlocks));
+    }
+
+    /** 设置遍历节点数上限（必须为正数）。 */
+    public void setMaxVisited(int maxVisited) {
+        if (maxVisited <= 0) {
+            throw new IllegalArgumentException("max_visited must be positive, got: " + maxVisited);
+        }
+        this.maxVisited = maxVisited;
     }
 
     @Override
@@ -71,7 +108,7 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
         queue.add(center);
         visited.add(center.asLong());
 
-        while (!queue.isEmpty() && visited.size() < MAX_VISITED && visibleBlocks.size() < MAX_BLOCKS) {
+        while (!queue.isEmpty() && visited.size() < this.maxVisited && visibleBlocks.size() < this.maxBlocks) {
             BlockPos airPos = queue.removeFirst();
             BlockState airState = level.getBlockState(airPos);
 
@@ -97,7 +134,7 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
                 Direction faceTowardAir = direction.getOpposite();
                 if (Block.shouldRenderFace(level, next, state, airState, faceTowardAir)) {
                     visibleBlocks.putIfAbsent(next.asLong(), new VisibleBlock(next, state, distance(center, next)));
-                    if (visibleBlocks.size() >= MAX_BLOCKS) {
+                    if (visibleBlocks.size() >= this.maxBlocks) {
                         break;
                     }
                 }
@@ -132,21 +169,37 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
         return false;
     }
 
-    private static boolean withinRadius(BlockPos center, BlockPos pos) {
-        return center.distSqr(pos) <= RADIUS * RADIUS;
+    private boolean withinRadius(BlockPos center, BlockPos pos) {
+        return center.distSqr(pos) <= (double) this.radius * this.radius;
     }
 
     private static double distance(BlockPos center, BlockPos pos) {
         return Math.sqrt(center.distSqr(pos));
     }
 
+    private static McSpace<Map<String, Object>> buildSpace(int maxBlocks) {
+        return new DictSpace(Map.of(
+            "blocks", new SequenceSpace<>(new TextSpace(), maxBlocks)
+        )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    }
+
     /**
      * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ObservationComponentFactory<ProtoNearbyBlocks> {
+    public static final class Factory implements ObservationComponentFactory<ProtoNearbyBlocks, NearbyBlocksObservationCreator> {
         @Override
         public NearbyBlocksObservationCreator create(Mob mob) {
             return new NearbyBlocksObservationCreator();
+        }
+
+        /**
+         * 返回该工厂创建的具体观测生成器类型。
+         *
+         * @return NearbyBlocksObservationCreator 的运行时类型
+         */
+        @Override
+        public Class<NearbyBlocksObservationCreator> componentType() {
+            return NearbyBlocksObservationCreator.class;
         }
     }
 }

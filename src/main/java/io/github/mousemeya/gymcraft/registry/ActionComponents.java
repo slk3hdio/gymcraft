@@ -36,61 +36,62 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  * <p>
  * 与 {@code env_factories} 一致：注册表保存动作类型（工厂），注册对象为各 controller 类内
  * 定义并实现的轻量 {@code Factory} 类；环境构造时通过 {@code factory.create(mob)} 为每个环境
- * 创建独立的 {@link ActionComponentController} 实例。
+ * 创建独立的 {@link ActionComponentController} 实例，组件默认值可在环境构造期经
+ * {@code AbstractMcEnv.actionComponent(factory)} 取实例后调用 setter 覆盖。
  * 所有动作组件基于注册表 ID（如 {@code GymCraft:move_to}）在运行时唯一标识。
  * </p>
  */
 public final class ActionComponents {
-    public static final DeferredRegister<ActionComponentFactory<?>> REGISTRY = DeferredRegister.create(
+    public static final DeferredRegister<ActionComponentFactory<?, ?>> REGISTRY = DeferredRegister.create(
         RegistryKeys.ACTION_COMPONENT_FACTORIES,
         GymCraft.MODID
     );
 
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoMoveTo>> MOVE_TO = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoMoveTo, MoveToController>> MOVE_TO = REGISTRY.register(
         "move_to",
         MoveToController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoStepMove>> STEP_MOVE = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoStepMove, StepMoveController>> STEP_MOVE = REGISTRY.register(
         "step_move",
         StepMoveController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoSetAttackTarget>> SET_ATTACK_TARGET = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoSetAttackTarget, SetAttackTargetController>> SET_ATTACK_TARGET = REGISTRY.register(
         "set_attack_target",
         SetAttackTargetController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoBreakBlock>> BREAK_BLOCK = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoBreakBlock, BreakBlockController>> BREAK_BLOCK = REGISTRY.register(
         "break_block",
         BreakBlockController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoSetBlock>> SET_BLOCK = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoSetBlock, SetBlockController>> SET_BLOCK = REGISTRY.register(
         "set_block",
         SetBlockController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoAttackOnce>> ATTACK_ONCE = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoAttackOnce, AttackOnceController>> ATTACK_ONCE = REGISTRY.register(
         "attack_once",
         AttackOnceController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoNoop>> NOOP = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoNoop, NoopController>> NOOP = REGISTRY.register(
         "noop",
         NoopController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoJump>> JUMP = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoJump, JumpController>> JUMP = REGISTRY.register(
         "jump",
         JumpController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoOpenMenu>> OPEN_MENU = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoOpenMenu, OpenMenuController>> OPEN_MENU = REGISTRY.register(
         "open_menu",
         OpenMenuController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoCloseMenu>> CLOSE_MENU = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoCloseMenu, CloseMenuController>> CLOSE_MENU = REGISTRY.register(
         "close_menu",
         CloseMenuController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoMoveMenuItem>> MOVE_MENU_ITEM = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoMoveMenuItem, MoveMenuItemController>> MOVE_MENU_ITEM = REGISTRY.register(
         "move_menu_item",
         MoveMenuItemController.Factory::new
     );
-    public static final DeferredHolder<ActionComponentFactory<?>, ActionComponentFactory<ProtoClickMenuButton>> CLICK_MENU_BUTTON = REGISTRY.register(
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoClickMenuButton, ClickMenuButtonController>> CLICK_MENU_BUTTON = REGISTRY.register(
         "click_menu_button",
         ClickMenuButtonController.Factory::new
     );

@@ -46,9 +46,9 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     private static final Logger LOGGER = LoggerFactory.getLogger(BreakBlockController.class);
 
     /** 原版生存模式默认方块交互距离 ({@code Attributes.BLOCK_INTERACTION_RANGE} 默认值)。 */
-    private static final double REACH_DISTANCE = 4.5;
-    /** 挥手动画间隔（tick）。 */
-    private static final int SWING_INTERVAL_TICKS = 10;
+    public static final double DEFAULT_REACH_DISTANCE = 4.5;
+    /** 默认挥手动画间隔（tick）。 */
+    public static final int DEFAULT_SWING_INTERVAL_TICKS = 10;
 
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
@@ -58,6 +58,10 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     /** 当前环境实例的跨 tick 挖掘状态（仅服务端 tick 线程访问）。 */
     @Nullable
     private MiningState miningState;
+    /** 当前环境实例的方块交互距离（默认 4.5，可用 {@link #setReachDistance} 覆盖）。 */
+    private double reachDistance = DEFAULT_REACH_DISTANCE;
+    /** 当前环境实例的挥手动画间隔（默认 10 tick，可用 {@link #setSwingIntervalTicks} 覆盖）。 */
+    private int swingIntervalTicks = DEFAULT_SWING_INTERVAL_TICKS;
 
     /** 单个 Mob 的挖掘进度。 */
     private static final class MiningState {
@@ -74,6 +78,22 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
 
     public BreakBlockController(Mob mob) {
         super(mob);
+    }
+
+    /** 设置方块交互距离（必须为正数）。 */
+    public void setReachDistance(double reachDistance) {
+        if (reachDistance <= 0 || !Double.isFinite(reachDistance)) {
+            throw new IllegalArgumentException("reach_distance must be a positive finite number, got: " + reachDistance);
+        }
+        this.reachDistance = reachDistance;
+    }
+
+    /** 设置挥手动画间隔（tick，0 表示禁止挥手动画）。 */
+    public void setSwingIntervalTicks(int swingIntervalTicks) {
+        if (swingIntervalTicks < 0) {
+            throw new IllegalArgumentException("swing_interval_ticks must not be negative, got: " + swingIntervalTicks);
+        }
+        this.swingIntervalTicks = swingIntervalTicks;
     }
 
     @Override
@@ -162,7 +182,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         mining.progress += blockState.getDestroyProgress(fakePlayer, level, mining.pos);
         mining.ticks++;
         mob.getLookControl().setLookAt(Vec3.atCenterOf(mining.pos));
-        if (mining.ticks % SWING_INTERVAL_TICKS == 0) {
+        if (this.swingIntervalTicks > 0 && mining.ticks % this.swingIntervalTicks == 0) {
             mob.swing(InteractionHand.MAIN_HAND);
         }
         level.destroyBlockProgress(mob.getId(), mining.pos, crackStage(mining.progress));
@@ -196,7 +216,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     }
 
     /** 目标合法性校验,返回 null 表示可挖掘。 */
-    private static ActionState validateTarget(Mob mob, ServerLevel level, BlockPos pos, BlockState blockState) {
+    private ActionState validateTarget(Mob mob, ServerLevel level, BlockPos pos, BlockState blockState) {
         if (!level.hasChunkAt(pos)) {
             return ActionState.failed("target chunk is not loaded", targetDetails(pos, blockState));
         }
@@ -208,11 +228,11 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
             return ActionState.failed("block is unbreakable", targetDetails(pos, blockState));
         }
         double distance = mob.getEyePosition().distanceTo(Vec3.atCenterOf(pos));
-        if (distance > REACH_DISTANCE) {
+        if (distance > this.reachDistance) {
             return ActionState.failed("target out of reach", Map.of(
                 "pos", pos.toShortString(),
                 "distance", distance,
-                "reach_distance", REACH_DISTANCE
+                "reach_distance", this.reachDistance
             ));
         }
         return null;
@@ -258,10 +278,20 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ActionComponentFactory<ProtoBreakBlock> {
+    public static final class Factory implements ActionComponentFactory<ProtoBreakBlock, BreakBlockController> {
         @Override
         public BreakBlockController create(Mob mob) {
             return new BreakBlockController(mob);
+        }
+
+        /**
+         * 返回该工厂创建的具体动作控制器类型。
+         *
+         * @return BreakBlockController 的运行时类型
+         */
+        @Override
+        public Class<BreakBlockController> componentType() {
+            return BreakBlockController.class;
         }
     }
 }

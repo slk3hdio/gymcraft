@@ -39,8 +39,22 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         "stop_distance", new BoxSpace(0, 128, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
+    /** 默认寻路速度修正值。 */
+    public static final double DEFAULT_SPEED = 1.0;
+
+    /** 当前环境实例使用的寻路速度修正值（默认 1.0，可用 {@link #setSpeed} 覆盖）。 */
+    private double speed = DEFAULT_SPEED;
+
     public MoveToController(Mob mob) {
         super(mob);
+    }
+
+    /** 设置寻路速度修正值（必须为正数）。 */
+    public void setSpeed(double speed) {
+        if (speed <= 0 || !Double.isFinite(speed)) {
+            throw new IllegalArgumentException("speed must be a positive finite number, got: " + speed);
+        }
+        this.speed = speed;
     }
 
     @Override
@@ -66,7 +80,7 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
     @Override
     public ActionApplyResult apply(ProtoMoveTo component) {
         Mob mob = this.mob();
-        boolean moved = mob.getNavigation().moveTo(component.getX(), component.getY(), component.getZ(), 1.0);
+        boolean moved = mob.getNavigation().moveTo(component.getX(), component.getY(), component.getZ(), this.speed);
         Path path = mob.getNavigation().getPath();
         var policy = ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE)
@@ -177,10 +191,20 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ActionComponentFactory<ProtoMoveTo> {
+    public static final class Factory implements ActionComponentFactory<ProtoMoveTo, MoveToController> {
         @Override
         public MoveToController create(Mob mob) {
             return new MoveToController(mob);
+        }
+
+        /**
+         * 返回该工厂创建的具体动作控制器类型。
+         *
+         * @return MoveToController 的运行时类型
+         */
+        @Override
+        public Class<MoveToController> componentType() {
+            return MoveToController.class;
         }
     }
 }

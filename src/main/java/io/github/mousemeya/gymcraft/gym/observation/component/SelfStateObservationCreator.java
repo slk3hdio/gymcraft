@@ -93,10 +93,20 @@ public class SelfStateObservationCreator extends AbstractObservationComponentCre
     /**
      * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ObservationComponentFactory<ProtoSelfState> {
+    public static final class Factory implements ObservationComponentFactory<ProtoSelfState, SelfStateObservationCreator> {
         @Override
         public SelfStateObservationCreator create(Mob mob) {
             return new SelfStateObservationCreator();
+        }
+
+        /**
+         * 返回该工厂创建的具体观测生成器类型。
+         *
+         * @return SelfStateObservationCreator 的运行时类型
+         */
+        @Override
+        public Class<SelfStateObservationCreator> componentType() {
+            return SelfStateObservationCreator.class;
         }
     }
 }

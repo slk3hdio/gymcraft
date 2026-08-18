@@ -1,6 +1,7 @@
 # GymCraft
 
-在 Minecraft 中实现 [Gymnasium](https://gymnasium.farama.org/) 式强化学习环境的 NeoForge 模组。
+GymCraft 是面向 Minecraft 26.1 / NeoForge 的强化学习环境模组。把游戏中的 Mob
+包装成 Gymnasium 风格环境，外部 Python Agent 通过 gRPC 调用 `reset()` 和 `step()`。
 
 <p align="center">
   <img src="https://img.shields.io/badge/Minecraft-26.1-brightgreen" alt="Minecraft 26.1">
@@ -11,257 +12,93 @@
 
 ---
 
-## 概述
+## 基本架构
 
-GymCraft 把 Minecraft 中的实体（Mob）转换为标准 RL 环境，提供 Gymnasium 风格的
-`reset()` / `step(action)` 交互接口。
-环境在游戏内由 **Environment Tool** 物品创建并绑定到实体 UUID，外部 RL Agent 通过
-**gRPC**（默认端口 `50051`）连接已存在的环境进行训练。
-
-### 核心架构
-
-项目由 **三端** 协作：**Proto** 定义共享契约，**Java** 在 Minecraft 服务端执行环境逻辑，**Python** 在外部驱动 RL 训练。
-
-```mermaid
-graph TB
-    subgraph Proto["Proto (共享契约) — src/main/proto/"]
-        direction LR
-        P1["gym/rpc/<br/>gRPC service"]
-        P2["gym/action/<br/>ProtoMcAction"]
-        P3["gym/observation/<br/>ProtoMcObservation"]
-    end
-
-    Proto -- "protoc → Java 桩" --> Java
-    Proto -- "protoc → Python 桩" --> Python
-
-    subgraph Java["Java (服务端) — Minecraft 模组"]
-        J1["GymCraftRpcServer"]
-        J2["EnvManager"]
-        J3["AgentRuntime"]
-        J4["ActionController"]
-        J5["ObservationCreator"]
-    end
-
-    subgraph Python["Python (客户端) — gymcraft 包"]
-        PY1["GymCraftEnv<br/>(gym.Env)"]
-        PY2["Agent（用户代码）"]
-        PY1 --> PY2
-    end
-
-    Java <== "gRPC :50051<br/>Connect / Reset / Step / CloseSession" ==> Python
+```text
+Python Agent (GymCraftEnv)
+          |
+          | gRPC :50051
+          v
+GymEnvService -> EnvManager -> AgentRuntime
+                                  |
+                         Minecraft entity tick
+                                  |
+                    动作组件 / 观测组件 / 环境
 ```
 
-#### 数据流
+- Java 模组负责环境生命周期、动作执行、观测生成和奖励计算。
+- protobuf 定义动作、观测与 gRPC 接口，同时生成 Java/Python 桩。
+- Python `gymcraft` 包提供 `GymCraftEnv`，连接游戏内已经创建的环境。
+- 环境、动作和观测均通过 NeoForge 自定义注册表扩展。
 
-```mermaid
-sequenceDiagram
-    participant Agent as Agent (Python)
-    participant RPC as gRPC :50051
-    participant Runtime as AgentRuntime (Java)
-    participant World as Minecraft World
+## 使用方法
 
-    Agent->>RPC: step(ProtoMcAction)
-    RPC->>Runtime: 提交动作, CompletableFuture 阻塞等待
+### 1. 启动模组
 
-    World-->>Runtime: BeforeEntityTick
-    Runtime->>Runtime: 压制原版 AI (Goal/Brain)
-    Runtime->>Runtime: ActionController.apply() 执行动作
-
-    World-->>Runtime: AfterEntityTick
-    Runtime->>Runtime: ObservationCreator.create() 收集观测
-
-    Runtime->>RPC: ProtoMcObservation + reward + done
-    RPC->>Agent: StepResponse
-```
-
-#### 关键 Java 类
-
-| 类 | 职责 |
-|----|------|
-| `GymCraftRpcServer` | 随 `ServerStartedEvent` 启动 gRPC，实现 `GymEnvService` |
-| `EnvManager` | 按 entity UUID 管理 `AbstractMcEnv` 生命周期 |
-| `AgentRuntime` | 在 entity tick 事件中驱动动作/观测，用 `CompletableFuture` 阻塞 rpc 线程 |
-| `ActionComponentController` | 动作组件接口，`apply()` 施加控制、`getState()` 返回完成状态 |
-| `ObservationCreator` | 观测组件接口，`create()` 从实体/世界读取数据并序列化 |
-| `EntitySnapshot` | 实体状态快照，reset 时据此重建同 UUID 的 mob |
-
----
-
-## 快速开始
-
-### 1. 构建并运行模组
+需要 Java 25。开发环境可直接运行：
 
 ```powershell
-# Windows PowerShell
-.\gradlew build         # 构建
-.\gradlew runClient     # 启动客户端进行测试
+.\gradlew build
+.\gradlew runClient
 ```
 
-模组随 Minecraft 服务端启动时自动开启 gRPC 桥接（可在配置中关闭，见下文）。
+Minecraft 服务端启动后会同时启动 gRPC 服务，默认监听 `localhost:50051`。
 
-### 2. 在游戏内创建环境
+### 2. 创建环境
 
-1. 在创造模式物品栏 **GymCraft** 标签页找到 **Environment Tool**
-2. **Shift + 滚轮** 切换环境类型（如 `simple_mob`）
-3. 对生物 **Shift + 右键** 创建环境（环境绑定到该实体的 UUID）
-4. 再次 **Shift + 右键** 删除环境
+1. 从创造模式的 GymCraft 标签页取得 **Environment Tool** 和 **UUID Copier**。
+2. 按住 Shift 滚动滚轮，选择 `simple_mob` 或 `parkour_mob` 环境。
+3. 使用 Environment Tool 右键 Mob 创建环境；Shift + 右键移除环境。
+4. 使用 UUID Copier 右键同一 Mob，取得 Python 连接所需的实体 UUID。
 
-专用服务器/RCON 场景可用等价指令：`/gymcraft env create <target> [type]` 与 `/gymcraft env remove <target>`。
+也可以在服务器控制台或 RCON 中使用：
 
-### 3. 用 Python 客户端连接
+```text
+/gymcraft env create <target> [type]
+/gymcraft env remove <target>
+```
+
+### 3. 连接 Python 客户端
 
 ```powershell
 cd src\main\python
-uv sync                              # 安装依赖
-.\generate_stubs.ps1                 # 从 .proto 生成 gRPC 桩（首次/改 proto 后）
+uv sync
 ```
 
 ```python
 from gymcraft import GymCraftEnv
-from gymcraft.gym.action.components import step_move_pb2
+from gymcraft.gym.action.components import noop_pb2
 
-# 按实体 UUID 连接已存在的环境（默认 localhost:50051）
 env = GymCraftEnv("entity-uuid-here")
+observation, info = env.reset(options={"disable_vanilla_ai": True})
 
-obs, reset_info = env.reset(options={
-    "disable_vanilla_ai": True,        # 全程关闭原版 AI；默认 False
-})                                      # (observation, info)
-self_state = obs["gymcraft:self"]      # 组件键即完整注册 id（含 gymcraft: 前缀）
-
-obs, reward, terminated, truncated, step_info = env.step({
-    "timeout_seconds": 0.0,            # 动作级超时（秒），<= 0 表示不限制
-    "gymcraft:step_move": step_move_pb2.ProtoStepMove(forward=1.0, jump=True),
+observation, reward, terminated, truncated, info = env.step({
+    "timeout_seconds": 0.0,
+    "gymcraft:noop": noop_pb2.ProtoNoop(),
 })
+
 env.close()
 ```
 
-> `reset()` 返回 `(observation, info)`，`step()` 返回 `(observation, reward, terminated, truncated, info)`（Gymnasium 风格），其中 `observation` 是解包后的 `Observation` dict（`header` + 组件键），`make_action()` 负责把动作 dict 打包为 wire 上的 `ProtoMcAction`，`unpack_observation()` 把原始 `ProtoMcObservation` 转回 `Observation`——`reset()`/`step()` 内部已自动完成。
+`Connect` 只连接现有环境，不会自动创建环境。`disable_vanilla_ai=True` 会在本次环境运行期间持续压制原版 AI。
 
----
+## Demo
 
-## gRPC 接口
+### 跳搭方块 Q-learning
 
-服务定义见 `src/main/proto/gymcraft/gym/rpc/env_service.proto`：
-
-| RPC | 说明 |
-|-----|------|
-| `Connect` | 按 `entity_uuid` **连接已存在的环境**（不创建），返回 `session_id`、动作/观测空间的 JSON 与 metadata |
-| `Reset` | 重置环境（可选 `seed` 与 `options`），返回首帧观测与 `info` |
-| `Step` | 提交 `ProtoMcAction`，返回 `observation, reward, terminated, truncated, info` |
-| `CloseSession` | 关闭会话 |
-
-- 服务端实现 `GymCraftRpcServer`，随 `ServerStartedEvent` 启动、`ServerStoppingEvent` 关闭。
-- 配置项（common config）：`rpcEnabled`（默认 `true`）、`rpcPort`（默认 `50051`）。
-- 动作/观测以 protobuf 传输；`info` / `options` / `metadata` 为 JSON 字符串。
-
----
-
-## AI 行为控制
-
-GymCraft 实现了对两种原版 AI 系统的压制策略，确保实体只受 Agent 动作驱动：
-
-| 系统 | 协调方式 |
-|------|---------|
-| **Goal 系统** (传统生物) | 动态禁用 `MOVE/LOOK/JUMP/TARGET` Flag |
-| **Brain 系统** (现代生物) | 清除 `WALK_TARGET/LOOK_TARGET/ATTACK_TARGET` Memory |
-
-策略在各动作 Controller 的 `apply()` 中动态生成，由 `AgentRuntime` 在 entity tick 前后持续维持。
-
-`reset(options={"disable_vanilla_ai": true})` 会在整个环境运行期间设置并持续维持实体的
-`NoAI`；设为 `false`（默认）时启用原版 AI，仅按当前 Controller 的策略进行局部压制。
-每次 reset 都会重新读取该选项，省略时按 `false` 处理。
-
----
-
-## 项目结构
-
-```
-src/main/
-├── java/io/github/mousemeya/gymcraft/
-│   ├── gym/
-│   │   ├── action/         动作控制器（step_move, move_to, open_menu, move_menu_item ...）
-│   │   ├── observation/    观测生成器（self, world, nearby_blocks, menu ...）
-│   │   ├── menu/           逻辑菜单会话（LogicalMenuSession(s), AgentInventoryBridge, MenuAdapters）
-│   │   ├── inventory/      Agent 统一物品栏布局（AgentInventoryLayout，slot_id 分配）
-│   │   ├── env/            环境抽象（McEnv, AbstractMcEnv, SimpleMobEnv）
-│   │   ├── rpc/            gRPC 桥接（GymCraftRpcServer, GymEnvService, ProtoJson）
-│   │   ├── runtime/        运行时调度（AgentRuntime）
-│   │   └── space/          Gymnasium 风格空间（Box, Discrete, Dict ...）
-│   ├── item/               环境工具物品（EnvToolItem）
-│   ├── network/            Shift+滚轮选择环境的网络同步
-│   └── registry/           三个 NeoForge 自定义注册表
-├── proto/                  Protobuf 消息与 gRPC service 定义
-├── python/                 Python gRPC 客户端（uv，gymcraft 包）
-├── resources/              资源（lang、模型等）
-└── templates/              neoforge.mods.toml 元数据模板
-```
-
----
-
-## 动作组件
-
-| 组件 (`gymcraft:`) | 说明 |
-|------|------|
-| `step_move` | 单步位移（前进/横向/视角/跳跃） |
-| `move_to` | 寻路导航到目标坐标 |
-| `set_attack_target` | 设置攻击目标 |
-| `attack_once` | 单次近战攻击 |
-| `noop` | 空操作（实体保持静止） |
-| `break_block` | 破坏方块（FakePlayer 复用原版破坏逻辑） |
-| `set_block` | 放置/替换方块（复用 /setblock 解析链路） |
-| `open_menu` | 打开逻辑菜单会话（目标：方块 / 实体 / 自身背包），details 返回 `session_id` |
-| `close_menu` | 按 `session_id` 关闭当前菜单会话 |
-| `move_menu_item` | 在会话槽位间移动物品（slot_id 寻址，受 stale 校验保护） |
-| `click_menu_button` | 点击菜单按钮（讲台翻页、切石机选配方等已适配菜单） |
-
-## 观测组件
-
-| 组件 (`gymcraft:`) | 说明 |
-|------|------|
-| `self` | 自身状态（HP、位置、速度、姿态、目标） |
-| `world` | 世界状态（时间、天气、维度） |
-| `nearby_entities` | 周围范围内的所有生物 |
-| `nearby_blocks` | 周围空气连通域可见表面的非空气方块 |
-| `menu` | 当前菜单会话（session_id、槽位/物品、类别、属性、按钮）；无会话时 `open=false` |
-
-### 逻辑菜单
-
-`open_menu` 在服务端建立逻辑菜单会话（方块 / 实体 / 自身背包三类目标），不要求真实客户端打开 Screen。所有槽位用统一的 `slot_id` 寻址：0–7 为装备槽、8 起为 Mob 自带容器槽、菜单自有槽随会话分配。`move_menu_item` / `click_menu_button` 受快照 stale 校验保护——先取最新 `menu` 观测再发动作即可；状态过期时动作安全失败（`stale_menu_state=true`），不修改物品。已适配按钮：讲台翻页/取书、切石机选配方、织布机选图案。完整示例见 `src/main/python/examples/menu_debug.py`，设计文档见 `docs/menu-interaction-implementation-plan.md`。
-
----
-
-## Python 检查与打包
+先为 Mob 创建 `parkour_mob` 环境，然后运行：
 
 ```powershell
-# 生成 Python gRPC 桩
-.\gradlew generatePythonStubs
-
-# 类型检查
 cd src\main\python
-uv run mypy src examples
-
-# 打包 wheel/sdist
-cd ..\..\..
-.\gradlew packagePython
-
-# 服务端 GameTest（无需客户端）
-.\gradlew runGameTestServer
+uv run demos\parkour_q_learning_demo.py <entity_uuid> --episodes 200
 ```
 
-GitHub Actions 在 push 到 `master` 或 pull request 时执行同样流程：生成 Python gRPC 桩、运行 mypy、打包 Python 分发文件，并上传 `gymcraft-python-dist` artifact。Linux runner 上会先执行 `chmod +x gradlew`，避免 `./gradlew: Permission denied`。
+该 demo 使用不依赖深度学习框架的表格 Q-learning，让 Mob 学习组合 `jump`、
+`set_block`、`step_move` 和 `noop`，通过跳跃并在脚下放置方块到达目标高度。
+常用参数包括 `--target-height`、`--block-count`、`--max-steps` 和 `--epsilon`。
 
----
+`debug/` 目录还包含移动、攻击、方块和菜单等动作的调试脚本。
 
-## 技术栈
+## 开发文档
 
-- **Minecraft** 26.1
-- **NeoForge** 26.1.0.19-beta
-- **Java** 25 · **Gradle** 9.2.1
-- **Protobuf** 4.30.2 · **gRPC (Java)** 1.72.0
-- **Python** ≥ 3.11（uv 管理）· gymnasium · grpcio
-
----
-
-## 许可证
-
-All Rights Reserved
+详细架构、组件清单、协议、测试与打包说明见 [docs/dev/README.md](docs/dev/README.md)。

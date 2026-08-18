@@ -22,32 +22,33 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  * <p>
  * 与 action 体系一致：注册对象为各 creator 类内定义并实现的轻量 {@code Factory} 类；
  * 环境构造时通过 {@code factory.create(mob)} 为每个环境创建独立的
- * {@link ObservationComponentCreator} 实例。
+ * {@link ObservationComponentCreator} 实例，组件默认值可在环境构造期经
+ * {@code AbstractMcEnv.observationComponent(factory)} 取实例后调用 setter 覆盖。
  * </p>
  */
 public final class ObservationCreators {
-    public static final DeferredRegister<ObservationComponentFactory<?>> REGISTRY = DeferredRegister.create(
+    public static final DeferredRegister<ObservationComponentFactory<?, ?>> REGISTRY = DeferredRegister.create(
         RegistryKeys.OBSERVATION_COMPONENT_FACTORIES,
         GymCraft.MODID
     );
 
-    public static final DeferredHolder<ObservationComponentFactory<?>, ObservationComponentFactory<ProtoSelfState>> SELF = REGISTRY.register(
+    public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoSelfState, SelfStateObservationCreator>> SELF = REGISTRY.register(
         "self",
         SelfStateObservationCreator.Factory::new
     );
-    public static final DeferredHolder<ObservationComponentFactory<?>, ObservationComponentFactory<ProtoNearbyEntities>> NEARBY_ENTITIES = REGISTRY.register(
+    public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoNearbyEntities, NearbyEntitiesObservationCreator>> NEARBY_ENTITIES = REGISTRY.register(
         "nearby_entities",
         NearbyEntitiesObservationCreator.Factory::new
     );
-    public static final DeferredHolder<ObservationComponentFactory<?>, ObservationComponentFactory<ProtoNearbyBlocks>> NEARBY_BLOCKS = REGISTRY.register(
+    public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoNearbyBlocks, NearbyBlocksObservationCreator>> NEARBY_BLOCKS = REGISTRY.register(
         "nearby_blocks",
         NearbyBlocksObservationCreator.Factory::new
     );
-    public static final DeferredHolder<ObservationComponentFactory<?>, ObservationComponentFactory<ProtoWorldState>> WORLD = REGISTRY.register(
+    public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoWorldState, WorldStateObservationCreator>> WORLD = REGISTRY.register(
         "world",
         WorldStateObservationCreator.Factory::new
     );
-    public static final DeferredHolder<ObservationComponentFactory<?>, ObservationComponentFactory<ProtoMenuObservation>> MENU = REGISTRY.register(
+    public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoMenuObservation, MenuObservationCreator>> MENU = REGISTRY.register(
         "menu",
         MenuObservationCreator.Factory::new
     );

@@ -147,10 +147,20 @@ public class SetAttackTargetController extends AbstractActionComponentController
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ActionComponentFactory<ProtoSetAttackTarget> {
+    public static final class Factory implements ActionComponentFactory<ProtoSetAttackTarget, SetAttackTargetController> {
         @Override
         public SetAttackTargetController create(Mob mob) {
             return new SetAttackTargetController(mob);
+        }
+
+        /**
+         * 返回该工厂创建的具体动作控制器类型。
+         *
+         * @return SetAttackTargetController 的运行时类型
+         */
+        @Override
+        public Class<SetAttackTargetController> componentType() {
+            return SetAttackTargetController.class;
         }
     }
 }

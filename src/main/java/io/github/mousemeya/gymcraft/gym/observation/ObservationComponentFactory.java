@@ -15,18 +15,25 @@ import io.github.mousemeya.gymcraft.registry.RegistryKeys;
  * <p>
  * 约定：组件的具体方法（{@code create(Mob)} 观测生成等）仍以每次调用传入的当前 Mob 为准——
  * reset 后 Mob 实例会被替换，组件不得缓存工厂传入的 Mob 引用用于后续操作；
- * 工厂参数仅用于创建期校验。
+ * 工厂参数仅用于创建期校验。组件默认值可在环境构造期通过 creator 暴露的 setter 覆盖。
  * </p>
  *
  * @param <T> 对应 Protobuf 消息类型
+ * @param <C> 工厂创建的具体观测生成器类型
  */
-@FunctionalInterface
-public interface ObservationComponentFactory<T extends Message> {
+public interface ObservationComponentFactory<T extends Message, C extends ObservationComponentCreator<T>> {
     /**
      * @param mob 创建期的目标实体，仅供校验使用，不得缓存
      * @return 为当前观测类型创建新的 creator 实例（每个环境一份）
      */
-    ObservationComponentCreator<T> create(Mob mob);
+    C create(Mob mob);
+
+    /**
+     * 返回工厂创建的具体观测生成器类型，用于从异构组件集合中安全恢复类型。
+     *
+     * @return 具体观测生成器的运行时类型
+     */
+    Class<C> componentType();
 
     /** @return 观测组件工厂的注册 id */
     default String getRegisterId() {

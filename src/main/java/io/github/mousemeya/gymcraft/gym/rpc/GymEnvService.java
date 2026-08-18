@@ -113,6 +113,8 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
                         ProtoJson.fromJson(request.getOptions()));
                 responseObserver.onNext(response);
                 responseObserver.onCompleted();
+            } catch (IllegalArgumentException e) {
+                responseObserver.onError(Status.INVALID_ARGUMENT.withDescription(e.getMessage()).asRuntimeException());
             } catch (IllegalStateException e) {
                 responseObserver.onError(Status.FAILED_PRECONDITION.withDescription(e.getMessage()).asRuntimeException());
             } catch (RuntimeException e) {

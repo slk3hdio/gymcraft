@@ -58,7 +58,7 @@ public class ActionDispatcher {
     private ProtoMcAction timedOutAction;
 
     /** 为指定实体创建动作控制器集合：对每个工厂 create 独立实例并校验实体支持性。 */
-    public ActionDispatcher(Mob mob, Collection<ActionComponentFactory<?>> factories) {
+    public ActionDispatcher(Mob mob, Collection<? extends ActionComponentFactory<?, ?>> factories) {
         var map = new LinkedHashMap<String, ActionComponentController<?>>();
         var unsupported = new ArrayList<String>();
         for (var factory : factories) {
@@ -76,6 +76,24 @@ public class ActionDispatcher {
             );
         }
         this.components = map;
+    }
+
+    /**
+     * 按工厂注册 id 获取当前环境的组件 controller 实例，并通过工厂类型令牌校验具体类型。
+     *
+     * @param factory 目标动作组件工厂
+     * @param <T> protobuf 消息类型
+     * @param <C> 具体动作控制器类型
+     * @return 当前环境中的具体动作控制器实例
+     */
+    public <T extends Message, C extends ActionComponentController<T>> C getComponent(
+        ActionComponentFactory<T, C> factory
+    ) {
+        ActionComponentController<?> controller = this.components.get(factory.getRegisterId());
+        if (controller == null) {
+            throw new IllegalArgumentException("Unknown action component: " + factory.getRegisterId());
+        }
+        return factory.componentType().cast(controller);
     }
 
     /** 更新所有控制器绑定的 Mob（reset 重建实体后由运行时调用）。 */

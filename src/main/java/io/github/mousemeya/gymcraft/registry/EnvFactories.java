@@ -8,6 +8,7 @@ import java.util.UUID;
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnv;
+import io.github.mousemeya.gymcraft.gym.env.envs.ParkourMobEnv;
 
 /**
  * 环境工厂注册入口 —— 通过 {@link DeferredRegister} 将所有 {@link McEnvFactory} 实现
@@ -26,6 +27,11 @@ public final class EnvFactories {
     public static final DeferredHolder<McEnvFactory, McEnvFactory> SIMPLE_MOB = REGISTRY.register(
         "simple_mob",
         SimpleMobEnv.Factory::new
+    );
+
+    public static final DeferredHolder<McEnvFactory, McEnvFactory> PARKOUR_MOB = REGISTRY.register(
+        "parkour_mob",
+        ParkourMobEnv.Factory::new
     );
 
     private EnvFactories() {

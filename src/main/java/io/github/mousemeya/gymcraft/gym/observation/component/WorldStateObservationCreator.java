@@ -60,10 +60,20 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
     /**
      * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ObservationComponentFactory<ProtoWorldState> {
+    public static final class Factory implements ObservationComponentFactory<ProtoWorldState, WorldStateObservationCreator> {
         @Override
         public WorldStateObservationCreator create(Mob mob) {
             return new WorldStateObservationCreator();
+        }
+
+        /**
+         * 返回该工厂创建的具体观测生成器类型。
+         *
+         * @return WorldStateObservationCreator 的运行时类型
+         */
+        @Override
+        public Class<WorldStateObservationCreator> componentType() {
+            return WorldStateObservationCreator.class;
         }
     }
 }

@@ -20,6 +20,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.ModContainer;
@@ -62,6 +63,7 @@ public class GymCraft {
         NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStarted);
         NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStopping);
         NeoForge.EVENT_BUS.addListener(GymCraftCommands::register);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, EnvToolItem::onEntityInteract);
 
         ITEMS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);

@@ -59,10 +59,20 @@ public class JumpController extends AbstractActionComponentController<ProtoJump>
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ActionComponentFactory<ProtoJump> {
+    public static final class Factory implements ActionComponentFactory<ProtoJump, JumpController> {
         @Override
         public JumpController create(Mob mob) {
             return new JumpController(mob);
+        }
+
+        /**
+         * 返回该工厂创建的具体动作控制器类型。
+         *
+         * @return JumpController 的运行时类型
+         */
+        @Override
+        public Class<JumpController> componentType() {
+            return JumpController.class;
         }
     }
 }

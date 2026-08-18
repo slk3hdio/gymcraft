@@ -16,6 +16,8 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
  * 最小 Mob 控制环境。
  * <p>
  * 使用当前已注册的全部动作组件和观测组件，奖励恒为 0，实体死亡时终止。
+ * 需要调整组件默认值时，在构造函数中经 {@link #actionComponent}/{@link #observationComponent}
+ * 取到组件实例并调用其 setter（见 {@code nearby_blocks} 等组件的 setter 说明）。
  * </p>
  */
 public class SimpleMobEnv extends AbstractMcEnv {

@@ -97,6 +97,20 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ACTION_TIMEOUT_FAILS =
         TEST_FUNCTIONS.register("action_timeout_fails", () -> ActionTimeoutGameTests::actionTimeoutFails);
 
+    // ===== 方块放置 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_SELF_OBSTRUCTED =
+        TEST_FUNCTIONS.register("set_block_self_obstructed", () -> SetBlockGameTests::selfObstructionBlocksPlacement);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_OTHER_ENTITY_OBSTRUCTED =
+        TEST_FUNCTIONS.register("set_block_other_entity_obstructed", () -> SetBlockGameTests::otherEntityObstructionBlocksPlacement);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_COLLISIONLESS_ALLOWED =
+        TEST_FUNCTIONS.register("set_block_collisionless_allowed", () -> SetBlockGameTests::collisionlessBlockAllowsPlacement);
+
+    // ===== 环境 AI 策略 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AI_DISABLED_MAINTAINED =
+        TEST_FUNCTIONS.register("env_disable_vanilla_ai_maintained", () -> EnvAiGameTests::disableVanillaAiIsMaintained);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AI_ENABLED_USES_CONTROLLER_POLICY =
+        TEST_FUNCTIONS.register("env_enable_vanilla_ai_uses_controller_policy", () -> EnvAiGameTests::enabledVanillaAiUsesControllerPolicy);
+
     // ===== 跳跃 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> JUMP_APPLIED =
         TEST_FUNCTIONS.register("jump_applied_and_executed", () -> JumpGameTests::jumpAppliedAndExecuted);
@@ -124,6 +138,8 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("regression_lectern_book_move_conserves_item", () -> MenuRegressionGameTests::lecternBookMoveConservesItem);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> DROP_ALL_ITEMS_CONSERVES =
         TEST_FUNCTIONS.register("regression_drop_all_items_conserves_carried", () -> MenuRegressionGameTests::dropAllItemsConservesCarriedItems);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CLEAR_ALL_ITEMS_REMOVES =
+        TEST_FUNCTIONS.register("regression_clear_all_items_removes_without_drop", () -> MenuRegressionGameTests::clearAllItemsRemovesWithoutDrop);
 
     private GymCraftGameTests() {
     }

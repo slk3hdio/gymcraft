@@ -21,6 +21,7 @@ import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
@@ -44,14 +45,15 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * <p>
  * 与指令的区别在于仍模拟生物行为:要求 Mob 具备手持能力（{@link Mob#canHoldItem}）
  * 且主手持有与目标方块匹配的 {@link BlockItem},放置成功消耗 1 个物品,
- * 并附带 Mob 挥手动作与放置音效。该动作为瞬时动作,应用后立即返回终态。
+ * 并按玩家放置语义检查待放置方块的碰撞形状是否被自己或其他实体遮挡；
+ * 成功后附带 Mob 挥手动作与放置音效。该动作为瞬时动作,应用后立即返回终态。
  * </p>
  */
 public class SetBlockController extends AbstractActionComponentController<ProtoSetBlock> {
     private static final Logger LOGGER = LoggerFactory.getLogger(SetBlockController.class);
 
     /** 原版生存模式默认方块交互距离 ({@code Attributes.BLOCK_INTERACTION_RANGE} 默认值)。 */
-    private static final double REACH_DISTANCE = 4.5;
+    public static final double DEFAULT_REACH_DISTANCE = 4.5;
     /** setBlock 标志位: UPDATE_NEIGHBORS | UPDATE_CLIENTS, 与常规方块放置一致。 */
     private static final int SET_BLOCK_FLAGS = 3;
 
@@ -62,8 +64,19 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
         "block", new TextSpace()
     ));
 
+    /** 当前环境实例的方块交互距离（默认 4.5，可用 {@link #setReachDistance} 覆盖）。 */
+    private double reachDistance = DEFAULT_REACH_DISTANCE;
+
     public SetBlockController(Mob mob) {
         super(mob);
+    }
+
+    /** 设置方块交互距离（必须为正数）。 */
+    public void setReachDistance(double reachDistance) {
+        if (reachDistance <= 0 || !Double.isFinite(reachDistance)) {
+            throw new IllegalArgumentException("reach_distance must be a positive finite number, got: " + reachDistance);
+        }
+        this.reachDistance = reachDistance;
     }
 
     @Override
@@ -156,8 +169,17 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
         return ActionState.completed("set block applied");
     }
 
-    /** 目标与手持物品校验,返回 null 表示可放置。 */
-    private static ActionState validateTarget(Mob mob, ServerLevel level, BlockPos pos, ItemStack held, BlockStateParser.BlockResult parsed) {
+    /**
+     * 校验手持物品、目标区块、可替换状态、实体遮挡和交互距离。
+     *
+     * @param mob 执行动作的 Agent
+     * @param level 目标服务端世界
+     * @param pos 目标方块坐标
+     * @param held Agent 主手物品
+     * @param parsed 已解析的目标方块状态
+     * @return 校验失败状态；返回 null 表示允许放置
+     */
+    private ActionState validateTarget(Mob mob, ServerLevel level, BlockPos pos, ItemStack held, BlockStateParser.BlockResult parsed) {
         if (!(held.getItem() instanceof BlockItem blockItem) || blockItem.getBlock() != parsed.blockState().getBlock()) {
             return ActionState.failed("held item does not match the block", Map.of(
                 "held_item", held.isEmpty() ? "empty" : held.getItem().toString(),
@@ -173,12 +195,20 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
                 "block", level.getBlockState(pos).getBlock().toString()
             ));
         }
+        // 与 BlockItem#canPlace 一致，按待放置方块的实际碰撞形状检查自己和其他实体。
+        CollisionContext placementContext = CollisionContext.withPosition(mob, mob.getY());
+        if (!level.isUnobstructed(parsed.blockState(), pos, placementContext)) {
+            return ActionState.failed("target position is obstructed by an entity", Map.of(
+                "pos", pos.toShortString(),
+                "block", parsed.blockState().getBlock().toString()
+            ));
+        }
         double distance = mob.getEyePosition().distanceTo(Vec3.atCenterOf(pos));
-        if (distance > REACH_DISTANCE) {
+        if (distance > this.reachDistance) {
             return ActionState.failed("target out of reach", Map.of(
                 "pos", pos.toShortString(),
                 "distance", distance,
-                "reach_distance", REACH_DISTANCE
+                "reach_distance", this.reachDistance
             ));
         }
         return null;
@@ -187,10 +217,20 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ActionComponentFactory<ProtoSetBlock> {
+    public static final class Factory implements ActionComponentFactory<ProtoSetBlock, SetBlockController> {
         @Override
         public SetBlockController create(Mob mob) {
             return new SetBlockController(mob);
+        }
+
+        /**
+         * 返回该工厂创建的具体动作控制器类型。
+         *
+         * @return SetBlockController 的运行时类型
+         */
+        @Override
+        public Class<SetBlockController> componentType() {
+            return SetBlockController.class;
         }
     }
 }

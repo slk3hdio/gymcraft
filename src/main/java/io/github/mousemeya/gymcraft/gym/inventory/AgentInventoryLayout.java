@@ -92,6 +92,22 @@ public final class AgentInventoryLayout {
         return List.copyOf(dropped);
     }
 
+    /**
+     * 清空 Mob 统一物品栏（装备槽 + 自带容器）的全部物品。
+     * <p>
+     * reset 语义：旧实体即将被快照还原的实体替换，其携带的物品直接删除，不在世界掉落。
+     * 仅供 reset 等"物品不再需要保留"的路径使用；若需保留即为 {@link #dropAllItems}。
+     * 注意这会静默删除物品（不再掉落），调用方需自行确认符合业务语义。
+     * </p>
+     *
+     * @param mob 目标实体
+     */
+    public static void clearAllItems(Mob mob) {
+        for (AgentSlot slot : resolve(mob).slots()) {
+            slot.setItem(ItemStack.EMPTY);
+        }
+    }
+
     /** Mob 自带容器及其发现来源。 */
     private record NativeContainer(Container container, LogicalSlotIdentity.NativeContainerSource source) {
     }

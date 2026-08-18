@@ -7,6 +7,7 @@ import java.util.Map;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.server.level.ServerLevel;
 
 /**
  * 动作控制策略。
@@ -19,9 +20,28 @@ public final class ActionControlPolicy {
     private final EnumSet<Goal.Flag> disabledGoalFlags = EnumSet.noneOf(Goal.Flag.class);
     private final Map<MemoryModuleType<?>, MemoryOperation<?>> memoryOperations = new LinkedHashMap<>();
     private boolean stopNavigation;
+    private boolean stopBrain;
 
     public static ActionControlPolicy none() {
         return new ActionControlPolicy();
+    }
+
+    /**
+     * 构造环境级原版 AI 压制策略。
+     * <p>
+     * 不设置 Mob 的 {@code NoAI} 标志，保留实体移动、重力和跳跃物理；
+     * 仅关闭 Goal 控制、停止寻路，并清理 Brain 当前行为依赖的关键记忆。
+     * </p>
+     */
+    public static ActionControlPolicy disableVanillaAi() {
+        return none()
+            .disableGoalFlags(Goal.Flag.MOVE, Goal.Flag.LOOK, Goal.Flag.JUMP, Goal.Flag.TARGET)
+            .stopNavigation()
+            .stopBrain()
+            .eraseMemory(MemoryModuleType.WALK_TARGET)
+            .eraseMemory(MemoryModuleType.PATH)
+            .eraseMemory(MemoryModuleType.LOOK_TARGET)
+            .eraseMemory(MemoryModuleType.ATTACK_TARGET);
     }
 
     public ActionControlPolicy disableGoalFlags(Goal.Flag... flags) {
@@ -55,6 +75,11 @@ public final class ActionControlPolicy {
         return this;
     }
 
+    public ActionControlPolicy stopBrain() {
+        this.stopBrain = true;
+        return this;
+    }
+
     public ActionControlPolicy merge(ActionControlPolicy other) {
         if (other == null) {
             return this;
@@ -63,6 +88,9 @@ public final class ActionControlPolicy {
         this.disabledGoalFlags.addAll(other.disabledGoalFlags);
         if (other.stopNavigation) {
             this.stopNavigation = true;
+        }
+        if (other.stopBrain) {
+            this.stopBrain = true;
         }
         this.memoryOperations.putAll(other.memoryOperations);
         return this;
@@ -77,6 +105,10 @@ public final class ActionControlPolicy {
             mob.getNavigation().stop();
         }
 
+        if (this.stopBrain && mob.level() instanceof ServerLevel level) {
+            stopBrain(mob, level);
+        }
+
         for (Map.Entry<MemoryModuleType<?>, MemoryOperation<?>> entry : this.memoryOperations.entrySet()) {
             applyMemoryOperation(mob, entry);
         }
@@ -85,6 +117,11 @@ public final class ActionControlPolicy {
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private static void applyMemoryOperation(Mob mob, Map.Entry<MemoryModuleType<?>, MemoryOperation<?>> entry) {
         ((MemoryOperation)entry.getValue()).apply(mob, entry.getKey());
+    }
+
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private static void stopBrain(Mob mob, ServerLevel level) {
+        ((net.minecraft.world.entity.ai.Brain) mob.getBrain()).stopAll(level, mob);
     }
 
     public void releaseFrom(Mob mob) {

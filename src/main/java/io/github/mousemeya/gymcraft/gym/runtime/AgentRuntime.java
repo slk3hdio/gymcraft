@@ -54,7 +54,7 @@ public class AgentRuntime {
     @Nullable
     private PendingResult pendingResult;
     private ActionControlPolicy activePolicy = ActionControlPolicy.none();
-    private boolean disableVanillaAi;
+    private ActionControlPolicy environmentPolicy = ActionControlPolicy.none();
 
     /** 环境重置回调，由具体环境实现还原逻辑。 */
     @FunctionalInterface
@@ -124,10 +124,11 @@ public class AgentRuntime {
         return this.mob;
     }
 
-    /** 设置环境级原版 AI 策略；开启后会在每个实体 tick 前后持续维持 NoAI。 */
+    /** 设置环境级原版 AI 策略；策略会与当前 controller 策略逐 tick 合并应用。 */
     public void setDisableVanillaAi(boolean disableVanillaAi) {
-        this.disableVanillaAi = disableVanillaAi;
-        this.mob.setNoAi(disableVanillaAi);
+        this.environmentPolicy = disableVanillaAi
+            ? ActionControlPolicy.disableVanillaAi()
+            : ActionControlPolicy.none();
     }
 
     /**
@@ -250,13 +251,9 @@ public class AgentRuntime {
         Mob restoredMob = this.initialSnapshot.restore();
         LOGGER.info("GymCraft runtime reset restore entity old={} new={}", this.mob.getUUID(), restoredMob.getUUID());
         // ③ 移除旧实体并加入还原实体（整体替换受控引用）；
-        //    丢弃前把旧实体携带的物品全部掉落，任何路径都不允许静默删除物品
+        //    丢弃前清空旧实体携带的物品（reset 语义：保留在容器中的物品直接删除，不在地上掉落）
+        AgentInventoryLayout.clearAllItems(this.mob);
         if (!this.mob.isRemoved()) {
-            var dropped = AgentInventoryLayout.dropAllItems(this.mob);
-            if (!dropped.isEmpty()) {
-                LOGGER.info("GymCraft runtime reset dropped {} carried item stacks from old entity {}: {}",
-                    dropped.size(), this.mob.getUUID(), dropped);
-            }
             this.mob.discard();
         }
         if (!(restoredMob.level() instanceof ServerLevel level)) {
@@ -409,8 +406,10 @@ public class AgentRuntime {
 
     /** 同时维持环境级 NoAI 与当前动作按需生成的细粒度控制策略。 */
     private void applyControlPolicy() {
-        this.mob.setNoAi(this.disableVanillaAi);
-        this.activePolicy.applyTo(this.mob);
+        ActionControlPolicy.none()
+            .merge(this.environmentPolicy)
+            .merge(this.activePolicy)
+            .applyTo(this.mob);
     }
 
     /** 清理环境关闭时的所有运行时状态。 */
@@ -456,7 +455,9 @@ public class AgentRuntime {
     /** 释放当前控制策略并停止寻路，恢复实体 AI 的控制权。 */
     private void clearRuntimeState() {
         this.activePolicy.releaseFrom(this.mob);
+        this.environmentPolicy.releaseFrom(this.mob);
         this.activePolicy = ActionControlPolicy.none();
+        this.environmentPolicy = ActionControlPolicy.none();
         this.mob.getNavigation().stop();
     }
 

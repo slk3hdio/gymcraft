@@ -79,10 +79,20 @@ public class CloseMenuController extends AbstractActionComponentController<Proto
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ActionComponentFactory<ProtoCloseMenu> {
+    public static final class Factory implements ActionComponentFactory<ProtoCloseMenu, CloseMenuController> {
         @Override
         public CloseMenuController create(Mob mob) {
             return new CloseMenuController(mob);
+        }
+
+        /**
+         * 返回该工厂创建的具体动作控制器类型。
+         *
+         * @return CloseMenuController 的运行时类型
+         */
+        @Override
+        public Class<CloseMenuController> componentType() {
+            return CloseMenuController.class;
         }
     }
 }

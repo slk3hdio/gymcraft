@@ -391,10 +391,20 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ActionComponentFactory<ProtoMoveMenuItem> {
+    public static final class Factory implements ActionComponentFactory<ProtoMoveMenuItem, MoveMenuItemController> {
         @Override
         public MoveMenuItemController create(Mob mob) {
             return new MoveMenuItemController(mob);
+        }
+
+        /**
+         * 返回该工厂创建的具体动作控制器类型。
+         *
+         * @return MoveMenuItemController 的运行时类型
+         */
+        @Override
+        public Class<MoveMenuItemController> componentType() {
+            return MoveMenuItemController.class;
         }
     }
 }

@@ -24,10 +24,10 @@ import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
  */
 public final class RegistryKeys {
 
-    public static final ResourceKey<Registry<ActionComponentFactory<?>>> ACTION_COMPONENT_FACTORIES_KEY = ResourceKey.createRegistryKey(
+    public static final ResourceKey<Registry<ActionComponentFactory<?, ?>>> ACTION_COMPONENT_FACTORIES_KEY = ResourceKey.createRegistryKey(
         Identifier.fromNamespaceAndPath(GymCraft.MODID, "action_components")
     );
-    public static final ResourceKey<Registry<ObservationComponentFactory<?>>> OBSERVATION_COMPONENT_FACTORIES_KEY = ResourceKey.createRegistryKey(
+    public static final ResourceKey<Registry<ObservationComponentFactory<?, ?>>> OBSERVATION_COMPONENT_FACTORIES_KEY = ResourceKey.createRegistryKey(
         Identifier.fromNamespaceAndPath(GymCraft.MODID, "observation_components")
     );
     public static final ResourceKey<Registry<McEnvFactory>> ENV_FACTORIES_KEY = ResourceKey.createRegistryKey(
@@ -35,9 +35,9 @@ public final class RegistryKeys {
     );
 
     /** 动作组件工厂注册表实例 */
-    public static final Registry<ActionComponentFactory<?>> ACTION_COMPONENT_FACTORIES = new RegistryBuilder<>(ACTION_COMPONENT_FACTORIES_KEY).create();
+    public static final Registry<ActionComponentFactory<?, ?>> ACTION_COMPONENT_FACTORIES = new RegistryBuilder<>(ACTION_COMPONENT_FACTORIES_KEY).create();
     /** 观测组件工厂注册表实例 */
-    public static final Registry<ObservationComponentFactory<?>> OBSERVATION_COMPONENT_FACTORIES = new RegistryBuilder<>(OBSERVATION_COMPONENT_FACTORIES_KEY).create();
+    public static final Registry<ObservationComponentFactory<?, ?>> OBSERVATION_COMPONENT_FACTORIES = new RegistryBuilder<>(OBSERVATION_COMPONENT_FACTORIES_KEY).create();
     /** 环境工厂注册表实例 */
     public static final Registry<McEnvFactory> ENV_FACTORIES = new RegistryBuilder<>(ENV_FACTORIES_KEY).create();
 

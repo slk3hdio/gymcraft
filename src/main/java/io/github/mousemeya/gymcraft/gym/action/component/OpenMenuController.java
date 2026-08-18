@@ -137,10 +137,20 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ActionComponentFactory<ProtoOpenMenu> {
+    public static final class Factory implements ActionComponentFactory<ProtoOpenMenu, OpenMenuController> {
         @Override
         public OpenMenuController create(Mob mob) {
             return new OpenMenuController(mob);
+        }
+
+        /**
+         * 返回该工厂创建的具体动作控制器类型。
+         *
+         * @return OpenMenuController 的运行时类型
+         */
+        @Override
+        public Class<OpenMenuController> componentType() {
+            return OpenMenuController.class;
         }
     }
 }

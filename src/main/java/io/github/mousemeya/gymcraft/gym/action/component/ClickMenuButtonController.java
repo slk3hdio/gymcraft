@@ -181,10 +181,20 @@ public class ClickMenuButtonController extends AbstractActionComponentController
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ActionComponentFactory<ProtoClickMenuButton> {
+    public static final class Factory implements ActionComponentFactory<ProtoClickMenuButton, ClickMenuButtonController> {
         @Override
         public ClickMenuButtonController create(Mob mob) {
             return new ClickMenuButtonController(mob);
+        }
+
+        /**
+         * 返回该工厂创建的具体动作控制器类型。
+         *
+         * @return ClickMenuButtonController 的运行时类型
+         */
+        @Override
+        public Class<ClickMenuButtonController> componentType() {
+            return ClickMenuButtonController.class;
         }
     }
 }

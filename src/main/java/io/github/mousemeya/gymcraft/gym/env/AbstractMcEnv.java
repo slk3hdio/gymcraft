@@ -4,6 +4,8 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 
+import com.google.protobuf.Message;
+
 import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
 
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -15,9 +17,11 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
+import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
@@ -48,7 +52,6 @@ public abstract class AbstractMcEnv implements McEnv {
     protected final ActionDispatcher actionController;
     protected final ObservationComposer observationCreator;
     protected final AgentRuntime agentRuntime;
-    private final boolean initialNoAi;
     private boolean disableVanillaAi;
     private boolean closed;
 
@@ -76,10 +79,42 @@ public abstract class AbstractMcEnv implements McEnv {
     protected AbstractMcEnv(
         Identifier envTypeId,
         Mob mob,
-        Collection<ActionComponentFactory<?>> actionComponentFactories,
-        Collection<ObservationComponentFactory<?>> observationComponents
+        Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
+        Collection<? extends ObservationComponentFactory<?, ?>> observationComponents
     ) {
         this(envTypeId, mob, new ActionDispatcher(mob, actionComponentFactories), new ObservationComposer(mob, observationComponents));
+    }
+
+    /**
+     * 获取当前环境指定动作组件的 controller 实例（按工厂注册 id 定位），
+     * 供环境构造期覆盖组件默认值，例如：
+     * {@code MoveToController moveTo = actionComponent(ActionComponents.MOVE_TO.get());}
+     *
+     * @param factory 组件工厂（必须是本环境声明过的组件，通常来自 {@code ActionComponents} 的 holder）
+     * @param <T> 组件对应的 protobuf 消息类型
+     * @param <C> 工厂声明的具体动作控制器类型
+     * @return 该组件在当前环境中的 controller 实例
+     */
+    protected <T extends Message, C extends ActionComponentController<T>> C actionComponent(
+        ActionComponentFactory<T, C> factory
+    ) {
+        return this.actionController.getComponent(factory);
+    }
+
+    /**
+     * 获取当前环境指定观测组件的 creator 实例（按工厂注册 id 定位），
+     * 供环境构造期覆盖组件默认值，例如：
+     * {@code NearbyBlocksObservationCreator blocks = observationComponent(ObservationCreators.NEARBY_BLOCKS.get());}
+     *
+     * @param factory 组件工厂（必须是本环境声明过的组件，通常来自 {@code ObservationCreators} 的 holder）
+     * @param <T> 组件对应的 protobuf 消息类型
+     * @param <C> 工厂声明的具体观测生成器类型
+     * @return 该组件在当前环境中的 creator 实例
+     */
+    protected <T extends Message, C extends ObservationComponentCreator<T>> C observationComponent(
+        ObservationComponentFactory<T, C> factory
+    ) {
+        return this.observationCreator.getComponent(factory);
     }
 
     protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionDispatcher actionController, ObservationComposer observationCreator) {
@@ -87,8 +122,7 @@ public abstract class AbstractMcEnv implements McEnv {
         this.envId = UUID.randomUUID();
         this.actionController = actionController;
         this.observationCreator = observationCreator;
-        this.initialNoAi = mob.isNoAi();
-        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob, this::resetMob);
+        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob, this::resetAgent);
         NeoForge.EVENT_BUS.register(this.agentRuntime);
     }
       
@@ -176,7 +210,6 @@ public abstract class AbstractMcEnv implements McEnv {
         }
         this.agentRuntime.clear();
         NeoForge.EVENT_BUS.unregister(this.agentRuntime);
-        this.mob().setNoAi(this.initialNoAi);
         this.closed = true;
     }
 
@@ -187,7 +220,12 @@ public abstract class AbstractMcEnv implements McEnv {
         mob.getBrain().eraseMemory(MemoryModuleType.PATH);
         mob.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
         mob.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+    }
+
+    /** 应用通用 reset 行为并在最后提交环境级 AI 选项。 */
+    protected final void resetAgent(Mob mob, Integer seed, Map<String, Object> options) {
         boolean requestedDisableVanillaAi = parseDisableVanillaAi(options);
+        this.resetMob(mob, seed, options);
         this.agentRuntime.setDisableVanillaAi(requestedDisableVanillaAi);
         this.disableVanillaAi = requestedDisableVanillaAi;
     }

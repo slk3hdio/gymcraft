@@ -155,10 +155,20 @@ public class MenuObservationCreator extends AbstractObservationComponentCreator<
     /**
      * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
      */
-    public static final class Factory implements ObservationComponentFactory<ProtoMenuObservation> {
+    public static final class Factory implements ObservationComponentFactory<ProtoMenuObservation, MenuObservationCreator> {
         @Override
         public MenuObservationCreator create(Mob mob) {
             return new MenuObservationCreator();
+        }
+
+        /**
+         * 返回该工厂创建的具体观测生成器类型。
+         *
+         * @return MenuObservationCreator 的运行时类型
+         */
+        @Override
+        public Class<MenuObservationCreator> componentType() {
+            return MenuObservationCreator.class;
         }
     }
 }
