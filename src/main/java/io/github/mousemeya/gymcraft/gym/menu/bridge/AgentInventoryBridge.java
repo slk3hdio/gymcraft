@@ -1,4 +1,4 @@
-package io.github.mousemeya.gymcraft.gym.menu;
+package io.github.mousemeya.gymcraft.gym.menu.bridge;
 
 import java.util.ArrayList;
 import java.util.HashSet;

@@ -75,6 +75,10 @@ public class SetAttackTargetController extends AbstractActionComponentController
     @Override
     public ActionApplyResult apply(ProtoSetAttackTarget component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         LivingEntity target = findTarget(mob, component);
         mob.setTarget(target);
 
@@ -111,6 +115,12 @@ public class SetAttackTargetController extends AbstractActionComponentController
     @Override
     public ActionState getState(ProtoSetAttackTarget component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            mob.setTarget(null);
+            mob.getNavigation().stop();
+            return agentError;
+        }
         LivingEntity target = findTarget(mob, component);
         if (target == null) {
             return ActionState.completed("target no longer loaded");

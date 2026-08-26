@@ -13,14 +13,14 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSessions;
-import io.github.mousemeya.gymcraft.gym.menu.MenuAdapter;
-import io.github.mousemeya.gymcraft.gym.menu.MenuAdapters;
-import io.github.mousemeya.gymcraft.gym.menu.MenuButtonView;
-import io.github.mousemeya.gymcraft.gym.menu.MenuPropertyView;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
+import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuAdapter;
+import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuAdapters;
+import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuButtonView;
+import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuPropertyView;
 import io.github.mousemeya.gymcraft.gym.menu.MenuTypeUtil;
-import io.github.mousemeya.gymcraft.gym.menu.SessionSlot;
+import io.github.mousemeya.gymcraft.gym.menu.session.SessionSlot;
 import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoItemStackView;
@@ -137,8 +137,12 @@ public class MenuObservationCreator extends AbstractObservationComponentCreator<
     /**
      * 构建纯物品视图：nbt 为组件补丁的规范化 SNBT 表达（与快照比较的可观察标签状态同源），
      * 没有标签时为空字符串。
+     * <p>
+     * 同为物品内容观测的 {@code NearbyItemsObservationCreator} 直接复用本方法，
+     * 保证两处物品视图字段语义一致。
+     * </p>
      */
-    private static ProtoItemStackView buildItemView(ItemStack stack, HolderLookup.Provider registries) {
+    public static ProtoItemStackView buildItemView(ItemStack stack, HolderLookup.Provider registries) {
         var builder = ProtoItemStackView.newBuilder()
             .setItemId(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
             .setCount(stack.getCount());

@@ -6,11 +6,13 @@ import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.component.MenuObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.NearbyBlocksObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.NearbyEntitiesObservationCreator;
+import io.github.mousemeya.gymcraft.gym.observation.component.NearbyItemsObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.SelfStateObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.WorldStateObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMenuObservation;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyBlocks;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyEntities;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyItems;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoSelfState;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoWorldState;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -51,6 +53,10 @@ public final class ObservationCreators {
     public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoMenuObservation, MenuObservationCreator>> MENU = REGISTRY.register(
         "menu",
         MenuObservationCreator.Factory::new
+    );
+    public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoNearbyItems, NearbyItemsObservationCreator>> NEARBY_ITEMS = REGISTRY.register(
+        "nearby_items",
+        NearbyItemsObservationCreator.Factory::new
     );
 
     private ObservationCreators() {

@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package gymcraft.gym.observation;
+
+import "gymcraft/gym/observation/common/item_stack_view.proto";
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.observation.proto";
+option java_outer_classname = "ItemEntityViewProto";
+
+// 掉落物实体视图：实体定位信息 + 物品内容（item 与菜单观测同源，含规范化 SNBT）。
+message ProtoItemEntityView {
+  int32 entity_id = 1;
+  string uuid = 2;
+  double x = 3;
+  double y = 4;
+  double z = 5;
+  double distance = 6;
+  ProtoItemStackView item = 7;
+}

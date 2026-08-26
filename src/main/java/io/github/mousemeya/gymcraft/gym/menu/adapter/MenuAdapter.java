@@ -1,5 +1,6 @@
-package io.github.mousemeya.gymcraft.gym.menu;
+package io.github.mousemeya.gymcraft.gym.menu.adapter;
 
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import java.util.List;
 
 import net.minecraft.world.entity.Mob;

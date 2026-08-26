@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package gymcraft.gym.observation;
+
+import "gymcraft/gym/observation/common/item_entity_view.proto";
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.observation.proto";
+option java_outer_classname = "NearbyItemsProto";
+
+message ProtoNearbyItems {
+  repeated ProtoItemEntityView items = 1;
+}

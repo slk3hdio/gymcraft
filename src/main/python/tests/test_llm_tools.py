@@ -9,8 +9,14 @@ from collections.abc import Mapping
 from typing import Any, cast
 
 from gymcraft.gym.action.components import set_block_pb2
-from gymcraft.gym.observation.common import block_view_pb2, entity_view_pb2
-from gymcraft.gym.observation.components import nearby_blocks_pb2, nearby_entities_pb2, self_pb2, world_pb2
+from gymcraft.gym.observation.common import block_view_pb2, entity_view_pb2, item_entity_view_pb2, item_stack_view_pb2
+from gymcraft.gym.observation.components import (
+    nearby_blocks_pb2,
+    nearby_entities_pb2,
+    nearby_items_pb2,
+    self_pb2,
+    world_pb2,
+)
 from gymcraft.gym.observation.observation_pb2 import ProtoObservationHeader
 from gymcraft.llm import (
     ActionDslParser,
@@ -84,6 +90,19 @@ def _observation(tick: int = 1) -> Observation:
                 blocks=[
                     block_view_pb2.ProtoBlockView(x=11, y=64, z=-2, block_id="minecraft:chest", distance=1),
                     block_view_pb2.ProtoBlockView(x=12, y=64, z=-2, block_id="minecraft:stone", distance=2),
+                ]
+            ),
+            "gymcraft:nearby_items": nearby_items_pb2.ProtoNearbyItems(
+                items=[
+                    item_entity_view_pb2.ProtoItemEntityView(
+                        entity_id=7,
+                        uuid="00000000-0000-0000-0000-000000000004",
+                        x=11,
+                        y=64,
+                        z=-2,
+                        distance=1.2,
+                        item=item_stack_view_pb2.ProtoItemStackView(item_id="minecraft:apple", count=3),
+                    ),
                 ]
             ),
         },
@@ -160,7 +179,7 @@ class ActionDslParserTests(unittest.TestCase):
         self.assertEqual(10.0, encoded["timeout_seconds"])
 
     def test_all_registered_action_commands_parse(self) -> None:
-        """当前 12 个动作组件的标准 DSL 写法都应能生成 protobuf。"""
+        """当前 13 个动作组件的标准 DSL 写法都应能生成 protobuf。"""
         commands = [
             "/noop",
             "/step_move 1 0 0 0 true",
@@ -174,6 +193,7 @@ class ActionDslParserTests(unittest.TestCase):
             "/close_menu 1",
             "/move_menu_item 1 0 1 1",
             "/click_menu_button 1 0",
+            "/pick_up_item 3",
         ]
         parser = ActionDslParser()
         for command in commands:
@@ -195,6 +215,8 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertNotIn("entity_id=1 entity_type=minecraft:skeleton", text)
         self.assertNotIn("rel=", text)
         self.assertNotIn("uuid=", text)
+        self.assertIn("items: total=1 shown=1", text)
+        self.assertIn("entity_id=7 item_id=minecraft:apple count=3", text)
 
     def test_context_keeps_raw_assistant_text(self) -> None:
         """历史中应原样保存模型文本和 DSL 动作块。"""

@@ -18,10 +18,10 @@ import net.minecraft.world.item.Items;
 import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.inventory.LogicalSlotIdentity;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSessions;
-import io.github.mousemeya.gymcraft.gym.menu.OpenMenuTarget;
-import io.github.mousemeya.gymcraft.gym.menu.SessionSlot;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
+import io.github.mousemeya.gymcraft.gym.menu.session.OpenMenuTarget;
+import io.github.mousemeya.gymcraft.gym.menu.session.SessionSlot;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMenuObservation;
 
 /**

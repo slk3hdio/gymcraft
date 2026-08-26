@@ -110,6 +110,10 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
     @Override
     public ActionApplyResult apply(ProtoSetBlock component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         if (!(mob.level() instanceof ServerLevel level)) {
             return ActionApplyResult.none(ActionState.failed("not in a server level"));
         }

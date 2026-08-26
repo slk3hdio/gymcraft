@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.protobuf.Message;
+import javax.annotation.Nullable;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
@@ -79,6 +81,44 @@ public abstract class AbstractActionComponentController<T extends Message> imple
     @Override
     public boolean supports() {
         return this.supportEntity(this.mob.getClass());
+    }
+
+    /**
+     * 为具体动作提供绑定实体的基础执行条件校验。
+     * <p>
+     * 该方法只是一项受保护的复用工具，调用时机与失败后的动作清理由具体组件自行决定；
+     * Dispatcher 和 runtime 不会调用或解释该状态。
+     * </p>
+     *
+     * @return 实体死亡、移除或不在服务端世界时的 FAILED 状态；否则返回 null
+     */
+    @Nullable
+    protected final ActionState validateMobForAction() {
+        if (this.mob.isDeadOrDying()) {
+            return ActionState.failed("agent entity is dead", Map.of(
+                "entity_uuid", this.mob.getUUID().toString(),
+                "removed", this.mob.isRemoved()
+            ));
+        }
+        if (this.mob.isRemoved()) {
+            return ActionState.failed("agent entity is removed", Map.of(
+                "entity_uuid", this.mob.getUUID().toString(),
+                "removed", true
+            ));
+        }
+        if (!this.mob.isAlive()) {
+            return ActionState.failed("agent entity is dead", Map.of(
+                "entity_uuid", this.mob.getUUID().toString(),
+                "removed", false
+            ));
+        }
+        if (!(this.mob.level() instanceof ServerLevel)) {
+            return ActionState.failed("agent entity is not in a server level", Map.of(
+                "entity_uuid", this.mob.getUUID().toString(),
+                "level_type", this.mob.level().getClass().getName()
+            ));
+        }
+        return null;
     }
 
     @Override

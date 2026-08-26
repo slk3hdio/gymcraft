@@ -24,10 +24,10 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveMenuItem;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentSlot;
-import io.github.mousemeya.gymcraft.gym.menu.AgentInventoryBridge;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSessions;
-import io.github.mousemeya.gymcraft.gym.menu.SessionSlot;
+import io.github.mousemeya.gymcraft.gym.menu.bridge.AgentInventoryBridge;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
+import io.github.mousemeya.gymcraft.gym.menu.session.SessionSlot;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
@@ -91,6 +91,10 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
     @Override
     public ActionApplyResult apply(ProtoMoveMenuItem component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         LogicalMenuSession session = LogicalMenuSessions.current(mob);
         if (session == null) {
             return ActionApplyResult.none(ActionState.failed("no open menu session"));

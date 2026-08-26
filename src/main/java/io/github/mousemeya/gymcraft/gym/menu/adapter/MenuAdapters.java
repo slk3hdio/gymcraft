@@ -1,5 +1,7 @@
-package io.github.mousemeya.gymcraft.gym.menu;
+package io.github.mousemeya.gymcraft.gym.menu.adapter;
 
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.SessionSlot;
 import java.util.ArrayList;
 import java.util.List;
 

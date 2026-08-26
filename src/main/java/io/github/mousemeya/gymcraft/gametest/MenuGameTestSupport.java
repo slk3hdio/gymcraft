@@ -23,10 +23,10 @@ import io.github.mousemeya.gymcraft.gym.action.component.MoveMenuItemController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoClickMenuButton;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoCloseMenu;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveMenuItem;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSessions;
-import io.github.mousemeya.gymcraft.gym.menu.MenuAdapters;
-import io.github.mousemeya.gymcraft.gym.menu.OpenMenuTarget;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
+import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuAdapters;
+import io.github.mousemeya.gymcraft.gym.menu.session.OpenMenuTarget;
 import io.github.mousemeya.gymcraft.gym.observation.component.MenuObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMenuObservation;
 

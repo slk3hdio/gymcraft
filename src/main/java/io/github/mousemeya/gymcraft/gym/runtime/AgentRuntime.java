@@ -26,7 +26,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
-import io.github.mousemeya.gymcraft.gym.menu.MenuSessionHooks;
+import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 
@@ -55,6 +55,8 @@ public class AgentRuntime {
     private PendingResult pendingResult;
     private ActionControlPolicy activePolicy = ActionControlPolicy.none();
     private ActionControlPolicy betweenActionsPolicy = ActionControlPolicy.none();
+    /** 自上一次 ServerTick.Post 以来，绑定实体是否已经走过正常的 EntityTick.Post。 */
+    private boolean entityPostObserved;
 
     /** 环境重置回调，由具体环境实现还原逻辑。 */
     @FunctionalInterface
@@ -208,12 +210,14 @@ public class AgentRuntime {
     }
 
     /**
-     * 服务端 tick 结束后处理重置请求，并兜底发布死亡实体的排队动作结果。
+     * 服务端 tick 结束后处理重置请求，并保障未收到实体 Post 事件时仍能推进动作调度。
      * <p>
-     * 实体还原需要从世界中移除/重新添加实体，不能在实体 tick 循环中执行，
-     * 因此选用 {@link ServerTickEvent.Post} 作为重置时机；死亡实体可能不再触发
-     * {@link EntityTickEvent.Post}，下一次 step 的终态也在这里兜底发布。
+     * 实体还原需要从世界中移除/重新添加实体，因此 reset 在此优先执行；若本 tick
+     * 绑定实体没有触发 {@link EntityTickEvent.Post}，则调用与实体事件相同的通用动作流程。
+     * runtime 不解释实体为何未 tick，异常语义由动作组件返回的状态决定。
      * </p>
+     *
+     * @param event 服务端 tick 后事件
      */
     @SubscribeEvent
     private void onServerTickPost(ServerTickEvent.Post event) {
@@ -227,13 +231,16 @@ public class AgentRuntime {
                 // 重置失败：以异常完成 future，让 gRPC 线程感知
                 reset.future().completeExceptionally(e);
             }
+            this.entityPostObserved = false;
+            return;
         }
 
-        // 动作间死亡的实体不会再消费 EntityTick.Pre 中的请求，改由服务端 tick 返回正常终态。
-        if (!this.mob.isAlive() && (this.pendingResult != null || !this.actionBuf.isEmpty())) {
-            this.cleanupAgentState(this.mob, "entity died");
-            this.publishDeathResultIfNeeded();
+        // 没有实体 Post 事件时，仍走完全相同的动作组件调度，不在 runtime 判断异常原因。
+        if (!this.entityPostObserved && (this.pendingResult != null || !this.actionBuf.isEmpty())) {
+            this.processActionBeforeTick();
+            this.processActionAfterTick();
         }
+        this.entityPostObserved = false;
     }
 
     /**
@@ -251,7 +258,7 @@ public class AgentRuntime {
         this.completeQueuedActions(ActionState.interrupted("interrupted by reset"));
         this.clearRuntimeState();
         // 集中清理入口：关闭旧 Mob 上的菜单会话与附件
-        this.cleanupAgentState(this.mob, "reset");
+        this.closeMenuSession(this.mob, "reset");
 
         // ② 用初始快照还原实体
         Mob restoredMob = this.initialSnapshot.restore();
@@ -285,7 +292,7 @@ public class AgentRuntime {
      * </p>
      */
     @SubscribeEvent
-    private void BeforeEntityTick(EntityTickEvent.Pre event) {
+    private void beforeEntityTick(EntityTickEvent.Pre event) {
         // 仅处理服务端、属于本运行时的实体
         if (event.getEntity().level().isClientSide()) {
             return;
@@ -293,10 +300,11 @@ public class AgentRuntime {
         if (!event.getEntity().equals(this.mob)) {
             return;
         }
-        if (!this.mob.isAlive()) {
-            return;
-        }
+        this.processActionBeforeTick();
+    }
 
+    /** 消费一个排队动作并在原版 AI 执行前应用当前控制策略。 */
+    private void processActionBeforeTick() {
         var profiler = Profiler.get();
         try (var gymcraftZone = profiler.zone("gymcraft_pre")) {
             // 非阻塞消费排队的动作请求
@@ -345,29 +353,26 @@ public class AgentRuntime {
     /**
      * 实体 tick 后事件：推进 RUNNING 动作的逐 tick 状态，发布终态结果。
      * <p>
-     * 每 tick 调用动作调度器的 tick/getState 检查进度；动作进入终态或实体死亡时，
-     * 在此生成观测并完成对应 future，唤醒阻塞中的 step()；tick 末尾再次施加策略以清理残留。
+     * 每 tick 调用动作调度器的 tick/getState 检查进度；动作进入终态时在此生成观测并完成
+     * 对应 future，唤醒阻塞中的 step()；tick 末尾再次施加策略以清理残留。
      * </p>
      */
     @SubscribeEvent
-    private void AfterEntityTick(EntityTickEvent.Post event) {
+    private void afterEntityTick(EntityTickEvent.Post event) {
         if (event.getEntity().level().isClientSide()) {
             return;
         }
         if (!event.getEntity().equals(this.mob)) {
             return;
         }
+        this.entityPostObserved = true;
+        this.processActionAfterTick();
+    }
 
+    /** 推进 RUNNING 动作、发布终态结果，并在 tick 末尾重新应用控制策略。 */
+    private void processActionAfterTick() {
         var profiler = Profiler.get();
         try (var gymcraftZone = profiler.zone("gymcraft_post")) {
-            // 实体死亡：统一发布死亡失败结果，本 tick 到此结束
-            if (!this.mob.isAlive()) {
-                // 集中清理入口：实体销毁前关闭菜单会话并清理附件（每 tick 触发，内部幂等）
-                this.cleanupAgentState(this.mob, "entity died");
-                this.publishDeathResultIfNeeded();
-                return;
-            }
-
             // RUNNING 动作：推进逐 tick 进度并检查是否产生终态
             if (this.pendingResult != null && this.pendingResult.isRunning()) {
                 try (var stateZone = profiler.zone("check_action_state")) {
@@ -444,7 +449,7 @@ public class AgentRuntime {
         // 释放控制策略、停止寻路并清空待发布状态
         this.clearRuntimeState();
         // 集中清理入口：环境关闭时关闭菜单会话并清理附件
-        this.cleanupAgentState(this.mob, "clear");
+        this.closeMenuSession(this.mob, "clear");
         this.pendingResult = null;
     }
 
@@ -458,9 +463,9 @@ public class AgentRuntime {
      * </p>
      *
      * @param mob    需要清理会话/附件的实体
-     * @param reason 清理原因（用于日志）
+     * @param reason 关闭原因（用于日志）
      */
-    private void cleanupAgentState(Mob mob, String reason) {
+    private void closeMenuSession(Mob mob, String reason) {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server != null && !server.isSameThread()) {
             server.execute(() -> MenuSessionHooks.closeFor(mob, reason));
@@ -479,45 +484,7 @@ public class AgentRuntime {
     }
 
     /**
-     * 实体死亡时发布失败结果。
-     * <p>
-     * 若存在等待中的动作或排队动作，先中断 RUNNING 动作并清理运行时状态，
-     * 再以 "entity died" 失败状态生成观测，统一完成所有相关 future。
-     * </p>
-     */
-    private void publishDeathResultIfNeeded() {
-        // 没有待发布结果且没有排队动作时无需处理
-        if (this.pendingResult == null && this.actionBuf.isEmpty()) {
-            return;
-        }
-        // 构造统一的死亡失败状态
-        ActionState deathState = ActionState.failed("entity died", Map.of(
-            "entity_uuid", this.mob.getUUID().toString(),
-            "removed", this.mob.isRemoved()
-        ));
-        // 释放控制策略并停止寻路
-        this.clearRuntimeState();
-        // RUNNING 动作需要调用 onInterrupt 清理跨 tick 状态
-        if (this.pendingResult != null && this.pendingResult.isRunning()) {
-            this.actionController.onInterrupt(this.pendingResult.action());
-        }
-        // 以同一观测/状态完成排队动作与当前动作
-        ProtoMcObservation observation = this.observationCreator.create(this.mob, deathState);
-        this.completeQueuedActions(deathState, observation);
-        if (this.pendingResult != null) {
-            this.completeResult(this.pendingResult.future(), new RuntimeStepResult(observation, deathState));
-        }
-        this.pendingResult = null;
-        LOGGER.info(
-            "GymCraft runtime published death result entity={} removed={} game_tick={}",
-            this.mob.getUUID(),
-            this.mob.isRemoved(),
-            observation.getHeader().getGameTick()
-        );
-    }
-
-    /**
-     * 打断当前 RUNNING 动作（被新动作/reset/死亡触发）。
+     * 打断当前 RUNNING 动作（被新动作或 reset 触发）。
      * <p>
      * 调用动作组件的 onInterrupt 清理跨 tick 状态，释放控制策略，
      * 并以 interrupted 状态生成观测、完成该动作的 future。

@@ -46,6 +46,10 @@ public class NoopController extends AbstractActionComponentController<ProtoNoop>
 
     @Override
     public ActionApplyResult apply(ProtoNoop component) {
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         return ActionApplyResult.applied(ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE, Goal.Flag.LOOK, Goal.Flag.JUMP, Goal.Flag.TARGET)
             .eraseMemory(MemoryModuleType.WALK_TARGET)

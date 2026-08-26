@@ -10,6 +10,7 @@ import io.github.mousemeya.gymcraft.item.UuidCopierItem;
 import io.github.mousemeya.gymcraft.command.GymCraftCommands;
 import io.github.mousemeya.gymcraft.gametest.GymCraftGameTests;
 import io.github.mousemeya.gymcraft.gym.rpc.GymCraftRpcServer;
+import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
 import io.github.mousemeya.gymcraft.network.GymCraftNetwork;
 
 import org.slf4j.Logger;
@@ -63,6 +64,10 @@ public class GymCraft {
         NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStarted);
         NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStopping);
         NeoForge.EVENT_BUS.addListener(GymCraftCommands::register);
+        NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onLivingDeath);
+        NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onEntityLeaveLevel);
+        NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onServerTickPost);
+        NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onServerStopping);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, EnvToolItem::onEntityInteract);
 
         ITEMS.register(modEventBus);

@@ -12,6 +12,7 @@ import io.github.mousemeya.gymcraft.gym.action.component.MoveMenuItemController;
 import io.github.mousemeya.gymcraft.gym.action.component.MoveToController;
 import io.github.mousemeya.gymcraft.gym.action.component.NoopController;
 import io.github.mousemeya.gymcraft.gym.action.component.OpenMenuController;
+import io.github.mousemeya.gymcraft.gym.action.component.PickUpItemController;
 import io.github.mousemeya.gymcraft.gym.action.component.SetAttackTargetController;
 import io.github.mousemeya.gymcraft.gym.action.component.SetBlockController;
 import io.github.mousemeya.gymcraft.gym.action.component.StepMoveController;
@@ -24,6 +25,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveMenuItem;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveTo;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoOpenMenu;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoPickUpItem;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetAttackTarget;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoStepMove;
@@ -94,6 +96,10 @@ public final class ActionComponents {
     public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoClickMenuButton, ClickMenuButtonController>> CLICK_MENU_BUTTON = REGISTRY.register(
         "click_menu_button",
         ClickMenuButtonController.Factory::new
+    );
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoPickUpItem, PickUpItemController>> PICK_UP_ITEM = REGISTRY.register(
+        "pick_up_item",
+        PickUpItemController.Factory::new
     );
 
     private ActionComponents() {

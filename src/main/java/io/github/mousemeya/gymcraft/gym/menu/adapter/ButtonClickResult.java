@@ -1,4 +1,4 @@
-package io.github.mousemeya.gymcraft.gym.menu;
+package io.github.mousemeya.gymcraft.gym.menu.adapter;
 
 /**
  * 按钮执行结果：成功/失败与可独立阅读的描述（供 {@code ActionState} description 使用）。

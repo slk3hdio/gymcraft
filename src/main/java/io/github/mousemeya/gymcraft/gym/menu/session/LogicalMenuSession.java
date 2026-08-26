@@ -1,5 +1,6 @@
-package io.github.mousemeya.gymcraft.gym.menu;
+package io.github.mousemeya.gymcraft.gym.menu.session;
 
+import io.github.mousemeya.gymcraft.gym.menu.bridge.AgentInventoryBridge;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;

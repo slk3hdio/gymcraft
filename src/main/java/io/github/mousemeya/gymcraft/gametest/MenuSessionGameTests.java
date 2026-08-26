@@ -18,8 +18,8 @@ import net.minecraft.world.item.Items;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSessions;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
 
 /**
  * 14.1 会话与内部状态：session id 稳定性、关闭重开、stale 校验与无关槽位变化。

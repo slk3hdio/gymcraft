@@ -17,13 +17,13 @@ import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoClickMenuButton;
-import io.github.mousemeya.gymcraft.gym.menu.AgentInventoryBridge;
-import io.github.mousemeya.gymcraft.gym.menu.ButtonClickResult;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSessions;
-import io.github.mousemeya.gymcraft.gym.menu.MenuAdapter;
-import io.github.mousemeya.gymcraft.gym.menu.MenuAdapters;
-import io.github.mousemeya.gymcraft.gym.menu.MenuButtonView;
+import io.github.mousemeya.gymcraft.gym.menu.bridge.AgentInventoryBridge;
+import io.github.mousemeya.gymcraft.gym.menu.adapter.ButtonClickResult;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
+import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuAdapter;
+import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuAdapters;
+import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuButtonView;
 import io.github.mousemeya.gymcraft.gym.menu.MenuTypeUtil;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -75,6 +75,10 @@ public class ClickMenuButtonController extends AbstractActionComponentController
     @Override
     public ActionApplyResult apply(ProtoClickMenuButton component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         int buttonId = component.getButtonId();
         LogicalMenuSession session = LogicalMenuSessions.current(mob);
         if (session == null) {

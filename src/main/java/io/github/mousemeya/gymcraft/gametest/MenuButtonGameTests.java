@@ -22,7 +22,7 @@ import net.minecraft.world.level.block.Blocks;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 
 /**
  * 14.6 按钮：Lectern 页码边界与取书、未适配菜单无副作用失败、

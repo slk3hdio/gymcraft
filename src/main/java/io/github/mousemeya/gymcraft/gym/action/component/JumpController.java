@@ -45,6 +45,10 @@ public class JumpController extends AbstractActionComponentController<ProtoJump>
 
     @Override
     public ActionApplyResult apply(ProtoJump component) {
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         this.mob().getJumpControl().jump();
         return ActionApplyResult.applied(ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.JUMP),

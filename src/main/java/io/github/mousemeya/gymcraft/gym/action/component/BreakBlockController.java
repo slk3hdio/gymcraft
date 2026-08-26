@@ -126,6 +126,10 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     @Override
     public ActionApplyResult apply(ProtoBreakBlock component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         if (!(mob.level() instanceof ServerLevel level)) {
             return ActionApplyResult.none(ActionState.failed("not in a server level"));
         }
@@ -163,6 +167,14 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         Mob mob = this.mob();
         MiningState mining = this.miningState;
         if (mining == null || mining.terminal != null) {
+            return;
+        }
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            if (mob.level() instanceof ServerLevel level) {
+                level.destroyBlockProgress(mob.getId(), mining.pos, -1);
+            }
+            mining.terminal = agentError;
             return;
         }
         BlockPos pos = new BlockPos(component.getX(), component.getY(), component.getZ());
@@ -211,6 +223,11 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         if (mining.terminal != null) {
             this.miningState = null;
             return mining.terminal;
+        }
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            this.onInterrupt(component);
+            return agentError;
         }
         return ActionState.running("mining", miningDetails(mining));
     }

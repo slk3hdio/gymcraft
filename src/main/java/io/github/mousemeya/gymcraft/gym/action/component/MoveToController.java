@@ -80,6 +80,10 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
     @Override
     public ActionApplyResult apply(ProtoMoveTo component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         boolean moved = mob.getNavigation().moveTo(component.getX(), component.getY(), component.getZ(), this.speed);
         Path path = mob.getNavigation().getPath();
         var policy = ActionControlPolicy.none()
@@ -108,6 +112,11 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
     @Override
     public ActionState getState(ProtoMoveTo component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            mob.getNavigation().stop();
+            return agentError;
+        }
         double dx = mob.getX() - component.getX();
         double dy = mob.getY() - component.getY();
         double dz = mob.getZ() - component.getZ();

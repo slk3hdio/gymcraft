@@ -61,6 +61,10 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
     @Override
     public ActionApplyResult apply(ProtoStepMove component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         mob.getMoveControl().strafe(component.getForward(), component.getStrafeRight());
         if (component.getJump()) {
             mob.getJumpControl().jump();

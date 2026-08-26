@@ -20,9 +20,9 @@ import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.state.properties.ChestType;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSessions;
-import io.github.mousemeya.gymcraft.gym.menu.MenuSessionHooks;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
+import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
 
 /**
  * 14.4 生命周期：双箱合并、阻挡检查、目标失效自动关闭、恰好一次关闭、
@@ -92,6 +92,32 @@ public final class MenuLifecycleGameTests {
         assertTrue(helper, session.isClosed(), "session should stay closed");
         assertTrue(helper, LogicalMenuSessions.current(mob) == null, "session attachment not removed");
         helper.succeed();
+    }
+
+    /**
+     * 实体死亡或离开世界时，NeoForge 生命周期事件应关闭对应菜单会话。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void entityLifecycleEventsCloseSessions(GameTestHelper helper) {
+        var deadMob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 0));
+        var removedMob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 4));
+        placeChest(helper, new BlockPos(0, 1, 0));
+        placeChest(helper, new BlockPos(0, 1, 4));
+        LogicalMenuSession deathSession = openBlockMenu(helper, deadMob, new BlockPos(0, 1, 0));
+        LogicalMenuSession leaveSession = openBlockMenu(helper, removedMob, new BlockPos(0, 1, 4));
+
+        helper.kill(deadMob);
+        removedMob.discard();
+        helper.runAfterDelay(2, () -> {
+            assertTrue(helper, deathSession.isClosed(), "death event did not close menu session");
+            assertTrue(helper, leaveSession.isClosed(), "leave-level event did not close menu session");
+            assertTrue(helper, LogicalMenuSessions.current(deadMob) == null,
+                "death event left menu attachment registered");
+            assertTrue(helper, LogicalMenuSessions.current(removedMob) == null,
+                "leave-level event left menu attachment registered");
+            helper.succeed();
+        });
     }
 
     /** 候选新菜单验证失败时清理候选，旧菜单保持打开。 */

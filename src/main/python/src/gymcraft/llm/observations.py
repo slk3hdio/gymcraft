@@ -10,11 +10,20 @@ from gymcraft.gym.observation.components import (
     menu_pb2,
     nearby_blocks_pb2,
     nearby_entities_pb2,
+    nearby_items_pb2,
     self_pb2,
     world_pb2,
 )
 from gymcraft.gym.observation.common import slot_pb2
-from gymcraft.type_info import OBS_MENU, OBS_NEARBY_BLOCKS, OBS_NEARBY_ENTITIES, OBS_SELF, OBS_WORLD, Observation
+from gymcraft.type_info import (
+    OBS_MENU,
+    OBS_NEARBY_BLOCKS,
+    OBS_NEARBY_ENTITIES,
+    OBS_NEARBY_ITEMS,
+    OBS_SELF,
+    OBS_WORLD,
+    Observation,
+)
 
 
 # LLM 文本观测的裁剪和显示参数。
@@ -25,13 +34,14 @@ class ObservationFormatConfig:
     float_precision: int = 2
     max_entities: int = 10
     max_blocks: int = 10
+    max_items: int = 10
 
     def __post_init__(self) -> None:
         """拒绝会导致空观测或不可预测格式的配置。"""
         if self.float_precision < 0:
             raise ValueError("float_precision must not be negative")
-        if self.max_entities <= 0 or self.max_blocks <= 0:
-            raise ValueError("max_entities and max_blocks must be positive")
+        if self.max_entities <= 0 or self.max_blocks <= 0 or self.max_items <= 0:
+            raise ValueError("max_entities, max_blocks and max_items must be positive")
 
 
 # 可被任意环境 wrapper 调用的纯观测格式化器。
@@ -56,6 +66,11 @@ class ObservationTextFormatter:
         lines.extend(
             self._format_blocks(
                 observation.get(OBS_NEARBY_BLOCKS),
+            )
+        )
+        lines.extend(
+            self._format_items(
+                observation.get(OBS_NEARBY_ITEMS),
             )
         )
         lines.extend(self._format_menu(observation.get(OBS_MENU)))
@@ -123,6 +138,24 @@ class ObservationTextFormatter:
             lines.append(
                 f"- block_id={block.block_id} x={block.x} y={block.y} z={block.z} "
                 f"distance={self._number(block.distance)}"
+            )
+        return lines
+
+    def _format_items(
+        self,
+        nearby: nearby_items_pb2.ProtoNearbyItems | None,
+    ) -> list[str]:
+        """按距离和 entity id 稳定排序附近掉落物。"""
+        if nearby is None:
+            return ["items: unavailable"]
+        items = sorted(nearby.items, key=lambda item: (item.distance, item.entity_id))
+        shown = items[: self.config.max_items]
+        lines = [self._count_header("items", len(items), len(shown))]
+        for item in shown:
+            lines.append(
+                f"- entity_id={item.entity_id} item_id={item.item.item_id} count={item.item.count} "
+                f"x={self._number(item.x)} y={self._number(item.y)} z={self._number(item.z)} "
+                f"distance={self._number(item.distance)}"
             )
         return lines
 

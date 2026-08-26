@@ -21,6 +21,7 @@ from gymcraft.gym.action.components import (
     move_to_pb2,
     noop_pb2,
     open_menu_pb2,
+    pick_up_item_pb2,
     set_attack_target_pb2,
     set_block_pb2,
     step_move_pb2,
@@ -35,6 +36,7 @@ from gymcraft.type_info import (
     ACTION_MOVE_TO,
     ACTION_NOOP,
     ACTION_OPEN_MENU,
+    ACTION_PICK_UP_ITEM,
     ACTION_SET_ATTACK_TARGET,
     ACTION_SET_BLOCK,
     ACTION_STEP_MOVE,
@@ -93,6 +95,7 @@ class ActionDslParser:
             "close_menu": self._parse_close_menu,
             "move_menu_item": self._parse_move_menu_item,
             "click_menu_button": self._parse_click_menu_button,
+            "pick_up_item": self._parse_pick_up_item,
         }
 
     def parse(self, response_text: str) -> ParsedAgentResponse:
@@ -176,6 +179,7 @@ class ActionDslParser:
             "close_menu": "/close_menu <session_id>",
             "move_menu_item": "/move_menu_item <session_id> <source_slot_id> <target_slot_id> <count>",
             "click_menu_button": "/click_menu_button <session_id> <button_id>",
+            "pick_up_item": "/pick_up_item <entity_id>",
         }
         lines = [references[name] for name in self.available_action_names()]
         return "\n".join(lines)
@@ -365,6 +369,13 @@ class ActionDslParser:
         button_id = self._non_negative_int(tokens[2], "button_id", line_number)
         payload = click_menu_button_pb2.ProtoClickMenuButton(session_id=session_id, button_id=button_id)
         return ParsedAction(ACTION_CLICK_MENU_BUTTON, "click_menu_button", payload)
+
+    def _parse_pick_up_item(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
+        """解析按实体 ID 拾取附近掉落物的命令。"""
+        self._require_arity(tokens, 2, 2, line_number)
+        entity_id = self._positive_int(tokens[1], "entity_id", line_number)
+        payload = pick_up_item_pb2.ProtoPickUpItem(entity_id=entity_id)
+        return ParsedAction(ACTION_PICK_UP_ITEM, "pick_up_item", payload)
 
     @staticmethod
     def _component_for_command(command_name: str) -> str:

@@ -1,7 +1,7 @@
 package io.github.mousemeya.gymcraft.registry;
 
 import io.github.mousemeya.gymcraft.GymCraft;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;

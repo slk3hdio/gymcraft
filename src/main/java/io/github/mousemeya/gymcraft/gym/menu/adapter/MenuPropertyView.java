@@ -1,4 +1,4 @@
-package io.github.mousemeya.gymcraft.gym.menu;
+package io.github.mousemeya.gymcraft.gym.menu.adapter;
 
 /**
  * 菜单专有 DataSlot 属性视图（对应 {@code ProtoMenuProperty}），

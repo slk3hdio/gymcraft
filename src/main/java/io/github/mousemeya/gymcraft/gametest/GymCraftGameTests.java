@@ -82,6 +82,8 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("lifecycle_target_destroyed_auto_closes", () -> MenuLifecycleGameTests::targetDestroyedAutoCloses);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CLOSE_IDEMPOTENT =
         TEST_FUNCTIONS.register("lifecycle_close_exactly_once", () -> MenuLifecycleGameTests::closeExactlyOnce);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LIFECYCLE_ENTITY_EVENTS_CLOSE_SESSIONS =
+        TEST_FUNCTIONS.register("lifecycle_entity_events_close_sessions", () -> MenuLifecycleGameTests::entityLifecycleEventsCloseSessions);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CANDIDATE_FAILURE_KEEPS_OLD =
         TEST_FUNCTIONS.register("lifecycle_candidate_failure_keeps_old", () -> MenuLifecycleGameTests::candidateFailureKeepsOld);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REOPEN_REPLACES_SESSION =
@@ -118,10 +120,24 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("agent_idle_death_returns_terminated_step", () -> AgentDeathGameTests::idleDeathReturnsTerminatedStep);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> RUNNING_ACTION_DEATH_COMPLETES_CURRENT_STEP =
         TEST_FUNCTIONS.register("agent_running_action_death_completes_current_step", () -> AgentDeathGameTests::runningActionDeathCompletesCurrentStep);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> RUNNING_MOVE_TO_DEATH_COMPLETES_CURRENT_STEP =
+        TEST_FUNCTIONS.register("agent_running_move_to_death_completes_current_step", () -> AgentDeathGameTests::runningMoveToDeathCompletesCurrentStep);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ENV_TERMINATION_INDEPENDENT_FROM_ACTION_STATE =
+        TEST_FUNCTIONS.register("env_termination_independent_from_action_state", () -> AgentDeathGameTests::envTerminationIsIndependentFromActionState);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REMOVED_ENTITY_FAILS_IN_ACTION_LAYER =
+        TEST_FUNCTIONS.register("removed_entity_fails_in_action_layer", () -> AgentDeathGameTests::removedEntityFailsInActionLayer);
 
     // ===== 跳跃 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> JUMP_APPLIED =
         TEST_FUNCTIONS.register("jump_applied_and_executed", () -> JumpGameTests::jumpAppliedAndExecuted);
+
+    // ===== 掉落物观测与拾取 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PICKUP_WITHIN_REACH_COLLECTS =
+        TEST_FUNCTIONS.register("pickup_within_reach_collects", () -> PickupGameTests::pickupWithinReachCollects);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PICKUP_UNKNOWN_ENTITY_FAILS =
+        TEST_FUNCTIONS.register("pickup_unknown_entity_fails", () -> PickupGameTests::pickupUnknownEntityFails);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NEARBY_ITEMS_OBSERVATION_LISTS_ITEM =
+        TEST_FUNCTIONS.register("nearby_items_observation_lists_item", () -> PickupGameTests::nearbyItemsObservationListsItem);
 
     // ===== 14.6 按钮 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LECTERN_PAGE_BOUNDS =

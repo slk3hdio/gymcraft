@@ -24,12 +24,14 @@ from gymcraft.gym.action.components.move_menu_item_pb2 import ProtoMoveMenuItem
 from gymcraft.gym.action.components.move_to_pb2 import ProtoMoveTo
 from gymcraft.gym.action.components.noop_pb2 import ProtoNoop
 from gymcraft.gym.action.components.open_menu_pb2 import ProtoOpenMenu
+from gymcraft.gym.action.components.pick_up_item_pb2 import ProtoPickUpItem
 from gymcraft.gym.action.components.set_attack_target_pb2 import ProtoSetAttackTarget
 from gymcraft.gym.action.components.set_block_pb2 import ProtoSetBlock
 from gymcraft.gym.action.components.step_move_pb2 import ProtoStepMove
 from gymcraft.gym.observation.components.menu_pb2 import ProtoMenuObservation
 from gymcraft.gym.observation.components.nearby_blocks_pb2 import ProtoNearbyBlocks
 from gymcraft.gym.observation.components.nearby_entities_pb2 import ProtoNearbyEntities
+from gymcraft.gym.observation.components.nearby_items_pb2 import ProtoNearbyItems
 from gymcraft.gym.observation.components.self_pb2 import ProtoSelfState
 from gymcraft.gym.observation.components.world_pb2 import ProtoWorldState
 from gymcraft.gym.observation.observation_pb2 import ProtoObservationHeader
@@ -48,6 +50,7 @@ ACTION_OPEN_MENU: Final = "gymcraft:open_menu"
 ACTION_CLOSE_MENU: Final = "gymcraft:close_menu"
 ACTION_MOVE_MENU_ITEM: Final = "gymcraft:move_menu_item"
 ACTION_CLICK_MENU_BUTTON: Final = "gymcraft:click_menu_button"
+ACTION_PICK_UP_ITEM: Final = "gymcraft:pick_up_item"
 
 # ── 观测组件注册 id（完整 wire 键，含 `gymcraft:` 命名空间）────────────────────
 OBS_SELF: Final = "gymcraft:self"
@@ -55,6 +58,7 @@ OBS_WORLD: Final = "gymcraft:world"
 OBS_NEARBY_ENTITIES: Final = "gymcraft:nearby_entities"
 OBS_NEARBY_BLOCKS: Final = "gymcraft:nearby_blocks"
 OBS_MENU: Final = "gymcraft:menu"
+OBS_NEARBY_ITEMS: Final = "gymcraft:nearby_items"
 
 # Action dict 中的动作级超时键（秒，<= 0 表示不限制；非组件键）。
 TIMEOUT_SECONDS: Final = "timeout_seconds"
@@ -81,6 +85,7 @@ Action = TypedDict(
         "gymcraft:close_menu": NotRequired[ProtoCloseMenu],
         "gymcraft:move_menu_item": NotRequired[ProtoMoveMenuItem],
         "gymcraft:click_menu_button": NotRequired[ProtoClickMenuButton],
+        "gymcraft:pick_up_item": NotRequired[ProtoPickUpItem],
     },
 )
 
@@ -97,5 +102,6 @@ Observation = TypedDict(
         "gymcraft:nearby_entities": NotRequired[ProtoNearbyEntities],
         "gymcraft:nearby_blocks": NotRequired[ProtoNearbyBlocks],
         "gymcraft:menu": NotRequired[ProtoMenuObservation],
+        "gymcraft:nearby_items": NotRequired[ProtoNearbyItems],
     },
 )

@@ -61,6 +61,10 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
     @Override
     public ActionApplyResult apply(ProtoAttackOnce component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         LivingEntity target = null;
         if (component.getTargetEntityId() > 0) {
             var found = mob.level().getEntity(component.getTargetEntityId());

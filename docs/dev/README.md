@@ -35,7 +35,7 @@ src/main/
 │   ├── gym/env/            McEnv、环境实现与实体快照
 │   ├── gym/runtime/        AgentRuntime tick 调度
 │   ├── gym/rpc/            gRPC 服务与会话
-│   ├── gym/menu/           逻辑菜单会话与菜单适配器
+│   ├── gym/menu/           逻辑菜单会话与菜单适配器（session/ 会话与槽位、bridge/ 物品栏桥接、adapter/ 按钮适配）
 │   ├── gym/inventory/      Agent 统一物品栏布局
 │   └── registry/           动作、观测、环境自定义注册表
 ├── proto/                  protobuf 与 GymEnvService 定义

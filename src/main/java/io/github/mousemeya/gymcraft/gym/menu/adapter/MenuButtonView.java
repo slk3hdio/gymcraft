@@ -1,4 +1,4 @@
-package io.github.mousemeya.gymcraft.gym.menu;
+package io.github.mousemeya.gymcraft.gym.menu.adapter;
 
 /**
  * 菜单按钮视图 —— 适配器声明的按钮元数据（对应 {@code ProtoMenuButton}）。

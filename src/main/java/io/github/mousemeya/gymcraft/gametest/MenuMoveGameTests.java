@@ -19,7 +19,7 @@ import net.minecraft.world.level.block.Blocks;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 
 /**
  * 14.3 物品移动：空源/不合法目标失败、数量截断、容量部分移动、不同物品不合并、carried 恒空。

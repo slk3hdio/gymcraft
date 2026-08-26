@@ -11,10 +11,10 @@ import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoOpenMenu;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSessions;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
 import io.github.mousemeya.gymcraft.gym.menu.MenuTypeUtil;
-import io.github.mousemeya.gymcraft.gym.menu.OpenMenuTarget;
+import io.github.mousemeya.gymcraft.gym.menu.session.OpenMenuTarget;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
@@ -83,6 +83,10 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
     @Override
     public ActionApplyResult apply(ProtoOpenMenu component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         OpenMenuTarget target = toTarget(component);
         if (target == null) {
             return ActionApplyResult.none(ActionState.failed("menu target is not set"));

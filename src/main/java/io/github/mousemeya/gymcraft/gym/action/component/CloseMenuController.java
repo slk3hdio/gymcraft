@@ -10,8 +10,8 @@ import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoCloseMenu;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSession;
-import io.github.mousemeya.gymcraft.gym.menu.LogicalMenuSessions;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
+import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
@@ -54,6 +54,10 @@ public class CloseMenuController extends AbstractActionComponentController<Proto
     @Override
     public ActionApplyResult apply(ProtoCloseMenu component) {
         Mob mob = this.mob();
+        ActionState agentError = this.validateMobForAction();
+        if (agentError != null) {
+            return ActionApplyResult.none(agentError);
+        }
         LogicalMenuSession session = LogicalMenuSessions.current(mob);
         if (session == null) {
             return ActionApplyResult.none(ActionState.failed("no open menu session"));
