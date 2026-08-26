@@ -80,7 +80,7 @@ observation, reward, terminated, truncated, info = env.step({
 env.close()
 ```
 
-`Connect` 只连接现有环境，不会自动创建环境。`disable_vanilla_ai=True` 会在本次环境运行期间持续压制原版 AI。
+`Connect` 只连接现有环境，不会自动创建环境。`disable_vanilla_ai=True` 仅在 reset 后以及一个动作结束到下一个动作开始之间压制原版 AI；动作执行期间会释放该环境级压制，并只保留动作自身声明的细粒度控制策略。
 
 ## Demo
 

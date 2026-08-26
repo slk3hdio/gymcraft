@@ -27,7 +27,7 @@ public final class ActionControlPolicy {
     }
 
     /**
-     * 构造环境级原版 AI 压制策略。
+     * 构造动作间空闲期使用的原版 AI 压制策略。
      * <p>
      * 不设置 Mob 的 {@code NoAI} 标志，保留实体移动、重力和跳跃物理；
      * 仅关闭 Goal 控制、停止寻路，并清理 Brain 当前行为依赖的关键记忆。

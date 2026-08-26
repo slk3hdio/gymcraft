@@ -44,7 +44,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 环境实现由 NeoForge 自定义注册表中的 McEnvFactory 创建。
  */
 public abstract class AbstractMcEnv implements McEnv {
-    /** reset options：是否在环境运行期间完全禁用原版 AI。 */
+    /** reset options：是否在 reset 后和相邻动作之间的空闲期禁用原版 AI。 */
     public static final String DISABLE_VANILLA_AI_OPTION = "disable_vanilla_ai";
 
     protected final Identifier envTypeId;
@@ -222,7 +222,7 @@ public abstract class AbstractMcEnv implements McEnv {
         mob.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
     }
 
-    /** 应用通用 reset 行为并在最后提交环境级 AI 选项。 */
+    /** 应用通用 reset 行为并在最后提交动作间空闲期 AI 选项。 */
     protected final void resetAgent(Mob mob, Integer seed, Map<String, Object> options) {
         boolean requestedDisableVanillaAi = parseDisableVanillaAi(options);
         this.resetMob(mob, seed, options);
@@ -273,11 +273,9 @@ public abstract class AbstractMcEnv implements McEnv {
         }
     }
 
+    /** 确认环境仍可接收 step；实体死亡由 step 作为正常终态返回。 */
     protected void ensureReady() {
         this.ensureOpen();
-        if (!this.mob().isAlive()) {
-            throw new IllegalStateException("Environment entity is dead: " + this.mob().getUUID());
-        }
     }
 
     protected Mob mob() {

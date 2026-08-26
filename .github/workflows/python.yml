@@ -37,7 +37,11 @@ jobs:
 
       - name: Typecheck Python code
         working-directory: src/main/python
-        run: uv run mypy src debug demos
+        run: uv run mypy src debug demos tests
+
+      - name: Test Python LLM tools
+        working-directory: src/main/python
+        run: uv run python -m unittest discover -s tests -v
 
       - name: Package Python client
         run: ./gradlew packagePython

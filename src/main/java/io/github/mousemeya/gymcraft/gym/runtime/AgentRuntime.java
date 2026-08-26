@@ -54,7 +54,7 @@ public class AgentRuntime {
     @Nullable
     private PendingResult pendingResult;
     private ActionControlPolicy activePolicy = ActionControlPolicy.none();
-    private ActionControlPolicy environmentPolicy = ActionControlPolicy.none();
+    private ActionControlPolicy betweenActionsPolicy = ActionControlPolicy.none();
 
     /** 环境重置回调，由具体环境实现还原逻辑。 */
     @FunctionalInterface
@@ -124,9 +124,13 @@ public class AgentRuntime {
         return this.mob;
     }
 
-    /** 设置环境级原版 AI 策略；策略会与当前 controller 策略逐 tick 合并应用。 */
+    /**
+     * 设置动作间空闲期的原版 AI 压制策略。
+     *
+     * @param disableVanillaAi 为 true 时，在 reset 后以及每个动作终态到下一动作开始之间压制原版 AI
+     */
     public void setDisableVanillaAi(boolean disableVanillaAi) {
-        this.environmentPolicy = disableVanillaAi
+        this.betweenActionsPolicy = disableVanillaAi
             ? ActionControlPolicy.disableVanillaAi()
             : ActionControlPolicy.none();
     }
@@ -173,13 +177,9 @@ public class AgentRuntime {
      *
      * @param action 本次要执行的动作
      * @return 该动作的最终观测与动作状态
-     * @throws IllegalStateException 实体已死亡，或线程被中断/执行失败时抛出
+     * @throws IllegalStateException 线程被中断或执行失败时抛出
      */
     public RuntimeStepResult step(ProtoMcAction action) {
-        // 实体已死亡时拒绝执行新动作
-        if (!this.mob.isAlive()) {
-            throw new IllegalStateException("Environment entity is dead: " + this.mob.getUUID());
-        }
         // 构造动作请求（含完成回调 future），投递到动作缓冲区
         ActionRequest request = new ActionRequest(action, new CompletableFuture<>());
         try {
@@ -208,25 +208,31 @@ public class AgentRuntime {
     }
 
     /**
-     * 服务端 tick 结束后处理重置请求。
+     * 服务端 tick 结束后处理重置请求，并兜底发布死亡实体的排队动作结果。
      * <p>
      * 实体还原需要从世界中移除/重新添加实体，不能在实体 tick 循环中执行，
-     * 因此选用 {@link ServerTickEvent.Post} 作为重置时机；每个 tick 至多处理一个重置。
+     * 因此选用 {@link ServerTickEvent.Post} 作为重置时机；死亡实体可能不再触发
+     * {@link EntityTickEvent.Post}，下一次 step 的终态也在这里兜底发布。
      * </p>
      */
     @SubscribeEvent
     private void onServerTickPost(ServerTickEvent.Post event) {
         // 非阻塞取重置请求；每个 tick 至多处理一个
         ResetRequest reset = this.resetBuf.poll();
-        if (reset == null) {
-            return;
+        if (reset != null) {
+            try {
+                // 在服务端 tick 线程上执行重置并完成 future
+                reset.future().complete(this.resetOnServerTick(reset.seed(), reset.options()));
+            } catch (RuntimeException e) {
+                // 重置失败：以异常完成 future，让 gRPC 线程感知
+                reset.future().completeExceptionally(e);
+            }
         }
-        try {
-            // 在服务端 tick 线程上执行重置并完成 future
-            reset.future().complete(this.resetOnServerTick(reset.seed(), reset.options()));
-        } catch (RuntimeException e) {
-            // 重置失败：以异常完成 future，让 gRPC 线程感知
-            reset.future().completeExceptionally(e);
+
+        // 动作间死亡的实体不会再消费 EntityTick.Pre 中的请求，改由服务端 tick 返回正常终态。
+        if (!this.mob.isAlive() && (this.pendingResult != null || !this.actionBuf.isEmpty())) {
+            this.cleanupAgentState(this.mob, "entity died");
+            this.publishDeathResultIfNeeded();
         }
     }
 
@@ -307,6 +313,9 @@ public class AgentRuntime {
                         this.interruptPendingAction("interrupted by new action");
                     }
 
+                    // 新动作开始前释放空闲期策略，让原版 AI 在动作执行期间参与移动、攻击等行为
+                    this.betweenActionsPolicy.releaseFrom(this.mob);
+
                     // 应用动作，得到初始状态与本次动作携带的控制策略
                     ActionApplyResult result = this.actionController.apply(request.action());
                     this.activePolicy = result.policy();
@@ -372,10 +381,8 @@ public class AgentRuntime {
                             state.description(),
                             state.details()
                         );
-                        // 进入终态：记录终态并释放动作的控制策略
+                        // 进入终态：记录终态；统一在结果发布后释放动作策略
                         this.pendingResult = PendingResult.terminal(state, this.pendingResult.future());
-                        this.activePolicy.releaseFrom(this.mob);
-                        this.activePolicy = ActionControlPolicy.none();
                     }
                 }
             }
@@ -393,6 +400,9 @@ public class AgentRuntime {
                         state.description(),
                         observation.getHeader().getGameTick()
                     );
+                    // 动作终态已经发布，释放动作策略并切回动作间空闲期策略
+                    this.activePolicy.releaseFrom(this.mob);
+                    this.activePolicy = ActionControlPolicy.none();
                     this.pendingResult = null;
                 }
             }
@@ -404,12 +414,19 @@ public class AgentRuntime {
         }
     }
 
-    /** 同时维持环境级 NoAI 与当前动作按需生成的细粒度控制策略。 */
+    /**
+     * 根据当前生命周期阶段应用控制策略。
+     * <p>
+     * RUNNING 动作只应用动作自己的细粒度策略；没有 RUNNING 动作时应用动作间空闲期策略。
+     * 初始即终态的动作会在同一 tick 同时应用一次动作策略和空闲期策略，随后释放动作策略。
+     * </p>
+     */
     private void applyControlPolicy() {
-        ActionControlPolicy.none()
-            .merge(this.environmentPolicy)
-            .merge(this.activePolicy)
-            .applyTo(this.mob);
+        ActionControlPolicy policy = ActionControlPolicy.none();
+        if (this.pendingResult == null || !this.pendingResult.isRunning()) {
+            policy.merge(this.betweenActionsPolicy);
+        }
+        policy.merge(this.activePolicy).applyTo(this.mob);
     }
 
     /** 清理环境关闭时的所有运行时状态。 */
@@ -455,9 +472,9 @@ public class AgentRuntime {
     /** 释放当前控制策略并停止寻路，恢复实体 AI 的控制权。 */
     private void clearRuntimeState() {
         this.activePolicy.releaseFrom(this.mob);
-        this.environmentPolicy.releaseFrom(this.mob);
+        this.betweenActionsPolicy.releaseFrom(this.mob);
         this.activePolicy = ActionControlPolicy.none();
-        this.environmentPolicy = ActionControlPolicy.none();
+        this.betweenActionsPolicy = ActionControlPolicy.none();
         this.mob.getNavigation().stop();
     }
 

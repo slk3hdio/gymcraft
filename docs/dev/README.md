@@ -98,9 +98,9 @@ src/main/
 - `gymcraft:simple_mob`：暴露通用动作和观测组件。
 - `gymcraft:parkour_mob`：提供受限训练场、方块资源、上升奖励和 Q-learning demo。
 
-`reset(options={"disable_vanilla_ai": true})` 会应用环境级策略，持续压制 Goal flags、
-寻路和关键 Brain memory，同时保留移动、重力与跳跃物理。该选项为 `false` 时，
-仅由当前动作 Controller 按需压制原版行为。
+`reset(options={"disable_vanilla_ai": true})` 会在 reset 后以及相邻动作之间的空闲期压制
+Goal flags、寻路和关键 Brain memory，同时保留移动、重力与跳跃物理。动作开始时会释放
+该环境级压制，执行期间仅由当前动作 Controller 按需控制原版行为；动作进入终态后恢复空闲期压制。
 
 ## gRPC 接口
 
@@ -114,6 +114,9 @@ src/main/
 | `CloseSession` | 释放独占会话 |
 
 动作和观测使用 protobuf；`options`、`metadata` 与 `info` 使用 JSON 字符串。
+实体在 RUNNING 动作期间死亡时，当前 `Step` 会立即返回 `terminated=true` 和 `entity died`；
+实体在动作间死亡时，则由下一次 `Step` 返回同一终态。两种情况都不会把正常 episode 终态
+映射为 gRPC `FAILED_PRECONDITION`。
 common config 中的 `rpcEnabled` 和 `rpcPort` 控制服务启用状态与端口。
 
 ## Python 客户端与 Demo

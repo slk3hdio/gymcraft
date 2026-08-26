@@ -108,8 +108,16 @@ public final class GymCraftGameTests {
     // ===== 环境 AI 策略 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AI_DISABLED_MAINTAINED =
         TEST_FUNCTIONS.register("env_disable_vanilla_ai_maintained", () -> EnvAiGameTests::disableVanillaAiIsMaintained);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AI_DISABLED_ONLY_BETWEEN_ACTIONS =
+        TEST_FUNCTIONS.register("env_disable_vanilla_ai_only_between_actions", () -> EnvAiGameTests::disableVanillaAiOnlyBetweenActions);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AI_ENABLED_USES_CONTROLLER_POLICY =
         TEST_FUNCTIONS.register("env_enable_vanilla_ai_uses_controller_policy", () -> EnvAiGameTests::enabledVanillaAiUsesControllerPolicy);
+
+    // ===== Agent 死亡生命周期 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IDLE_DEATH_RETURNS_TERMINATED_STEP =
+        TEST_FUNCTIONS.register("agent_idle_death_returns_terminated_step", () -> AgentDeathGameTests::idleDeathReturnsTerminatedStep);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> RUNNING_ACTION_DEATH_COMPLETES_CURRENT_STEP =
+        TEST_FUNCTIONS.register("agent_running_action_death_completes_current_step", () -> AgentDeathGameTests::runningActionDeathCompletesCurrentStep);
 
     // ===== 跳跃 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> JUMP_APPLIED =

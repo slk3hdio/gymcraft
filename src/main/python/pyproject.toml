@@ -16,9 +16,15 @@ dependencies = [
     "protobuf>=6.33.6",
 ]
 
+[project.optional-dependencies]
+openai = [
+    "openai>=2.0.0",
+]
+
 [dependency-groups]
 dev = [
     "grpcio-tools>=1.81.1",
+    "openai>=2.0.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -61,4 +67,3 @@ module = [
   "google.*",
 ]
 ignore_missing_imports = true
-
