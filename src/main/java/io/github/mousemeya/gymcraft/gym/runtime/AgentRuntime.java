@@ -52,7 +52,7 @@ public class AgentRuntime {
     private final ArrayBlockingQueue<ResetRequest> resetBuf = new ArrayBlockingQueue<>(1);
 
     @Nullable
-    private PendingResult pendingResult;
+    private volatile PendingResult pendingResult;
     private ActionControlPolicy activePolicy = ActionControlPolicy.none();
     private ActionControlPolicy betweenActionsPolicy = ActionControlPolicy.none();
     /** 自上一次 ServerTick.Post 以来，绑定实体是否已经走过正常的 EntityTick.Post。 */

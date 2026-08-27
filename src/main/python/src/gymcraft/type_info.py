@@ -19,6 +19,7 @@ from gymcraft.gym.action.components.attack_once_pb2 import ProtoAttackOnce
 from gymcraft.gym.action.components.break_block_pb2 import ProtoBreakBlock
 from gymcraft.gym.action.components.click_menu_button_pb2 import ProtoClickMenuButton
 from gymcraft.gym.action.components.close_menu_pb2 import ProtoCloseMenu
+from gymcraft.gym.action.components.drop_item_pb2 import ProtoDropItem
 from gymcraft.gym.action.components.jump_pb2 import ProtoJump
 from gymcraft.gym.action.components.look_at_pb2 import ProtoLookAt
 from gymcraft.gym.action.components.move_menu_item_pb2 import ProtoMoveMenuItem
@@ -53,6 +54,7 @@ ACTION_CLOSE_MENU: Final = "gymcraft:close_menu"
 ACTION_MOVE_MENU_ITEM: Final = "gymcraft:move_menu_item"
 ACTION_CLICK_MENU_BUTTON: Final = "gymcraft:click_menu_button"
 ACTION_PICK_UP_ITEM: Final = "gymcraft:pick_up_item"
+ACTION_DROP_ITEM: Final = "gymcraft:drop_item"
 
 # ── 观测组件注册 id（完整 wire 键，含 `gymcraft:` 命名空间）────────────────────
 OBS_SELF: Final = "gymcraft:self"
@@ -89,6 +91,7 @@ Action = TypedDict(
         "gymcraft:move_menu_item": NotRequired[ProtoMoveMenuItem],
         "gymcraft:click_menu_button": NotRequired[ProtoClickMenuButton],
         "gymcraft:pick_up_item": NotRequired[ProtoPickUpItem],
+        "gymcraft:drop_item": NotRequired[ProtoDropItem],
     },
 )
 

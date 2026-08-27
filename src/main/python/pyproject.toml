@@ -24,6 +24,7 @@ openai = [
 [dependency-groups]
 dev = [
     "grpcio-tools>=1.81.1",
+    "mcp>=2.1.1",
     "openai>=2.0.0",
 ]
 

@@ -72,6 +72,12 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("move_different_items_not_merged", () -> MenuMoveGameTests::differentItemsNotMerged);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CARRIED_ALWAYS_EMPTY =
         TEST_FUNCTIONS.register("move_carried_always_empty", () -> MenuMoveGameTests::carriedAlwaysEmpty);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REPEAT_MOVES_MULTIPLE =
+        TEST_FUNCTIONS.register("move_repeat_moves_multiple_times", () -> MenuMoveGameTests::repeatMovesMultipleTimes);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REPEAT_STOPS_SOURCE_EMPTY =
+        TEST_FUNCTIONS.register("move_repeat_stops_when_source_empty", () -> MenuMoveGameTests::repeatStopsWhenSourceEmpty);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REPEAT_CRAFTING_OUTPUTS =
+        TEST_FUNCTIONS.register("move_repeat_takes_consecutive_crafting_outputs", () -> MenuMoveGameTests::repeatTakesConsecutiveCraftingOutputs);
 
     // ===== 14.4 生命周期 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> DOUBLE_CHEST_MERGED =
@@ -148,6 +154,14 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("pickup_unknown_entity_fails", () -> PickupGameTests::pickupUnknownEntityFails);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NEARBY_ITEMS_OBSERVATION_LISTS_ITEM =
         TEST_FUNCTIONS.register("nearby_items_observation_lists_item", () -> PickupGameTests::nearbyItemsObservationListsItem);
+
+    // ===== 丢出物品 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> DROP_REQUESTED_COUNT_FORWARD =
+        TEST_FUNCTIONS.register("drop_item_requested_count_forward", () -> DropItemGameTests::dropRequestedCountForward);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> DROP_ZERO_COUNT_WHOLE_STACK =
+        TEST_FUNCTIONS.register("drop_item_zero_count_whole_stack", () -> DropItemGameTests::zeroCountDropsWholeStack);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> DROP_INVALID_SOURCE_FAILS =
+        TEST_FUNCTIONS.register("drop_item_invalid_source_fails", () -> DropItemGameTests::invalidSourceFails);
 
     // ===== 14.6 按钮 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LECTERN_PAGE_BOUNDS =

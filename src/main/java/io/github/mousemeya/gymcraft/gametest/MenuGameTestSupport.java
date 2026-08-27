@@ -97,11 +97,17 @@ public final class MenuGameTestSupport {
     }
 
     public static ActionState moveMenuItem(Mob mob, long sessionId, int sourceSlotId, int targetSlotId, int count) {
+        return moveMenuItem(mob, sessionId, sourceSlotId, targetSlotId, count, 1);
+    }
+
+    /** 移动菜单物品（可指定 repeat 重复次数）。 */
+    public static ActionState moveMenuItem(Mob mob, long sessionId, int sourceSlotId, int targetSlotId, int count, int repeat) {
         return new MoveMenuItemController(mob).apply(ProtoMoveMenuItem.newBuilder()
             .setSessionId(sessionId)
             .setSourceSlotId(sourceSlotId)
             .setTargetSlotId(targetSlotId)
             .setCount(count)
+            .setRepeat(repeat)
             .build()).initialState();
     }
 

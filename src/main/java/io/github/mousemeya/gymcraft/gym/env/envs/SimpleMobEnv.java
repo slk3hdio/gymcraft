@@ -45,7 +45,8 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ActionComponents.CLOSE_MENU.get(),
                 ActionComponents.MOVE_MENU_ITEM.get(),
                 ActionComponents.CLICK_MENU_BUTTON.get(),
-                ActionComponents.PICK_UP_ITEM.get()
+                ActionComponents.PICK_UP_ITEM.get(),
+                ActionComponents.DROP_ITEM.get()
             ),
             List.of(
                 ObservationCreators.SELF.get(),

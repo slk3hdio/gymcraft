@@ -72,7 +72,9 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
 
         EnvManager.get(entityUuid).ifPresentOrElse(env -> {
             try {
-                RpcEnvSessions.Session session = sessions.create(entityUuid, env);
+                // 记录 transport 远端地址，供断连时按 transport 定位会话
+                RpcEnvSessions.Session session = sessions.create(
+                        entityUuid, env, RemoteAddrInterceptor.REMOTE_ADDR_KEY.get());
                 responseObserver.onNext(ConnectResponse.newBuilder()
                         .setSessionId(session.id())
                         .setEntityUuid(entityUuid.toString())
@@ -106,6 +108,8 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
     @Override
     public void reset(ResetRequest request, StreamObserver<ResetResponse> responseObserver) {
         sessions.get(request.getSessionId()).ifPresentOrElse(session -> {
+            // 瞬断重连：孤儿会话从新 transport 收到 RPC 时自动重绑定恢复活跃
+            sessions.rebindIfOrphaned(session.id(), RemoteAddrInterceptor.REMOTE_ADDR_KEY.get());
             session.lock().lock();
             try {
                 ResetResponse response = session.env().reset(
@@ -143,6 +147,8 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
         }
 
         sessions.get(request.getSessionId()).ifPresentOrElse(session -> {
+            // 瞬断重连：孤儿会话从新 transport 收到 RPC 时自动重绑定恢复活跃
+            sessions.rebindIfOrphaned(session.id(), RemoteAddrInterceptor.REMOTE_ADDR_KEY.get());
             session.lock().lock();
             try {
                 StepResponse response = session.env().step(request.getAction());

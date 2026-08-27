@@ -16,6 +16,7 @@ from gymcraft.gym.action.components import (
     break_block_pb2,
     click_menu_button_pb2,
     close_menu_pb2,
+    drop_item_pb2,
     jump_pb2,
     look_at_pb2,
     move_menu_item_pb2,
@@ -32,6 +33,7 @@ from gymcraft.type_info import (
     ACTION_BREAK_BLOCK,
     ACTION_CLICK_MENU_BUTTON,
     ACTION_CLOSE_MENU,
+    ACTION_DROP_ITEM,
     ACTION_JUMP,
     ACTION_LOOK_AT,
     ACTION_MOVE_MENU_ITEM,
@@ -99,6 +101,7 @@ class ActionDslParser:
             "move_menu_item": self._parse_move_menu_item,
             "click_menu_button": self._parse_click_menu_button,
             "pick_up_item": self._parse_pick_up_item,
+            "drop_item": self._parse_drop_item,
         }
 
     def parse(self, response_text: str) -> ParsedAgentResponse:
@@ -181,9 +184,10 @@ class ActionDslParser:
             "jump": "/jump",
             "open_menu": "/open_menu self|entity <entity_id>|block <x> <y> <z>",
             "close_menu": "/close_menu <session_id>",
-            "move_menu_item": "/move_menu_item <session_id> <source_slot_id> <target_slot_id> <count>",
+            "move_menu_item": "/move_menu_item <session_id> <source_slot_id> <target_slot_id> <count> [repeat]",
             "click_menu_button": "/click_menu_button <session_id> <button_id>",
             "pick_up_item": "/pick_up_item <entity_id>",
+            "drop_item": "/drop_item <slot_id> [count]",
         }
         lines = [references[name] for name in self.available_action_names()]
         return "\n".join(lines)
@@ -382,17 +386,19 @@ class ActionDslParser:
         return ParsedAction(ACTION_CLOSE_MENU, "close_menu", close_menu_pb2.ProtoCloseMenu(session_id=session_id))
 
     def _parse_move_menu_item(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
-        """解析菜单槽位之间移动物品的命令。"""
-        self._require_arity(tokens, 5, 5, line_number)
+        """解析菜单槽位之间移动物品的命令（可选 repeat 指定重复移动次数）。"""
+        self._require_arity(tokens, 5, 6, line_number)
         session_id = self._positive_int(tokens[1], "session_id", line_number)
         source = self._non_negative_int(tokens[2], "source_slot_id", line_number)
         target = self._non_negative_int(tokens[3], "target_slot_id", line_number)
         count = self._positive_int(tokens[4], "count", line_number)
+        repeat = self._positive_int(tokens[5], "repeat", line_number) if len(tokens) == 6 else 1
         payload = move_menu_item_pb2.ProtoMoveMenuItem(
             session_id=session_id,
             source_slot_id=source,
             target_slot_id=target,
             count=count,
+            repeat=repeat,
         )
         return ParsedAction(ACTION_MOVE_MENU_ITEM, "move_menu_item", payload)
 
@@ -410,6 +416,14 @@ class ActionDslParser:
         entity_id = self._positive_int(tokens[1], "entity_id", line_number)
         payload = pick_up_item_pb2.ProtoPickUpItem(entity_id=entity_id)
         return ParsedAction(ACTION_PICK_UP_ITEM, "pick_up_item", payload)
+
+    def _parse_drop_item(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
+        """解析从统一物品栏槽位向前丢出物品的命令。"""
+        self._require_arity(tokens, 2, 3, line_number)
+        slot_id = self._non_negative_int(tokens[1], "slot_id", line_number)
+        count = self._positive_int(tokens[2], "count", line_number) if len(tokens) == 3 else 0
+        payload = drop_item_pb2.ProtoDropItem(slot_id=slot_id, count=count)
+        return ParsedAction(ACTION_DROP_ITEM, "drop_item", payload)
 
     @staticmethod
     def _component_for_command(command_name: str) -> str:

@@ -24,6 +24,7 @@ PROTO_FILES = [
     "gymcraft/gym/action/components/move_menu_item.proto",
     "gymcraft/gym/action/components/click_menu_button.proto",
     "gymcraft/gym/action/components/pick_up_item.proto",
+    "gymcraft/gym/action/components/drop_item.proto",
     "gymcraft/gym/observation/observation.proto",
     "gymcraft/gym/observation/common/entity_view.proto",
     "gymcraft/gym/observation/common/block_view.proto",

@@ -11,4 +11,8 @@ message ProtoMoveMenuItem {
   int32 source_slot_id = 2;
   int32 target_slot_id = 3;
   int32 count = 4;
+  // 重复移动次数；缺省 0 与 1 等价（单次移动，向后兼容）。
+  // 每次重复独立执行完整的"校验 → 取出 → 落库"流程（数量截断/容量检查/结果槽完整产出语义），
+  // 源耗尽或目标已满等无法继续时提前结束，按实际完成次数报告 completed_repeats。
+  int32 repeat = 5;
 }

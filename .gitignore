@@ -29,6 +29,9 @@ bin/
 ### VS Code ###
 .vscode/
 
+### Kimi CLI ###
+.kimi-code/
+
 ### Mac OS ###
 .DS_Store
 

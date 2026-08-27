@@ -195,7 +195,7 @@ class ActionDslParserTests(unittest.TestCase):
                 self.assertEqual(expected_target, payload.WhichOneof("target"))
 
     def test_all_registered_action_commands_parse(self) -> None:
-        """当前 14 个动作组件的标准 DSL 写法都应能生成 protobuf。"""
+        """当前 15 个动作组件的标准 DSL 写法都应能生成 protobuf。"""
         commands = [
             "/noop",
             "/step_move 1 0 0 0 true",
@@ -209,8 +209,10 @@ class ActionDslParserTests(unittest.TestCase):
             "/open_menu block 1 64 2",
             "/close_menu 1",
             "/move_menu_item 1 0 1 1",
+            "/move_menu_item 1 0 1 1 3",
             "/click_menu_button 1 0",
             "/pick_up_item 3",
+            "/drop_item 0 2",
         ]
         parser = ActionDslParser()
         for command in commands:

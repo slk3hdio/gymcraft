@@ -7,6 +7,7 @@ import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.observe;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.openBlockMenu;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.placeChest;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.sessionSlotId;
+import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.setMenuSlot;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.spawnAgent;
 
 import net.minecraft.core.BlockPos;
@@ -127,6 +128,65 @@ public final class MenuMoveGameTests {
         assertTrue(helper, session.menu().getCarried().isEmpty(), "carried not empty after move");
         observe(mob);
         assertTrue(helper, session.menu().getCarried().isEmpty(), "carried not empty after observation");
+        helper.succeed();
+    }
+
+    /** repeat 重复移动：count=5、repeat=3 从 20 个圆石中一次动作移出 15 个。 */
+    public static void repeatMovesMultipleTimes(GameTestHelper helper) {
+        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        var chest = placeChest(helper, new BlockPos(0, 1, 2));
+        chest.setItem(0, new ItemStack(Items.COBBLESTONE, 20));
+        LogicalMenuSession session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
+        observe(mob);
+
+        ActionState state = moveMenuItem(mob, session.sessionId(), sessionSlotId(session, 0), 0, 5, 3);
+        assertEquals(helper, ActionStatus.COMPLETED, state.status(), "repeat move failed: " + state.description());
+        assertEquals(helper, 3, state.details().get("requested_repeats"), "requested_repeats");
+        assertEquals(helper, 3, state.details().get("completed_repeats"), "completed_repeats");
+        assertEquals(helper, 15, state.details().get("moved_count"), "moved_count");
+        assertEquals(helper, 15, mob.getMainHandItem().getCount(), "mainhand count after repeat move");
+        assertEquals(helper, 5, chest.getItem(0).getCount(), "source remainder wrong");
+        helper.succeed();
+    }
+
+    /** repeat 在源耗尽后提前结束：completed_repeats < requested_repeats 且带 stopped_reason。 */
+    public static void repeatStopsWhenSourceEmpty(GameTestHelper helper) {
+        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        var chest = placeChest(helper, new BlockPos(0, 1, 2));
+        chest.setItem(0, new ItemStack(Items.COBBLESTONE, 8));
+        LogicalMenuSession session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
+        observe(mob);
+
+        ActionState state = moveMenuItem(mob, session.sessionId(), sessionSlotId(session, 0), 0, 5, 3);
+        assertEquals(helper, ActionStatus.COMPLETED, state.status(), "repeat move failed: " + state.description());
+        assertEquals(helper, 3, state.details().get("requested_repeats"), "requested_repeats");
+        assertEquals(helper, 2, state.details().get("completed_repeats"), "completed_repeats");
+        assertEquals(helper, 8, state.details().get("moved_count"), "moved_count");
+        assertTrue(helper, state.details().containsKey("stopped_reason"), "stopped_reason missing");
+        assertEquals(helper, 8, mob.getMainHandItem().getCount(), "mainhand count after repeat move");
+        assertTrue(helper, chest.getItem(0).isEmpty(), "source not emptied");
+        helper.succeed();
+    }
+
+    /** 合成结果槽 repeat：2 个原木一次动作连续取 2 次完整产出，共得 8 个木板。 */
+    public static void repeatTakesConsecutiveCraftingOutputs(GameTestHelper helper) {
+        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        helper.setBlock(new BlockPos(0, 1, 2), Blocks.CRAFTING_TABLE);
+        LogicalMenuSession session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
+        // 合成菜单槽 1（3x3 合成格第一格）放入 2 个橡木原木，结果槽即 4 个木板
+        setMenuSlot(session, 1, new ItemStack(Items.OAK_LOG, 2));
+        observe(mob);
+
+        ActionState state = moveMenuItem(mob, session.sessionId(), sessionSlotId(session, 0), 0, 4, 2);
+        assertEquals(helper, ActionStatus.COMPLETED, state.status(), "crafting repeat failed: " + state.description());
+        assertEquals(helper, 2, state.details().get("completed_repeats"), "completed_repeats");
+        assertEquals(helper, 8, state.details().get("taken_count"), "taken_count");
+        assertEquals(helper, 8, state.details().get("moved_count"), "moved_count");
+        assertEquals(helper, 0, state.details().get("relocated_count"), "relocated_count");
+        ItemStack mainhand = mob.getMainHandItem();
+        assertTrue(helper, mainhand.is(Items.OAK_PLANKS) && mainhand.getCount() == 8,
+            "mainhand should hold 8 planks: " + mainhand);
+        assertTrue(helper, session.menu().slots.get(1).getItem().isEmpty(), "crafting grid not consumed");
         helper.succeed();
     }
 }

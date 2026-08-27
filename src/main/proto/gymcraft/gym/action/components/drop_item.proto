@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package gymcraft.gym.action;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.action.proto";
+option java_outer_classname = "DropItemProto";
+
+// 从 Agent 统一物品栏的指定槽位向视线前方丢出物品。
+message ProtoDropItem {
+  int32 slot_id = 1;
+  // 丢出数量；0 时丢出整个堆叠，超过现有数量时截断为现有数量。
+  int32 count = 2;
+}

@@ -163,6 +163,8 @@ message ProtoMoveMenuItem {
   int32 source_slot_id = 2;
   int32 target_slot_id = 3;
   int32 count = 4;
+  // 重复移动次数；缺省 0 与 1 等价（单次移动）
+  int32 repeat = 5;
 }
 
 message ProtoClickMenuButton {
@@ -558,6 +560,8 @@ fakePlayer.containerMenu = menu;
 16. 写回 Agent 物品栏映射
 17. `menu.broadcastChanges()` 并 refresh `currentSnapshot`；新的 observation 生成前不提交 `lastObservedSnapshot`
 
+`repeat`（缺省 0/1 等价单次）：stale 校验（步骤 4/5）只在动作开始时执行一次，之后逐次重复步骤 8–17 的完整流程，每次重复重新读取槽位状态、独立做数量截断与容量检查，结果槽每次仍按完整产出取出（典型用途：合成结果槽连续取多次产出）。第一次重复失败即整体失败；后续重复遇到源耗尽、目标已满等无法继续的情况时提前结束，details 记录 `requested_repeats`/`completed_repeats` 与 `stopped_reason`，`taken_count`/`moved_count`/`relocated_count` 为各次之和。
+
 目标槽非空时必须满足 `ItemStack.isSameItemSameComponents`。
 
 首版不提供：
@@ -748,6 +752,9 @@ fakePlayer.containerMenu = fakePlayer.inventoryMenu;
 - `safeTake` 提交后出现 remainder 时不承诺回滚，按主手、Mob 容器、掉落顺序清算
 - bridge 边界不出现静默复制或删除；配方和交易的合法物品转换不按逐 item/count 守恒断言
 - `menu.getCarried()` 始终为空
+- `repeat` 次重复移动一次动作完成，details 记录 `requested_repeats`/`completed_repeats`，数量字段为各次之和
+- `repeat` 过程中源耗尽或目标已满时提前结束，`completed_repeats < requested_repeats` 且带 `stopped_reason`
+- 合成结果槽 `repeat`：2 个原木一次动作连续取 2 次完整产出，共得 8 个木板
 
 ### 14.4 生命周期
 
