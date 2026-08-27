@@ -66,6 +66,7 @@ src/main/
 | 注册 ID | 说明 |
 |---|---|
 | `gymcraft:step_move` | 单 tick 前进、横移、视角和跳跃控制 |
+| `gymcraft:look_at` | 将当前视线对准实体、掉落物或方块 |
 | `gymcraft:move_to` | 使用寻路移动到目标坐标 |
 | `gymcraft:set_attack_target` | 设置实体攻击目标 |
 | `gymcraft:attack_once` | 执行一次近战攻击 |

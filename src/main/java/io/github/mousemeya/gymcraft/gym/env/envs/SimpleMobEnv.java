@@ -21,6 +21,12 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
  * </p>
  */
 public class SimpleMobEnv extends AbstractMcEnv {
+    /**
+     * 创建暴露全部通用动作与观测组件的 Mob 环境。
+     *
+     * @param envTypeId 环境类型注册 ID
+     * @param mob 受控 Agent
+     */
     public SimpleMobEnv(Identifier envTypeId, Mob mob) {
         super(
             envTypeId,
@@ -28,6 +34,7 @@ public class SimpleMobEnv extends AbstractMcEnv {
             List.of(
                 ActionComponents.NOOP.get(),
                 ActionComponents.STEP_MOVE.get(),
+                ActionComponents.LOOK_AT.get(),
                 ActionComponents.MOVE_TO.get(),
                 ActionComponents.SET_ATTACK_TARGET.get(),
                 ActionComponents.BREAK_BLOCK.get(),
@@ -55,6 +62,13 @@ public class SimpleMobEnv extends AbstractMcEnv {
      * 环境工厂 —— 注册表引用该内部轻量 {@link McEnvFactory}，而非目标类构造函数。
      */
     public static final class Factory implements McEnvFactory {
+        /**
+         * 创建简单 Mob 环境。
+         *
+         * @param envTypeId 环境类型注册 ID
+         * @param mob 受控 Agent
+         * @return 新环境实例
+         */
         @Override
         public SimpleMobEnv create(Identifier envTypeId, Mob mob) {
             return new SimpleMobEnv(envTypeId, mob);

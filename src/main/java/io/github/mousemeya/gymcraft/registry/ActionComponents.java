@@ -8,6 +8,7 @@ import io.github.mousemeya.gymcraft.gym.action.component.BreakBlockController;
 import io.github.mousemeya.gymcraft.gym.action.component.ClickMenuButtonController;
 import io.github.mousemeya.gymcraft.gym.action.component.CloseMenuController;
 import io.github.mousemeya.gymcraft.gym.action.component.JumpController;
+import io.github.mousemeya.gymcraft.gym.action.component.LookAtController;
 import io.github.mousemeya.gymcraft.gym.action.component.MoveMenuItemController;
 import io.github.mousemeya.gymcraft.gym.action.component.MoveToController;
 import io.github.mousemeya.gymcraft.gym.action.component.NoopController;
@@ -21,6 +22,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoBreakBlock;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoClickMenuButton;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoCloseMenu;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoJump;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoLookAt;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveMenuItem;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveTo;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
@@ -56,6 +58,10 @@ public final class ActionComponents {
     public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoStepMove, StepMoveController>> STEP_MOVE = REGISTRY.register(
         "step_move",
         StepMoveController.Factory::new
+    );
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoLookAt, LookAtController>> LOOK_AT = REGISTRY.register(
+        "look_at",
+        LookAtController.Factory::new
     );
     public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoSetAttackTarget, SetAttackTargetController>> SET_ATTACK_TARGET = REGISTRY.register(
         "set_attack_target",
@@ -102,6 +108,7 @@ public final class ActionComponents {
         PickUpItemController.Factory::new
     );
 
+    /** 禁止实例化纯注册入口类。 */
     private ActionComponents() {
     }
 }

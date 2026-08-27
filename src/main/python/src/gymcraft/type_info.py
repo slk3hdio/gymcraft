@@ -20,6 +20,7 @@ from gymcraft.gym.action.components.break_block_pb2 import ProtoBreakBlock
 from gymcraft.gym.action.components.click_menu_button_pb2 import ProtoClickMenuButton
 from gymcraft.gym.action.components.close_menu_pb2 import ProtoCloseMenu
 from gymcraft.gym.action.components.jump_pb2 import ProtoJump
+from gymcraft.gym.action.components.look_at_pb2 import ProtoLookAt
 from gymcraft.gym.action.components.move_menu_item_pb2 import ProtoMoveMenuItem
 from gymcraft.gym.action.components.move_to_pb2 import ProtoMoveTo
 from gymcraft.gym.action.components.noop_pb2 import ProtoNoop
@@ -39,6 +40,7 @@ from gymcraft.gym.observation.observation_pb2 import ProtoObservationHeader
 
 # ── 动作组件注册 id（完整 wire 键，含 `gymcraft:` 命名空间）────────────────────
 ACTION_STEP_MOVE: Final = "gymcraft:step_move"
+ACTION_LOOK_AT: Final = "gymcraft:look_at"
 ACTION_MOVE_TO: Final = "gymcraft:move_to"
 ACTION_SET_ATTACK_TARGET: Final = "gymcraft:set_attack_target"
 ACTION_ATTACK_ONCE: Final = "gymcraft:attack_once"
@@ -74,6 +76,7 @@ Action = TypedDict(
         # 动作组件键即完整 wire 键（含 ``gymcraft:`` 命名空间），通常至多出现一个；
         # 值为对应 protobuf 消息。
         "gymcraft:step_move": NotRequired[ProtoStepMove],
+        "gymcraft:look_at": NotRequired[ProtoLookAt],
         "gymcraft:move_to": NotRequired[ProtoMoveTo],
         "gymcraft:set_attack_target": NotRequired[ProtoSetAttackTarget],
         "gymcraft:attack_once": NotRequired[ProtoAttackOnce],

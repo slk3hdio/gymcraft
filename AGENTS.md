@@ -17,7 +17,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 ## Architecture
 
 - **三个自定义 NeoForge registry** (在 `RegistryKeys` 用 `RegistryBuilder` + `NewRegistryEvent` 定义):
-  - `action_components` → `ActionComponents` (13 个控制器: `step_move`, `move_to`, `set_attack_target`, `attack_once`, `noop`, `jump`, `break_block`, `set_block`, `open_menu`, `close_menu`, `move_menu_item`, `click_menu_button`, `pick_up_item`; `jump` 是瞬时动作，经 `JumpControl.jump()` 提交跳跃意图；`break_block` 经 `MobHandSimulator` 用 FakePlayer 复用原版破坏逻辑, `set_block` 复用 /setblock 的 `BlockStateParser`/`BlockInput` 链路；菜单 4 件套用逻辑菜单会话 `gym/menu/session/LogicalMenuSession*`；`pick_up_item` 按 entity_id 寻路到 ItemEntity 并收入统一物品栏)
+  - `action_components` → `ActionComponents` (14 个控制器: `step_move`, `look_at`, `move_to`, `set_attack_target`, `attack_once`, `noop`, `jump`, `break_block`, `set_block`, `open_menu`, `close_menu`, `move_menu_item`, `click_menu_button`, `pick_up_item`; `look_at` 瞬时对准普通实体眼睛、掉落物包围盒中心或方块中心；`jump` 是瞬时动作，经 `JumpControl.jump()` 提交跳跃意图；`break_block` 经 `MobHandSimulator` 用 FakePlayer 复用原版破坏逻辑, `set_block` 复用 /setblock 的 `BlockStateParser`/`BlockInput` 链路；菜单 4 件套用逻辑菜单会话 `gym/menu/session/LogicalMenuSession*`；`pick_up_item` 按 entity_id 寻路到 ItemEntity 并收入统一物品栏)
   - `observation_components` → `ObservationCreators` (6 个生成器: `self`, `world`, `nearby_entities`, `nearby_blocks`, `nearby_items`, `menu`；旧 `inventory` 组件已随菜单交互改造移除)
   - `env_factories` → `EnvFactories` (1 个环境: `simple_mob`)
   - 新增类型必须在对应 `*Components`/`EnvFactories` 类中注册 `DeferredHolder`

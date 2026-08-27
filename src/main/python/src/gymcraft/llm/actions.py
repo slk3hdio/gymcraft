@@ -17,6 +17,7 @@ from gymcraft.gym.action.components import (
     click_menu_button_pb2,
     close_menu_pb2,
     jump_pb2,
+    look_at_pb2,
     move_menu_item_pb2,
     move_to_pb2,
     noop_pb2,
@@ -32,6 +33,7 @@ from gymcraft.type_info import (
     ACTION_CLICK_MENU_BUTTON,
     ACTION_CLOSE_MENU,
     ACTION_JUMP,
+    ACTION_LOOK_AT,
     ACTION_MOVE_MENU_ITEM,
     ACTION_MOVE_TO,
     ACTION_NOOP,
@@ -85,6 +87,7 @@ class ActionDslParser:
         self._builders: dict[str, Callable[[Sequence[str], str, int], ParsedAction]] = {
             "noop": self._parse_noop,
             "step_move": self._parse_step_move,
+            "look_at": self._parse_look_at,
             "move_to": self._parse_move_to,
             "set_attack_target": self._parse_set_attack_target,
             "break_block": self._parse_break_block,
@@ -169,6 +172,7 @@ class ActionDslParser:
         references = {
             "noop": "/noop",
             "step_move": "/step_move <forward> <strafe_right> [yaw_delta] [pitch_delta] [jump]",
+            "look_at": "/look_at entity|item <entity_id>|block <x> <y> <z>",
             "move_to": "/move_to <x> <y> <z> [stop_distance]",
             "set_attack_target": "/set_attack_target clear|entity <entity_id>|uuid <uuid>",
             "attack_once": "/attack_once <entity_id>",
@@ -242,6 +246,16 @@ class ActionDslParser:
             if target == "entity":
                 return {"x": 0, "y": 0, "z": 0, "entity_id": open_payload.entity.entity_id}
             return {"x": 0, "y": 0, "z": 0, "entity_id": 0}
+        if action.component_id == ACTION_LOOK_AT:
+            look_payload = cast(look_at_pb2.ProtoLookAt, payload)
+            target = look_payload.WhichOneof("target")
+            if target == "block":
+                return {"x": look_payload.block.x, "y": look_payload.block.y, "z": look_payload.block.z, "entity_id": 0}
+            if target == "entity":
+                return {"x": 0, "y": 0, "z": 0, "entity_id": look_payload.entity.entity_id}
+            if target == "item":
+                return {"x": 0, "y": 0, "z": 0, "entity_id": look_payload.item.entity_id}
+            return {"x": 0, "y": 0, "z": 0, "entity_id": 0}
         fields: dict[str, Any] = {}
         for descriptor, value in payload.ListFields():
             fields[descriptor.name] = value
@@ -275,6 +289,26 @@ class ActionDslParser:
             jump=jump,
         )
         return ParsedAction(ACTION_STEP_MOVE, "step_move", payload)
+
+    def _parse_look_at(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
+        """解析普通实体、掉落物或方块三类注视目标。"""
+        if len(tokens) == 3 and tokens[1] == "entity":
+            target = look_at_pb2.ProtoLookAtEntityTarget(
+                entity_id=self._positive_int(tokens[2], "entity_id", line_number)
+            )
+            payload = look_at_pb2.ProtoLookAt(entity=target)
+        elif len(tokens) == 3 and tokens[1] == "item":
+            target = look_at_pb2.ProtoLookAtItemTarget(
+                entity_id=self._positive_int(tokens[2], "entity_id", line_number)
+            )
+            payload = look_at_pb2.ProtoLookAt(item=target)
+        elif len(tokens) == 5 and tokens[1] == "block":
+            x, y, z = self._parse_block_position(tokens[2:5], line_number)
+            target = look_at_pb2.ProtoLookAtBlockTarget(x=x, y=y, z=z)
+            payload = look_at_pb2.ProtoLookAt(block=target)
+        else:
+            raise ActionParseError("Usage: /look_at entity|item <id>|block <x> <y> <z>", line_number)
+        return ParsedAction(ACTION_LOOK_AT, "look_at", payload)
 
     def _parse_move_to(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
         """解析带可选停止距离的绝对坐标寻路命令。"""

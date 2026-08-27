@@ -11,6 +11,7 @@ OUT_DIR = SCRIPT_DIR / "src"
 PROTO_FILES = [
     "gymcraft/gym/action/action.proto",
     "gymcraft/gym/action/components/step_move.proto",
+    "gymcraft/gym/action/components/look_at.proto",
     "gymcraft/gym/action/components/move_to.proto",
     "gymcraft/gym/action/components/set_attack_target.proto",
     "gymcraft/gym/action/components/attack_once.proto",
@@ -40,6 +41,7 @@ PROTO_FILES = [
 
 
 def main() -> None:
+    """调用 grpc_tools.protoc 生成 Python 消息、类型声明与 gRPC 桩。"""
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     result = subprocess.run(

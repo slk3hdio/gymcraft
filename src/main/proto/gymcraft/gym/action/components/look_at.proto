@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package gymcraft.gym.action;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.action.proto";
+option java_outer_classname = "LookAtProto";
+
+// 方块视线目标，以方块中心作为注视点。
+message ProtoLookAtBlockTarget {
+  int32 x = 1;
+  int32 y = 2;
+  int32 z = 3;
+}
+
+// 普通实体视线目标，以实体眼睛位置作为注视点。
+message ProtoLookAtEntityTarget {
+  int32 entity_id = 1;
+}
+
+// 掉落物视线目标，以掉落物包围盒中心作为注视点。
+message ProtoLookAtItemTarget {
+  int32 entity_id = 1;
+}
+
+// 将 Agent 当前视线瞬时对准一个已加载目标。
+message ProtoLookAt {
+  oneof target {
+    ProtoLookAtEntityTarget entity = 1;
+    ProtoLookAtItemTarget item = 2;
+    ProtoLookAtBlockTarget block = 3;
+  }
+}

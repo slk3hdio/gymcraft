@@ -131,6 +131,16 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> JUMP_APPLIED =
         TEST_FUNCTIONS.register("jump_applied_and_executed", () -> JumpGameTests::jumpAppliedAndExecuted);
 
+    // ===== 注视目标 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LOOK_AT_ENTITY_EYES =
+        TEST_FUNCTIONS.register("look_at_living_entity_eyes", () -> LookAtGameTests::lookAtLivingEntityEyes);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LOOK_AT_ITEM_CENTER =
+        TEST_FUNCTIONS.register("look_at_item_center", () -> LookAtGameTests::lookAtItemCenter);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LOOK_AT_BLOCK_CENTER =
+        TEST_FUNCTIONS.register("look_at_block_center", () -> LookAtGameTests::lookAtBlockCenter);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LOOK_AT_AIR_BLOCK_CENTER =
+        TEST_FUNCTIONS.register("look_at_air_block_center", () -> LookAtGameTests::lookAtAirBlockCenter);
+
     // ===== 掉落物观测与拾取 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PICKUP_WITHIN_REACH_COLLECTS =
         TEST_FUNCTIONS.register("pickup_within_reach_collects", () -> PickupGameTests::pickupWithinReachCollects);

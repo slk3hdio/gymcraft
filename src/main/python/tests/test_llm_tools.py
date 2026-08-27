@@ -8,7 +8,7 @@ import unittest
 from collections.abc import Mapping
 from typing import Any, cast
 
-from gymcraft.gym.action.components import set_block_pb2
+from gymcraft.gym.action.components import look_at_pb2, set_block_pb2
 from gymcraft.gym.observation.common import block_view_pb2, entity_view_pb2, item_entity_view_pb2, item_stack_view_pb2
 from gymcraft.gym.observation.components import (
     nearby_blocks_pb2,
@@ -31,7 +31,7 @@ from gymcraft.llm import (
     format_transition_result,
     render_chat_transcript,
 )
-from gymcraft.type_info import ACTION_JUMP, ACTION_SET_BLOCK, Action, Observation
+from gymcraft.type_info import ACTION_JUMP, ACTION_LOOK_AT, ACTION_SET_BLOCK, Action, Observation
 
 
 def _observation(tick: int = 1) -> Observation:
@@ -178,11 +178,28 @@ class ActionDslParserTests(unittest.TestCase):
         self.assertIn(ACTION_SET_BLOCK, encoded)
         self.assertEqual(10.0, encoded["timeout_seconds"])
 
+    def test_look_at_parses_all_target_types(self) -> None:
+        """look_at 应区分普通实体、掉落物和方块三个 oneof 分支。"""
+        commands_and_targets = [
+            ("/look_at entity 2", "entity"),
+            ("/look_at item 7", "item"),
+            ("/look_at block 11 64 -2", "block"),
+        ]
+        parser = ActionDslParser()
+        for command, expected_target in commands_and_targets:
+            with self.subTest(command=command):
+                parsed = parser.parse(f"```gymcraft-action\n{command}\n```")
+                action = parsed.batch.actions[0]
+                payload = cast(look_at_pb2.ProtoLookAt, action.payload)
+                self.assertEqual(ACTION_LOOK_AT, action.component_id)
+                self.assertEqual(expected_target, payload.WhichOneof("target"))
+
     def test_all_registered_action_commands_parse(self) -> None:
-        """当前 13 个动作组件的标准 DSL 写法都应能生成 protobuf。"""
+        """当前 14 个动作组件的标准 DSL 写法都应能生成 protobuf。"""
         commands = [
             "/noop",
             "/step_move 1 0 0 0 true",
+            "/look_at entity 2",
             "/move_to 1 64 2 1",
             "/set_attack_target entity 2",
             "/break_block 1 64 2",
