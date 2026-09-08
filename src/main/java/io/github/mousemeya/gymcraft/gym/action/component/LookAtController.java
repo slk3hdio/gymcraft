@@ -228,9 +228,7 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
         }
 
         // 直接旋转保证动作瞬时生效；LookControl 保证当前原版实体 tick 不会复位俯仰角。
-        mob.getLookControl().setLookAt(targetPos.x, targetPos.y, targetPos.z, 360.0F, 180.0F);
-        mob.lookAt(EntityAnchorArgument.Anchor.EYES, targetPos);
-        mob.setYBodyRot(mob.getYRot());
+        ActionLook.apply(mob, targetPos);
 
         var details = new LinkedHashMap<String, Object>(targetDetails);
         details.put("target_x", targetPos.x);

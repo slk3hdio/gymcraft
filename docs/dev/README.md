@@ -67,6 +67,7 @@ src/main/
 |---|---|
 | `gymcraft:step_move` | 单 tick 前进、横移、视角和跳跃控制 |
 | `gymcraft:look_at` | 将当前视线对准实体、掉落物或方块 |
+| `gymcraft:use_item` | 按 Agent 槽号向方块、实体或自身使用物品；食物药水等待消费完成，详见[使用物品动作](../use-item-action.md) |
 | `gymcraft:move_to` | 使用寻路移动到目标坐标 |
 | `gymcraft:set_attack_target` | 设置实体攻击目标 |
 | `gymcraft:attack_once` | 执行一次近战攻击 |
@@ -185,3 +186,16 @@ cd ..\..\..
 - NeoForge 26.1.2.95 (Minecraft 26.1.2)
 - Java 25 / Gradle 9.2.1
 - Python 3.11+ / uv / Gymnasium / grpcio
+
+### 批量菜单移动
+
+`gymcraft:move_menu_item` 使用 `ProtoMoveMenuItem(session_id=..., moves=[...])`。
+`moves` 为非空数组，每项使用 `ProtoMoveMenuItem.Move(source_slot_id=..., target_slot_id=..., count=..., repeat=...)`。
+旧的顶层移动字段已移除，客户端需要重新生成桩并迁移到数组。
+
+执行前统一检查所有涉及槽位的观测基线；过期或槽位不存在则整批拒绝。
+随后按数组顺序执行，后项能使用前项的产出。某项失败后停止，已完成项不回滚。
+每项 `repeat` 为 0/1 时移动一次，重复过程中源耗尽或目标已满沿用提前结束语义。
+返回 `requested_moves`、`completed_moves`、`results`，执行失败时额外返回从 0 开始的 `failed_move_index`。
+
+LLM 命令示例：`/move_menu_item 1 8 9 3; 9 10 2 4`，表示先移动 3 个，再将第二项重复 4 次。

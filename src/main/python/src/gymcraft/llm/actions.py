@@ -17,6 +17,7 @@ from gymcraft.gym.action.components import (
     click_menu_button_pb2,
     close_menu_pb2,
     drop_item_pb2,
+    use_item_pb2,
     jump_pb2,
     look_at_pb2,
     move_menu_item_pb2,
@@ -34,6 +35,7 @@ from gymcraft.type_info import (
     ACTION_CLICK_MENU_BUTTON,
     ACTION_CLOSE_MENU,
     ACTION_DROP_ITEM,
+    ACTION_USE_ITEM,
     ACTION_JUMP,
     ACTION_LOOK_AT,
     ACTION_MOVE_MENU_ITEM,
@@ -102,6 +104,7 @@ class ActionDslParser:
             "click_menu_button": self._parse_click_menu_button,
             "pick_up_item": self._parse_pick_up_item,
             "drop_item": self._parse_drop_item,
+            "use_item": self._parse_use_item,
         }
 
     def parse(self, response_text: str) -> ParsedAgentResponse:
@@ -184,10 +187,11 @@ class ActionDslParser:
             "jump": "/jump",
             "open_menu": "/open_menu self|entity <entity_id>|block <x> <y> <z>",
             "close_menu": "/close_menu <session_id>",
-            "move_menu_item": "/move_menu_item <session_id> <source_slot_id> <target_slot_id> <count> [repeat]",
+            "move_menu_item": "/move_menu_item <session_id> <source_slot_id> <target_slot_id> <count> [repeat] [; <source_slot_id> <target_slot_id> <count> [repeat] ...]",
             "click_menu_button": "/click_menu_button <session_id> <button_id>",
             "pick_up_item": "/pick_up_item <entity_id>",
             "drop_item": "/drop_item <slot_id> [count]",
+            "use_item": "/use_item <slot_id> [self|block <x> <y> <z>|entity <id>]",
         }
         lines = [references[name] for name in self.available_action_names()]
         return "\n".join(lines)
@@ -260,6 +264,11 @@ class ActionDslParser:
             if target == "item":
                 return {"x": 0, "y": 0, "z": 0, "entity_id": look_payload.item.entity_id}
             return {"x": 0, "y": 0, "z": 0, "entity_id": 0}
+        if action.component_id == ACTION_USE_ITEM:
+            use_payload = cast(use_item_pb2.ProtoUseItem, payload)
+            return {"slot_id": use_payload.slot_id, "x": use_payload.block.x,
+                    "y": use_payload.block.y, "z": use_payload.block.z,
+                    "entity_id": use_payload.entity.entity_id}
         fields: dict[str, Any] = {}
         for descriptor, value in payload.ListFields():
             fields[descriptor.name] = value
@@ -386,20 +395,21 @@ class ActionDslParser:
         return ParsedAction(ACTION_CLOSE_MENU, "close_menu", close_menu_pb2.ProtoCloseMenu(session_id=session_id))
 
     def _parse_move_menu_item(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
-        """解析菜单槽位之间移动物品的命令（可选 repeat 指定重复移动次数）。"""
-        self._require_arity(tokens, 5, 6, line_number)
+        """解析分号分隔的移动序列，每项可选 repeat，返回一个数组动作。"""
+        self._require_arity(tokens, 5, 1000000, line_number)
         session_id = self._positive_int(tokens[1], "session_id", line_number)
-        source = self._non_negative_int(tokens[2], "source_slot_id", line_number)
-        target = self._non_negative_int(tokens[3], "target_slot_id", line_number)
-        count = self._positive_int(tokens[4], "count", line_number)
-        repeat = self._positive_int(tokens[5], "repeat", line_number) if len(tokens) == 6 else 1
-        payload = move_menu_item_pb2.ProtoMoveMenuItem(
-            session_id=session_id,
-            source_slot_id=source,
-            target_slot_id=target,
-            count=count,
-            repeat=repeat,
-        )
+        moves = []
+        for group in " ".join(tokens[2:]).split(";"):
+            fields = group.split()
+            if len(fields) not in (3, 4):
+                raise ActionParseError("Each move requires source target count [repeat]", line_number)
+            moves.append(move_menu_item_pb2.Move(
+                source_slot_id=self._non_negative_int(fields[0], "source_slot_id", line_number),
+                target_slot_id=self._non_negative_int(fields[1], "target_slot_id", line_number),
+                count=self._positive_int(fields[2], "count", line_number),
+                repeat=self._positive_int(fields[3], "repeat", line_number) if len(fields) == 4 else 1,
+            ))
+        payload = move_menu_item_pb2.ProtoMoveMenuItem(session_id=session_id, moves=moves)
         return ParsedAction(ACTION_MOVE_MENU_ITEM, "move_menu_item", payload)
 
     def _parse_click_menu_button(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
@@ -424,6 +434,30 @@ class ActionDslParser:
         count = self._positive_int(tokens[2], "count", line_number) if len(tokens) == 3 else 0
         payload = drop_item_pb2.ProtoDropItem(slot_id=slot_id, count=count)
         return ParsedAction(ACTION_DROP_ITEM, "drop_item", payload)
+
+    def _parse_use_item(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
+        """解析槽号和可选目标；省略目标或 self 均编码为未设置 target。"""
+        self._require_arity(tokens, 2, 6, line_number)
+        slot_id = self._non_negative_int(tokens[1], "slot_id", line_number)
+        if slot_id > 2_147_483_647:
+            raise ActionParseError("slot_id exceeds int32 range", line_number)
+        payload = use_item_pb2.ProtoUseItem(slot_id=slot_id)
+        target = tokens[2] if len(tokens) > 2 else "self"
+        if target == "self":
+            self._require_arity(tokens, 2, 3, line_number)
+        elif target == "block":
+            self._require_arity(tokens, 6, 6, line_number)
+            x, y, z = self._parse_block_position(tokens[3:6], line_number)
+            payload.block.CopyFrom(use_item_pb2.ProtoUseItemBlockTarget(x=x, y=y, z=z))
+        elif target == "entity":
+            self._require_arity(tokens, 4, 4, line_number)
+            entity_id = self._positive_int(tokens[3], "entity_id", line_number)
+            if entity_id > 2_147_483_647:
+                raise ActionParseError("entity_id exceeds int32 range", line_number)
+            payload.entity.CopyFrom(use_item_pb2.ProtoUseItemEntityTarget(entity_id=entity_id))
+        else:
+            raise ActionParseError("Use target must be self, block or entity", line_number)
+        return ParsedAction(ACTION_USE_ITEM, "use_item", payload)
 
     @staticmethod
     def _component_for_command(command_name: str) -> str:

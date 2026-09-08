@@ -126,9 +126,11 @@ def move_item_demo(
         TIMEOUT_SECONDS: 0.0,
         ACTION_MOVE_MENU_ITEM: move_menu_item_pb2.ProtoMoveMenuItem(
             session_id=session_id,
-            source_slot_id=source.slot_id,
-            target_slot_id=target.slot_id,
-            count=count,
+            moves=[move_menu_item_pb2.Move(
+                source_slot_id=source.slot_id,
+                target_slot_id=target.slot_id,
+                count=count,
+            )],
         ),
     })
     menu = menu_observation(obs)
@@ -142,9 +144,11 @@ def move_item_demo(
         TIMEOUT_SECONDS: 0.0,
         ACTION_MOVE_MENU_ITEM: move_menu_item_pb2.ProtoMoveMenuItem(
             session_id=session_id,
-            source_slot_id=target.slot_id,
-            target_slot_id=source.slot_id,
-            count=count,
+            moves=[move_menu_item_pb2.Move(
+                source_slot_id=target.slot_id,
+                target_slot_id=source.slot_id,
+                count=count,
+            )],
         ),
     })
     menu = menu_observation(obs)

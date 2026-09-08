@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package gymcraft.gym.action;
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.action.proto";
+option java_outer_classname = "UseItemProto";
+
+// 使用物品的方块目标；命中面由 Agent 眼睛到方块中心的射线决定。
+message ProtoUseItemBlockTarget {
+  int32 x = 1;
+  int32 y = 2;
+  int32 z = 3;
+}
+
+// 使用物品的实体目标，使用当前世界的网络实体 ID。
+message ProtoUseItemEntityTarget {
+  int32 entity_id = 1;
+}
+
+// 从 Agent 统一物品栏选择物品；必须显式设置 slot_id，省略目标表示自身。
+message ProtoUseItem {
+  optional int32 slot_id = 1;
+  oneof target {
+    ProtoUseItemBlockTarget block = 2;
+    ProtoUseItemEntityTarget entity = 3;
+  }
+}

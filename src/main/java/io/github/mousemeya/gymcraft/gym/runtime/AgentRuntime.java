@@ -468,9 +468,13 @@ public class AgentRuntime {
     private void closeMenuSession(Mob mob, String reason) {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server != null && !server.isSameThread()) {
-            server.execute(() -> MenuSessionHooks.closeFor(mob, reason));
+            server.execute(() -> {
+                io.github.mousemeya.gymcraft.gym.action.component.UseItemConsumption.closeFor(mob);
+                MenuSessionHooks.closeFor(mob, reason);
+            });
             return;
         }
+        io.github.mousemeya.gymcraft.gym.action.component.UseItemConsumption.closeFor(mob);
         MenuSessionHooks.closeFor(mob, reason);
     }
 

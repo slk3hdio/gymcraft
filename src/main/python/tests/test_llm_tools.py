@@ -194,8 +194,21 @@ class ActionDslParserTests(unittest.TestCase):
                 self.assertEqual(ACTION_LOOK_AT, action.component_id)
                 self.assertEqual(expected_target, payload.WhichOneof("target"))
 
+    def test_menu_move_array(self) -> None:
+        """分号移动项按输入顺序生成数组，保留每项 repeat。"""
+        parser = ActionDslParser()
+        parsed = parser.parse("```gymcraft-action\n/move_menu_item 1 8 9 3; 9 10 2 4\n```")
+        from gymcraft.gym.action.components.move_menu_item_pb2 import ProtoMoveMenuItem
+        payload = cast(ProtoMoveMenuItem, parsed.batch.actions[0].payload)
+        self.assertEqual(1, len(parsed.batch.actions))
+        self.assertEqual([(8, 9, 3, 1), (9, 10, 2, 4)],
+                         [(m.source_slot_id, m.target_slot_id, m.count, m.repeat) for m in payload.moves])
+        for command in ("/move_menu_item 1 8 9 3;", "/move_menu_item 1 8 9 3; 9 10"):
+            with self.subTest(command=command), self.assertRaises(ActionParseError):
+                parser.parse(f"```gymcraft-action\n{command}\n```")
+
     def test_all_registered_action_commands_parse(self) -> None:
-        """当前 15 个动作组件的标准 DSL 写法都应能生成 protobuf。"""
+        """当前 16 个动作组件的标准 DSL 写法都应能生成 protobuf。"""
         commands = [
             "/noop",
             "/step_move 1 0 0 0 true",
@@ -213,6 +226,7 @@ class ActionDslParserTests(unittest.TestCase):
             "/click_menu_button 1 0",
             "/pick_up_item 3",
             "/drop_item 0 2",
+            "/use_item 0",
         ]
         parser = ActionDslParser()
         for command in commands:

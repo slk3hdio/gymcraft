@@ -2,6 +2,7 @@ package io.github.mousemeya.gymcraft.gym.menu;
 
 import javax.annotation.Nullable;
 
+import io.github.mousemeya.gymcraft.gym.menu.bridge.AgentInventoryMenu;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.MenuType;

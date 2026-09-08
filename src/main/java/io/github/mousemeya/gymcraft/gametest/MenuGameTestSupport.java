@@ -104,10 +104,11 @@ public final class MenuGameTestSupport {
     public static ActionState moveMenuItem(Mob mob, long sessionId, int sourceSlotId, int targetSlotId, int count, int repeat) {
         return new MoveMenuItemController(mob).apply(ProtoMoveMenuItem.newBuilder()
             .setSessionId(sessionId)
+            .addMoves(io.github.mousemeya.gymcraft.gym.action.proto.Move.newBuilder()
             .setSourceSlotId(sourceSlotId)
             .setTargetSlotId(targetSlotId)
             .setCount(count)
-            .setRepeat(repeat)
+            .setRepeat(repeat))
             .build()).initialState();
     }
 

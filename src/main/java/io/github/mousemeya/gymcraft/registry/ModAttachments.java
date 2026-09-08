@@ -1,6 +1,7 @@
 package io.github.mousemeya.gymcraft.registry;
 
 import io.github.mousemeya.gymcraft.GymCraft;
+import io.github.mousemeya.gymcraft.gym.action.component.UseItemConsumption;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -35,6 +36,15 @@ public final class ModAttachments {
         }).build()
     );
 
+    /** 物品消费会话的纯运行时附件；读取前必须检查 hasData。 */
+    public static final DeferredHolder<AttachmentType<?>, AttachmentType<UseItemConsumption>> ITEM_CONSUMPTION = REGISTRY.register(
+        "item_consumption",
+        () -> AttachmentType.<UseItemConsumption>builder(() -> {
+            throw new IllegalStateException("Item consumption must be explicitly created");
+        }).build()
+    );
+
+    /** 禁止实例化注册入口。 */
     private ModAttachments() {
     }
 }

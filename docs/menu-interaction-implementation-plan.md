@@ -160,11 +160,15 @@ message ProtoCloseMenu {
 
 message ProtoMoveMenuItem {
   uint64 session_id = 1;
-  int32 source_slot_id = 2;
-  int32 target_slot_id = 3;
-  int32 count = 4;
-  // 重复移动次数；缺省 0 与 1 等价（单次移动）
-  int32 repeat = 5;
+  reserved 2 to 5;
+  repeated Move moves = 6;
+  // 单项移动；repeat 为 0 或 1 时执行一次。
+  message Move {
+    int32 source_slot_id = 1;
+    int32 target_slot_id = 2;
+    int32 count = 3;
+    int32 repeat = 4;
+  }
 }
 
 message ProtoClickMenuButton {
@@ -277,6 +281,8 @@ refresh（见 5.4）只更新 `currentSnapshot`，不得覆盖 stale 校验基�
 快照比较使用 `item_id`、`count` 和与 `ProtoItemStackView.nbt` 相同的完整可观察标签状态，**不使用 `AbstractContainerMenu.stateId`**，因为原版 state ID 属于某个菜单实例，不能表达其他玩家对同一底层容器的修改。
 
 ### 5.1 移动动作的局部校验
+
+数组动作执行前，对所有移动项涉及的槽位统一进行以下基线校验；执行中不重新比较旧基线，允许后项使用前项产出。
 
 执行 `source_slot_id -> target_slot_id` 时，先经 slot_id 映射把两个 slot_id 解析为当前会话的 `SessionSlot`（无法解析时动作直接失败），再比较两者的 `currentSnapshot` 与最近一次已返回给 Agent 的 `lastObservedSnapshot`：
 

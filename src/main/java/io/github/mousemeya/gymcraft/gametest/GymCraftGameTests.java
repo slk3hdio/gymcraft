@@ -20,7 +20,8 @@ import io.github.mousemeya.gymcraft.GymCraft;
  * <p>
  * 测试函数经 {@code TEST_FUNCTION} 注册表注册，测试实例在 {@link RegisterGameTestsEvent}
  * （模组总线，仅 GameTest 启用时触发）中统一装配：环境为空环境（不修改世界），
- * 结构复用原版内置的 {@code minecraft:empty}，测试逻辑自行放置方块与实体。
+ * 普通测试复用 {@code minecraft:empty}；使用物品测试采用覆盖完整场景的 8×6×8 空结构，
+ * 保证跨 tick 消费时实体所在区块被框架加载。测试逻辑自行放置方块与实体。
  * 测试类放在 main 源集：注册仅在 GameTest 启用时生效，对生产环境无副作用。
  * </p>
  */
@@ -32,8 +33,17 @@ public final class GymCraftGameTests {
 
     /** 原版内置空结构（always_pass 同款），测试内容全部由测试函数自行搭建。 */
     private static final Identifier EMPTY_STRUCTURE = Identifier.withDefaultNamespace("empty");
+    /** 持续消费依赖实体 tick，专用结构边界必须覆盖所有 Agent 与目标，避免只强加载原点。 */
+    private static final Identifier USE_ITEM_STRUCTURE = Identifier.fromNamespaceAndPath(GymCraft.MODID, "use_item_empty");
     /** 同步测试一个 tick 内完成，100 tick 超时足够冗余。 */
     private static final int MAX_TICKS = 100;
+
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BATCH_MOVES_ORDER =
+        TEST_FUNCTIONS.register("menu_batch_moves_order", () -> MenuSessionGameTests::batchMovesInOrder);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BATCH_MOVES_FAILURE =
+        TEST_FUNCTIONS.register("menu_batch_moves_failure", () -> MenuSessionGameTests::batchMoveStopsOnFailure);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BATCH_MOVES_STALE =
+        TEST_FUNCTIONS.register("menu_batch_moves_stale", () -> MenuSessionGameTests::batchMoveChecksAllBaselines);
 
     // ===== 14.1 会话与内部状态 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SESSION_ID_STABLE =
@@ -189,10 +199,32 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CLEAR_ALL_ITEMS_REMOVES =
         TEST_FUNCTIONS.register("regression_clear_all_items_removes_without_drop", () -> MenuRegressionGameTests::clearAllItemsRemovesWithoutDrop);
 
+    // 使用物品的独立场景，使用专用空结构与统一测试时限。
+    static {
+        TEST_FUNCTIONS.register("use_item_bone_meal", () -> UseItemGameTests::boneMeal);
+        TEST_FUNCTIONS.register("use_item_block_face_durability", () -> UseItemGameTests::blockFaceAndDurability);
+        TEST_FUNCTIONS.register("use_item_entity_no_fallback", () -> UseItemGameTests::entityAndNoFallback);
+        TEST_FUNCTIONS.register("use_item_throw_container_menu", () -> UseItemGameTests::throwFromContainer);
+        TEST_FUNCTIONS.register("use_item_food_waits", () -> UseItemGameTests::foodWaits);
+        TEST_FUNCTIONS.register("use_item_potion_isolation", () -> UseItemGameTests::potionAndIsolation);
+        TEST_FUNCTIONS.register("use_item_remainder_zero_duration", () -> UseItemGameTests::remainderAndZeroDuration);
+        TEST_FUNCTIONS.register("use_item_interruption", () -> UseItemGameTests::interruption);
+        TEST_FUNCTIONS.register("use_item_timeout", () -> UseItemGameTests::timeout);
+        TEST_FUNCTIONS.register("use_item_invalid_inputs", () -> UseItemGameTests::invalidInputs);
+        TEST_FUNCTIONS.register("use_item_reach_obstruction", () -> UseItemGameTests::reachAndObstruction);
+        TEST_FUNCTIONS.register("use_item_composite_failure", () -> UseItemGameTests::compositeFailure);
+        TEST_FUNCTIONS.register("use_item_death", () -> UseItemGameTests::death);
+        TEST_FUNCTIONS.register("use_item_equipment", () -> UseItemGameTests::equipment);
+        TEST_FUNCTIONS.register("use_item_runtime_reset", () -> UseItemGameTests::runtimeReset);
+        TEST_FUNCTIONS.register("use_item_runtime_close", () -> UseItemGameTests::runtimeClose);
+        TEST_FUNCTIONS.register("use_item_reset_menu_identity", () -> UseItemGameTests::resetMenuIdentity);
+    }
+
+    /** 禁止实例化测试注册入口。 */
     private GymCraftGameTests() {
     }
 
-    /** 在 RegisterGameTestsEvent 中装配全部测试实例（空环境 + 原版空结构）。 */
+    /** 在 RegisterGameTestsEvent 中装配全部测试实例，按场景选择空结构边界。 */
     public static void register(RegisterGameTestsEvent event) {
         Holder<TestEnvironmentDefinition<?>> environment = event.registerEnvironment(
             Identifier.fromNamespaceAndPath(GymCraft.MODID, "default")
@@ -202,7 +234,9 @@ public final class GymCraftGameTests {
                 holder.getId(),
                 new FunctionGameTestInstance(
                     holder.getKey(),
-                    new TestData<>(environment, EMPTY_STRUCTURE, MAX_TICKS, 0, true)
+                    new TestData<>(environment,
+                        holder.getId().getPath().startsWith("use_item_") ? USE_ITEM_STRUCTURE : EMPTY_STRUCTURE,
+                        MAX_TICKS, 0, true)
                 )
             );
         }

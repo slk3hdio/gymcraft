@@ -169,7 +169,8 @@ public class ActionDispatcher {
             componentStates.add(Map.entry(entry.getKey(),
                 ActionState.failed("unknown action component", Map.of("key", entry.getKey()))));
         }
-        return new ActionApplyResult(policy, appliedAny, ActionState.aggregate(componentStates));
+        ActionState aggregate = this.aggregateAndInterruptRemaining(action, componentStates);
+        return new ActionApplyResult(policy, appliedAny, aggregate);
     }
 
     /** 对单个动作组件执行类型校验、参数校验和执行。 */
@@ -305,7 +306,27 @@ public class ActionDispatcher {
                 LOGGER.warn("No action component for key: {}", key);
             }
         }
-        return ActionState.aggregate(componentStates);
+        return this.aggregateAndInterruptRemaining(action, componentStates);
+    }
+
+    /**
+     * 聚合已执行组件；整体失败或中断时停止仍在运行的组件，避免消费在 step 结束后继续。
+     *
+     * @param action 当前组合动作
+     * @param states 各组件本次状态
+     * @return 保留原有描述和优先级的聚合状态
+     */
+    private ActionState aggregateAndInterruptRemaining(ProtoMcAction action, List<Map.Entry<String, ActionState>> states) {
+        ActionState aggregate = ActionState.aggregate(states);
+        if (aggregate.isTerminal()) {
+            for (var entry : states) {
+                if (entry.getValue().status() == ActionStatus.RUNNING) {
+                    var payload = action.getComponentsMap().get(entry.getKey());
+                    dispatchComponentCallback(this.components.get(entry.getKey()), payload, entry.getKey(), false);
+                }
+            }
+        }
+        return aggregate;
     }
 
     /**

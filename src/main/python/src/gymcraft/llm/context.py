@@ -71,14 +71,16 @@ class ContextAssembler:
     def _default_system_prompt(self) -> str:
         """生成包含动作边界、坐标和批处理语义的默认英文指令。"""
         commands = self.action_parser.command_reference()
-        execution_order = " -> ".join(self.action_parser.execution_order())
+        # execution_order = " -> ".join(self.action_parser.execution_order())
         return (
             "You control an entity in Minecraft. Choose the next action batch from the task, recent results, and latest observation.\n"
             "All positions shown in observations and accepted by actions are absolute world coordinates.\n"
             "You may begin with a short analysis, but the response must end with exactly one ```gymcraft-action fenced block. "
             "Every non-empty line inside the block must be a /command. Include at least one action and no comments.\n"
             "Do not repeat an action in one batch. Text line order does not control execution; the server uses its declared component order.\n"
-            f"Current server execution order: {execution_order}\n"
+            "For use_item, choose an Agent inventory slot, not a menu-owned slot. Omitted target means self/air use along the current view. "
+            "Block/entity use requires reach and an unobstructed view. Food and potions wait until consumed; bows and other sustained uses are unsupported.\n"
+            # f"Current server execution order: {execution_order}\n"
             f"Optional /timeout <seconds>: default {self.action_parser.default_timeout_seconds:g}, "
             f"maximum {self.action_parser.max_timeout_seconds:g}.\n"
             "Commands available in this environment:\n"

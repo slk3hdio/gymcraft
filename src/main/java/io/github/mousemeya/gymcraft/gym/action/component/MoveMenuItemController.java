@@ -1,5 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
+import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
+import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,6 +35,7 @@ import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
+ * 按 moves 数组顺序执行移动，失败停止且不回滚已完成项。
  * 移动菜单物品动作组件 —— 在当前会话内把物品从 {@code source_slot_id} 移到
  * {@code target_slot_id}（计划 10 节执行流程）。
  * <p>
@@ -65,14 +68,19 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 public class MoveMenuItemController extends AbstractActionComponentController<ProtoMoveMenuItem> {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "session_id", new BoxSpace(0, Long.MAX_VALUE, 1),
+    private static final McSpace<Map<String, Object>> MOVE_SPACE = new DictSpace(Map.of(
         "source_slot_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
         "target_slot_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
         "count", new BoxSpace(0, Integer.MAX_VALUE, 1),
         "repeat", new BoxSpace(0, Integer.MAX_VALUE, 1)
     ));
 
+    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+        "session_id", new BoxSpace(0, Long.MAX_VALUE, 1),
+        "moves", new SequenceSpace<>(MOVE_SPACE, Integer.MAX_VALUE)
+    ));
+
+    /** @param mob 执行移动的受控生物。 */
     public MoveMenuItemController(Mob mob) {
         super(mob);
     }
@@ -87,17 +95,21 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
         return DEFAULT_SPACE;
     }
 
+    /** @return 非空移动数组是否符合动作空间约束。 */
     @Override
     public boolean contains(ProtoMoveMenuItem component) {
-        return component != null && this.space().contains(Map.of(
+        return component != null && component.getMovesCount() > 0 && this.space().contains(Map.of(
             "session_id", new double[] { component.getSessionId() },
-            "source_slot_id", new double[] { component.getSourceSlotId() },
-            "target_slot_id", new double[] { component.getTargetSlotId() },
-            "count", new double[] { component.getCount() },
-            "repeat", new double[] { component.getRepeat() }
+            "moves", component.getMovesList().stream().map(move -> Map.<String, Object>of(
+                "source_slot_id", new double[] { move.getSourceSlotId() },
+                "target_slot_id", new double[] { move.getTargetSlotId() },
+                "count", new double[] { move.getCount() },
+                "repeat", new double[] { move.getRepeat() }
+            )).toList()
         ));
     }
 
+    /** @param component 顺序移动请求；@return 失败停止且不回滚的执行结果。 */
     @Override
     public ActionApplyResult apply(ProtoMoveMenuItem component) {
         Mob mob = this.mob();
@@ -123,28 +135,73 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
                 "current_session_id", session.sessionId()
             )));
         }
+        if (component.getMovesCount() == 0) {
+            return ActionApplyResult.none(ActionState.failed("moves must not be empty"));
+        }
+        // 先校验全部槽位基线，允许后项读取前项移动后的状态。
+        for (var move : component.getMovesList()) {
+            int sourceSlotId = move.getSourceSlotId();
+            int targetSlotId = move.getTargetSlotId();
+            // 3. 经 slot_id 映射解析源/目标槽
+            SessionSlot source = session.slot(sourceSlotId);
+            SessionSlot target = session.slot(targetSlotId);
+            if (source == null || target == null) {
+                return ActionApplyResult.none(ActionState.failed(
+                    "slot id cannot be resolved in current session",
+                    slotIds(sourceSlotId, targetSlotId)
+                ));
+            }
+            // 4/5. stale 校验：currentSnapshot 必须匹配最近一次 observation 基线（基线缺失视为不匹配）；
+            // 不匹配时不修改任何物品、不提交基线，仅标记 stale_menu_state
+            LogicalMenuSession.SlotSnapshot sourceCurrent = session.currentSnapshot(sourceSlotId);
+            LogicalMenuSession.SlotSnapshot targetCurrent = session.currentSnapshot(targetSlotId);
+            if (sourceCurrent == null || !sourceCurrent.matches(session.lastObservedSnapshot(sourceSlotId))
+                || targetCurrent == null || !targetCurrent.matches(session.lastObservedSnapshot(targetSlotId))) {
+                return ActionApplyResult.none(ActionState.failed(
+                    "menu state changed; refresh observation",
+                    staleDetails(sourceSlotId, targetSlotId)
+                ));
+            }
+        }
+        List<Map<String, Object>> results = new ArrayList<>();
+        boolean applied = false;
+        int completed = 0;
+        ActionState state = ActionState.completed("menu moves completed");
+        for (var move : component.getMovesList()) {
+            ActionApplyResult result = this.applyMove(session, move);
+            applied |= result.appliedAnyComponent();
+            state = result.initialState();
+            results.add(Map.of("index", results.size(), "status", state.status().name(),
+                "description", state.description(), "details", state.details()));
+            if (state.status() != ActionStatus.COMPLETED) {
+                break;
+            }
+            completed++;
+        }
+        // 保留单项数量字段，同时报告数组中每项的结果与失败位置。
+        Map<String, Object> details = new LinkedHashMap<>(state.details());
+        details.put("requested_moves", component.getMovesCount());
+        details.put("completed_moves", completed);
+        details.put("results", results);
+        if (completed < component.getMovesCount()) {
+            details.put("failed_move_index", completed);
+        }
+        return new ActionApplyResult(ActionControlPolicy.none(), applied,
+            new ActionState(state.status(), state.description(), details));
+    }
+
+    /**
+     * 执行已通过初始基线检查的一项移动。
+     * @param session 当前菜单会话
+     * @param component 单项参数，保留 repeat 的数量截断语义
+     * @return 本项结果和实际副作用标记
+     */
+    private ActionApplyResult applyMove(LogicalMenuSession session, io.github.mousemeya.gymcraft.gym.action.proto.Move component) {
+        Mob mob = this.mob();
         int sourceSlotId = component.getSourceSlotId();
         int targetSlotId = component.getTargetSlotId();
-        // 3. 经 slot_id 映射解析源/目标槽
         SessionSlot source = session.slot(sourceSlotId);
         SessionSlot target = session.slot(targetSlotId);
-        if (source == null || target == null) {
-            return ActionApplyResult.none(ActionState.failed(
-                "slot id cannot be resolved in current session",
-                slotIds(sourceSlotId, targetSlotId)
-            ));
-        }
-        // 4/5. stale 校验：currentSnapshot 必须匹配最近一次 observation 基线（基线缺失视为不匹配）；
-        // 不匹配时不修改任何物品、不提交基线，仅标记 stale_menu_state
-        LogicalMenuSession.SlotSnapshot sourceCurrent = session.currentSnapshot(sourceSlotId);
-        LogicalMenuSession.SlotSnapshot targetCurrent = session.currentSnapshot(targetSlotId);
-        if (sourceCurrent == null || !sourceCurrent.matches(session.lastObservedSnapshot(sourceSlotId))
-            || targetCurrent == null || !targetCurrent.matches(session.lastObservedSnapshot(targetSlotId))) {
-            return ActionApplyResult.none(ActionState.failed(
-                "menu state changed; refresh observation",
-                staleDetails(sourceSlotId, targetSlotId)
-            ));
-        }
         // 6. 源 ≠ 目标
         if (source == target) {
             return ActionApplyResult.none(ActionState.failed(

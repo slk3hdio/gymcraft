@@ -131,4 +131,56 @@ public final class MenuSessionGameTests {
         assertTrue(helper, LogicalMenuSessions.current(mob) == null, "session still attached after close");
         helper.succeed();
     }
+    /** @param helper 测试上下文；验证后一项读取前一项的产出。 */
+    public static void batchMovesInOrder(GameTestHelper helper) {
+        checkBatchMoves(helper, false, false);
+    }
+
+    /** @param helper 测试上下文；验证失败保留前项且跳过后项。 */
+    public static void batchMoveStopsOnFailure(GameTestHelper helper) {
+        checkBatchMoves(helper, true, false);
+    }
+
+    /** @param helper 测试上下文；验证后项槽位过期时整批不修改物品。 */
+    public static void batchMoveChecksAllBaselines(GameTestHelper helper) {
+        checkBatchMoves(helper, false, true);
+    }
+
+    /**
+     * 构造箱内连续转移，验证执行顺序、失败边界与基线检查。
+     * @param helper 测试上下文
+     * @param failSecond 是否令第二项数量无效
+     * @param stale 是否使仅后项涉及的槽位过期
+     */
+    private static void checkBatchMoves(GameTestHelper helper, boolean failSecond, boolean stale) {
+        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        var chest = placeChest(helper, new BlockPos(0, 1, 2));
+        chest.setItem(0, new ItemStack(Items.COBBLESTONE, 10));
+        var session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
+        observe(mob);
+        if (stale) {
+            chest.setItem(2, new ItemStack(Items.DIRT, 1));
+        }
+        var request = io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveMenuItem.newBuilder()
+            .setSessionId(session.sessionId());
+        for (int i = 0; i < 3; i++) {
+            request.addMoves(io.github.mousemeya.gymcraft.gym.action.proto.Move.newBuilder()
+                .setSourceSlotId(sessionSlotId(session, i))
+                .setTargetSlotId(sessionSlotId(session, i + 1))
+                .setCount(failSecond && i == 1 ? 0 : 5));
+        }
+        var result = new io.github.mousemeya.gymcraft.gym.action.component.MoveMenuItemController(mob)
+            .apply(request.build());
+        assertEquals(helper, failSecond || stale ? ActionStatus.FAILED : ActionStatus.COMPLETED,
+            result.initialState().status(), "unexpected batch status");
+        assertEquals(helper, stale ? 10 : 5, chest.getItem(0).getCount(), "unexpected source count");
+        assertEquals(helper, failSecond ? 5 : 0, chest.getItem(1).getCount(), "unexpected intermediate count");
+        assertEquals(helper, failSecond || stale ? 0 : 5, chest.getItem(3).getCount(), "unexpected final count");
+        assertEquals(helper, !stale, result.appliedAnyComponent(), "incorrect side effect flag");
+        if (!stale) {
+            assertEquals(helper, failSecond ? 1 : 3, result.initialState().details().get("completed_moves"),
+                "incorrect completed moves");
+        }
+        helper.succeed();
+    }
 }

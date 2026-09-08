@@ -47,7 +47,8 @@ public final class MenuSessionHooks {
      * @param reason 清理原因（reset / entity died / clear 等，用于日志）
      */
     public static void closeFor(Mob mob, String reason) {
-        LogicalMenuSession session = OPEN_SESSIONS.get(mob.getUUID());
+        // reset 保留 UUID 但替换实体实例；旧实体的延迟事件只能清理旧实例自己的附件。
+        LogicalMenuSession session = LogicalMenuSessions.current(mob);
         if (session != null) {
             session.closeOnce(reason);
         }
