@@ -1,4 +1,4 @@
-package io.github.mousemeya.gymcraft.gym.menu.bridge;
+package io.github.mousemeya.gymcraft.gym.fakeplayer;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -23,7 +23,7 @@ import io.github.mousemeya.gymcraft.gym.inventory.LogicalSlotIdentity;
 
 /**
  * Agent 物品栏桥接 —— 把 Agent 统一物品栏（{@link AgentInventoryLayout}）映射到
- * 会话独占 FakePlayer 的玩家物品栏，并在每次菜单操作后写回 Mob。
+ * FakePlayer 的玩家物品栏，并在每次菜单或物品操作后写回 Mob。
  * <p>
  * 1.26 的玩家 {@link Inventory} 是单一 36 格 {@code items} 列表加
  * {@code EntityEquipment}（槽号 36–42 映射到装备槽），{@code getContainerSize()} 为 43；
@@ -40,7 +40,7 @@ import io.github.mousemeya.gymcraft.gym.inventory.LogicalSlotIdentity;
  * slot_id 5 (OFFHAND)  -&gt; 装备槽 40（{@code Inventory.SLOT_OFFHAND}）
  * slot_id 6 (BODY)     -&gt; 预留普通格 35（{@link #RESERVED_SLOT_BODY}）
  * slot_id 7 (SADDLE)   -&gt; 预留普通格 34（{@link #RESERVED_SLOT_SADDLE}）
- * slot_id 8+k (容器槽) -&gt; 普通格 1+k（{@link #NATIVE_CONTAINER_BASE_SLOT} 起，最多 {@link #MAX_NATIVE_CONTAINER_SLOTS} 格）
+ * slot_id 8+k (存储槽) -&gt; 普通格 1+k（{@link #STORAGE_BASE_SLOT} 起，最多 {@link #MAX_STORAGE_SLOTS} 格）
  * </pre>
  * 八个 Mob 装备槽优先复制到 FakePlayer 对应装备位置；BODY/SADDLE 没有参与菜单绑定的
  * 对应位置，复制到预留固定普通格。预留格只用于会话桥接，不构成新的持久 Agent 背包，
@@ -64,13 +64,13 @@ public final class AgentInventoryBridge {
     public static final int RESERVED_SLOT_BODY = 35;
     /** 预留固定普通格：Mob {@code EquipmentSlot.SADDLE} 的桥接位置。 */
     public static final int RESERVED_SLOT_SADDLE = 34;
-    /** Mob 自带容器槽映射的普通格起始位置。 */
-    public static final int NATIVE_CONTAINER_BASE_SLOT = 1;
+    /** Mob 原生容器或专属背包存储槽映射的普通格起始位置。 */
+    public static final int STORAGE_BASE_SLOT = 1;
     /**
      * Mob 自带容器可映射的最大槽数：36 格普通物品栏扣除主手格（1）与两个预留格（2）。
      * 映射容量阈值按计划取 36（菜单只绑定 0–35），不按 43 计算。
      */
-    public static final int MAX_NATIVE_CONTAINER_SLOTS = 33;
+    public static final int MAX_STORAGE_SLOTS = 33;
 
     private final Mob mob;
     private final FakePlayer player;
@@ -108,16 +108,11 @@ public final class AgentInventoryBridge {
     /**
      * 建立桥接：解析 Mob 当前统一物品栏布局并同步到 FakePlayer。
      *
-     * @throws MenuBridgeException Agent 存储槽超出可映射容量（{@link #MAX_NATIVE_CONTAINER_SLOTS}）时抛出
+     * @throws MenuBridgeException Agent 存储槽超出可映射容量（{@link #MAX_STORAGE_SLOTS}）时抛出
      */
     public static AgentInventoryBridge establish(Mob mob, FakePlayer player) {
         AgentInventoryLayout layout = AgentInventoryLayout.resolve(mob);
-        if (layout.storageSlotCount() > MAX_NATIVE_CONTAINER_SLOTS) {
-            throw new MenuBridgeException(
-                "Mob storage has " + layout.storageSlotCount()
-                    + " slots, exceeding the bridge capacity of " + MAX_NATIVE_CONTAINER_SLOTS
-                    + " (mob=" + mob.getUUID() + ")");
-        }
+        validateCapacity(mob, layout);
         List<SlotMapping> mappings = new ArrayList<>();
         for (var slot : layout.slots()) {
             mappings.add(new SlotMapping(slot, inventoryIndexFor(slot)));
@@ -125,6 +120,31 @@ public final class AgentInventoryBridge {
         var bridge = new AgentInventoryBridge(mob, player, layout, mappings);
         bridge.syncToFakePlayer();
         return bridge;
+    }
+
+    /**
+     * 在不创建 FakePlayer、不复制物品的前提下验证 Mob 当前布局是否可桥接。
+     *
+     * @param mob 待验证 Mob
+     * @throws MenuBridgeException 存储槽数量超过桥接容量时抛出
+     */
+    public static void validateCapacity(Mob mob) {
+        validateCapacity(mob, AgentInventoryLayout.resolve(mob));
+    }
+
+    /**
+     * 对已解析布局执行容量验证。
+     *
+     * @param mob 待验证 Mob
+     * @param layout 已解析的统一物品栏布局
+     */
+    private static void validateCapacity(Mob mob, AgentInventoryLayout layout) {
+        if (layout.storageSlotCount() > MAX_STORAGE_SLOTS) {
+            throw new MenuBridgeException(
+                "Mob storage has " + layout.storageSlotCount()
+                    + " slots, exceeding the bridge capacity of " + MAX_STORAGE_SLOTS
+                    + " (mob=" + mob.getUUID() + ")");
+        }
     }
 
     /** 按固定映射表计算 Agent 槽位对应的 FakePlayer 物品栏槽号。 */
@@ -138,9 +158,9 @@ public final class AgentInventoryBridge {
                 case SADDLE -> RESERVED_SLOT_SADDLE;
             };
             case LogicalSlotIdentity.MobNativeContainer container ->
-                NATIVE_CONTAINER_BASE_SLOT + container.localIndex();
+                STORAGE_BASE_SLOT + container.localIndex();
             case LogicalSlotIdentity.MobBackpack backpack ->
-                NATIVE_CONTAINER_BASE_SLOT + backpack.localIndex();
+                STORAGE_BASE_SLOT + backpack.localIndex();
             // 物品栏布局只产生 MobEquipment/MobNativeContainer/MobBackpack 身份；
             // FakeBridge/MenuOwned 是会话阶段的规范化身份，不会出现在布局中
             default -> throw new IllegalStateException("Unexpected agent slot identity: " + slot.identity());
@@ -376,7 +396,7 @@ public final class AgentInventoryBridge {
             return;
         }
         // ② Mob 自带容器（先合并同类堆叠，再放空槽）
-        remaining = tryInsertIntoNativeContainer(remaining);
+        remaining = tryInsertIntoStorageSlots(remaining);
         if (remaining.isEmpty()) {
             relocated.add(new RelocatedItem(stack.copy(), "container"));
             return;
@@ -392,7 +412,7 @@ public final class AgentInventoryBridge {
     }
 
     /** 尝试把物品插入 Mob 自带容器；返回无法插入的余量。 */
-    private ItemStack tryInsertIntoNativeContainer(ItemStack stack) {
+    private ItemStack tryInsertIntoStorageSlots(ItemStack stack) {
         ItemStack remaining = stack;
         for (var slot : this.layout.slots()) {
             if (remaining.isEmpty()) {

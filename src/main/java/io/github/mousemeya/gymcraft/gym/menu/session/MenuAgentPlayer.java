@@ -1,12 +1,11 @@
 package io.github.mousemeya.gymcraft.gym.menu.session;
 
-import java.util.UUID;
-
-import com.mojang.authlib.GameProfile;
-
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.neoforge.common.util.FakePlayer;
+
+import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerActor;
+import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerService;
 
 /**
  * 逻辑菜单会话独占的 FakePlayer 持有者。
@@ -14,7 +13,7 @@ import net.neoforged.neoforge.common.util.FakePlayer;
  * 原版 {@code MenuProvider#createMenu} 要求 {@code Player.Inventory}，因此每个环境
  * （Agent）的每个活动或候选菜单会话使用独占 {@link FakePlayer}；不同环境、活动会话
  * 和候选会话之间不共享实例或 GameProfile UUID。不得复用
- * {@code MobHandSimulator} 的"每维度一个 FakePlayer"——长生命周期菜单会共享并覆盖
+ * {@link AgentFakePlayerService} 的手部复用执行者——长生命周期菜单会共享并覆盖
  * {@code containerMenu}、物品栏、商人 trading player、容器 opener 状态和位置校验。
  * </p>
  * <p>
@@ -27,14 +26,12 @@ import net.neoforged.neoforge.common.util.FakePlayer;
  * </p>
  */
 public final class MenuAgentPlayer {
-    /** FakePlayer 显示名（UUID 每次随机，名称固定即可）。 */
-    private static final String PROFILE_NAME = "[GymCraftMenu]";
-
-    private final FakePlayer player;
+    private final AgentFakePlayerActor actor;
     private int containerCounter;
 
-    private MenuAgentPlayer(FakePlayer player) {
-        this.player = player;
+    /** 使用菜单会话独占执行者创建包装器。 */
+    private MenuAgentPlayer(AgentFakePlayerActor actor) {
+        this.actor = actor;
     }
 
     /**
@@ -42,15 +39,15 @@ public final class MenuAgentPlayer {
      * 并把位置/朝向同步到 Mob 当前状态。
      */
     public static MenuAgentPlayer create(Mob mob, ServerLevel level) {
-        FakePlayer player = new FakePlayer(level, new GameProfile(UUID.randomUUID(), PROFILE_NAME));
-        var handle = new MenuAgentPlayer(player);
-        handle.syncToMob(mob);
-        return handle;
+        if (mob.level() != level) {
+            throw new IllegalArgumentException("Mob is not in the requested menu level");
+        }
+        return new MenuAgentPlayer(AgentFakePlayerService.createMenuActor(mob));
     }
 
     /** @return 会话独占的 FakePlayer 实例 */
     public FakePlayer player() {
-        return this.player;
+        return this.actor.player();
     }
 
     /**
@@ -76,9 +73,6 @@ public final class MenuAgentPlayer {
      * </p>
      */
     public void syncToMob(Mob mob) {
-        this.player.setPos(mob.getX(), mob.getY(), mob.getZ());
-        this.player.setYRot(mob.getYRot());
-        this.player.setXRot(mob.getXRot());
-        this.player.setYHeadRot(mob.getYHeadRot());
+        this.actor.syncToMob(mob);
     }
 }

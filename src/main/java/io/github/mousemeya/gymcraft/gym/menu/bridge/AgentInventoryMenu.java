@@ -1,5 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.menu.bridge;
 
+import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
+
 import java.util.List;
 
 import net.minecraft.world.entity.player.Inventory;

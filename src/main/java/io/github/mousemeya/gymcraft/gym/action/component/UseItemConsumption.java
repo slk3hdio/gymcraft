@@ -1,6 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
+import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryTransaction;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Mob;
@@ -119,9 +120,7 @@ public final class UseItemConsumption {
         this.mob.stopUsingItem();
         ItemStack result = this.mob.getMainHandItem();
         this.mob.setItemInHand(InteractionHand.MAIN_HAND, this.savedMain);
-        var inventory = new UseItemInventory(this.mob, this.slotId);
-        inventory.returnToSource(result);
-        inventory.bridge.writeBackToMob();
+        AgentInventoryTransaction.settle(this.mob, this.slotId, result);
     }
 
     /** @return 是否已经完成结算 */

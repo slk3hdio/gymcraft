@@ -27,6 +27,8 @@ import net.neoforged.neoforge.transfer.item.ItemResource;
 
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
+import io.github.mousemeya.gymcraft.gym.action.component.UseItemController;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItem;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentHooks;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentService;
@@ -44,6 +46,23 @@ import io.github.mousemeya.gymcraft.gym.inventory.LogicalSlotIdentity;
 public final class MobAttachmentGameTests {
     /** 禁止实例化 GameTest 集合。 */
     private MobAttachmentGameTests() {
+    }
+
+    /** @param helper 测试场景；专属背包槽通过公共 FakePlayer 库存事务使用并正确写回 */
+    public static void backpackUseItemTransaction(GameTestHelper helper) {
+        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        MobAttachmentAccessScope scope = MobAttachmentAccessScope.activate(mob, List.of(MobAttachments.AGENT_BACKPACK));
+        AgentInventoryLayout.resolve(mob).slot(8).setItem(new ItemStack(Items.SNOWBALL, 2));
+
+        var result = new UseItemController(mob).apply(
+            ProtoUseItem.newBuilder().setSlotId(8).build()
+        ).initialState();
+        assertEquals(helper, ActionStatus.COMPLETED, result.status(), result.toString());
+        assertEquals(helper, 1, AgentInventoryLayout.resolve(mob).slot(8).getItem().getCount(),
+            "backpack use result was not written back");
+        assertTrue(helper, mob.getMainHandItem().isEmpty(), "backpack use changed main hand");
+        scope.deactivate(mob);
+        helper.succeed();
     }
 
     /** 独立 Java API 无需环境即可附加、读取、序列化和移除背包。 */

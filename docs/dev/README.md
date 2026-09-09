@@ -36,7 +36,8 @@ src/main/
 │   ├── gym/runtime/        AgentRuntime tick 调度
 │   ├── gym/rpc/            gRPC 服务与会话
 │   ├── gym/attachment/     通用 Mob 附件描述器、独立访问 API 与 env 访问作用域
-│   ├── gym/menu/           逻辑菜单会话与菜单适配器（session/ 会话与槽位、bridge/ 物品栏桥接、adapter/ 按钮适配）
+│   ├── gym/fakeplayer/     FakePlayer 执行者、状态同步、库存桥接与事务
+│   ├── gym/menu/           逻辑菜单会话与菜单适配器（session/ 会话与槽位、bridge/ self 菜单、adapter/ 按钮适配）
 │   ├── gym/inventory/      Agent 统一物品栏布局
 │   └── registry/           动作、观测、环境自定义注册表
 ├── proto/                  protobuf 与 GymEnvService 定义

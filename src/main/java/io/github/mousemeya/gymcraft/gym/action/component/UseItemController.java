@@ -26,6 +26,8 @@ import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItem;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
+import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
+import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryTransaction;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
@@ -148,24 +150,24 @@ public final class UseItemController extends AbstractActionComponentController<P
             LivingEntity entity = action.hasEntity() ? this.entityTarget(action) : null;
             if (!action.hasBlock() && !action.hasEntity() && stack.has(DataComponents.CONSUMABLE)) {
                 // 提前验证桥接容量，保证跨 tick 消费结束后一定能建立清算桥接。
-                new UseItemInventory(this.mob(), action.getSlotId());
+                AgentInventoryBridge.validateCapacity(this.mob());
                 this.consumption = new UseItemConsumption(this.mob(), action.getSlotId());
                 this.consumption.start();
                 this.state = ActionState.running("consuming item", this.details);
                 this.tick(action);
                 return ActionApplyResult.applied(this.policy(), this.state);
             }
-            var inventory = new UseItemInventory(this.mob(), action.getSlotId());
-            if (!action.hasBlock() && !action.hasEntity() && stack.getUseDuration(inventory.player) > 0) {
-                return this.fail("non-consumable sustained use is not supported");
-            }
-            inventory.stage();
             InteractionResult result;
-            try {
-                result = this.use(inventory, blockHit, entity);
-            } finally {
-                inventory.player.stopUsingItem();
-                inventory.commit();
+            try (var inventory = AgentInventoryTransaction.open(this.mob(), action.getSlotId())) {
+                if (!action.hasBlock() && !action.hasEntity() && stack.getUseDuration(inventory.player()) > 0) {
+                    return this.fail("non-consumable sustained use is not supported");
+                }
+                inventory.stageSelectedInMainHand();
+                try {
+                    result = this.use(inventory, blockHit, entity);
+                } finally {
+                    inventory.player().stopUsingItem();
+                }
             }
             this.state = result.consumesAction() ? ActionState.completed("item used", this.details)
                 : ActionState.failed("item did not accept target", this.details);
@@ -280,35 +282,35 @@ public final class UseItemController extends AbstractActionComponentController<P
      * @param entity 实体或 null
      * @return 原版持物交互结果
      */
-    private InteractionResult use(UseItemInventory inventory, @Nullable BlockHitResult block, @Nullable LivingEntity entity) {
-        ItemStack stack = inventory.player.getMainHandItem();
+    private InteractionResult use(AgentInventoryTransaction inventory, @Nullable BlockHitResult block, @Nullable LivingEntity entity) {
+        ItemStack stack = inventory.player().getMainHandItem();
         InteractionResult result;
         if (block != null) {
             // 原版右键方块先让方块处理手中物品；堆肥桶的投入逻辑位于此入口。
             result = this.mob().level().getBlockState(block.getBlockPos()).useItemOn(
-                stack, this.mob().level(), inventory.player, InteractionHand.MAIN_HAND, block
+                stack, this.mob().level(), inventory.player(), InteractionHand.MAIN_HAND, block
             );
             if (!result.consumesAction()) {
-                result = stack.useOn(new UseOnContext(inventory.player, InteractionHand.MAIN_HAND, block));
+                result = stack.useOn(new UseOnContext(inventory.player(), InteractionHand.MAIN_HAND, block));
             }
         } else if (entity != null) {
             // 僵尸村民的金苹果治愈由目标实体处理；仅开放此组合，避免触发交易或骑乘。
             if (entity instanceof ZombieVillager && stack.is(Items.GOLDEN_APPLE)) {
-                result = entity.interact(inventory.player, InteractionHand.MAIN_HAND, entity.position());
+                result = entity.interact(inventory.player(), InteractionHand.MAIN_HAND, entity.position());
             } else {
-                result = stack.interactLivingEntity(inventory.player, entity, InteractionHand.MAIN_HAND);
+                result = stack.interactLivingEntity(inventory.player(), entity, InteractionHand.MAIN_HAND);
             }
         } else {
-            result = stack.use(this.mob().level(), inventory.player, InteractionHand.MAIN_HAND);
+            result = stack.use(this.mob().level(), inventory.player(), InteractionHand.MAIN_HAND);
         }
         // 目标不接受直接交互时（如投掷物），保持已转向目标的姿态按普通使用执行，与原版右键落空后继续使用物品一致。
         if ((block != null || entity != null) && !result.consumesAction()) {
-            result = stack.use(this.mob().level(), inventory.player, InteractionHand.MAIN_HAND);
+            result = stack.use(this.mob().level(), inventory.player(), InteractionHand.MAIN_HAND);
         }
         if (result instanceof InteractionResult.Success success && success.heldItemTransformedTo() != null) {
-            inventory.player.setItemInHand(InteractionHand.MAIN_HAND, success.heldItemTransformedTo());
+            inventory.player().setItemInHand(InteractionHand.MAIN_HAND, success.heldItemTransformedTo());
         }
-        if (inventory.player.isUsingItem()) {
+        if (inventory.player().isUsingItem()) {
             throw new IllegalArgumentException("non-consumable sustained use is not supported");
         }
         return result;

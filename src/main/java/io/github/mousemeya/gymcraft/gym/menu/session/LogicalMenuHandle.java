@@ -1,6 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.menu.session;
 
-import io.github.mousemeya.gymcraft.gym.menu.bridge.AgentInventoryBridge;
+import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 

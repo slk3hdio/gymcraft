@@ -17,6 +17,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
+import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerActor;
+import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerService;
+
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
@@ -34,7 +37,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * {@code BlockState#getDestroyProgress(player, level, pos)}（内含工具速度、
  * 正确工具 30/100 系数、急迫/挖掘疲劳、水中/空中惩罚等）,累计 ≥ 1.0 时通过
  * {@code ServerPlayerGameMode#destroyBlock} 完成破坏（含耐久损耗与掉落）。
- * 执行者是通过 {@link MobHandSimulator} 同步了 Mob 状态的 {@link FakePlayer}。
+ * 执行者是通过 {@link AgentFakePlayerService} 同步了 Mob 状态的 {@link FakePlayer}。
  * </p>
  * <p>
  * 要求生物具备手持能力（{@link Mob#canHoldItem}）;空手挖掘同样遵循原版规则。
@@ -140,9 +143,9 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
             return ActionApplyResult.none(validationError);
         }
 
-        FakePlayer fakePlayer = MobHandSimulator.syncFromMob(mob, level);
+        AgentFakePlayerActor actor = AgentFakePlayerService.borrowHandActor(mob);
         // 首 tick 进度与原版 START_DESTROY_BLOCK 一致:立即累计一次
-        float progress = blockState.getDestroyProgress(fakePlayer, level, pos);
+        float progress = blockState.getDestroyProgress(actor.player(), level, pos);
         mob.getLookControl().setLookAt(Vec3.atCenterOf(pos));
         mob.swing(InteractionHand.MAIN_HAND);
 
@@ -190,8 +193,8 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
             return;
         }
 
-        FakePlayer fakePlayer = MobHandSimulator.syncFromMob(mob, level);
-        mining.progress += blockState.getDestroyProgress(fakePlayer, level, mining.pos);
+        AgentFakePlayerActor actor = AgentFakePlayerService.borrowHandActor(mob);
+        mining.progress += blockState.getDestroyProgress(actor.player(), level, mining.pos);
         mining.ticks++;
         mob.getLookControl().setLookAt(Vec3.atCenterOf(mining.pos));
         if (this.swingIntervalTicks > 0 && mining.ticks % this.swingIntervalTicks == 0) {
@@ -257,9 +260,13 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
 
     /** 通过假玩家执行原版生存模式破坏（含工具耐久损耗与掉落物）。 */
     private static ActionState finishDestroy(Mob mob, ServerLevel level, BlockPos pos, int ticks) {
-        FakePlayer fakePlayer = MobHandSimulator.syncFromMob(mob, level);
-        boolean destroyed = fakePlayer.gameMode.destroyBlock(pos);
-        MobHandSimulator.syncBackToMob(mob, fakePlayer);
+        AgentFakePlayerActor actor = AgentFakePlayerService.borrowHandActor(mob);
+        boolean destroyed;
+        try {
+            destroyed = actor.player().gameMode.destroyBlock(pos);
+        } finally {
+            actor.writeMainHandTo(mob);
+        }
         if (destroyed) {
             LOGGER.info("GymCraft BreakBlock done entity={} pos={} ticks={}", mob.getUUID(), pos.toShortString(), ticks);
             return ActionState.completed("block broken", Map.of(

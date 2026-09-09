@@ -461,7 +461,7 @@ MenuOwned(session ID, container identity, local index)
 
 原版 `MenuProvider#createMenu` 要求 `Player.Inventory`，因此每个环境（Agent）的每个活动或候选菜单会话使用独占 `FakePlayer`。不同环境、活动会话和候选会话之间都不得共享实例或 GameProfile UUID。
 
-不得复用 `MobHandSimulator` 当前的“每维度一个 FakePlayer”，因为长生命周期菜单会共享和覆盖：
+不得复用 `AgentFakePlayerService` 的“每维度一个手部 FakePlayer”，因为长生命周期菜单会共享和覆盖：
 
 - `containerMenu`
 - FakePlayer 物品栏

@@ -82,6 +82,16 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("attachment_backpack_death_drops", () -> MobAttachmentGameTests::backpackDropsWithoutEnvironment);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BACKPACK_RESET_SCOPE =
         TEST_FUNCTIONS.register("attachment_backpack_reset_scope", () -> MobAttachmentGameTests::resetRestoresBackpackAndScope);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BACKPACK_USE_ITEM_TRANSACTION =
+        TEST_FUNCTIONS.register("use_item_backpack_transaction", () -> MobAttachmentGameTests::backpackUseItemTransaction);
+
+    // ===== 公共 FakePlayer 执行与库存桥接 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> FAKE_PLAYER_ACTOR_MODES =
+        TEST_FUNCTIONS.register("fake_player_actor_modes", () -> FakePlayerBridgeGameTests::actorModesAndIsolation);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> FAKE_PLAYER_INVENTORY_TRANSACTION =
+        TEST_FUNCTIONS.register("fake_player_inventory_transaction", () -> FakePlayerBridgeGameTests::inventoryTransactionCommitOnce);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> FAKE_PLAYER_MENU_ISOLATION =
+        TEST_FUNCTIONS.register("fake_player_menu_isolation", () -> FakePlayerBridgeGameTests::activeMenuIsolation);
 
     // ===== 14.3 物品移动 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> EMPTY_SOURCE_FAILS =

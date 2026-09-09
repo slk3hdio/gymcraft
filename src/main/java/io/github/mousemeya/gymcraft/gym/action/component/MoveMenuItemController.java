@@ -26,7 +26,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveMenuItem;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentSlot;
-import io.github.mousemeya.gymcraft.gym.menu.bridge.AgentInventoryBridge;
+import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
 import io.github.mousemeya.gymcraft.gym.menu.session.SessionSlot;
