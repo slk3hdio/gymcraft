@@ -1,7 +1,6 @@
 """使用物品 DSL 的目标、字段存在性、编码与校验回归测试。"""
 
 import unittest
-from typing import cast
 
 from gymcraft.gym.action.components.use_item_pb2 import ProtoUseItem
 from gymcraft.llm import ActionDslParser, ActionParseError, encode_action_batch
@@ -17,7 +16,7 @@ class UseItemTests(unittest.TestCase):
         for suffix, target in cases:
             with self.subTest(suffix=suffix):
                 batch = ActionDslParser().parse(f"```gymcraft-action\n/use_item {suffix}\n```").batch
-                payload = cast(ProtoUseItem, encode_action_batch(batch)[ACTION_USE_ITEM])
+                payload = encode_action_batch(batch)[ACTION_USE_ITEM]
                 decoded = ProtoUseItem.FromString(payload.SerializeToString())
                 self.assertTrue(decoded.HasField("slot_id"))
                 self.assertEqual(int(suffix.split()[0]), decoded.slot_id)

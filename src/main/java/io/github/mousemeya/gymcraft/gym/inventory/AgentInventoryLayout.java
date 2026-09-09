@@ -12,6 +12,12 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.world.entity.npc.InventoryCarrier;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.transfer.item.ItemResource;
+import net.neoforged.neoforge.transfer.item.ItemStacksResourceHandler;
+
+import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
+import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentService;
+import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 
 /**
  * Agent 统一物品栏布局 —— 由 Mob 结构确定性导出的无状态 slot_id 映射快照。
@@ -19,7 +25,7 @@ import net.minecraft.world.item.ItemStack;
  * 编号规则（GymCraft 自定义索引，非 Minecraft 全局槽位编号）：
  * <ul>
  *   <li>{@code 0..7} —— {@link EquipmentSlot#getId()} 对应的八个装备槽</li>
- *   <li>{@code 8..N} —— Mob 自带 {@link Container} 的局部槽位</li>
+ *   <li>{@code 8..N} —— Mob 自带 {@link Container} 或 env 授权专属背包的局部槽位</li>
  * </ul>
  * Mob 自带容器的发现顺序：
  * <ol>
@@ -60,6 +66,13 @@ public final class AgentInventoryLayout {
         if (nativeContainer != null) {
             for (int i = 0; i < nativeContainer.container().getContainerSize(); i++) {
                 slots.add(new NativeContainerAgentSlot(mob, nativeContainer, i));
+            }
+        } else if (MobAttachmentAccessScope.canAccess(mob, MobAttachments.AGENT_BACKPACK)) {
+            ItemStacksResourceHandler backpack = MobAttachmentService
+                .getIfPresent(mob, MobAttachments.AGENT_BACKPACK)
+                .orElseThrow(() -> new IllegalStateException("Backpack access granted without attachment: " + mob.getUUID()));
+            for (int i = 0; i < backpack.size(); i++) {
+                slots.add(new BackpackAgentSlot(mob, backpack, i));
             }
         }
         return new AgentInventoryLayout(slots);
@@ -129,9 +142,18 @@ public final class AgentInventoryLayout {
         return this.slots.size();
     }
 
-    /** @return Mob 自带容器槽个数（0 表示该 Mob 没有自带容器） */
-    public int nativeContainerSlotCount() {
+    /** @return Agent 存储槽个数（原生容器或专属背包；0 表示没有存储槽） */
+    public int storageSlotCount() {
         return this.slots.size() - EQUIPMENT_SLOT_COUNT;
+    }
+
+    /**
+     * @return Mob 自带容器槽个数；保留供旧调用方兼容，新增代码应使用 {@link #storageSlotCount()}
+     * @deprecated 统一布局现在也可包含专属背包，名称无法准确表达语义
+     */
+    @Deprecated
+    public int nativeContainerSlotCount() {
+        return this.storageSlotCount();
     }
 
     /** @return 全部槽位，按 slot_id 升序（不可变） */
@@ -264,6 +286,65 @@ public final class AgentInventoryLayout {
         public void setItem(ItemStack stack) {
             this.nativeContainer.container().setItem(this.localIndex, stack);
             this.nativeContainer.container().setChanged();
+        }
+    }
+
+    /**
+     * 专属背包槽实现：使用 NeoForge 资源处理器持久化物品，并通过直接 set 完成写回。
+     */
+    private static final class BackpackAgentSlot implements AgentSlot {
+        private final Mob mob;
+        private final ItemStacksResourceHandler backpack;
+        private final int localIndex;
+
+        /** 保存背包处理器和局部索引，所有读写直接指向持久附件。 */
+        private BackpackAgentSlot(Mob mob, ItemStacksResourceHandler backpack, int localIndex) {
+            this.mob = mob;
+            this.backpack = backpack;
+            this.localIndex = localIndex;
+        }
+
+        /** @return 统一布局中的稳定槽位 ID */
+        @Override
+        public int slotId() {
+            return EQUIPMENT_SLOT_COUNT + this.localIndex;
+        }
+
+        /** @return 由 Mob UUID 和局部索引组成的背包槽身份 */
+        @Override
+        public LogicalSlotIdentity identity() {
+            return new LogicalSlotIdentity.MobBackpack(this.mob.getUUID(), this.localIndex);
+        }
+
+        /** @return 与原生容器兼容的槽位类别 */
+        @Override
+        public String category() {
+            return "container";
+        }
+
+        /** @return 当前背包堆栈的副本 */
+        @Override
+        public ItemStack getItem() {
+            int count = Math.toIntExact(this.backpack.getAmountAsLong(this.localIndex));
+            return this.backpack.getResource(this.localIndex).toStack(count);
+        }
+
+        /** @return 非空物品是否可存入该资源槽 */
+        @Override
+        public boolean mayPlace(ItemStack stack) {
+            return !stack.isEmpty() && this.backpack.isValid(this.localIndex, ItemResource.of(stack));
+        }
+
+        /** @return 处理器对候选物品报告的容量 */
+        @Override
+        public int maxStackSize(ItemStack stack) {
+            return Math.toIntExact(this.backpack.getCapacityAsLong(this.localIndex, ItemResource.of(stack)));
+        }
+
+        /** 使用资源与数量覆盖背包槽。 */
+        @Override
+        public void setItem(ItemStack stack) {
+            this.backpack.set(this.localIndex, ItemResource.of(stack), stack.getCount());
         }
     }
 }

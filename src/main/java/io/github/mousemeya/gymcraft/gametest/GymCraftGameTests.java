@@ -69,6 +69,20 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SLOT_IDS_INVALID_AFTER_CLOSE =
         TEST_FUNCTIONS.register("inventory_slot_ids_invalid_after_close", () -> MenuInventoryGameTests::slotIdsInvalidAfterClose);
 
+    // ===== 通用 Mob 附件与专属背包 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ATTACHMENT_STANDALONE_PERSISTENCE =
+        TEST_FUNCTIONS.register("attachment_standalone_persistence", () -> MobAttachmentGameTests::standaloneServiceAndPersistence);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ATTACHMENT_SCOPE_VISIBILITY =
+        TEST_FUNCTIONS.register("attachment_scope_visibility", () -> MobAttachmentGameTests::accessScopeHidesWithoutDeleting);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ENV_BACKPACK_SELECTION =
+        TEST_FUNCTIONS.register("attachment_env_backpack_selection", () -> MobAttachmentGameTests::environmentsChooseBackpackAccess);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BACKPACK_MENU_BRIDGE =
+        TEST_FUNCTIONS.register("attachment_backpack_menu_bridge", () -> MobAttachmentGameTests::backpackMenuBridge);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BACKPACK_DEATH_DROPS =
+        TEST_FUNCTIONS.register("attachment_backpack_death_drops", () -> MobAttachmentGameTests::backpackDropsWithoutEnvironment);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BACKPACK_RESET_SCOPE =
+        TEST_FUNCTIONS.register("attachment_backpack_reset_scope", () -> MobAttachmentGameTests::resetRestoresBackpackAndScope);
+
     // ===== 14.3 物品移动 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> EMPTY_SOURCE_FAILS =
         TEST_FUNCTIONS.register("move_empty_source_fails", () -> MenuMoveGameTests::emptySourceFails);
@@ -122,6 +136,16 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("set_block_other_entity_obstructed", () -> SetBlockGameTests::otherEntityObstructionBlocksPlacement);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_COLLISIONLESS_ALLOWED =
         TEST_FUNCTIONS.register("set_block_collisionless_allowed", () -> SetBlockGameTests::collisionlessBlockAllowsPlacement);
+
+    // ===== 感兴趣方块 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> INTERESTING_BLOCKS_UPDATE =
+        TEST_FUNCTIONS.register("interesting_blocks_update", () -> InterestingBlocksGameTests::updateIsIdempotentAndRemoves);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> INTERESTING_BLOCKS_ATOMIC =
+        TEST_FUNCTIONS.register("interesting_blocks_atomic", () -> InterestingBlocksGameTests::invalidAndConflictingUpdatesAreAtomic);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> INTERESTING_BLOCKS_LIFECYCLE =
+        TEST_FUNCTIONS.register("interesting_blocks_lifecycle", () -> InterestingBlocksGameTests::attachmentIsIsolatedAndClearedByReset);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> INTERESTING_BLOCKS_OBSERVATION =
+        TEST_FUNCTIONS.register("interesting_blocks_observation", () -> InterestingBlocksGameTests::observationFiltersVisibleSurfaces);
 
     // ===== 环境 AI 策略 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AI_DISABLED_MAINTAINED =
@@ -202,8 +226,11 @@ public final class GymCraftGameTests {
     // 使用物品的独立场景，使用专用空结构与统一测试时限。
     static {
         TEST_FUNCTIONS.register("use_item_bone_meal", () -> UseItemGameTests::boneMeal);
+        TEST_FUNCTIONS.register("use_item_composter", () -> UseItemGameTests::composter);
         TEST_FUNCTIONS.register("use_item_block_face_durability", () -> UseItemGameTests::blockFaceAndDurability);
         TEST_FUNCTIONS.register("use_item_entity_no_fallback", () -> UseItemGameTests::entityAndNoFallback);
+        TEST_FUNCTIONS.register("use_item_cure_zombie_villager", () -> UseItemGameTests::cureZombieVillager);
+        TEST_FUNCTIONS.register("use_item_throw_at_entity", () -> UseItemGameTests::throwAtEntity);
         TEST_FUNCTIONS.register("use_item_throw_container_menu", () -> UseItemGameTests::throwFromContainer);
         TEST_FUNCTIONS.register("use_item_food_waits", () -> UseItemGameTests::foodWaits);
         TEST_FUNCTIONS.register("use_item_potion_isolation", () -> UseItemGameTests::potionAndIsolation);

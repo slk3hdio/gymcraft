@@ -11,7 +11,9 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.monster.zombie.ZombieVillager;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.BlockHitResult;
@@ -30,7 +32,8 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 /**
- * 按 Agent 槽号使用物品；外部目标先校验距离和视线，再转向并执行物品入口。
+ * 按 Agent 槽号使用物品；外部目标先校验距离和视线，再转向并执行原版持物交互入口。
+ * 目标不接受直接交互的物品（如投掷物）回退为面向目标的普通使用。
  * 瞬时交互通过独立玩家桥接，食物药水由 Mob 原版 tick 消费；不执行目标自身交互。
  */
 public final class UseItemController extends AbstractActionComponentController<ProtoUseItem> {
@@ -275,16 +278,31 @@ public final class UseItemController extends AbstractActionComponentController<P
      * @param inventory 玩家桥接
      * @param block 方块命中或 null
      * @param entity 实体或 null
-     * @return 物品入口结果
+     * @return 原版持物交互结果
      */
     private InteractionResult use(UseItemInventory inventory, @Nullable BlockHitResult block, @Nullable LivingEntity entity) {
         ItemStack stack = inventory.player.getMainHandItem();
         InteractionResult result;
         if (block != null) {
-            result = stack.useOn(new UseOnContext(inventory.player, InteractionHand.MAIN_HAND, block));
+            // 原版右键方块先让方块处理手中物品；堆肥桶的投入逻辑位于此入口。
+            result = this.mob().level().getBlockState(block.getBlockPos()).useItemOn(
+                stack, this.mob().level(), inventory.player, InteractionHand.MAIN_HAND, block
+            );
+            if (!result.consumesAction()) {
+                result = stack.useOn(new UseOnContext(inventory.player, InteractionHand.MAIN_HAND, block));
+            }
         } else if (entity != null) {
-            result = stack.interactLivingEntity(inventory.player, entity, InteractionHand.MAIN_HAND);
+            // 僵尸村民的金苹果治愈由目标实体处理；仅开放此组合，避免触发交易或骑乘。
+            if (entity instanceof ZombieVillager && stack.is(Items.GOLDEN_APPLE)) {
+                result = entity.interact(inventory.player, InteractionHand.MAIN_HAND, entity.position());
+            } else {
+                result = stack.interactLivingEntity(inventory.player, entity, InteractionHand.MAIN_HAND);
+            }
         } else {
+            result = stack.use(this.mob().level(), inventory.player, InteractionHand.MAIN_HAND);
+        }
+        // 目标不接受直接交互时（如投掷物），保持已转向目标的姿态按普通使用执行，与原版右键落空后继续使用物品一致。
+        if ((block != null || entity != null) && !result.consumesAction()) {
             result = stack.use(this.mob().level(), inventory.player, InteractionHand.MAIN_HAND);
         }
         if (result instanceof InteractionResult.Success success && success.heldItemTransformedTo() != null) {

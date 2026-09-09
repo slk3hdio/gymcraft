@@ -1,17 +1,10 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.ArrayDeque;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.state.BlockState;
 
 import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
@@ -32,7 +25,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * <p>
  * 默认值可通过环境构造期 setter 覆盖（调用后同步重建观测空间）：
  * {@link #setRadius(int)}（搜索半径，默认 8）、{@link #setMaxBlocks(int)}
- * （返回方块数上限，默认 128）、{@link #setMaxVisited(int)}（遍历节点数上限，默认 2048）。
+ * （返回方块数上限，默认 128）、{@link #setMaxVisited(int)}（遍历节点数上限，默认 256）。
  * </p>
  */
 public class NearbyBlocksObservationCreator extends AbstractObservationComponentCreator<ProtoNearbyBlocks> {
@@ -49,9 +42,6 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
     private int maxBlocks = DEFAULT_MAX_BLOCKS;
     /** 当前环境实例的遍历节点数上限。 */
     private int maxVisited = DEFAULT_MAX_VISITED;
-
-    private record VisibleBlock(BlockPos pos, BlockState state, double distance) {
-    }
 
     public NearbyBlocksObservationCreator() {
     }
@@ -99,49 +89,9 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
     @Override
     public ProtoNearbyBlocks create(Mob mob) {
         var builder = ProtoNearbyBlocks.newBuilder();
-        Level level = mob.level();
-        BlockPos center = BlockPos.containing(mob.getEyePosition());
-        var queue = new ArrayDeque<BlockPos>();
-        var visited = new HashSet<Long>();
-        var visibleBlocks = new LinkedHashMap<Long, VisibleBlock>();
-
-        queue.add(center);
-        visited.add(center.asLong());
-
-        while (!queue.isEmpty() && visited.size() < this.maxVisited && visibleBlocks.size() < this.maxBlocks) {
-            BlockPos airPos = queue.removeFirst();
-            BlockState airState = level.getBlockState(airPos);
-
-            for (Direction direction : Direction.values()) {
-                BlockPos next = airPos.relative(direction);
-                if (!withinRadius(center, next)) {
-                    continue;
-                }
-
-                BlockState state = level.getBlockState(next);
-                if (canTraverse(level, next, state)) {
-                    long key = next.asLong();
-                    if (visited.add(key)) {
-                        if (touchesVisibleSurface(level, next)) {
-                            queue.addFirst(next);
-                        } else {
-                            queue.addLast(next);
-                        }
-                    }
-                    continue;
-                }
-
-                Direction faceTowardAir = direction.getOpposite();
-                if (Block.shouldRenderFace(level, next, state, airState, faceTowardAir)) {
-                    visibleBlocks.putIfAbsent(next.asLong(), new VisibleBlock(next, state, distance(center, next)));
-                    if (visibleBlocks.size() >= this.maxBlocks) {
-                        break;
-                    }
-                }
-            }
-        }
-
-        for (VisibleBlock block : visibleBlocks.values()) {
+        for (var block : NearbyBlockScanner.scan(
+            mob, this.radius, this.maxVisited, this.maxBlocks, state -> true
+        )) {
             BlockPos pos = block.pos();
             builder.addBlocks(ProtoBlockView.newBuilder()
                 .setX(pos.getX()).setY(pos.getY()).setZ(pos.getZ())
@@ -150,31 +100,6 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
                 .build());
         }
         return builder.build();
-    }
-
-    private static boolean canTraverse(Level level, BlockPos pos, BlockState state) {
-        return state.isAir() || state.getCollisionShape(level, pos).isEmpty();
-    }
-
-    private static boolean touchesVisibleSurface(Level level, BlockPos airPos) {
-        BlockState airState = level.getBlockState(airPos);
-        for (Direction direction : Direction.values()) {
-            BlockPos neighborPos = airPos.relative(direction);
-            BlockState neighborState = level.getBlockState(neighborPos);
-            if (!canTraverse(level, neighborPos, neighborState)
-                && Block.shouldRenderFace(level, neighborPos, neighborState, airState, direction.getOpposite())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean withinRadius(BlockPos center, BlockPos pos) {
-        return center.distSqr(pos) <= (double) this.radius * this.radius;
-    }
-
-    private static double distance(BlockPos center, BlockPos pos) {
-        return Math.sqrt(center.distSqr(pos));
     }
 
     private static McSpace<Map<String, Object>> buildSpace(int maxBlocks) {

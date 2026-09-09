@@ -35,6 +35,7 @@ src/main/
 │   ├── gym/env/            McEnv、环境实现与实体快照
 │   ├── gym/runtime/        AgentRuntime tick 调度
 │   ├── gym/rpc/            gRPC 服务与会话
+│   ├── gym/attachment/     通用 Mob 附件描述器、独立访问 API 与 env 访问作用域
 │   ├── gym/menu/           逻辑菜单会话与菜单适配器（session/ 会话与槽位、bridge/ 物品栏桥接、adapter/ 按钮适配）
 │   ├── gym/inventory/      Agent 统一物品栏布局
 │   └── registry/           动作、观测、环境自定义注册表
@@ -52,6 +53,18 @@ src/main/
 | `ActionDispatcher` | 校验和分发 protobuf 动作组件 |
 | `ObservationComposer` | 聚合环境启用的观测组件 |
 | `EntitySnapshot` | reset 时重建相同 UUID 的受控 Mob |
+| `MobAttachmentService` | 在无 env/Agent 依赖下附加、读取和移除类型安全的 Mob 附件 |
+
+### Mob 附件与专属背包
+
+持久附件由 `MobAttachmentSpec<T>` 描述，并统一通过 `MobAttachmentService` 访问。
+环境构造函数传入允许访问的描述器集合；访问作用域只控制 Agent 可见性，关闭环境不会删除附件数据。
+reset 会在初始快照前附加所声明的数据，并在实体还原后重新激活访问作用域。
+
+`MobAttachments.AGENT_BACKPACK` 是首个通用附件：没有原生容器的 Mob 可获得 27 格持久背包。
+`simple_mob` 启用该描述器，普通 Mob 的统一物品栏因此为装备槽 `0..7` 加背包槽 `8..34`；
+`parkour_mob` 不启用，即使 Mob 已有背包也不会向动作或观测暴露。村民、马等继续使用原生容器。
+背包随实体 NBT 保存，死亡时进入正常掉落；环境 reset 恢复创建环境时的快照。
 
 ## 注册表与组件
 
@@ -75,6 +88,7 @@ src/main/
 | `gymcraft:jump` | 提交一次跳跃意图 |
 | `gymcraft:break_block` | 通过 FakePlayer 复用原版方块破坏逻辑 |
 | `gymcraft:set_block` | 校验手持物品、距离和实体碰撞后放置方块 |
+| `gymcraft:update_interesting_blocks` | 原子地批量添加或移除 Agent 感兴趣的方块类型 |
 | `gymcraft:open_menu` | 打开方块、实体或自身逻辑菜单 |
 | `gymcraft:close_menu` | 关闭逻辑菜单会话 |
 | `gymcraft:move_menu_item` | 在逻辑菜单槽位之间移动物品 |
@@ -88,6 +102,7 @@ src/main/
 | `gymcraft:world` | 时间、天气和维度 |
 | `gymcraft:nearby_entities` | 一定范围内的实体 |
 | `gymcraft:nearby_blocks` | 空气连通域中可见的方块表面 |
+| `gymcraft:interesting_blocks` | 空气连通域中已标记为感兴趣的可见方块表面 |
 | `gymcraft:menu` | 当前逻辑菜单、槽位、属性和按钮 |
 
 环境构造函数可以通过 `actionComponent(factory)` 和 `observationComponent(factory)`

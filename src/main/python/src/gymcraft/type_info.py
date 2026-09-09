@@ -31,6 +31,12 @@ from gymcraft.gym.action.components.pick_up_item_pb2 import ProtoPickUpItem
 from gymcraft.gym.action.components.set_attack_target_pb2 import ProtoSetAttackTarget
 from gymcraft.gym.action.components.set_block_pb2 import ProtoSetBlock
 from gymcraft.gym.action.components.step_move_pb2 import ProtoStepMove
+from gymcraft.gym.action.components.update_interesting_blocks_pb2 import (
+    ProtoUpdateInterestingBlocks,
+)
+from gymcraft.gym.observation.components.interesting_blocks_pb2 import (
+    ProtoInterestingBlocks,
+)
 from gymcraft.gym.observation.components.menu_pb2 import ProtoMenuObservation
 from gymcraft.gym.observation.components.nearby_blocks_pb2 import ProtoNearbyBlocks
 from gymcraft.gym.observation.components.nearby_entities_pb2 import ProtoNearbyEntities
@@ -57,6 +63,7 @@ ACTION_CLICK_MENU_BUTTON: Final = "gymcraft:click_menu_button"
 ACTION_PICK_UP_ITEM: Final = "gymcraft:pick_up_item"
 ACTION_DROP_ITEM: Final = "gymcraft:drop_item"
 ACTION_USE_ITEM: Final = "gymcraft:use_item"
+ACTION_UPDATE_INTERESTING_BLOCKS: Final = "gymcraft:update_interesting_blocks"
 
 # ── 观测组件注册 id（完整 wire 键，含 `gymcraft:` 命名空间）────────────────────
 OBS_SELF: Final = "gymcraft:self"
@@ -65,6 +72,7 @@ OBS_NEARBY_ENTITIES: Final = "gymcraft:nearby_entities"
 OBS_NEARBY_BLOCKS: Final = "gymcraft:nearby_blocks"
 OBS_MENU: Final = "gymcraft:menu"
 OBS_NEARBY_ITEMS: Final = "gymcraft:nearby_items"
+OBS_INTERESTING_BLOCKS: Final = "gymcraft:interesting_blocks"
 
 # Action dict 中的动作级超时键（秒，<= 0 表示不限制；非组件键）。
 TIMEOUT_SECONDS: Final = "timeout_seconds"
@@ -95,6 +103,7 @@ Action = TypedDict(
         "gymcraft:pick_up_item": NotRequired[ProtoPickUpItem],
         "gymcraft:drop_item": NotRequired[ProtoDropItem],
         "gymcraft:use_item": NotRequired[ProtoUseItem],
+        "gymcraft:update_interesting_blocks": NotRequired[ProtoUpdateInterestingBlocks],
     },
 )
 
@@ -112,5 +121,6 @@ Observation = TypedDict(
         "gymcraft:nearby_blocks": NotRequired[ProtoNearbyBlocks],
         "gymcraft:menu": NotRequired[ProtoMenuObservation],
         "gymcraft:nearby_items": NotRequired[ProtoNearbyItems],
+        "gymcraft:interesting_blocks": NotRequired[ProtoInterestingBlocks],
     },
 )

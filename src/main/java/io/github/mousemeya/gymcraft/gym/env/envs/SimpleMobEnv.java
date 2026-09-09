@@ -8,6 +8,7 @@ import net.minecraft.world.entity.Mob;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
+import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 
@@ -47,7 +48,8 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ActionComponents.CLICK_MENU_BUTTON.get(),
                 ActionComponents.PICK_UP_ITEM.get(),
                 ActionComponents.DROP_ITEM.get(),
-                ActionComponents.USE_ITEM.get()
+                ActionComponents.USE_ITEM.get(),
+                ActionComponents.UPDATE_INTERESTING_BLOCKS.get()
             ),
             List.of(
                 ObservationCreators.SELF.get(),
@@ -55,8 +57,10 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ObservationCreators.NEARBY_ENTITIES.get(),
                 ObservationCreators.NEARBY_BLOCKS.get(),
                 ObservationCreators.NEARBY_ITEMS.get(),
-                ObservationCreators.MENU.get()
-            )
+                ObservationCreators.MENU.get(),
+                ObservationCreators.INTERESTING_BLOCKS.get()
+            ),
+            List.of(MobAttachments.AGENT_BACKPACK)
         );
     }
 

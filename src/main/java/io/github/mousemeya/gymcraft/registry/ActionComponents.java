@@ -19,7 +19,9 @@ import io.github.mousemeya.gymcraft.gym.action.component.SetAttackTargetControll
 import io.github.mousemeya.gymcraft.gym.action.component.SetBlockController;
 import io.github.mousemeya.gymcraft.gym.action.component.StepMoveController;
 import io.github.mousemeya.gymcraft.gym.action.component.UseItemController;
+import io.github.mousemeya.gymcraft.gym.action.component.UpdateInterestingBlocksController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItem;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUpdateInterestingBlocks;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoAttackOnce;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoBreakBlock;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoClickMenuButton;
@@ -119,6 +121,10 @@ public final class ActionComponents {
     public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoUseItem, UseItemController>> USE_ITEM = REGISTRY.register(
         "use_item",
         UseItemController.Factory::new
+    );
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoUpdateInterestingBlocks, UpdateInterestingBlocksController>> UPDATE_INTERESTING_BLOCKS = REGISTRY.register(
+        "update_interesting_blocks",
+        UpdateInterestingBlocksController.Factory::new
     );
 
     /** 禁止实例化纯注册入口类。 */

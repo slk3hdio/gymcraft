@@ -21,6 +21,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
+import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentSpec;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
@@ -82,7 +83,32 @@ public abstract class AbstractMcEnv implements McEnv {
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents
     ) {
-        this(envTypeId, mob, new ActionDispatcher(mob, actionComponentFactories), new ObservationComposer(mob, observationComponents));
+        this(envTypeId, mob, actionComponentFactories, observationComponents, java.util.List.of());
+    }
+
+    /**
+     * 创建带显式 Mob 附件访问声明的环境。
+     *
+     * @param envTypeId 环境类型注册 ID
+     * @param mob 受控 Mob
+     * @param actionComponentFactories 动作组件工厂
+     * @param observationComponents 观测组件工厂
+     * @param attachmentSpecs 当前环境允许访问的附件描述器
+     */
+    protected AbstractMcEnv(
+        Identifier envTypeId,
+        Mob mob,
+        Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
+        Collection<? extends ObservationComponentFactory<?, ?>> observationComponents,
+        Collection<? extends MobAttachmentSpec<?>> attachmentSpecs
+    ) {
+        this(
+            envTypeId,
+            mob,
+            new ActionDispatcher(mob, actionComponentFactories),
+            new ObservationComposer(mob, observationComponents),
+            attachmentSpecs
+        );
     }
 
     /**
@@ -118,11 +144,22 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionDispatcher actionController, ObservationComposer observationCreator) {
+        this(envTypeId, mob, actionController, observationCreator, java.util.List.of());
+    }
+
+    /** 使用已构建组件与显式附件声明初始化环境。 */
+    protected AbstractMcEnv(
+        Identifier envTypeId,
+        Mob mob,
+        ActionDispatcher actionController,
+        ObservationComposer observationCreator,
+        Collection<? extends MobAttachmentSpec<?>> attachmentSpecs
+    ) {
         this.envTypeId = envTypeId;
         this.envId = UUID.randomUUID();
         this.actionController = actionController;
         this.observationCreator = observationCreator;
-        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob, this::resetAgent);
+        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob, this::resetAgent, attachmentSpecs);
         NeoForge.EVENT_BUS.register(this.agentRuntime);
     }
       

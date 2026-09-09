@@ -45,10 +45,19 @@ public sealed interface LogicalSlotIdentity {
     }
 
     /**
+     * Mob 专属背包槽身份：由 Mob UUID 与背包局部索引唯一确定。
+     *
+     * @param mobId 所属 Mob 的 UUID
+     * @param localIndex 背包局部槽位索引
+     */
+    record MobBackpack(UUID mobId, int localIndex) implements LogicalSlotIdentity {
+    }
+
+    /**
      * FakePlayer 桥接格身份：菜单槽指向 FakePlayer 物品栏中映射了 Agent 槽位的格子。
      * <p>
      * 用于会话建立时的槽位规范化：命中本身份的菜单槽认领对应 Agent 背包 slot_id
-     * （与 MobEquipment/MobNativeContainer 身份等效，同属该 Agent 槽位）。
+     * （与 MobEquipment/MobNativeContainer/MobBackpack 身份等效，同属该 Agent 槽位）。
      * </p>
      *
      * @param agentSlotId 桥接格映射的 Agent 背包 slot_id

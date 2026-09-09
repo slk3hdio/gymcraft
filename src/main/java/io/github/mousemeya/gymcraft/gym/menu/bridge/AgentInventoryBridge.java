@@ -108,13 +108,13 @@ public final class AgentInventoryBridge {
     /**
      * 建立桥接：解析 Mob 当前统一物品栏布局并同步到 FakePlayer。
      *
-     * @throws MenuBridgeException Mob 自带容器超出可映射容量（{@link #MAX_NATIVE_CONTAINER_SLOTS}）时抛出
+     * @throws MenuBridgeException Agent 存储槽超出可映射容量（{@link #MAX_NATIVE_CONTAINER_SLOTS}）时抛出
      */
     public static AgentInventoryBridge establish(Mob mob, FakePlayer player) {
         AgentInventoryLayout layout = AgentInventoryLayout.resolve(mob);
-        if (layout.nativeContainerSlotCount() > MAX_NATIVE_CONTAINER_SLOTS) {
+        if (layout.storageSlotCount() > MAX_NATIVE_CONTAINER_SLOTS) {
             throw new MenuBridgeException(
-                "Mob native container has " + layout.nativeContainerSlotCount()
+                "Mob storage has " + layout.storageSlotCount()
                     + " slots, exceeding the bridge capacity of " + MAX_NATIVE_CONTAINER_SLOTS
                     + " (mob=" + mob.getUUID() + ")");
         }
@@ -139,7 +139,9 @@ public final class AgentInventoryBridge {
             };
             case LogicalSlotIdentity.MobNativeContainer container ->
                 NATIVE_CONTAINER_BASE_SLOT + container.localIndex();
-            // 物品栏布局只产生 MobEquipment/MobNativeContainer 身份；
+            case LogicalSlotIdentity.MobBackpack backpack ->
+                NATIVE_CONTAINER_BASE_SLOT + backpack.localIndex();
+            // 物品栏布局只产生 MobEquipment/MobNativeContainer/MobBackpack 身份；
             // FakeBridge/MenuOwned 是会话阶段的规范化身份，不会出现在布局中
             default -> throw new IllegalStateException("Unexpected agent slot identity: " + slot.identity());
         };
@@ -315,7 +317,7 @@ public final class AgentInventoryBridge {
                 break;
             }
             AgentSlot slot = mapping.agentSlot();
-            if (!(slot.identity() instanceof LogicalSlotIdentity.MobNativeContainer)) {
+            if (!isStorageSlot(slot)) {
                 continue;
             }
             ItemStack existing = inventory.getItem(mapping.inventoryIndex());
@@ -396,7 +398,7 @@ public final class AgentInventoryBridge {
             if (remaining.isEmpty()) {
                 break;
             }
-            if (!(slot.identity() instanceof LogicalSlotIdentity.MobNativeContainer)) {
+            if (!isStorageSlot(slot)) {
                 continue;
             }
             ItemStack existing = slot.getItem();
@@ -419,6 +421,12 @@ public final class AgentInventoryBridge {
             remaining.shrink(moved);
         }
         return remaining;
+    }
+
+    /** 判断统一物品栏槽位是否属于可承载普通物品的存储段。 */
+    private static boolean isStorageSlot(AgentSlot slot) {
+        return slot.identity() instanceof LogicalSlotIdentity.MobNativeContainer
+            || slot.identity() instanceof LogicalSlotIdentity.MobBackpack;
     }
 
     /** 桥接建立失败（如容量不足）时抛出。 */

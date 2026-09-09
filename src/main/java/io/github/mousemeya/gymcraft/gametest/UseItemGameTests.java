@@ -17,7 +17,9 @@ import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.zombie.ZombieVillager;
 import net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -25,6 +27,7 @@ import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.item.component.Consumable;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ComposterBlock;
 import net.minecraft.world.level.block.CropBlock;
 import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
 import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
@@ -102,6 +105,23 @@ public final class UseItemGameTests {
     }
 
     /**
+     * @param helper 测试场景；方块先处理手中物品，使南瓜派能够投入堆肥桶
+     */
+    public static void composter(GameTestHelper helper) {
+        Mob mob = agent(helper);
+        BlockPos composter = new BlockPos(3, 2, 2);
+        helper.setBlock(composter, Blocks.COMPOSTER);
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND_SWORD));
+        mob.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.PUMPKIN_PIE, 2));
+        var result = new UseItemController(mob).apply(block(helper, 5, composter)).initialState();
+        assertEquals(helper, ActionStatus.COMPLETED, result.status(), result.toString());
+        assertEquals(helper, 1, helper.getBlockState(composter).getValue(ComposterBlock.LEVEL), "composter level");
+        assertEquals(helper, 1, mob.getOffhandItem().getCount(), "compostable item count");
+        assertTrue(helper, mob.getMainHandItem().is(Items.DIAMOND_SWORD), "main hand changed");
+        helper.succeed();
+    }
+
+    /**
      * @param helper 测试场景；真实上表面决定方块放置位置，打火石消耗耐久
      */
     public static void blockFaceAndDurability(GameTestHelper helper) {
@@ -139,6 +159,40 @@ public final class UseItemGameTests {
         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.APPLE));
         assertEquals(helper, ActionStatus.FAILED, controller.apply(entity(0, target)).initialState().status(), "unexpected fallback");
         assertTrue(helper, !mob.isUsingItem(), "should not eat on entity PASS");
+        helper.succeed();
+    }
+
+    /**
+     * @param helper 测试场景；虚弱僵尸村民接受金苹果并进入治愈状态
+     */
+    public static void cureZombieVillager(GameTestHelper helper) {
+        Mob mob = agent(helper);
+        ZombieVillager target = (ZombieVillager)spawnAgent(helper, EntityType.ZOMBIE_VILLAGER, new BlockPos(4, 1, 2));
+        target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 200));
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND_SWORD));
+        mob.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.GOLDEN_APPLE, 2));
+        var result = new UseItemController(mob).apply(entity(5, target)).initialState();
+        assertEquals(helper, ActionStatus.COMPLETED, result.status(), result.toString());
+        assertTrue(helper, target.isConverting(), "zombie villager did not start converting");
+        assertTrue(helper, !target.hasEffect(MobEffects.WEAKNESS), "weakness was not removed");
+        assertEquals(helper, 1, mob.getOffhandItem().getCount(), "golden apple count");
+        assertTrue(helper, mob.getMainHandItem().is(Items.DIAMOND_SWORD), "main hand changed");
+        helper.succeed();
+    }
+
+    /**
+     * @param helper 测试场景；投掷物不被实体目标直接接受，转向目标后按普通使用掷出
+     */
+    public static void throwAtEntity(GameTestHelper helper) {
+        Mob mob = agent(helper);
+        Mob target = spawnAgent(helper, EntityType.COW, new BlockPos(4, 1, 2));
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.SNOWBALL, 2));
+        var result = new UseItemController(mob).apply(entity(0, target)).initialState();
+        assertEquals(helper, ActionStatus.COMPLETED, result.status(), result.toString());
+        assertEquals(helper, 1, mob.getMainHandItem().getCount(), "snowball count");
+        var projectiles = helper.getLevel().getEntitiesOfClass(Snowball.class, mob.getBoundingBox().inflate(3));
+        assertEquals(helper, 1, projectiles.size(), "snowball not thrown");
+        assertTrue(helper, projectiles.getFirst().getDeltaMovement().x > 0, "snowball not aimed at target");
         helper.succeed();
     }
 

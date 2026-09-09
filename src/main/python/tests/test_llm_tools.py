@@ -8,9 +8,14 @@ import unittest
 from collections.abc import Mapping
 from typing import Any, cast
 
-from gymcraft.gym.action.components import look_at_pb2, set_block_pb2
+from gymcraft.gym.action.components import (
+    look_at_pb2,
+    set_block_pb2,
+    update_interesting_blocks_pb2,
+)
 from gymcraft.gym.observation.common import block_view_pb2, entity_view_pb2, item_entity_view_pb2, item_stack_view_pb2
 from gymcraft.gym.observation.components import (
+    interesting_blocks_pb2,
     nearby_blocks_pb2,
     nearby_entities_pb2,
     nearby_items_pb2,
@@ -31,7 +36,14 @@ from gymcraft.llm import (
     format_transition_result,
     render_chat_transcript,
 )
-from gymcraft.type_info import ACTION_JUMP, ACTION_LOOK_AT, ACTION_SET_BLOCK, Action, Observation
+from gymcraft.type_info import (
+    ACTION_JUMP,
+    ACTION_LOOK_AT,
+    ACTION_SET_BLOCK,
+    ACTION_UPDATE_INTERESTING_BLOCKS,
+    Action,
+    Observation,
+)
 
 
 def _observation(tick: int = 1) -> Observation:
@@ -90,6 +102,24 @@ def _observation(tick: int = 1) -> Observation:
                 blocks=[
                     block_view_pb2.ProtoBlockView(x=11, y=64, z=-2, block_id="minecraft:chest", distance=1),
                     block_view_pb2.ProtoBlockView(x=12, y=64, z=-2, block_id="minecraft:stone", distance=2),
+                ]
+            ),
+            "gymcraft:interesting_blocks": interesting_blocks_pb2.ProtoInterestingBlocks(
+                blocks=[
+                    block_view_pb2.ProtoBlockView(
+                        x=14,
+                        y=63,
+                        z=-2,
+                        block_id="minecraft:diamond_ore",
+                        distance=4.2,
+                    ),
+                    block_view_pb2.ProtoBlockView(
+                        x=11,
+                        y=63,
+                        z=-2,
+                        block_id="minecraft:ancient_debris",
+                        distance=1.5,
+                    ),
                 ]
             ),
             "gymcraft:nearby_items": nearby_items_pb2.ProtoNearbyItems(
@@ -194,6 +224,29 @@ class ActionDslParserTests(unittest.TestCase):
                 self.assertEqual(ACTION_LOOK_AT, action.component_id)
                 self.assertEqual(expected_target, payload.WhichOneof("target"))
 
+    def test_update_interesting_blocks_parses_atomic_batch(self) -> None:
+        """兴趣更新命令应保留每个分段的 ID 顺序，并拒绝规范化后相同的增删项。"""
+        parser = ActionDslParser()
+        parsed = parser.parse(
+            "```gymcraft-action\n"
+            "/update_interesting_blocks remove minecraft:stone add minecraft:diamond_ore mod:block\n"
+            "```"
+        )
+        action = parsed.batch.actions[0]
+        payload = cast(update_interesting_blocks_pb2.ProtoUpdateInterestingBlocks, action.payload)
+        self.assertEqual(ACTION_UPDATE_INTERESTING_BLOCKS, action.component_id)
+        self.assertEqual(["minecraft:diamond_ore", "mod:block"], list(payload.add_block_ids))
+        self.assertEqual(["minecraft:stone"], list(payload.remove_block_ids))
+
+        invalid_commands = [
+            "/update_interesting_blocks add minecraft:stone remove stone",
+            "/update_interesting_blocks add",
+            "/update_interesting_blocks add minecraft:stone add minecraft:dirt",
+        ]
+        for command in invalid_commands:
+            with self.subTest(command=command), self.assertRaises(ActionParseError):
+                parser.parse(f"```gymcraft-action\n{command}\n```")
+
     def test_menu_move_array(self) -> None:
         """分号移动项按输入顺序生成数组，保留每项 repeat。"""
         parser = ActionDslParser()
@@ -208,7 +261,7 @@ class ActionDslParserTests(unittest.TestCase):
                 parser.parse(f"```gymcraft-action\n{command}\n```")
 
     def test_all_registered_action_commands_parse(self) -> None:
-        """当前 16 个动作组件的标准 DSL 写法都应能生成 protobuf。"""
+        """当前全部动作组件的标准 DSL 写法都应能生成 protobuf。"""
         commands = [
             "/noop",
             "/step_move 1 0 0 0 true",
@@ -227,6 +280,7 @@ class ActionDslParserTests(unittest.TestCase):
             "/pick_up_item 3",
             "/drop_item 0 2",
             "/use_item 0",
+            "/update_interesting_blocks add minecraft:diamond_ore remove minecraft:stone",
         ]
         parser = ActionDslParser()
         for command in commands:
@@ -241,7 +295,9 @@ class ObservationAndContextTests(unittest.TestCase):
 
     def test_observation_is_compact_and_reports_omissions(self) -> None:
         """裁剪后的文本应保留最近目标并报告省略数量。"""
-        formatter = ObservationTextFormatter(ObservationFormatConfig(max_entities=1, max_blocks=1))
+        formatter = ObservationTextFormatter(
+            ObservationFormatConfig(max_entities=1, max_blocks=1, max_interesting_blocks=1)
+        )
         text = formatter.format(_observation())
         self.assertIn("entities: total=2 shown=1 omitted=1", text)
         self.assertIn("entity_id=2 entity_type=minecraft:cow", text)
@@ -250,6 +306,9 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertNotIn("uuid=", text)
         self.assertIn("items: total=1 shown=1", text)
         self.assertIn("entity_id=7 item_id=minecraft:apple count=3", text)
+        self.assertIn("interesting_blocks: total=2 shown=1 omitted=1", text)
+        self.assertIn("block_id=minecraft:ancient_debris x=11 y=63 z=-2 distance=1.5", text)
+        self.assertNotIn("block_id=minecraft:diamond_ore", text)
 
     def test_context_keeps_raw_assistant_text(self) -> None:
         """历史中应原样保存模型文本和 DSL 动作块。"""
@@ -271,6 +330,7 @@ class ObservationAndContextTests(unittest.TestCase):
         config = ObservationFormatConfig()
         self.assertEqual(10, config.max_entities)
         self.assertEqual(10, config.max_blocks)
+        self.assertEqual(10, config.max_interesting_blocks)
 
     def test_action_result_omits_details(self) -> None:
         """action-result 只保留状态和描述，不把服务端 details 放入 prompt。"""

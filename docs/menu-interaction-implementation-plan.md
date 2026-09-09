@@ -1,5 +1,9 @@
 # Menu 交互实现计划
 
+> 当前扩展：统一物品栏除原生容器外，还可包含 env 经类型安全附件描述器授权的专属背包。
+> `simple_mob` 为无原生容器的 Mob 启用 27 格持久背包（`slot_id=8..34`），`parkour_mob` 不启用；
+> 两者继续复用本文的菜单会话、槽位快照、FakePlayer 桥接和移动语义。
+
 本文描述 GymCraft 为 Mob Agent 提供 Minecraft 逻辑菜单交互的实现方案。目标是在服务端复用原版 `AbstractContainerMenu`、`Slot` 和按钮逻辑，不要求真实 Minecraft 客户端打开 `Screen`。
 
 首版动作范围：

@@ -80,6 +80,8 @@ class ContextAssembler:
             "Do not repeat an action in one batch. Text line order does not control execution; the server uses its declared component order.\n"
             "For use_item, choose an Agent inventory slot, not a menu-owned slot. Omitted target means self/air use along the current view. "
             "Block/entity use requires reach and an unobstructed view. Food and potions wait until consumed; bows and other sustained uses are unsupported.\n"
+            "Use update_interesting_blocks to maintain a per-agent set of block types. Matching visible blocks then appear in the "
+            "interesting_blocks observation. Updates are atomic, so never add and remove the same block id in one command.\n"
             # f"Current server execution order: {execution_order}\n"
             f"Optional /timeout <seconds>: default {self.action_parser.default_timeout_seconds:g}, "
             f"maximum {self.action_parser.max_timeout_seconds:g}.\n"

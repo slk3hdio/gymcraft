@@ -1,12 +1,19 @@
 package io.github.mousemeya.gymcraft.registry;
 
+import java.util.HashSet;
+import java.util.Set;
+import java.util.function.Supplier;
+
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.action.component.UseItemConsumption;
+import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
+import net.minecraft.world.level.block.Block;
+import net.neoforged.neoforge.transfer.item.ItemStacksResourceHandler;
 
 /**
  * 附件类型注册入口 —— 通过 {@link DeferredRegister} 将 {@link AttachmentType}
@@ -41,6 +48,31 @@ public final class ModAttachments {
         "item_consumption",
         () -> AttachmentType.<UseItemConsumption>builder(() -> {
             throw new IllegalStateException("Item consumption must be explicitly created");
+        }).build()
+    );
+
+    /**
+     * 当前 Mob 感兴趣的方块类型集合；纯运行时、无序且去重，不提供序列化 codec。
+     * 默认供应商只在显式读取时创建空集合，reset 更换实体后自然清空。
+     */
+    public static final DeferredHolder<AttachmentType<?>, AttachmentType<Set<Block>>> INTERESTING_BLOCKS = REGISTRY.register(
+        "interesting_blocks",
+        () -> AttachmentType.<Set<Block>>builder((Supplier<Set<Block>>) HashSet::new).build()
+    );
+
+    /** 27 格专属背包持久化附件；死亡时不复制，由掉落事件转移其内容。 */
+    public static final DeferredHolder<AttachmentType<?>, AttachmentType<ItemStacksResourceHandler>> AGENT_BACKPACK = REGISTRY.register(
+        "agent_backpack",
+        () -> AttachmentType.serializable(
+            () -> new ItemStacksResourceHandler(io.github.mousemeya.gymcraft.gym.attachment.MobAttachments.AGENT_BACKPACK_SIZE)
+        ).build()
+    );
+
+    /** 当前 env 的临时附件访问作用域；不序列化，也不随实体快照复制。 */
+    public static final DeferredHolder<AttachmentType<?>, AttachmentType<MobAttachmentAccessScope>> ENV_ATTACHMENT_SCOPE = REGISTRY.register(
+        "env_attachment_scope",
+        () -> AttachmentType.<MobAttachmentAccessScope>builder(() -> {
+            throw new IllegalStateException("Environment attachment scope must be explicitly activated");
         }).build()
     );
 

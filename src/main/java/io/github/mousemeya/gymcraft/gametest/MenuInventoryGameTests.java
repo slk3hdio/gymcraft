@@ -54,7 +54,7 @@ public final class MenuInventoryGameTests {
         var mob = spawnAgent(helper, EntityType.VILLAGER, new BlockPos(2, 1, 2));
         AgentInventoryLayout layout = AgentInventoryLayout.resolve(mob);
         assertEquals(helper, 16, layout.size(), "villager layout should be 8 equipment + 8 carrier slots");
-        assertEquals(helper, 8, layout.nativeContainerSlotCount(), "villager carrier slot count");
+        assertEquals(helper, 8, layout.storageSlotCount(), "villager carrier slot count");
         for (int i = 8; i < 16; i++) {
             var slot = layout.slot(i);
             if (slot.identity() instanceof LogicalSlotIdentity.MobNativeContainer container) {

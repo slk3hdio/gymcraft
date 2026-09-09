@@ -18,8 +18,8 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 ## Architecture
 
 - **三个自定义 NeoForge registry**（`RegistryKeys`，`RegistryBuilder` + `NewRegistryEvent`）：
-  - `action_components` → `ActionComponents`（16 个控制器：`step_move`/`look_at`/`move_to`/`set_attack_target`/`attack_once`/`noop`/`jump`/`break_block`/`set_block`/菜单 4 件套/`pick_up_item`/`drop_item`/`use_item`）
-  - `observation_components` → `ObservationCreators`（6 个生成器：`self`/`world`/`nearby_entities`/`nearby_blocks`/`nearby_items`/`menu`）
+  - `action_components` → `ActionComponents`（17 个控制器：`step_move`/`look_at`/`move_to`/`set_attack_target`/`attack_once`/`noop`/`jump`/`break_block`/`set_block`/菜单 4 件套/`pick_up_item`/`drop_item`/`use_item`/`update_interesting_blocks`）
+  - `observation_components` → `ObservationCreators`（7 个生成器：`self`/`world`/`nearby_entities`/`nearby_blocks`/`nearby_items`/`menu`/`interesting_blocks`）
   - `env_factories` → `EnvFactories`（`simple_mob`）
   - 新增类型必须在对应 `*Components`/`EnvFactories` 类中注册 `DeferredHolder`
 - **组件默认值覆盖**: 环境构造函数里经 `AbstractMcEnv.actionComponent(factory)`/`observationComponent(factory)` 取实例再调组件 setter（`setRadius`/`setSpeed`/`setReachDistance` 等，见各组件类）；观测组件 setter 会同步重建观测空间

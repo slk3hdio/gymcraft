@@ -21,6 +21,7 @@ $Args = @(
     "$ProjectRoot\src\main\proto\gymcraft\gym\action\components\jump.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\action\components\break_block.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\action\components\set_block.proto",
+    "$ProjectRoot\src\main\proto\gymcraft\gym\action\components\update_interesting_blocks.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\observation\observation.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\observation\common\entity_view.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\observation\common\block_view.proto",
@@ -29,6 +30,7 @@ $Args = @(
     "$ProjectRoot\src\main\proto\gymcraft\gym\observation\components\world.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\observation\components\nearby_entities.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\observation\components\nearby_blocks.proto",
+    "$ProjectRoot\src\main\proto\gymcraft\gym\observation\components\interesting_blocks.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\observation\components\inventory.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\rpc\env_service.proto"
 )

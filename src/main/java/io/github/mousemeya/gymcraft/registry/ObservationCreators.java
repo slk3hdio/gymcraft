@@ -4,12 +4,14 @@ import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.component.MenuObservationCreator;
+import io.github.mousemeya.gymcraft.gym.observation.component.InterestingBlocksObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.NearbyBlocksObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.NearbyEntitiesObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.NearbyItemsObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.SelfStateObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.WorldStateObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMenuObservation;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoInterestingBlocks;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyBlocks;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyEntities;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyItems;
@@ -45,6 +47,10 @@ public final class ObservationCreators {
     public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoNearbyBlocks, NearbyBlocksObservationCreator>> NEARBY_BLOCKS = REGISTRY.register(
         "nearby_blocks",
         NearbyBlocksObservationCreator.Factory::new
+    );
+    public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoInterestingBlocks, InterestingBlocksObservationCreator>> INTERESTING_BLOCKS = REGISTRY.register(
+        "interesting_blocks",
+        InterestingBlocksObservationCreator.Factory::new
     );
     public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoWorldState, WorldStateObservationCreator>> WORLD = REGISTRY.register(
         "world",

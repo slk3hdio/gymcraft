@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package gymcraft.gym.action;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.action.proto";
+option java_outer_classname = "UpdateInterestingBlocksProto";
+
+message ProtoUpdateInterestingBlocks {
+  // 要加入兴趣集合的方块注册 ID。
+  repeated string add_block_ids = 1;
+  // 要从兴趣集合移除的方块注册 ID。
+  repeated string remove_block_ids = 2;
+}

@@ -1,6 +1,8 @@
 package io.github.mousemeya.gymcraft.gym.runtime;
 
 import java.util.Map;
+import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -24,6 +26,8 @@ import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
+import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
+import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentSpec;
 import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
@@ -45,6 +49,8 @@ public class AgentRuntime {
     private final ObservationComposer observationCreator;
     private final EntitySnapshot initialSnapshot;
     private final ResetHandler resetHandler;
+    private final List<MobAttachmentSpec<?>> attachmentSpecs;
+    private MobAttachmentAccessScope attachmentScope;
 
     /** 动作缓冲区（容量 1），外部线程生产 → 实体 tick 消费。 */
     private final ArrayBlockingQueue<ActionRequest> actionBuf = new ArrayBlockingQueue<>(1);
@@ -75,11 +81,20 @@ public class AgentRuntime {
      * @param observationCreator 观测生成器
      * @param mob               受控的环境实体
      * @param resetHandler      环境重置回调
+     * @param attachmentSpecs   当前环境允许访问的 Mob 附件描述器
      */
-    public AgentRuntime(ActionDispatcher actionController, ObservationComposer observationCreator, Mob mob, ResetHandler resetHandler) {
+    public AgentRuntime(
+        ActionDispatcher actionController,
+        ObservationComposer observationCreator,
+        Mob mob,
+        ResetHandler resetHandler,
+        Collection<? extends MobAttachmentSpec<?>> attachmentSpecs
+    ) {
         this.actionController = actionController;
         this.observationCreator = observationCreator;
         this.mob = mob;
+        this.attachmentSpecs = List.copyOf(attachmentSpecs);
+        this.attachmentScope = MobAttachmentAccessScope.activate(mob, this.attachmentSpecs);
         this.initialSnapshot = EntitySnapshot.capture(mob);
         this.resetHandler = resetHandler;
     }
@@ -266,6 +281,7 @@ public class AgentRuntime {
         // ③ 移除旧实体并加入还原实体（整体替换受控引用）；
         //    丢弃前清空旧实体携带的物品（reset 语义：保留在容器中的物品直接删除，不在地上掉落）
         AgentInventoryLayout.clearAllItems(this.mob);
+        this.attachmentScope.deactivate(this.mob);
         if (!this.mob.isRemoved()) {
             this.mob.discard();
         }
@@ -278,6 +294,7 @@ public class AgentRuntime {
 
         // ④ 替换受控实体，同步更新动作控制器绑定的 Mob，调用环境重置回调并生成重置观测
         this.mob = restoredMob;
+        this.attachmentScope = MobAttachmentAccessScope.activate(restoredMob, this.attachmentSpecs);
         this.actionController.setMob(restoredMob);
         this.resetHandler.reset(restoredMob, seed, options);
         ActionState state = ActionState.completed("reset");
@@ -450,6 +467,7 @@ public class AgentRuntime {
         this.clearRuntimeState();
         // 集中清理入口：环境关闭时关闭菜单会话并清理附件
         this.closeMenuSession(this.mob, "clear");
+        this.deactivateAttachmentScope(this.mob);
         this.pendingResult = null;
     }
 
@@ -476,6 +494,16 @@ public class AgentRuntime {
         }
         io.github.mousemeya.gymcraft.gym.action.component.UseItemConsumption.closeFor(mob);
         MenuSessionHooks.closeFor(mob, reason);
+    }
+
+    /** 在服务端线程撤销环境附件访问权，但保留所有持久附件数据。 */
+    private void deactivateAttachmentScope(Mob mob) {
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server != null && !server.isSameThread()) {
+            server.execute(() -> this.attachmentScope.deactivate(mob));
+            return;
+        }
+        this.attachmentScope.deactivate(mob);
     }
 
     /** 释放当前控制策略并停止寻路，恢复实体 AI 的控制权。 */

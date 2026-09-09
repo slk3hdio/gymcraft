@@ -156,6 +156,16 @@ class UseItemE2E:
         self.command("setblock 6 100 4 minecraft:air")
         self.command("setblock 6 99 4 minecraft:stone")
 
+    def composter(self) -> None:
+        """验证持物方块入口能够投入堆肥桶，并同步扣减来源槽。"""
+        self.command("setblock 5 100 4 minecraft:composter[level=0]")
+        self.equip("offhand", "minecraft:pumpkin_pie", 2)
+        self.step("/use_item 5 block 5 100 4")
+        self.world_check("if block 5 100 4 minecraft:composter[level=1]")
+        self.slot(5, "minecraft:pumpkin_pie", 1)
+        self.slot(0, "minecraft:stick", 1)
+        self.command("setblock 5 100 4 minecraft:air")
+
     def naming(self) -> None:
         """从附近实体观测取网络 ID，再验证命名牌只作用于指定实体。"""
         cow_tag = self.tag + "_cow"
@@ -171,6 +181,23 @@ class UseItemE2E:
         self.step(f"/use_item 5 entity {target.entity_id}", "FAILED")
         self.slot(5, "minecraft:apple", 3)
         self.command(f"kill @e[tag={cow_tag}]")
+
+    def cure_zombie_villager(self) -> None:
+        """验证虚弱僵尸村民接受金苹果并进入原版治愈流程。"""
+        target_tag = self.tag + "_zombie_villager"
+        self.command('summon minecraft:zombie_villager 6.5 100 4.5 {Tags:["' + target_tag
+                     + '"],NoAI:1b,NoGravity:1b,Invulnerable:1b}')
+        self.command(f"effect give @e[tag={target_tag},limit=1] minecraft:weakness 60 0 true")
+        self.equip("offhand", "minecraft:golden_apple", 2)
+        targets = self.observation[OBS_NEARBY_ENTITIES].entities
+        target = next(value for value in targets if value.entity_type == "minecraft:zombie_villager")
+        self.step(f"/use_item 5 entity {target.entity_id}")
+        conversion = self.command(f"data get entity @e[tag={target_tag},limit=1] ConversionTime")
+        match = re.search(r"(-?\d+)\s*$", conversion)
+        self.require(match is not None and int(match.group(1)) > 0, conversion)
+        self.slot(5, "minecraft:golden_apple", 1)
+        self.slot(0, "minecraft:stick", 1)
+        self.command(f"kill @e[tag={target_tag}]")
 
     def throwing(self) -> None:
         """省略目标时沿当前视线投掷，验证世界中的投射物与副手数量。"""
@@ -270,7 +297,9 @@ class UseItemE2E:
         """按顺序运行独立场景并记录结果；首个失败保留完整报告后交由调用者退出。"""
         cases: list[tuple[str, Callable[[], None]]] = [
             ("block_placement", self.placement), ("fire_and_durability", self.fire),
-            ("bone_meal", self.bone_meal), ("entity_name_and_no_fallback", self.naming),
+            ("bone_meal", self.bone_meal), ("composter", self.composter),
+            ("entity_name_and_no_fallback", self.naming),
+            ("cure_zombie_villager", self.cure_zombie_villager),
             ("self_throw", self.throwing), ("food_duration_and_no_heal", self.food),
             ("potion_effect_and_bottle", self.potion), ("timeout_restores_inventory", self.timeout),
             ("invalid_targets_and_bow", self.invalid_targets), ("serialized_rpc_reset", self.serialized_reset),
@@ -294,6 +323,7 @@ class UseItemE2E:
             self.command(f"gymcraft env remove {self.entity_uuid}")
         self.command(f"kill @e[tag={self.tag}]")
         self.command(f"kill @e[tag={self.tag}_cow]")
+        self.command(f"kill @e[tag={self.tag}_zombie_villager]")
         self.command("forceload remove 0 0 31 31")
 
 

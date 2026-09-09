@@ -28,6 +28,7 @@ from gymcraft.gym.action.components import (
     set_attack_target_pb2,
     set_block_pb2,
     step_move_pb2,
+    update_interesting_blocks_pb2,
 )
 from gymcraft.type_info import (
     ACTION_ATTACK_ONCE,
@@ -46,6 +47,7 @@ from gymcraft.type_info import (
     ACTION_SET_ATTACK_TARGET,
     ACTION_SET_BLOCK,
     ACTION_STEP_MOVE,
+    ACTION_UPDATE_INTERESTING_BLOCKS,
     Action,
     TIMEOUT_SECONDS,
 )
@@ -105,6 +107,7 @@ class ActionDslParser:
             "pick_up_item": self._parse_pick_up_item,
             "drop_item": self._parse_drop_item,
             "use_item": self._parse_use_item,
+            "update_interesting_blocks": self._parse_update_interesting_blocks,
         }
 
     def parse(self, response_text: str) -> ParsedAgentResponse:
@@ -192,6 +195,7 @@ class ActionDslParser:
             "pick_up_item": "/pick_up_item <entity_id>",
             "drop_item": "/drop_item <slot_id> [count]",
             "use_item": "/use_item <slot_id> [self|block <x> <y> <z>|entity <id>]",
+            "update_interesting_blocks": "/update_interesting_blocks add <block_id>... [remove <block_id>...]",
         }
         lines = [references[name] for name in self.available_action_names()]
         return "\n".join(lines)
@@ -458,6 +462,54 @@ class ActionDslParser:
         else:
             raise ActionParseError("Use target must be self, block or entity", line_number)
         return ParsedAction(ACTION_USE_ITEM, "use_item", payload)
+
+    def _parse_update_interesting_blocks(
+        self,
+        tokens: Sequence[str],
+        raw: str,
+        line_number: int,
+    ) -> ParsedAction:
+        """解析可任意排序的 add/remove 分段，并提前拒绝空分段、重复分段和增删冲突。"""
+        self._require_arity(tokens, 3, 1_000_000, line_number)
+        sections: dict[str, list[str]] = {}
+        current_operation: str | None = None
+        for token in tokens[1:]:
+            if token in ("add", "remove"):
+                if token in sections:
+                    raise ActionParseError(f"{token} section may appear only once", line_number)
+                sections[token] = []
+                current_operation = token
+                continue
+            if current_operation is None:
+                raise ActionParseError(
+                    "Usage: /update_interesting_blocks add <block_id>... [remove <block_id>...]",
+                    line_number,
+                )
+            sections[current_operation].append(token)
+
+        empty_sections = [operation for operation, block_ids in sections.items() if not block_ids]
+        if empty_sections:
+            raise ActionParseError(f"{empty_sections[0]} section requires at least one block id", line_number)
+        additions = sections.get("add", [])
+        removals = sections.get("remove", [])
+        normalized_additions = {self._normalize_block_id(block_id) for block_id in additions}
+        normalized_removals = {self._normalize_block_id(block_id) for block_id in removals}
+        conflicts = sorted(normalized_additions & normalized_removals)
+        if conflicts:
+            raise ActionParseError(
+                f"block ids cannot appear in both add and remove sections: {', '.join(conflicts)}",
+                line_number,
+            )
+        payload = update_interesting_blocks_pb2.ProtoUpdateInterestingBlocks(
+            add_block_ids=additions,
+            remove_block_ids=removals,
+        )
+        return ParsedAction(ACTION_UPDATE_INTERESTING_BLOCKS, "update_interesting_blocks", payload)
+
+    @staticmethod
+    def _normalize_block_id(block_id: str) -> str:
+        """为冲突检测补全原版命名空间，实际 ID 合法性仍由服务端注册表校验。"""
+        return block_id if ":" in block_id else f"minecraft:{block_id}"
 
     @staticmethod
     def _component_for_command(command_name: str) -> str:
