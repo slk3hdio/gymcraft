@@ -9,13 +9,18 @@ import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.openBloc
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.placeChest;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.spawnAgent;
 
+import java.util.List;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
+import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
+import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.inventory.LogicalSlotIdentity;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
@@ -90,7 +95,7 @@ public final class MenuInventoryGameTests {
         helper.succeed();
     }
 
-    /** self 背包菜单只返回统一物品栏 slots，menu_type/title/properties/buttons 为空。 */
+    /** self 菜单保留 Agent 槽位并在其后暴露原版 2x2 合成槽。 */
     public static void selfMenuShape(GameTestHelper helper) {
         var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
         mob.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, new ItemStack(Items.COBBLESTONE, 3));
@@ -104,9 +109,79 @@ public final class MenuInventoryGameTests {
         assertEquals(helper, "", observation.getTitle(), "self menu title must be empty");
         assertEquals(helper, 0, observation.getPropertiesCount(), "self menu must not expose properties");
         assertEquals(helper, 0, observation.getButtonsCount(), "self menu must not expose buttons");
-        // 不暴露合成区/armor/offhand 等额外槽位：仅统一物品栏 0..7
-        assertEquals(helper, 8, observation.getSlotsCount(), "self menu must expose exactly the unified inventory");
+        // 无存储槽 Mob：Agent 槽为 0..7，结果槽为 8，四个输入槽为 9..12。
+        assertEquals(helper, 13, observation.getSlotsCount(), "self menu must expose inventory and 2x2 crafting");
         assertEquals(helper, 3, observation.getSlots(0).getItem().getCount(), "mainhand item missing at slot 0");
+        assertEquals(helper, "menu/crafting/result", observation.getSlots(8).getCategory(),
+            "self crafting result category");
+        assertEquals(helper, "menu/crafting/input/1a", observation.getSlots(9).getCategory(),
+            "self crafting top-left category");
+        assertEquals(helper, "menu/crafting/input/1b", observation.getSlots(10).getCategory(),
+            "self crafting top-right category");
+        assertEquals(helper, "menu/crafting/input/2a", observation.getSlots(11).getCategory(),
+            "self crafting bottom-left category");
+        assertEquals(helper, "menu/crafting/input/2b", observation.getSlots(12).getCategory(),
+            "self crafting bottom-right category");
+        helper.succeed();
+    }
+
+    /** 普通 27 格背包后固定分配结果槽 35 与输入槽 36..39，并可完成两级合成。 */
+    public static void selfMenuCraftingWithBackpack(GameTestHelper helper) {
+        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        MobAttachmentAccessScope scope = MobAttachmentAccessScope.activate(mob, List.of(MobAttachments.AGENT_BACKPACK));
+        AgentInventoryLayout.resolve(mob).slot(8).setItem(new ItemStack(Items.OAK_LOG));
+        LogicalMenuSession session = LogicalMenuSessions.open(mob, new OpenMenuTarget.Self()).session();
+        assertTrue(helper, session != null, "self crafting menu did not open");
+
+        ProtoMenuObservation initial = observe(mob);
+        assertEquals(helper, 40, initial.getSlotsCount(), "backpack self crafting slot count");
+        assertEquals(helper, "menu/crafting/result", initial.getSlots(35).getCategory(), "result slot category");
+
+        assertEquals(helper, ActionStatus.COMPLETED,
+            moveMenuItem(mob, session.sessionId(), 8, 36, 1).status(), "log input move failed");
+        observe(mob);
+        assertEquals(helper, ActionStatus.COMPLETED,
+            moveMenuItem(mob, session.sessionId(), 35, 8, 4).status(), "plank result move failed");
+        for (int target = 36; target <= 39; target++) {
+            observe(mob);
+            assertEquals(helper, ActionStatus.COMPLETED,
+                moveMenuItem(mob, session.sessionId(), 8, target, 1).status(),
+                "crafting-table input move failed at " + target);
+        }
+        observe(mob);
+        assertEquals(helper, ActionStatus.COMPLETED,
+            moveMenuItem(mob, session.sessionId(), 35, 8, 1).status(), "crafting-table result move failed");
+        assertTrue(helper, AgentInventoryLayout.resolve(mob).slot(8).getItem().is(Items.CRAFTING_TABLE),
+            "crafted table was not written to backpack");
+        assertEquals(helper, ActionStatus.COMPLETED, closeMenu(mob, session.sessionId()).status(), "self menu close failed");
+        scope.deactivate(mob);
+        helper.succeed();
+    }
+
+    /** 工作台结果槽和 3x3 输入槽使用稳定的行列 category。 */
+    public static void craftingTableSlotCategories(GameTestHelper helper) {
+        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        MobAttachmentAccessScope scope = MobAttachmentAccessScope.activate(mob, List.of(MobAttachments.AGENT_BACKPACK));
+        helper.setBlock(new BlockPos(0, 1, 2), Blocks.CRAFTING_TABLE);
+        LogicalMenuSession session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
+
+        ProtoMenuObservation observation = observe(mob);
+        assertEquals(helper, 45, observation.getSlotsCount(), "crafting table session slot count");
+        assertEquals(helper, "menu/crafting/result", observation.getSlots(35).getCategory(),
+            "crafting table result category");
+        for (int inputIndex = 0; inputIndex < 9; inputIndex++) {
+            int row = inputIndex / 3 + 1;
+            char column = (char) ('a' + inputIndex % 3);
+            assertEquals(
+                helper,
+                "menu/crafting/input/" + row + column,
+                observation.getSlots(36 + inputIndex).getCategory(),
+                "crafting table input category at index " + inputIndex
+            );
+        }
+        assertEquals(helper, ActionStatus.COMPLETED, closeMenu(mob, session.sessionId()).status(),
+            "crafting table menu close failed");
+        scope.deactivate(mob);
         helper.succeed();
     }
 

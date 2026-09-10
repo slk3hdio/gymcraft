@@ -47,7 +47,7 @@ Minecraft 服务端启动后会同时启动 gRPC 服务，默认监听 `localhos
 ### 2. 创建环境
 
 1. 从创造模式的 GymCraft 标签页取得 **Environment Tool** 和 **UUID Copier**。
-2. 按住 Shift 滚动滚轮，选择 `simple_mob` 或 `parkour_mob` 环境。
+2. 按住 Shift 滚动滚轮，选择 `simple_mob`、`parkour_mob` 或 `iron_mining` 环境。
 3. 使用 Environment Tool 右键 Mob 创建环境；Shift + 右键移除环境。
 4. 使用 UUID Copier 右键同一 Mob，取得 Python 连接所需的实体 UUID。
 
@@ -96,6 +96,27 @@ uv run demos\parkour_q_learning_demo.py <entity_uuid> --episodes 200
 该 demo 使用不依赖深度学习框架的表格 Q-learning，让 Mob 学习组合 `jump`、
 `set_block`、`step_move` 和 `noop`，通过跳跃并在脚下放置方块到达目标高度。
 常用参数包括 `--target-height`、`--block-count`、`--max-steps` 和 `--epsilon`。
+
+### 从空手到粗铁 LLM Demo
+
+先为最近的 Zombie 创建环境；命令成功信息会直接包含实体 UUID，也可以用 UUID Copier 右键复制：
+
+```text
+/gymcraft env create @e[type=minecraft:zombie,sort=nearest,limit=1] gymcraft:iron_mining
+```
+
+然后配置任意 Chat Completions 兼容服务：
+
+```powershell
+cd src\main\python
+uv sync --extra openai
+$env:LLM_API_KEY = "your-api-key"
+$env:LLM_MODEL = "your-model-id"
+uv run --extra openai demos\iron_mining_llm_demo.py <entity_uuid> --trace traces\iron.jsonl
+```
+
+环境会清空 Agent 物品栏并重建固定训练场。模型需要自行采集原木，通过 self 菜单的
+$2\times2$ 合成格制作并放置工作台，再制作木镐、石镐并取得粗铁。
 
 `debug/` 目录还包含移动、攻击、方块和菜单等动作的调试脚本。
 

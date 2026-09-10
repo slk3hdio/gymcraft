@@ -82,7 +82,7 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:step_move` | 单 tick 前进、横移、视角和跳跃控制 |
 | `gymcraft:look_at` | 将当前视线对准实体、掉落物或方块 |
 | `gymcraft:use_item` | 按 Agent 槽号向方块、实体或自身使用物品；食物药水等待消费完成，详见[使用物品动作](../use-item-action.md) |
-| `gymcraft:move_to` | 使用寻路移动到目标坐标 |
+| `gymcraft:move_to` | 使用寻路移动到目标坐标，按 Mob 中心的水平距离精确判定 `stop_distance` |
 | `gymcraft:set_attack_target` | 设置实体攻击目标 |
 | `gymcraft:attack_once` | 执行一次近战攻击 |
 | `gymcraft:noop` | 空操作 |
@@ -94,6 +94,10 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:close_menu` | 关闭逻辑菜单会话 |
 | `gymcraft:move_menu_item` | 在逻辑菜单槽位之间移动物品 |
 | `gymcraft:click_menu_button` | 操作已适配菜单的按钮 |
+
+`move_to` 不会自动将整数坐标改为方块中心：`x=10, z=20` 表示方块边角，需要到达方块中心时应传入 `x=10.5, z=20.5`。
+`move_to` 与 `pick_up_item` 在路径被清除、替换或卡住时最多自动重规划 3 次；终态的 `action_state.details`
+包含 `navigation_reason`、`repath_attempts`、`path_owned`、`path_can_reach`、当前水平距离与最后路径终点，可用于区分不可达、外部清路和无进展。
 
 ### 观测组件
 
@@ -115,6 +119,7 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 
 - `gymcraft:simple_mob`：暴露通用动作和观测组件。
 - `gymcraft:parkour_mob`：提供受限训练场、方块资源、上升奖励和 Q-learning demo。
+- `gymcraft:iron_mining`：从空物品栏开始采集木石、制作工具并以取得粗铁为目标。
 
 `reset(options={"disable_vanilla_ai": true})` 会在 reset 后以及相邻动作之间的空闲期压制
 Goal flags、寻路和关键 Brain memory，同时保留移动、重力与跳跃物理。动作开始时会释放
@@ -157,10 +162,19 @@ uv run demos\parkour_q_learning_demo.py <entity_uuid> --episodes 200
 
 `src/main/python/debug` 下的脚本用于逐项验证动作和观测，不作为稳定公共 API。
 
+`demos/iron_mining_llm_demo.py` 连接 `iron_mining` 环境，通过通用 Chat Completions API
+驱动完整工具链任务，并可使用 `--trace` 保存 JSONL 轨迹。
+
 ## 菜单交互
 
 逻辑菜单不要求真实客户端打开 Screen。统一 `slot_id` 包含装备槽、Mob 容器槽和菜单槽；
 移动物品及点击按钮前必须基于最新 `gymcraft:menu` 观测进行 stale 校验。
+`open_menu(self)` 复用原版 $2\times2$ 合成语义：Agent 槽位编号保持不变，结果槽和
+四个输入槽依次排在 `AgentInventoryLayout.size()` 之后。普通 27 格背包 Mob 的结果槽
+为 `35`，输入槽为 `36..39`。
+合成菜单通过 category 暴露槽位语义：结果槽为 `menu/crafting/result`，输入槽
+使用“数字行 + 字母列”定位，如 `menu/crafting/input/1a`。self 2x2 范围为
+`1a..2b`，工作台 3x3 范围为 `1a..3c`；行列均从左上角开始。
 
 详细设计见 [菜单交互实现方案](../menu-interaction-implementation-plan.md)。
 

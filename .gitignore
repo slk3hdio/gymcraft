@@ -43,3 +43,8 @@ repo/
 !**/src/**/repo/
 
 .metals/
+
+### Local environment ###
+.env
+.env.*
+!.env.example

@@ -5,19 +5,17 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.SectionPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
-import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.Vec3;
 
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
+import io.github.mousemeya.gymcraft.gym.action.navigation.MobNavigationTask;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveTo;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -44,7 +42,10 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
 
     /** 当前环境实例使用的寻路速度修正值（默认 1.0，可用 {@link #setSpeed} 覆盖）。 */
     private double speed = DEFAULT_SPEED;
+    /** 当前 move_to 动作独占的可靠导航任务。 */
+    private final MobNavigationTask navigationTask = new MobNavigationTask();
 
+    /** @param mob controller 初始绑定的 Mob */
     public MoveToController(Mob mob) {
         super(mob);
     }
@@ -84,22 +85,26 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
         }
-        boolean moved = mob.getNavigation().moveTo(component.getX(), component.getY(), component.getZ(), this.speed);
-        Path path = mob.getNavigation().getPath();
+        Vec3 target = target(component);
         var policy = ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE)
             .eraseMemory(MemoryModuleType.WALK_TARGET)
             .eraseMemory(MemoryModuleType.PATH);
-        if (!moved) {
-            policy.stopNavigation();
+        double horizontalDistance = horizontalDistance(mob, target);
+        if (horizontalDistance <= component.getStopDistance()) {
+            return ActionApplyResult.applied(
+                policy,
+                ActionState.completed("reached target", moveDetails(target, component.getStopDistance()))
+            );
         }
-        ActionState initialState = moved
-            ? ActionState.running("navigating to target", pathDetails(mob, path, component))
-            : ActionState.failed(failureDescription(mob, path, component), pathDetails(mob, path, component));
+        this.navigationTask.begin(mob, target, this.speed, true);
+        ActionState initialState = ActionState.running(
+            "navigating to target",
+            moveDetails(target, component.getStopDistance())
+        );
         LOGGER.info(
-            "GymCraft MoveTo apply entity={} moved={} target=({}, {}, {}) state={} details={}",
+            "GymCraft MoveTo apply entity={} target=({}, {}, {}) state={} details={}",
             mob.getUUID(),
-            moved,
             component.getX(),
             component.getY(),
             component.getZ(),
@@ -114,87 +119,61 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         Mob mob = this.mob();
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
-            mob.getNavigation().stop();
+            this.navigationTask.cancel();
             return agentError;
         }
-        double dx = mob.getX() - component.getX();
-        double dy = mob.getY() - component.getY();
-        double dz = mob.getZ() - component.getZ();
+        Vec3 target = target(component);
         double stop = component.getStopDistance();
-        double horizontalDistSq = dx * dx + dz * dz;
-        double horizontalDist = Math.sqrt(horizontalDistSq);
-        if (horizontalDistSq <= stop * stop) {
-            ActionState state = ActionState.completed("reached target", Map.of(
-                "horizontal_distance", horizontalDist,
-                "vertical_delta", dy,
-                "stop_distance", stop));
+        double horizontalDist = horizontalDistance(mob, target);
+        if (horizontalDist <= stop) {
+            this.navigationTask.cancel();
+            ActionState state = ActionState.completed("reached target", moveDetails(target, stop));
             LOGGER.info("GymCraft MoveTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
             return state;
         }
-        if (mob.getNavigation().isDone()) {
-            ActionState state = ActionState.failed("navigation ended before reaching target", Map.of(
-                "horizontal_distance", horizontalDist,
-                "vertical_delta", dy,
-                "stop_distance", stop,
-                "navigation_done", true));
+        MobNavigationTask.Update update = this.navigationTask.advance(target, false);
+        if (update.exhausted()) {
+            ActionState state = ActionState.failed(
+                "navigation ended before reaching target",
+                moveDetails(target, stop)
+            );
+            this.navigationTask.cancel();
             LOGGER.info("GymCraft MoveTo state entity={} status={} description={} details={}", mob.getUUID(), state.status(), state.description(), state.details());
             return state;
         }
-        ActionState state = ActionState.running("navigating", Map.of(
-            "horizontal_distance", horizontalDist,
-            "vertical_delta", dy));
+        ActionState state = ActionState.running("navigating", moveDetails(target, stop));
         LOGGER.info("GymCraft MoveTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
         return state;
     }
 
-    private static Map<String, Object> pathDetails(Mob mob, Path path, ProtoMoveTo component) {
-        var details = new java.util.LinkedHashMap<String, Object>();
-        details.put("x", component.getX());
-        details.put("y", component.getY());
-        details.put("z", component.getZ());
-        details.put("stop_distance", component.getStopDistance());
-        details.put("mob_type", BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString());
-        details.put("navigation_class", mob.getNavigation().getClass().getSimpleName());
-        details.put("no_ai", mob.isNoAi());
-        details.put("on_ground", mob.onGround());
-        details.put("in_liquid", mob.isInLiquid());
-        details.put("in_water", mob.isInWater());
-        details.put("passenger", mob.isPassenger());
-        details.put("can_update_ground_path", mob.onGround() || mob.isInLiquid() || mob.isPassenger());
-        details.put("mob_block", mob.blockPosition().toShortString());
-        BlockPos below = mob.blockPosition().below();
-        details.put("block_below", BuiltInRegistries.BLOCK.getKey(mob.level().getBlockState(below).getBlock()).toString());
-        BlockPos targetBlock = BlockPos.containing(component.getX(), component.getY(), component.getZ());
-        details.put("target_block", targetBlock.toShortString());
-        details.put("target_chunk_loaded", mob.level().getChunkSource().getChunkNow(
-            SectionPos.blockToSectionCoord(targetBlock.getX()),
-            SectionPos.blockToSectionCoord(targetBlock.getZ())) != null);
-        details.put("path_null", path == null);
-        if (path != null) {
-            details.put("path_node_count", path.getNodeCount());
-            details.put("path_can_reach", path.canReach());
-            details.put("path_done", path.isDone());
-            details.put("path_dist_to_target", path.getDistToTarget());
-            details.put("path_target", path.getTarget().toShortString());
-        }
-        return details;
+    /** 当前动作被打断时只停止其自有路径和末段移动。 */
+    @Override
+    public void onInterrupt(ProtoMoveTo component) {
+        this.navigationTask.cancel();
     }
 
-    private static String failureDescription(Mob mob, Path path, ProtoMoveTo component) {
-        BlockPos targetBlock = BlockPos.containing(component.getX(), component.getY(), component.getZ());
-        boolean targetChunkLoaded = mob.level().getChunkSource().getChunkNow(
-            SectionPos.blockToSectionCoord(targetBlock.getX()),
-            SectionPos.blockToSectionCoord(targetBlock.getZ())) != null;
-        if (!targetChunkLoaded) {
-            return "target chunk is not loaded";
-        }
-        if (path == null) {
-            return "path not found";
-        }
-        if (!path.canReach()) {
-            return "target cannot be reached by pathfinder";
-        }
-        return "unreachable target";
+    /** @return protobuf 坐标对应的原始目标，不做方块中心修正 */
+    private static Vec3 target(ProtoMoveTo component) {
+        return new Vec3(component.getX(), component.getY(), component.getZ());
+    }
+
+    /** @return 当前 Mob 到目标的水平中心距离 */
+    private static double horizontalDistance(Mob mob, Vec3 target) {
+        double dx = mob.getX() - target.x;
+        double dz = mob.getZ() - target.z;
+        return Math.sqrt(dx * dx + dz * dz);
+    }
+
+    /** @return 包含精确距离、垂直差和导航所有权的动作诊断 */
+    private Map<String, Object> moveDetails(Vec3 target, double stopDistance) {
+        Map<String, Object> details = this.navigationTask.details(
+            target,
+            horizontalDistance(this.mob(), target),
+            "stop_distance",
+            stopDistance
+        );
+        details.put("vertical_delta", this.mob().getY() - target.y);
+        return details;
     }
 
     /**

@@ -11,10 +11,10 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 
 /**
- * 菜单按钮适配器注册与查找入口（计划 11 节）。
+ * 菜单能力适配器注册与查找入口（计划 11 节）。
  * <p>
  * 采用简单静态列表而非第四个 NeoForge 自定义 registry：适配器是全部内置的
- * 固定实现细节（首批仅 Lectern/Stonecutter/Loom 三个），按菜单类查找、无需
+ * 固定实现细节，按菜单类查找、无需
  * 协议侧 ID、无数据包/模组扩展需求；而既有三个 registry 承载的是会出现在
  * 配置与协议中的环境/动作/观测类型，语义不同。
  * </p>
@@ -22,6 +22,7 @@ import net.minecraft.world.inventory.Slot;
 public final class MenuAdapters {
     /** 已注册适配器（查找顺序即声明顺序）。 */
     private static final List<MenuAdapter<?>> ADAPTERS = List.of(
+        new CraftingMenuAdapter(),
         new LecternMenuAdapter(),
         new StonecutterMenuAdapter(),
         new LoomMenuAdapter()

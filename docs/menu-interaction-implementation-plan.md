@@ -212,7 +212,7 @@ message ProtoSlotView {
 字段语义：
 
 - `slot_id`：服务端统一分配的无重复槽位 ID（见 1.2）。
-- `category`：字符串，标识槽位来源。装备槽使用 `EquipmentSlot.getName()`（如 `"mainhand"`、`"saddle"`），Mob 自带容器槽为 `"container"`，菜单自身的容器槽位设有默认值，可以被 `MenuAdapter` 特化。使用字符串而非枚举，便于模组槽位来源扩展。
+- `category`：字符串，标识槽位来源。装备槽使用 `EquipmentSlot.getName()`（如 `"mainhand"`、`"saddle"`），Mob 自带容器槽为 `"container"`，菜单自身的容器槽位默认为 `"menu"`，可以被 `MenuAdapter` 特化。合成结果槽为 `"menu/crafting/result"`，输入槽使用数字行和字母列定位，如左上角 `"menu/crafting/input/1a"`。使用字符串而非枚举，便于模组槽位来源扩展。
 - `x`/`y`：原版槽位屏幕坐标；专用背包包装菜单固定为 0。
 
 `ProtoItemStackView` 同时改为纯物品数据：

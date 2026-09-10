@@ -130,7 +130,7 @@ public final class MobAttachmentGameTests {
         var selfResult = io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions.open(
             mob, new io.github.mousemeya.gymcraft.gym.menu.session.OpenMenuTarget.Self());
         assertTrue(helper, selfResult.success(), "backpack self menu failed: " + selfResult.failureReason());
-        assertEquals(helper, 35, observe(mob).getSlotsCount(), "self menu did not expose backpack slots");
+        assertEquals(helper, 40, observe(mob).getSlotsCount(), "self menu did not expose backpack and crafting slots");
         assertEquals(helper, ActionStatus.COMPLETED,
             closeMenu(mob, selfResult.session().sessionId()).status(), "self menu close failed");
 

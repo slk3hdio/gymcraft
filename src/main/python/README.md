@@ -121,6 +121,17 @@ uv run --extra openai demos/llm_chat_completions_demo.py `
 
 demo 使用通用的 `client.chat.completions.create(model=..., messages=...)` 接口，不启用 Responses API、厂商工具调用或服务端会话存储。
 
+连接 `gymcraft:iron_mining` 环境可运行完整生存工具链 demo：
+
+```powershell
+uv run --extra openai demos/iron_mining_llm_demo.py `
+  <entity_uuid> `
+  --max-steps 64 `
+  --trace traces/iron-mining.jsonl
+```
+
+该 demo 内置从空手采集原木、使用 self 菜单 $2\times2$ 合成、放置工作台、制作石镐并拾取粗铁的任务提示。`--task` 可覆盖提示，`--trace` 可保存完整 JSONL 轨迹。
+
 ## 人工终端交互
 
 ```powershell

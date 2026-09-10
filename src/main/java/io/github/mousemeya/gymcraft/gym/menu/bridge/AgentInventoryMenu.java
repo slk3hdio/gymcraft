@@ -1,42 +1,24 @@
 package io.github.mousemeya.gymcraft.gym.menu.bridge;
 
-import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
-
-import java.util.List;
-
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.inventory.InventoryMenu;
 
 /**
- * Agent 背包包装菜单 —— {@code open_menu} 目标为 self 时的专用逻辑菜单。
+ * Agent 自身物品栏菜单 —— {@code open_menu} 目标为 self 时的专用逻辑菜单。
  * <p>
- * 只包含 FakePlayer bridge 中映射的 Agent 统一物品栏 {@link Slot}
- * （slot_id 0..N），不复用 {@code fakePlayer.inventoryMenu}，不暴露合成结果、
- * 2x2 合成区、FakePlayer armor/offhand 等额外槽位。槽位屏幕坐标固定为 0。
- * {@code stillValid} 恒为 true（自身物品栏没有距离或目标存活约束），
- * 仅受 Mob 死亡、reset 和 clear 等通用关闭条件约束。
+ * 复用原版 {@link InventoryMenu} 的 2x2 合成格、结果槽和配方结算语义。
+ * FakePlayer 物品栏槽仍由会话规范化器认领为稳定 Agent slot_id；未映射槽隐藏，
+ * 合成结果与四个输入格作为菜单自有槽排在 Agent 统一物品栏之后。
  * </p>
  */
-public final class AgentInventoryMenu extends AbstractContainerMenu {
+public final class AgentInventoryMenu extends InventoryMenu {
 
-    public AgentInventoryMenu(int containerId, Inventory inventory, List<AgentInventoryBridge.SlotMapping> mappings) {
-        super(null, containerId);
-        for (var mapping : mappings) {
-            this.addSlot(new Slot(inventory, mapping.inventoryIndex(), 0, 0));
-        }
-    }
-
-    @Override
-    public boolean stillValid(Player player) {
-        return true;
-    }
-
-    @Override
-    public ItemStack quickMoveStack(Player player, int index) {
-        // Agent 没有 Shift 点击语义，快速移动恒为无操作
-        return ItemStack.EMPTY;
+    /**
+     * 创建绑定会话独占 FakePlayer 物品栏的自身合成菜单。
+     *
+     * @param inventory FakePlayer 物品栏
+     */
+    public AgentInventoryMenu(Inventory inventory) {
+        super(inventory, true, inventory.player);
     }
 }

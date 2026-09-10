@@ -66,6 +66,10 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("inventory_chest_menu_slot_allocation", () -> MenuInventoryGameTests::chestMenuSlotIdAllocation);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SELF_MENU_SHAPE =
         TEST_FUNCTIONS.register("inventory_self_menu_shape", () -> MenuInventoryGameTests::selfMenuShape);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SELF_MENU_CRAFTING =
+        TEST_FUNCTIONS.register("inventory_self_menu_crafting", () -> MenuInventoryGameTests::selfMenuCraftingWithBackpack);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CRAFTING_TABLE_SLOT_CATEGORIES =
+        TEST_FUNCTIONS.register("inventory_crafting_table_slot_categories", () -> MenuInventoryGameTests::craftingTableSlotCategories);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SLOT_IDS_INVALID_AFTER_CLOSE =
         TEST_FUNCTIONS.register("inventory_slot_ids_invalid_after_close", () -> MenuInventoryGameTests::slotIdsInvalidAfterClose);
 
@@ -164,6 +168,24 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("env_disable_vanilla_ai_only_between_actions", () -> EnvAiGameTests::disableVanillaAiOnlyBetweenActions);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AI_ENABLED_USES_CONTROLLER_POLICY =
         TEST_FUNCTIONS.register("env_enable_vanilla_ai_uses_controller_policy", () -> EnvAiGameTests::enabledVanillaAiUsesControllerPolicy);
+
+    // ===== Mob 导航可靠性 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NAVIGATION_PREEMPTS_MOVE_GOAL =
+        TEST_FUNCTIONS.register("navigation_preempts_move_goal", () -> NavigationReliabilityGameTests::runningMoveGoalIsPreemptedBeforeNewPath);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NAVIGATION_PRECISE_REPATH =
+        TEST_FUNCTIONS.register("navigation_precise_repath", () -> NavigationReliabilityGameTests::preciseMoveRepathsAfterExternalClear);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NAVIGATION_MOVING_PICKUP =
+        TEST_FUNCTIONS.register("navigation_moving_pickup", () -> NavigationReliabilityGameTests::movingItemRefreshesPickupPath);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NAVIGATION_REPATH_BUDGET =
+        TEST_FUNCTIONS.register("navigation_repath_budget", () -> NavigationReliabilityGameTests::repathBudgetIsBounded);
+
+    // ===== 铁矿工具链环境 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_MINING_RESET_RESTORE =
+        TEST_FUNCTIONS.register("iron_mining_reset_restore", () -> IronMiningEnvGameTests::resetAndCloseRestoreArena);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_MINING_PROGRESSION =
+        TEST_FUNCTIONS.register("iron_mining_progression", () -> IronMiningEnvGameTests::completeToolProgression);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_MINING_FAILURE_LIMIT =
+        TEST_FUNCTIONS.register("iron_mining_failure_limit", () -> IronMiningEnvGameTests::failureAndStepLimit);
 
     // ===== Agent 死亡生命周期 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IDLE_DEATH_RETURNS_TERMINATED_STEP =
@@ -272,8 +294,14 @@ public final class GymCraftGameTests {
                 new FunctionGameTestInstance(
                     holder.getKey(),
                     new TestData<>(environment,
-                        holder.getId().getPath().startsWith("use_item_") ? USE_ITEM_STRUCTURE : EMPTY_STRUCTURE,
-                        MAX_TICKS, 0, true)
+                        holder.getId().getPath().startsWith("use_item_")
+                            || holder.getId().getPath().startsWith("iron_mining_")
+                            || holder.getId().getPath().startsWith("navigation_")
+                            ? USE_ITEM_STRUCTURE : EMPTY_STRUCTURE,
+                        holder.getId().getPath().startsWith("iron_mining_") ? 12000
+                            : holder.getId().getPath().startsWith("navigation_") ? 160 : MAX_TICKS,
+                        0,
+                        true)
                 )
             );
         }

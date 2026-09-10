@@ -51,12 +51,20 @@ public final class SessionSlot {
         return new SessionSlot(slotId, agentSlot.identity(), agentSlot.category(), slot, true, agentSlot);
     }
 
-    /** 创建菜单自有槽位（会话 slot_id，从 N+1 起分配）。 */
-    public static SessionSlot menuOwned(int slotId, long sessionId, Slot menuSlot) {
+    /**
+     * 创建菜单自有槽位（会话 slot_id，从 N+1 起分配）。
+     *
+     * @param slotId 会话内统一槽位 ID
+     * @param sessionId 所属会话 ID
+     * @param menuSlot 原版菜单槽位
+     * @param category 适配器提供的槽位语义
+     * @return 菜单自有会话槽位
+     */
+    public static SessionSlot menuOwned(int slotId, long sessionId, Slot menuSlot, String category) {
         return new SessionSlot(
             slotId,
             new LogicalSlotIdentity.MenuOwned(sessionId, menuSlot.container, menuSlot.getContainerSlot()),
-            "menu",
+            category,
             menuSlot,
             false,
             null

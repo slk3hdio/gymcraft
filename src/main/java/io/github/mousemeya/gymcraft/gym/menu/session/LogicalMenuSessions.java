@@ -2,6 +2,8 @@ package io.github.mousemeya.gymcraft.gym.menu.session;
 
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
 import io.github.mousemeya.gymcraft.gym.menu.bridge.AgentInventoryMenu;
+import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuAdapter;
+import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuAdapters;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -180,6 +182,10 @@ public final class LogicalMenuSessions {
         AbstractContainerMenu create(MenuAgentPlayer candidate);
     }
 
+    /** 保留菜单自有槽的原版索引，供适配器在分配 slot_id 时添加语义。 */
+    private record MenuOwnedCandidate(int menuSlotIndex, Slot slot) {
+    }
+
     /** 目标解析结果：菜单构造、槽位规范化、目标有效性复查与构造前/失败后副作用处理。 */
     private record ResolvedMenu(
         String title,
@@ -253,7 +259,7 @@ public final class LogicalMenuSessions {
                 },
                 player -> {
                 },
-                c -> new AgentInventoryMenu(c.nextContainerId(), c.player().getInventory(), bridge.mappings())
+                c -> new AgentInventoryMenu(c.player().getInventory())
             );
             case OpenMenuTarget.Block block -> {
                 var state = level.getBlockState(block.pos());
@@ -347,11 +353,13 @@ public final class LogicalMenuSessions {
     ) {
         AgentInventoryLayout layout = bridge.layout();
         Map<Integer, Slot> claimedMenuSlots = new HashMap<>();
-        List<Slot> menuOwnedSlots = new ArrayList<>();
-        for (Slot menuSlot : menu.slots) {
+        List<MenuOwnedCandidate> menuOwnedSlots = new ArrayList<>();
+        for (int menuSlotIndex = 0; menuSlotIndex < menu.slots.size(); menuSlotIndex++) {
+            Slot menuSlot = menu.slots.get(menuSlotIndex);
             switch (normalizer.normalize(menuSlot)) {
                 case NormalizedMenuSlot.AgentClaim claim -> claimedMenuSlots.putIfAbsent(claim.agentSlotId(), menuSlot);
-                case NormalizedMenuSlot.MenuOwnedSlot ignored -> menuOwnedSlots.add(menuSlot);
+                case NormalizedMenuSlot.MenuOwnedSlot ignored ->
+                    menuOwnedSlots.add(new MenuOwnedCandidate(menuSlotIndex, menuSlot));
                 case NormalizedMenuSlot.Hidden ignored -> {
                 }
             }
@@ -364,8 +372,15 @@ public final class LogicalMenuSessions {
                 : SessionSlot.synthetic(agentSlot.slotId(), agentSlot));
         }
         int nextId = layout.size();
-        for (Slot menuSlot : menuOwnedSlots) {
-            slots.add(SessionSlot.menuOwned(nextId++, sessionId, menuSlot));
+        MenuAdapter<AbstractContainerMenu> adapter = MenuAdapters.find(menu);
+        for (MenuOwnedCandidate candidate : menuOwnedSlots) {
+            String category = adapter == null
+                ? "menu"
+                : adapter.menuSlotCategory(menu, candidate.menuSlotIndex(), candidate.slot());
+            if (category == null || category.isBlank()) {
+                category = "menu";
+            }
+            slots.add(SessionSlot.menuOwned(nextId++, sessionId, candidate.slot(), category));
         }
         return List.copyOf(slots);
     }

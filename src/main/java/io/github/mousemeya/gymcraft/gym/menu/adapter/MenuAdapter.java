@@ -5,11 +5,12 @@ import java.util.List;
 
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.Slot;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
 /**
- * 菜单按钮适配器（计划 11 节）—— 把原版菜单的 {@code clickMenuButton} 能力
- * 以受控方式暴露给 Agent。
+ * 菜单能力适配器（计划 11 节）—— 为特定原版菜单提供按钮、属性和
+ * 菜单自有槽位的稳定语义。
  * <p>
  * controller 不直接调用未知菜单的 {@code clickMenuButton}；只有适配器完成
  * ID、范围和启用状态检查后，才能在适配器内部调用原版菜单方法。
@@ -24,14 +25,34 @@ public interface MenuAdapter<M extends AbstractContainerMenu> {
     boolean supports(AbstractContainerMenu menu);
 
     /** @return 当前菜单状态下声明的全部按钮（button_id/name/enabled） */
-    List<MenuButtonView> buttons(M menu, Mob mob);
+    default List<MenuButtonView> buttons(M menu, Mob mob) {
+        return List.of();
+    }
 
     /**
      * 执行按钮。实现必须先完成全部前置检查（页码/索引边界、启用状态、
      * 物品栏接收能力等），再在内部调用原版 {@code clickMenuButton}；
      * 前置检查失败时返回失败结果且不得产生任何副作用。
      */
-    ButtonClickResult clickButton(M menu, FakePlayer actor, int buttonId, Mob mob);
+    default ButtonClickResult clickButton(M menu, FakePlayer actor, int buttonId, Mob mob) {
+        return ButtonClickResult.failed("menu adapter does not expose buttons");
+    }
+
+    /**
+     * 返回菜单自有槽位的语义 category。
+     * <p>
+     * 该方法只用于未被规范化为 Agent 装备或存储槽的菜单槽。语义在 session
+     * 创建时确定并在会话期间保持不变；未特化的槽位回退为 {@code "menu"}。
+     * </p>
+     *
+     * @param menu 原版菜单实例
+     * @param menuSlotIndex 槽位在 {@code menu.slots} 中的索引
+     * @param slot 原版槽位
+     * @return 稳定 category 字符串
+     */
+    default String menuSlotCategory(M menu, int menuSlotIndex, Slot slot) {
+        return "menu";
+    }
 
     /**
      * 菜单专有 DataSlot 属性（填充 {@code ProtoMenuProperty}，如 Lectern 页码）。

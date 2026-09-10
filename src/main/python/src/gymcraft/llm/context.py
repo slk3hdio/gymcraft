@@ -78,6 +78,8 @@ class ContextAssembler:
             "You may begin with a short analysis, but the response must end with exactly one ```gymcraft-action fenced block. "
             "Every non-empty line inside the block must be a /command. Include at least one action and no comments.\n"
             "Do not repeat an action in one batch. Text line order does not control execution; the server uses its declared component order.\n"
+            "Crafting menu categories identify the result as menu/crafting/result and inputs by row and column, such as "
+            "menu/crafting/input/1a for the top-left cell. Row numbers and column letters start at the top-left.\n"
             "For use_item, choose an Agent inventory slot, not a menu-owned slot. Omitted target means self/air use along the current view. "
             "Block/entity use requires reach and an unobstructed view. Food and potions wait until consumed; bows and other sustained uses are unsupported.\n"
             "Use update_interesting_blocks to maintain a per-agent set of block types. Matching visible blocks then appear in the "

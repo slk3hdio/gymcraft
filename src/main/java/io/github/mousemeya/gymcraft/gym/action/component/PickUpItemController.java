@@ -15,12 +15,14 @@ import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
+import io.github.mousemeya.gymcraft.gym.action.navigation.MobNavigationTask;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoPickUpItem;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentSlot;
@@ -60,7 +62,10 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
     /** 非 null 表示动作已结束（成功或失败），下次 {@link #getState} 返回并清空。 */
     @Nullable
     private ActionState terminal;
+    /** 当前拾取动作独占的可靠导航任务。 */
+    private final MobNavigationTask navigationTask = new MobNavigationTask();
 
+    /** @param mob controller 初始绑定的 Mob */
     public PickUpItemController(Mob mob) {
         super(mob);
     }
@@ -123,15 +128,10 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
                 mob.getUUID(), item.getUUID(), state.status());
             return ActionApplyResult.applied(policy, state);
         }
-        boolean moved = mob.getNavigation().moveTo(item.getX(), item.getY(), item.getZ(), this.speed);
-        if (!moved) {
-            policy.stopNavigation();
-        }
-        ActionState state = moved
-            ? ActionState.running("navigating to item", targetDetails(mob, item))
-            : ActionState.failed("path not found", targetDetails(mob, item));
-        LOGGER.info("GymCraft PickUpItem apply entity={} item={} moved={} state={}",
-            mob.getUUID(), item.getUUID(), moved, state.status());
+        this.navigationTask.begin(mob, item.position(), this.speed, false);
+        ActionState state = ActionState.running("navigating to item", targetDetails(mob, item));
+        LOGGER.info("GymCraft PickUpItem apply entity={} item={} state={}",
+            mob.getUUID(), item.getUUID(), state.status());
         return ActionApplyResult.applied(policy, state);
     }
 
@@ -145,11 +145,12 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         Mob mob = this.mob();
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
-            mob.getNavigation().stop();
+            this.navigationTask.cancel();
             return agentError;
         }
         ItemEntity item = resolveItem(mob, component.getEntityId());
         if (item == null) {
+            this.navigationTask.cancel();
             return ActionState.failed("item no longer available", Map.of(
                 "entity_id", component.getEntityId()
             ));
@@ -157,12 +158,20 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         double distance = horizontalDistance(mob, item);
         if (distance <= this.pickupReach) {
             if (item.hasPickUpDelay()) {
+                this.navigationTask.holdPosition("waiting_for_pickup_delay");
                 return ActionState.running("waiting for pickup delay", targetDetails(mob, item));
             }
+            this.navigationTask.cancel();
             return tryPickUp(mob, item);
         }
-        if (mob.getNavigation().isDone()) {
-            return ActionState.failed("navigation ended before reaching item", targetDetails(mob, item));
+        MobNavigationTask.Update update = this.navigationTask.advance(item.position(), true);
+        if (update.exhausted()) {
+            ActionState failure = ActionState.failed(
+                "navigation ended before reaching item",
+                targetDetails(mob, item)
+            );
+            this.navigationTask.cancel();
+            return failure;
         }
         return ActionState.running("navigating to item", targetDetails(mob, item));
     }
@@ -170,7 +179,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
     @Override
     public void onInterrupt(ProtoPickUpItem component) {
         this.terminal = null;
-        this.mob().getNavigation().stop();
+        this.navigationTask.cancel();
     }
 
     /**
@@ -178,7 +187,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
      *
      * @return 拾取终态；物品栏放不下时返回 failed 且不改动 ItemEntity
      */
-    private static ActionState tryPickUp(Mob mob, ItemEntity item) {
+    private ActionState tryPickUp(Mob mob, ItemEntity item) {
         ItemStack stack = item.getItem();
         // 先在副本上模拟完整转移，确认能全部放下后再落地，避免部分拾取
         var layout = AgentInventoryLayout.resolve(mob);
@@ -250,8 +259,13 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         return Math.sqrt(dx * dx + dz * dz);
     }
 
-    private static Map<String, Object> targetDetails(Mob mob, ItemEntity item) {
-        var details = new java.util.LinkedHashMap<String, Object>();
+    private Map<String, Object> targetDetails(Mob mob, ItemEntity item) {
+        var details = new java.util.LinkedHashMap<String, Object>(this.navigationTask.details(
+            item.position(),
+            horizontalDistance(mob, item),
+            "pickup_reach",
+            this.pickupReach
+        ));
         details.put("entity_id", item.getId());
         details.put("item_id", BuiltInRegistries.ITEM.getKey(item.getItem().getItem()).toString());
         details.put("count", item.getItem().getCount());

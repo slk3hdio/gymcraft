@@ -12,7 +12,7 @@ import net.minecraft.world.inventory.MenuType;
  * <p>
  * 1.26 起 {@code AbstractContainerMenu#getType()} 在 menuType 为 null 时抛
  * {@link UnsupportedOperationException}（"Unable to construct this menu by type"），
- * 而 GymCraft 存在合法的无类型菜单（{@link AgentInventoryMenu} self 背包），
+ * 而 GymCraft 存在合法的无类型菜单（{@link AgentInventoryMenu} self 物品栏），
  * 所有读取菜单类型的代码必须经本工具，不得直接调用 {@code getType()}。
  * </p>
  */

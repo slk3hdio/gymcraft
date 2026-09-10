@@ -9,6 +9,7 @@ import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.ParkourMobEnv;
+import io.github.mousemeya.gymcraft.gym.env.envs.IronMiningEnv;
 
 /**
  * 环境工厂注册入口 —— 通过 {@link DeferredRegister} 将所有 {@link McEnvFactory} 实现
@@ -32,6 +33,12 @@ public final class EnvFactories {
     public static final DeferredHolder<McEnvFactory, McEnvFactory> PARKOUR_MOB = REGISTRY.register(
         "parkour_mob",
         ParkourMobEnv.Factory::new
+    );
+
+    /** 从空物品栏完成工具制造并取得粗铁的任务环境。 */
+    public static final DeferredHolder<McEnvFactory, McEnvFactory> IRON_MINING = REGISTRY.register(
+        "iron_mining",
+        IronMiningEnv.Factory::new
     );
 
     private EnvFactories() {
