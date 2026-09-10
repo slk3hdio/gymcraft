@@ -60,7 +60,7 @@ public final class MenuRegressionGameTests {
         var details = (Map<String, Object>) state.details().get("gymcraft:open_menu");
         assertTrue(helper, details != null && details.containsKey("session_id"),
             "open_menu details should carry session_id");
-        assertEquals(helper, "", details.get("menu_type"), "self menu has no menu type");
+        assertEquals(helper, "gymcraft:agent_inventory", details.get("menu_type"), "self menu menu_type");
         assertTrue(helper, observe(mob).getOpen(), "menu observation should report open=true");
         helper.succeed();
     }

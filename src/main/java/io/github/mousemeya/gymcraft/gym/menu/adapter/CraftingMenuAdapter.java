@@ -1,9 +1,8 @@
 package io.github.mousemeya.gymcraft.gym.menu.adapter;
 
-import io.github.mousemeya.gymcraft.gym.menu.bridge.AgentInventoryMenu;
-
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.Slot;
 
 /**
@@ -18,10 +17,10 @@ import net.minecraft.world.inventory.Slot;
 public final class CraftingMenuAdapter implements MenuAdapter<AbstractContainerMenu> {
     private static final String RESULT_CATEGORY = "menu/crafting/result";
 
-    /** @return 是否为 GymCraft self 合成菜单或原版工作台菜单 */
+    /** @return 是否为 self 2x2 合成菜单（原版 {@link InventoryMenu}）或工作台 3x3 合成菜单 */
     @Override
     public boolean supports(AbstractContainerMenu menu) {
-        return menu instanceof AgentInventoryMenu || menu instanceof CraftingMenu;
+        return menu instanceof InventoryMenu || menu instanceof CraftingMenu;
     }
 
     /**
@@ -37,7 +36,7 @@ public final class CraftingMenuAdapter implements MenuAdapter<AbstractContainerM
         if (menuSlotIndex == 0) {
             return RESULT_CATEGORY;
         }
-        int columns = menu instanceof AgentInventoryMenu ? 2 : 3;
+        int columns = menu instanceof InventoryMenu ? 2 : 3;
         int inputCount = columns * columns;
         if (menuSlotIndex < 1 || menuSlotIndex > inputCount) {
             return "menu";

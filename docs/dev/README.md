@@ -88,7 +88,7 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:noop` | 空操作 |
 | `gymcraft:jump` | 提交一次跳跃意图 |
 | `gymcraft:break_block` | 通过 FakePlayer 复用原版方块破坏逻辑 |
-| `gymcraft:set_block` | 校验手持物品、距离和实体碰撞后放置方块 |
+| `gymcraft:set_block` | 校验距离和实体碰撞后放置方块；物品栏任一槽位有匹配方块物品即可，放置前自动换到主手 |
 | `gymcraft:update_interesting_blocks` | 原子地批量添加或移除 Agent 感兴趣的方块类型 |
 | `gymcraft:open_menu` | 打开方块、实体或自身逻辑菜单 |
 | `gymcraft:close_menu` | 关闭逻辑菜单会话 |
@@ -120,6 +120,8 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 - `gymcraft:simple_mob`：暴露通用动作和观测组件。
 - `gymcraft:parkour_mob`：提供受限训练场、方块资源、上升奖励和 Q-learning demo。
 - `gymcraft:iron_mining`：从空物品栏开始采集木石、制作工具并以取得粗铁为目标。
+- `gymcraft:iron_golem_warden`：在玻璃围墙战斗场中用发放的 4 铁块 + 雕刻南瓜建造铁傀儡，
+  战斗期间用铁锭治疗铁傀儡（原版交互 +25 生命/锭），Warden 死亡即成功；Agent 本体无攻击动作。
 
 `reset(options={"disable_vanilla_ai": true})` 会在 reset 后以及相邻动作之间的空闲期压制
 Goal flags、寻路和关键 Brain memory，同时保留移动、重力与跳跃物理。动作开始时会释放
@@ -164,6 +166,12 @@ uv run demos\parkour_q_learning_demo.py <entity_uuid> --episodes 200
 
 `demos/iron_mining_llm_demo.py` 连接 `iron_mining` 环境，通过通用 Chat Completions API
 驱动完整工具链任务，并可使用 `--trace` 保存 JSONL 轨迹。
+
+`demos/iron_golem_warden_reflexion_demo.py` 连接 `iron_golem_warden` 环境，按
+Reflexion（arXiv:2303.11366）范式运行多 trial：每 trial 失败后由同一 LLM 从轨迹摘要
+生成文字反思，反思累积进下一 trial 的任务提示，直到 Warden 被击杀或达到 `--max-trials`。
+
+`nearby_entities` 观测的每个实体视图携带 `health`/`max_health` 字段（`entity_view.proto`）。
 
 ## 菜单交互
 
@@ -228,4 +236,4 @@ cd ..\..\..
 每项 `repeat` 为 0/1 时移动一次，重复过程中源耗尽或目标已满沿用提前结束语义。
 返回 `requested_moves`、`completed_moves`、`results`，执行失败时额外返回从 0 开始的 `failed_move_index`。
 
-LLM 命令示例：`/move_menu_item 1 8 9 3; 9 10 2 4`，表示先移动 3 个，再将第二项重复 4 次。
+LLM 命令示例：`/move_menu_item 1 8 9 3` 与 `/move_menu_item 1 9 10 2 4` 两条语句按顺序合并为一个动作，表示先移动 3 个，再将第二项重复 4 次；同批次多条语句必须使用同一 `session_id`。

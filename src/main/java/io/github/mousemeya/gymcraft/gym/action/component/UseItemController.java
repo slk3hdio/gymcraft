@@ -11,6 +11,7 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.animal.golem.IronGolem;
 import net.minecraft.world.entity.monster.zombie.ZombieVillager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -294,8 +295,10 @@ public final class UseItemController extends AbstractActionComponentController<P
                 result = stack.useOn(new UseOnContext(inventory.player(), InteractionHand.MAIN_HAND, block));
             }
         } else if (entity != null) {
-            // 僵尸村民的金苹果治愈由目标实体处理；仅开放此组合，避免触发交易或骑乘。
-            if (entity instanceof ZombieVillager && stack.is(Items.GOLDEN_APPLE)) {
+            // 由目标实体自身处理的持物交互白名单：僵尸村民的金苹果治愈、铁傀儡的铁锭治疗；
+            // 仅开放这两个组合，避免触发交易或骑乘。
+            if (entity instanceof ZombieVillager && stack.is(Items.GOLDEN_APPLE)
+                || entity instanceof IronGolem && stack.is(Items.IRON_INGOT)) {
                 result = entity.interact(inventory.player(), InteractionHand.MAIN_HAND, entity.position());
             } else {
                 result = stack.interactLivingEntity(inventory.player(), entity, InteractionHand.MAIN_HAND);

@@ -124,7 +124,7 @@ public final class LogicalMenuSession {
         return this.bridge;
     }
 
-    /** @return 菜单显示名（self 背包菜单为空字符串） */
+    /** @return 菜单显示名（self 背包菜单为固定标题 {@code Agent Inventory}） */
     public String title() {
         return this.title;
     }

@@ -10,6 +10,7 @@ import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.ParkourMobEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.IronMiningEnv;
+import io.github.mousemeya.gymcraft.gym.env.envs.IronGolemWardenEnv;
 
 /**
  * 环境工厂注册入口 —— 通过 {@link DeferredRegister} 将所有 {@link McEnvFactory} 实现
@@ -39,6 +40,12 @@ public final class EnvFactories {
     public static final DeferredHolder<McEnvFactory, McEnvFactory> IRON_MINING = REGISTRY.register(
         "iron_mining",
         IronMiningEnv.Factory::new
+    );
+
+    /** 建造铁傀儡并用铁锭治疗它来击败 Warden 的任务环境。 */
+    public static final DeferredHolder<McEnvFactory, McEnvFactory> IRON_GOLEM_WARDEN = REGISTRY.register(
+        "iron_golem_warden",
+        IronGolemWardenEnv.Factory::new
     );
 
     private EnvFactories() {

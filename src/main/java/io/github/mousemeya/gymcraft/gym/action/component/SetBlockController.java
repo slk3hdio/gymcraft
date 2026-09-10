@@ -14,6 +14,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -29,6 +30,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
+import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
@@ -44,7 +46,8 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * </p>
  * <p>
  * 与指令的区别在于仍模拟生物行为:要求 Mob 具备手持能力（{@link Mob#canHoldItem}）
- * 且主手持有与目标方块匹配的 {@link BlockItem},放置成功消耗 1 个物品,
+ * 且统一物品栏中存在与目标方块匹配的 {@link BlockItem}（不要求已在主手；
+ * 匹配物品在其他槽位时先自动与主手交换）,放置成功消耗 1 个物品,
  * 并按玩家放置语义检查待放置方块的碰撞形状是否被自己或其他实体遮挡；
  * 成功后附带 Mob 挥手动作与放置音效。该动作为瞬时动作,应用后立即返回终态。
  * </p>
@@ -130,7 +133,24 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
         }
 
         ItemStack held = mob.getMainHandItem();
-        ActionState validationError = validateTarget(mob, level, pos, held, parsed);
+        if (!isBlockItemFor(held, parsed)) {
+            // 主手不匹配时从统一物品栏查找匹配方块物品并换到主手（交换而非移动，保持物品守恒）。
+            var source = AgentInventoryLayout.resolve(mob).slots().stream()
+                .filter(slot -> isBlockItemFor(slot.getItem(), parsed))
+                .findFirst();
+            if (source.isEmpty()) {
+                return ActionApplyResult.none(ActionState.failed("no matching block item in inventory", Map.of(
+                    "held_item", held.isEmpty() ? "empty" : held.getItem().toString(),
+                    "requested_block", parsed.blockState().getBlock().toString()
+                )));
+            }
+            var sourceSlot = source.orElseThrow();
+            ItemStack stack = sourceSlot.getItem();
+            sourceSlot.setItem(held);
+            mob.setItemSlot(EquipmentSlot.MAINHAND, stack);
+            held = mob.getMainHandItem();
+        }
+        ActionState validationError = validateTarget(mob, level, pos, parsed);
         if (validationError != null) {
             return ActionApplyResult.none(validationError);
         }
@@ -174,22 +194,26 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
     }
 
     /**
-     * 校验手持物品、目标区块、可替换状态、实体遮挡和交互距离。
+     * 判断物品堆是否为匹配目标方块的 {@link BlockItem}。
+     *
+     * @param stack 待检查物品堆
+     * @param parsed 已解析的目标方块状态
+     * @return 物品可用于放置该方块时为 true
+     */
+    private static boolean isBlockItemFor(ItemStack stack, BlockStateParser.BlockResult parsed) {
+        return stack.getItem() instanceof BlockItem blockItem && blockItem.getBlock() == parsed.blockState().getBlock();
+    }
+
+    /**
+     * 校验目标区块、可替换状态、实体遮挡和交互距离。
      *
      * @param mob 执行动作的 Agent
      * @param level 目标服务端世界
      * @param pos 目标方块坐标
-     * @param held Agent 主手物品
      * @param parsed 已解析的目标方块状态
      * @return 校验失败状态；返回 null 表示允许放置
      */
-    private ActionState validateTarget(Mob mob, ServerLevel level, BlockPos pos, ItemStack held, BlockStateParser.BlockResult parsed) {
-        if (!(held.getItem() instanceof BlockItem blockItem) || blockItem.getBlock() != parsed.blockState().getBlock()) {
-            return ActionState.failed("held item does not match the block", Map.of(
-                "held_item", held.isEmpty() ? "empty" : held.getItem().toString(),
-                "requested_block", parsed.blockState().getBlock().toString()
-            ));
-        }
+    private ActionState validateTarget(Mob mob, ServerLevel level, BlockPos pos, BlockStateParser.BlockResult parsed) {
         if (!level.isLoaded(pos)) {
             return ActionState.failed("target chunk is not loaded", Map.of("pos", pos.toShortString()));
         }

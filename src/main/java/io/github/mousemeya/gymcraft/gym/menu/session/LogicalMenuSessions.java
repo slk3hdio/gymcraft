@@ -1,7 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.menu.session;
 
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
-import io.github.mousemeya.gymcraft.gym.menu.bridge.AgentInventoryMenu;
 import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuAdapter;
 import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuAdapters;
 import java.util.ArrayList;
@@ -25,6 +24,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.HorseInventoryMenu;
+import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.MerchantMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.trading.Merchant;
@@ -52,6 +52,9 @@ public final class LogicalMenuSessions {
     private static final Logger LOGGER = LogUtils.getLogger();
     /** GymCraft 会话 ID 分配器（单调递增，关闭重开必不同，旧 ID 不能命中新会话）。 */
     private static final AtomicLong NEXT_SESSION_ID = new AtomicLong();
+
+    /** self 背包菜单的固定标题（协议观测与 open_menu 结果共用）。 */
+    private static final String SELF_MENU_TITLE = "Agent Inventory";
 
     private LogicalMenuSessions() {
     }
@@ -251,7 +254,7 @@ public final class LogicalMenuSessions {
         SlotNormalizer defaultNormalizer = defaultNormalizer(candidate.player(), bridge);
         return switch (target) {
             case OpenMenuTarget.Self ignored -> new ResolvedMenu(
-                "",
+                SELF_MENU_TITLE,
                 true,
                 defaultNormalizer,
                 () -> true,
@@ -259,7 +262,9 @@ public final class LogicalMenuSessions {
                 },
                 player -> {
                 },
-                c -> new AgentInventoryMenu(c.player().getInventory())
+                // 直接复用原版 InventoryMenu（active=true 启用 2x2 合成区）；
+                // 其 stillValid 恒为 true，与 self 会话语义一致
+                c -> new InventoryMenu(c.player().getInventory(), true, c.player())
             );
             case OpenMenuTarget.Block block -> {
                 var state = level.getBlockState(block.pos());
@@ -365,12 +370,14 @@ public final class LogicalMenuSessions {
             }
         }
         List<SessionSlot> slots = new ArrayList<>();
+        // Agent自身背包槽
         for (AgentSlot agentSlot : layout.slots()) {
             Slot backing = claimedMenuSlots.remove(agentSlot.slotId());
             slots.add(backing != null
                 ? SessionSlot.menuBacked(agentSlot.slotId(), agentSlot.identity(), agentSlot.category(), backing, agentSlot)
                 : SessionSlot.synthetic(agentSlot.slotId(), agentSlot));
         }
+        // Menu槽位
         int nextId = layout.size();
         MenuAdapter<AbstractContainerMenu> adapter = MenuAdapters.find(menu);
         for (MenuOwnedCandidate candidate : menuOwnedSlots) {

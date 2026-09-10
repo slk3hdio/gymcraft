@@ -132,7 +132,8 @@ class ObservationTextFormatter:
             lines.append(
                 f"- entity_id={entity.entity_id} entity_type={entity.entity_type} "
                 f"x={self._number(entity.x)} y={self._number(entity.y)} z={self._number(entity.z)} "
-                f"distance={self._number(entity.distance)} hostile={self._bool(entity.hostile)} "
+                f"distance={self._number(entity.distance)} health={self._number(entity.health)} "
+                f"max_health={self._number(entity.max_health)} hostile={self._bool(entity.hostile)} "
                 f"ally={self._bool(entity.ally)} player={self._bool(entity.player)} item={self._bool(entity.item)}"
             )
         return lines

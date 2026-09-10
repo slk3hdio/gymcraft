@@ -47,6 +47,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * 直接返回 {@code open=false}，不再从旧菜单构造槽位观测），随后输出
  * session_id/menu_type/title 与槽位列表——菜单打开时槽位列表连带 Agent
  * 物品栏槽位（复用背包 slot_id 与 category；synthetic slot 的 x/y 为 0）。
+ * self 背包的 menu_type/title 为固定标识（见 {@code MenuTypeUtil.AGENT_INVENTORY_MENU_TYPE}）。
  * properties/buttons 由菜单适配器提供（{@link MenuAdapters} 查找），无适配器时为空。
  * 观测成功构造后提交会话的 {@code lastObservedSnapshot} 基线。
  * </p>
@@ -91,11 +92,9 @@ public class MenuObservationCreator extends AbstractObservationComponentCreator<
             return builder.setOpen(false).build();
         }
         builder.setOpen(true).setSessionId(session.sessionId());
-        if (!session.isSelfMenu()) {
-            // self 背包菜单只填 open/session_id/slots，menu_type/title 保持默认空值
-            builder.setMenuType(MenuTypeUtil.idOf(session.menu()));
-            builder.setTitle(session.title());
-        }
+        // menu_type 经 MenuTypeUtil 统一读取（self 背包返回 gymcraft:agent_inventory）
+        builder.setMenuType(MenuTypeUtil.idOf(session.menu()));
+        builder.setTitle(session.title());
         for (SessionSlot slot : session.slots()) {
             builder.addSlots(buildSlotView(slot, mob.registryAccess()));
         }

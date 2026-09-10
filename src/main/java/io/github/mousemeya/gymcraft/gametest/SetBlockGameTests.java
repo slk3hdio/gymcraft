@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -73,6 +74,47 @@ public final class SetBlockGameTests {
         assertEquals(helper, ActionStatus.COMPLETED, state.status(), "collisionless block should be placed");
         assertTrue(helper, mob.level().getBlockState(target).is(Blocks.TORCH), "torch was not placed");
         assertTrue(helper, mob.getMainHandItem().isEmpty(), "successful placement did not consume the torch");
+        helper.succeed();
+    }
+
+    /**
+     * 验证匹配方块物品不在主手时自动从其他槽位换到主手并完成放置。
+     *
+     * @param helper GameTest 测试辅助对象
+     */
+    public static void inventoryFallbackSwapsToMainHand(GameTestHelper helper) {
+        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        BlockPos target = mob.blockPosition().offset(2, 0, 0);
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIRT));
+        mob.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.STONE, 2));
+
+        ActionState state = apply(mob, target, "minecraft:stone");
+
+        assertEquals(helper, ActionStatus.COMPLETED, state.status(), "inventory fallback failed: " + state.description());
+        assertTrue(helper, mob.level().getBlockState(target).is(Blocks.STONE), "stone was not placed");
+        assertTrue(helper, mob.getMainHandItem().is(Items.STONE) && mob.getMainHandItem().getCount() == 1,
+            "main hand did not receive and consume the stone");
+        assertTrue(helper, mob.getOffhandItem().is(Items.DIRT), "previous main hand item was not swapped back");
+        helper.succeed();
+    }
+
+    /**
+     * 验证统一物品栏中没有匹配方块物品时放置失败且无副作用。
+     *
+     * @param helper GameTest 测试辅助对象
+     */
+    public static void missingBlockItemFails(GameTestHelper helper) {
+        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        BlockPos target = mob.blockPosition().offset(2, 0, 0);
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIRT));
+
+        ActionState state = apply(mob, target, "minecraft:stone");
+
+        assertEquals(helper, ActionStatus.FAILED, state.status(), "missing block item should fail");
+        assertTrue(helper, state.description().contains("no matching block item"),
+            "unexpected description: " + state.description());
+        assertEquals(helper, 1, mob.getMainHandItem().getCount(), "failure consumed the held item");
+        assertTrue(helper, mob.level().getBlockState(target).isAir(), "failure changed the target block");
         helper.succeed();
     }
 

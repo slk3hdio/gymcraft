@@ -19,4 +19,7 @@ message ProtoEntityView {
   bool ally = 10;
   bool player = 11;
   bool item = 12;
+  // 当前生命值与最大生命值（仅 LivingEntity 有意义）。
+  float health = 13;
+  float max_health = 14;
 }

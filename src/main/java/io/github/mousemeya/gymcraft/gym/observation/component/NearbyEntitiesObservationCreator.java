@@ -92,6 +92,7 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
                 .setHostile(!entity.getType().getCategory().isFriendly())
                 .setAlly(entity.isAlliedTo(mob))
                 .setPlayer(entity instanceof Player).setItem(false)
+                .setHealth(entity.getHealth()).setMaxHealth(entity.getMaxHealth())
                 .build());
         }
         return builder.build();

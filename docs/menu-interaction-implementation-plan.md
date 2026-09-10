@@ -544,7 +544,7 @@ fakePlayer.containerMenu = menu;
 
 `open_menu` 目标为 `self` 时建立专用背包包装菜单会话：只包含 FakePlayer bridge 中映射的 Agent 统一物品栏 `Slot`（slot_id 0..N），不复用原版 `fakePlayer.inventoryMenu`，不暴露合成结果、2x2 合成区、FakePlayer armor/offhand 等额外槽位。
 
-背包菜单的 `ProtoMenuObservation` 只填充 `open`、`session_id` 和 `slots`；`menu_type`、`title`、`properties`、`buttons` 保持默认空值。
+背包菜单的 `ProtoMenuObservation` 填充 `open`、`session_id`、`slots`、`menu_type`（固定 `gymcraft:agent_inventory`，见 `MenuTypeUtil.AGENT_INVENTORY_MENU_TYPE`）和 `title`（固定 `Agent Inventory`）；`properties`、`buttons` 保持默认空值。菜单本体直接复用原版 `InventoryMenu`（`active=true` 启用 2x2 合成区），不再有 GymCraft 子类。
 
 背包菜单与其他菜单完全共用会话建立、快照、移动和关闭链路，不引入任何特殊通道。`stillValid` 对背包菜单恒为 true（自身物品栏没有距离或目标存活约束），仅受 Mob 死亡、reset 和 clear 等通用关闭条件约束。
 
@@ -745,7 +745,7 @@ fakePlayer.containerMenu = fakePlayer.inventoryMenu;
 - 不出现装备槽与 Mob 自带容器重复映射
 - `HorseInventoryMenu` 的 SADDLE/BODY 包装槽复用对应 EquipmentSlot slot_id，不分配第二个菜单 slot_id
 - 以自身为目标打开背包菜单即可返回双手、装备槽和容器槽，空槽也列出且编号稳定
-- self 背包菜单只返回统一物品栏 slots，`menu_type`、`title`、`properties`、`buttons` 为空
+- self 背包菜单的 `menu_type` 为 `gymcraft:agent_inventory`、`title` 为 `Agent Inventory`，`properties`、`buttons` 为空
 - self 背包菜单不暴露 FakePlayer 合成区、armor/offhand 等额外槽位
 - 菜单打开时菜单 observation 中的 Agent 物品栏槽位与背包菜单会话在同一 tick 返回的对应 slot_id 内容一致
 - FakePlayer 没有对应位置的特殊装备槽始终映射到固定预留普通格，且仍复用原 EquipmentSlot slot_id

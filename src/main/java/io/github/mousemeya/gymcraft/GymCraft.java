@@ -71,6 +71,7 @@ public class GymCraft {
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onServerTickPost);
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onServerStopping);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, EnvToolItem::onEntityInteract);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, UuidCopierItem::onEntityInteract);
 
         ITEMS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);

@@ -1,10 +1,10 @@
-"""循环跳跃并在空中把方块放到脚下，直到主手方块耗尽。
+"""循环跳跃并在空中把方块放到脚下，直到物品栏方块耗尽。
 
 Usage:
     uv run debug/jump_set_block_debug.py <entity_uuid> --block minecraft:stone
 
-环境会使用 ``disable_vanilla_ai=True`` 重置。Agent 必须在主手预先持有与
-``--block`` 匹配的方块；脚本会持续循环，直到 set_block 报告主手物品不匹配。
+环境会使用 ``disable_vanilla_ai=True`` 重置。Agent 物品栏中必须有与
+``--block`` 匹配的方块；脚本会持续循环，直到 set_block 报告没有匹配方块物品。
 """
 from __future__ import annotations
 
@@ -112,15 +112,15 @@ def wait_for_airborne(env: GymCraftEnv, initial_y: float, height: float, max_tic
 
 
 def is_block_exhausted(obs: Any) -> bool:
-    """判断 set_block 失败是否由主手方块耗尽导致。
+    """判断 set_block 失败是否由物品栏方块耗尽导致。
 
     参数:
         obs: set_block 返回的观测。
     返回:
-        失败描述表示主手物品不匹配时返回 True。
+        失败描述表示物品栏没有匹配方块物品时返回 True。
     """
     description = str(obs["header"].last_action_description).lower()
-    return action_status(obs) == "FAILED" and "held item does not match" in description
+    return action_status(obs) == "FAILED" and "no matching block item" in description
 
 
 def main() -> None:

@@ -105,8 +105,8 @@ public final class MenuInventoryGameTests {
         ProtoMenuObservation observation = observe(mob);
         assertTrue(helper, observation.getOpen(), "self menu observation not open");
         assertEquals(helper, result.session().sessionId(), observation.getSessionId(), "session id mismatch");
-        assertEquals(helper, "", observation.getMenuType(), "self menu menu_type must be empty");
-        assertEquals(helper, "", observation.getTitle(), "self menu title must be empty");
+        assertEquals(helper, "gymcraft:agent_inventory", observation.getMenuType(), "self menu menu_type");
+        assertEquals(helper, "Agent Inventory", observation.getTitle(), "self menu title");
         assertEquals(helper, 0, observation.getPropertiesCount(), "self menu must not expose properties");
         assertEquals(helper, 0, observation.getButtonsCount(), "self menu must not expose buttons");
         // 无存储槽 Mob：Agent 槽为 0..7，结果槽为 8，四个输入槽为 9..12。

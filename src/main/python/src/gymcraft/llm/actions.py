@@ -149,6 +149,10 @@ class ActionDslParser:
             action = builder(tokens, line, line_number)
             self._ensure_available(action.component_id, line_number)
             if action.component_id in component_ids:
+                # move_menu_item 是唯一的数组动作：同批次多条语句按顺序合并而非报重复
+                if action.component_id == ACTION_MOVE_MENU_ITEM:
+                    self._merge_move_menu_item(parsed, action, line_number)
+                    continue
                 raise ActionParseError(f"Action /{command_name} is duplicated in the same batch", line_number)
             self._validate_space(action, line_number)
             component_ids.add(action.component_id)
@@ -162,6 +166,22 @@ class ActionDslParser:
             narrative=narrative,
             batch=ActionBatch(timeout_seconds=timeout, actions=tuple(parsed)),
         )
+
+    def _merge_move_menu_item(self, parsed: Sequence[ParsedAction], action: ParsedAction, line_number: int) -> None:
+        """把一条 /move_menu_item 语句按声明顺序合并进同批次已有的移动数组动作。
+
+        ParsedAction 本身 frozen，但 protobuf 负载可变，直接向既有 moves 追加；
+        合并要求所有语句使用同一 session_id，否则该语句在原地报解析错误。
+        """
+        existing = next(a for a in parsed if a.component_id == ACTION_MOVE_MENU_ITEM)
+        existing_payload = cast(move_menu_item_pb2.ProtoMoveMenuItem, existing.payload)
+        new_payload = cast(move_menu_item_pb2.ProtoMoveMenuItem, action.payload)
+        if existing_payload.session_id != new_payload.session_id:
+            raise ActionParseError(
+                "All /move_menu_item statements in one batch must share the same session_id",
+                line_number,
+            )
+        existing_payload.moves.extend(new_payload.moves)
 
     def available_action_names(self) -> list[str]:
         """按协议固定顺序返回当前环境实际支持的 DSL 动作名。"""
@@ -190,7 +210,7 @@ class ActionDslParser:
             "jump": "/jump",
             "open_menu": "/open_menu self|entity <entity_id>|block <x> <y> <z>",
             "close_menu": "/close_menu <session_id>",
-            "move_menu_item": "/move_menu_item <session_id> <source_slot_id> <target_slot_id> <count> [repeat] [; <source_slot_id> <target_slot_id> <count> [repeat] ...]",
+            "move_menu_item": "/move_menu_item <session_id> <source_slot_id> <target_slot_id> <count> [repeat] (repeat the command on new lines to append more moves in order)",
             "click_menu_button": "/click_menu_button <session_id> <button_id>",
             "pick_up_item": "/pick_up_item <entity_id>",
             "drop_item": "/drop_item <slot_id> [count]",
@@ -399,21 +419,18 @@ class ActionDslParser:
         return ParsedAction(ACTION_CLOSE_MENU, "close_menu", close_menu_pb2.ProtoCloseMenu(session_id=session_id))
 
     def _parse_move_menu_item(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
-        """解析分号分隔的移动序列，每项可选 repeat，返回一个数组动作。"""
-        self._require_arity(tokens, 5, 1000000, line_number)
+        """解析单条移动语句（可选 repeat）；同批次多条语句由 parse 合并为一个数组动作。"""
+        self._require_arity(tokens, 5, 6, line_number)
         session_id = self._positive_int(tokens[1], "session_id", line_number)
-        moves = []
-        for group in " ".join(tokens[2:]).split(";"):
-            fields = group.split()
-            if len(fields) not in (3, 4):
-                raise ActionParseError("Each move requires source target count [repeat]", line_number)
-            moves.append(move_menu_item_pb2.Move(
-                source_slot_id=self._non_negative_int(fields[0], "source_slot_id", line_number),
-                target_slot_id=self._non_negative_int(fields[1], "target_slot_id", line_number),
-                count=self._positive_int(fields[2], "count", line_number),
-                repeat=self._positive_int(fields[3], "repeat", line_number) if len(fields) == 4 else 1,
-            ))
-        payload = move_menu_item_pb2.ProtoMoveMenuItem(session_id=session_id, moves=moves)
+        payload = move_menu_item_pb2.ProtoMoveMenuItem(
+            session_id=session_id,
+            moves=[move_menu_item_pb2.Move(
+                source_slot_id=self._non_negative_int(tokens[2], "source_slot_id", line_number),
+                target_slot_id=self._non_negative_int(tokens[3], "target_slot_id", line_number),
+                count=self._positive_int(tokens[4], "count", line_number),
+                repeat=self._positive_int(tokens[5], "repeat", line_number) if len(tokens) == 6 else 1,
+            )],
+        )
         return ParsedAction(ACTION_MOVE_MENU_ITEM, "move_menu_item", payload)
 
     def _parse_click_menu_button(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:

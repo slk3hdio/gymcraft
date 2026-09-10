@@ -17,6 +17,7 @@ import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.animal.golem.IronGolem;
 import net.minecraft.world.entity.monster.zombie.ZombieVillager;
 import net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -177,6 +178,27 @@ public final class UseItemGameTests {
         assertTrue(helper, !target.hasEffect(MobEffects.WEAKNESS), "weakness was not removed");
         assertEquals(helper, 1, mob.getOffhandItem().getCount(), "golden apple count");
         assertTrue(helper, mob.getMainHandItem().is(Items.DIAMOND_SWORD), "main hand changed");
+        helper.succeed();
+    }
+
+    /**
+     * @param helper 测试场景；铁锭治疗受伤铁傀儡恢复 25 生命并消耗一锭，白名单外实体拒绝
+     */
+    public static void healIronGolem(GameTestHelper helper) {
+        Mob mob = agent(helper);
+        IronGolem golem = spawnAgent(helper, EntityType.IRON_GOLEM, new BlockPos(4, 1, 2));
+        golem.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 30.0F);
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND_SWORD));
+        mob.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.IRON_INGOT, 2));
+        var controller = new UseItemController(mob);
+        var result = controller.apply(entity(5, golem)).initialState();
+        assertEquals(helper, ActionStatus.COMPLETED, result.status(), result.toString());
+        assertEquals(helper, 95.0F, golem.getHealth(), "golem not healed by 25");
+        assertEquals(helper, 1, mob.getOffhandItem().getCount(), "iron ingot count");
+        assertTrue(helper, mob.getMainHandItem().is(Items.DIAMOND_SWORD), "main hand changed");
+        Mob cow = spawnAgent(helper, EntityType.COW, new BlockPos(2, 1, 4));
+        assertEquals(helper, ActionStatus.FAILED, controller.apply(entity(5, cow)).initialState().status(),
+            "iron ingot accepted by non-golem entity");
         helper.succeed();
     }
 

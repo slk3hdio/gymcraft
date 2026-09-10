@@ -150,6 +150,10 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("set_block_other_entity_obstructed", () -> SetBlockGameTests::otherEntityObstructionBlocksPlacement);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_COLLISIONLESS_ALLOWED =
         TEST_FUNCTIONS.register("set_block_collisionless_allowed", () -> SetBlockGameTests::collisionlessBlockAllowsPlacement);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_INVENTORY_FALLBACK =
+        TEST_FUNCTIONS.register("set_block_inventory_fallback", () -> SetBlockGameTests::inventoryFallbackSwapsToMainHand);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_MISSING_ITEM =
+        TEST_FUNCTIONS.register("set_block_missing_item", () -> SetBlockGameTests::missingBlockItemFails);
 
     // ===== 感兴趣方块 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> INTERESTING_BLOCKS_UPDATE =
@@ -186,6 +190,18 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("iron_mining_progression", () -> IronMiningEnvGameTests::completeToolProgression);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_MINING_FAILURE_LIMIT =
         TEST_FUNCTIONS.register("iron_mining_failure_limit", () -> IronMiningEnvGameTests::failureAndStepLimit);
+
+    // ===== 铁傀儡战斗环境 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_GOLEM_WARDEN_RESET_RESTORE =
+        TEST_FUNCTIONS.register("iron_golem_warden_reset_restore", () -> IronGolemWardenEnvGameTests::resetAndCloseRestoreArena);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_GOLEM_WARDEN_VICTORY =
+        TEST_FUNCTIONS.register("iron_golem_warden_victory", () -> IronGolemWardenEnvGameTests::golemSpawnHealAndVictory);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_GOLEM_WARDEN_FAILURE_LIMIT =
+        TEST_FUNCTIONS.register("iron_golem_warden_failure_limit", () -> IronGolemWardenEnvGameTests::failureAndStepLimit);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_GOLEM_WARDEN_INVALID_PATTERN =
+        TEST_FUNCTIONS.register("iron_golem_warden_invalid_pattern", () -> IronGolemWardenEnvGameTests::invalidPatternFailsUnrecoverably);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_GOLEM_WARDEN_RESUPPLY =
+        TEST_FUNCTIONS.register("iron_golem_warden_resupply", () -> IronGolemWardenEnvGameTests::suppliesReissuedAcrossResets);
 
     // ===== Agent 死亡生命周期 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IDLE_DEATH_RETURNS_TERMINATED_STEP =
@@ -262,6 +278,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("use_item_block_face_durability", () -> UseItemGameTests::blockFaceAndDurability);
         TEST_FUNCTIONS.register("use_item_entity_no_fallback", () -> UseItemGameTests::entityAndNoFallback);
         TEST_FUNCTIONS.register("use_item_cure_zombie_villager", () -> UseItemGameTests::cureZombieVillager);
+        TEST_FUNCTIONS.register("use_item_heal_iron_golem", () -> UseItemGameTests::healIronGolem);
         TEST_FUNCTIONS.register("use_item_throw_at_entity", () -> UseItemGameTests::throwAtEntity);
         TEST_FUNCTIONS.register("use_item_throw_container_menu", () -> UseItemGameTests::throwFromContainer);
         TEST_FUNCTIONS.register("use_item_food_waits", () -> UseItemGameTests::foodWaits);
@@ -296,9 +313,11 @@ public final class GymCraftGameTests {
                     new TestData<>(environment,
                         holder.getId().getPath().startsWith("use_item_")
                             || holder.getId().getPath().startsWith("iron_mining_")
+                            || holder.getId().getPath().startsWith("iron_golem_warden_")
                             || holder.getId().getPath().startsWith("navigation_")
                             ? USE_ITEM_STRUCTURE : EMPTY_STRUCTURE,
                         holder.getId().getPath().startsWith("iron_mining_") ? 12000
+                            : holder.getId().getPath().startsWith("iron_golem_warden_") ? 12000
                             : holder.getId().getPath().startsWith("navigation_") ? 160 : MAX_TICKS,
                         0,
                         true)
