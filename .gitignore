@@ -29,8 +29,14 @@ bin/
 ### VS Code ###
 .vscode/
 
-### Kimi CLI ###
+### Trae ###
+.trae/
+
+### harness ###
 .kimi-code/
+.claude/
+.zcode/
+.codex/
 
 ### Mac OS ###
 .DS_Store

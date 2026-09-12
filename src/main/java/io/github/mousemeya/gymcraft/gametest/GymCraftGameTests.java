@@ -215,6 +215,14 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REMOVED_ENTITY_FAILS_IN_ACTION_LAYER =
         TEST_FUNCTIONS.register("removed_entity_fails_in_action_layer", () -> AgentDeathGameTests::removedEntityFailsInActionLayer);
 
+    // ===== 聊天观测 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CHAT_OBSERVATION_SHOWS_RECENT_MESSAGES =
+        TEST_FUNCTIONS.register("chat_observation_shows_recent_messages", () -> ChatObservationGameTests::chatObservationShowsRecentMessages);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SEND_CHAT_ACTION_BROADCASTS =
+        TEST_FUNCTIONS.register("chat_send_action_broadcasts", () -> ChatObservationGameTests::sendChatActionBroadcastsAndObserves);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SEND_CHAT_ACTION_VALIDATES =
+        TEST_FUNCTIONS.register("chat_send_action_validates", () -> ChatObservationGameTests::sendChatActionValidatesMessages);
+
     // ===== 跳跃 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> JUMP_APPLIED =
         TEST_FUNCTIONS.register("jump_applied_and_executed", () -> JumpGameTests::jumpAppliedAndExecuted);
@@ -318,6 +326,7 @@ public final class GymCraftGameTests {
                             ? USE_ITEM_STRUCTURE : EMPTY_STRUCTURE,
                         holder.getId().getPath().startsWith("iron_mining_") ? 12000
                             : holder.getId().getPath().startsWith("iron_golem_warden_") ? 12000
+                            : holder.getId().getPath().startsWith("chat_") ? 12000
                             : holder.getId().getPath().startsWith("navigation_") ? 160 : MAX_TICKS,
                         0,
                         true)

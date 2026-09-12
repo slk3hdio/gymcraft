@@ -3,6 +3,7 @@ package io.github.mousemeya.gymcraft.registry;
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
+import io.github.mousemeya.gymcraft.gym.observation.component.ChatObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.MenuObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.InterestingBlocksObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.NearbyBlocksObservationCreator;
@@ -11,6 +12,7 @@ import io.github.mousemeya.gymcraft.gym.observation.component.NearbyItemsObserva
 import io.github.mousemeya.gymcraft.gym.observation.component.SelfStateObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.WorldStateObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMenuObservation;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoRecentChat;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoInterestingBlocks;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyBlocks;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyEntities;
@@ -63,6 +65,10 @@ public final class ObservationCreators {
     public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoNearbyItems, NearbyItemsObservationCreator>> NEARBY_ITEMS = REGISTRY.register(
         "nearby_items",
         NearbyItemsObservationCreator.Factory::new
+    );
+    public static final DeferredHolder<ObservationComponentFactory<?, ?>, ObservationComponentFactory<ProtoRecentChat, ChatObservationCreator>> CHAT = REGISTRY.register(
+        "chat",
+        ChatObservationCreator.Factory::new
     );
 
     private ObservationCreators() {

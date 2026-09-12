@@ -30,10 +30,12 @@ from gymcraft.gym.action.components.open_menu_pb2 import ProtoOpenMenu
 from gymcraft.gym.action.components.pick_up_item_pb2 import ProtoPickUpItem
 from gymcraft.gym.action.components.set_attack_target_pb2 import ProtoSetAttackTarget
 from gymcraft.gym.action.components.set_block_pb2 import ProtoSetBlock
+from gymcraft.gym.action.components.send_chat_pb2 import ProtoSendChat
 from gymcraft.gym.action.components.step_move_pb2 import ProtoStepMove
 from gymcraft.gym.action.components.update_interesting_blocks_pb2 import (
     ProtoUpdateInterestingBlocks,
 )
+from gymcraft.gym.observation.components.chat_pb2 import ProtoRecentChat
 from gymcraft.gym.observation.components.interesting_blocks_pb2 import (
     ProtoInterestingBlocks,
 )
@@ -64,6 +66,7 @@ ACTION_PICK_UP_ITEM: Final = "gymcraft:pick_up_item"
 ACTION_DROP_ITEM: Final = "gymcraft:drop_item"
 ACTION_USE_ITEM: Final = "gymcraft:use_item"
 ACTION_UPDATE_INTERESTING_BLOCKS: Final = "gymcraft:update_interesting_blocks"
+ACTION_SEND_CHAT: Final = "gymcraft:send_chat"
 
 # ── 观测组件注册 id（完整 wire 键，含 `gymcraft:` 命名空间）────────────────────
 OBS_SELF: Final = "gymcraft:self"
@@ -73,6 +76,7 @@ OBS_NEARBY_BLOCKS: Final = "gymcraft:nearby_blocks"
 OBS_MENU: Final = "gymcraft:menu"
 OBS_NEARBY_ITEMS: Final = "gymcraft:nearby_items"
 OBS_INTERESTING_BLOCKS: Final = "gymcraft:interesting_blocks"
+OBS_CHAT: Final = "gymcraft:chat"
 
 # Action dict 中的动作级超时键（秒，<= 0 表示不限制；非组件键）。
 TIMEOUT_SECONDS: Final = "timeout_seconds"
@@ -104,6 +108,7 @@ Action = TypedDict(
         "gymcraft:drop_item": NotRequired[ProtoDropItem],
         "gymcraft:use_item": NotRequired[ProtoUseItem],
         "gymcraft:update_interesting_blocks": NotRequired[ProtoUpdateInterestingBlocks],
+        "gymcraft:send_chat": NotRequired[ProtoSendChat],
     },
 )
 
@@ -122,5 +127,6 @@ Observation = TypedDict(
         "gymcraft:menu": NotRequired[ProtoMenuObservation],
         "gymcraft:nearby_items": NotRequired[ProtoNearbyItems],
         "gymcraft:interesting_blocks": NotRequired[ProtoInterestingBlocks],
+        "gymcraft:chat": NotRequired[ProtoRecentChat],
     },
 )

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package gymcraft.gym.observation;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.observation.proto";
+option java_outer_classname = "ChatProto";
+
+// 聊天栏中的单条消息：入队游戏刻、发送者名（系统/命令消息为空）与文本内容
+message ProtoChatMessage {
+  int64 game_tick = 1;
+  string sender = 2;
+  string content = 3;
+}
+
+// 最近聊天栏消息窗口（时间升序，旧->新；窗口大小由环境配置）
+message ProtoRecentChat {
+  repeated ProtoChatMessage messages = 1;
+}

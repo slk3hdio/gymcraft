@@ -90,6 +90,7 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:break_block` | 通过 FakePlayer 复用原版方块破坏逻辑 |
 | `gymcraft:set_block` | 校验距离和实体碰撞后放置方块；物品栏任一槽位有匹配方块物品即可，放置前自动换到主手 |
 | `gymcraft:update_interesting_blocks` | 原子地批量添加或移除 Agent 感兴趣的方块类型 |
+| `gymcraft:send_chat` | 以受控 Mob 的显示名称向全服聊天栏发送纯文本消息；正文最长 256 个 UTF-16 单元 |
 | `gymcraft:open_menu` | 打开方块、实体或自身逻辑菜单 |
 | `gymcraft:close_menu` | 关闭逻辑菜单会话 |
 | `gymcraft:move_menu_item` | 在逻辑菜单槽位之间移动物品 |
@@ -109,6 +110,7 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:nearby_blocks` | 空气连通域中可见的方块表面 |
 | `gymcraft:interesting_blocks` | 空气连通域中已标记为感兴趣的可见方块表面 |
 | `gymcraft:menu` | 当前逻辑菜单、槽位、属性和按钮 |
+| `gymcraft:chat` | 最近聊天栏消息窗口（玩家聊天、`/say`、广播类 `/tellraw` 与系统消息；仅捕获多接收者广播，指令回显与私发内容被过滤） |
 
 环境构造函数可以通过 `actionComponent(factory)` 和 `observationComponent(factory)`
 获取当前环境专属组件实例，再覆盖观测半径、上限、移动速度或交互距离等默认参数。

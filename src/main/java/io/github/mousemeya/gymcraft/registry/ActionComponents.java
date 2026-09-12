@@ -17,6 +17,7 @@ import io.github.mousemeya.gymcraft.gym.action.component.OpenMenuController;
 import io.github.mousemeya.gymcraft.gym.action.component.PickUpItemController;
 import io.github.mousemeya.gymcraft.gym.action.component.SetAttackTargetController;
 import io.github.mousemeya.gymcraft.gym.action.component.SetBlockController;
+import io.github.mousemeya.gymcraft.gym.action.component.SendChatController;
 import io.github.mousemeya.gymcraft.gym.action.component.StepMoveController;
 import io.github.mousemeya.gymcraft.gym.action.component.UseItemController;
 import io.github.mousemeya.gymcraft.gym.action.component.UpdateInterestingBlocksController;
@@ -36,6 +37,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoOpenMenu;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoPickUpItem;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetAttackTarget;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSendChat;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoStepMove;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -125,6 +127,10 @@ public final class ActionComponents {
     public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoUpdateInterestingBlocks, UpdateInterestingBlocksController>> UPDATE_INTERESTING_BLOCKS = REGISTRY.register(
         "update_interesting_blocks",
         UpdateInterestingBlocksController.Factory::new
+    );
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoSendChat, SendChatController>> SEND_CHAT = REGISTRY.register(
+        "send_chat",
+        SendChatController.Factory::new
     );
 
     /** 禁止实例化纯注册入口类。 */

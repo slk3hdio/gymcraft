@@ -27,6 +27,7 @@ from gymcraft.gym.action.components import (
     pick_up_item_pb2,
     set_attack_target_pb2,
     set_block_pb2,
+    send_chat_pb2,
     step_move_pb2,
     update_interesting_blocks_pb2,
 )
@@ -46,6 +47,7 @@ from gymcraft.type_info import (
     ACTION_PICK_UP_ITEM,
     ACTION_SET_ATTACK_TARGET,
     ACTION_SET_BLOCK,
+    ACTION_SEND_CHAT,
     ACTION_STEP_MOVE,
     ACTION_UPDATE_INTERESTING_BLOCKS,
     Action,
@@ -108,6 +110,7 @@ class ActionDslParser:
             "drop_item": self._parse_drop_item,
             "use_item": self._parse_use_item,
             "update_interesting_blocks": self._parse_update_interesting_blocks,
+            "send_chat": self._parse_send_chat,
         }
 
     def parse(self, response_text: str) -> ParsedAgentResponse:
@@ -128,7 +131,15 @@ class ActionDslParser:
                 continue
             if not line.startswith("/"):
                 raise ActionParseError("Every non-empty line must start with /", line_number)
-            tokens = self._split(line, line_number)
+            # 聊天正文是整行余部，不使用 shell 引号规则，避免自然语言中的撇号被误判为未闭合引号。
+            command_token = line.split(maxsplit=1)[0]
+            tokens = (
+                [command_token, line[len(command_token):].lstrip()]
+                if command_token == "/send_chat" and len(line) > len(command_token)
+                else [command_token]
+                if command_token == "/send_chat"
+                else self._split(line, line_number)
+            )
             command_name = tokens[0][1:]
             if command_name == "timeout":
                 if timeout_seen:
@@ -216,6 +227,7 @@ class ActionDslParser:
             "drop_item": "/drop_item <slot_id> [count]",
             "use_item": "/use_item <slot_id> [self|block <x> <y> <z>|entity <id>]",
             "update_interesting_blocks": "/update_interesting_blocks add <block_id>... [remove <block_id>...]",
+            "send_chat": "/send_chat <message>",
         }
         lines = [references[name] for name in self.available_action_names()]
         return "\n".join(lines)
@@ -522,6 +534,20 @@ class ActionDslParser:
             remove_block_ids=removals,
         )
         return ParsedAction(ACTION_UPDATE_INTERESTING_BLOCKS, "update_interesting_blocks", payload)
+
+    def _parse_send_chat(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
+        """解析整行聊天正文，并按照原版聊天输入限制提前校验。"""
+        self._require_arity(tokens, 2, 2, line_number)
+        message = tokens[1]
+        if not message or message.isspace():
+            raise ActionParseError("message must not be blank", line_number)
+        utf16_units = len(message.encode("utf-16-le")) // 2
+        if utf16_units > 256:
+            raise ActionParseError("message must not exceed 256 UTF-16 code units", line_number)
+        if any(ord(character) < 32 or ord(character) == 127 or character == "§" for character in message):
+            raise ActionParseError("message contains a character disallowed by Minecraft chat", line_number)
+        payload = send_chat_pb2.ProtoSendChat(message=message)
+        return ParsedAction(ACTION_SEND_CHAT, "send_chat", payload)
 
     @staticmethod
     def _normalize_block_id(block_id: str) -> str:

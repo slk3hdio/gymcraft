@@ -49,7 +49,8 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ActionComponents.PICK_UP_ITEM.get(),
                 ActionComponents.DROP_ITEM.get(),
                 ActionComponents.USE_ITEM.get(),
-                ActionComponents.UPDATE_INTERESTING_BLOCKS.get()
+                ActionComponents.UPDATE_INTERESTING_BLOCKS.get(),
+                ActionComponents.SEND_CHAT.get()
             ),
             List.of(
                 ObservationCreators.SELF.get(),
@@ -58,7 +59,8 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ObservationCreators.NEARBY_BLOCKS.get(),
                 ObservationCreators.NEARBY_ITEMS.get(),
                 ObservationCreators.MENU.get(),
-                ObservationCreators.INTERESTING_BLOCKS.get()
+                ObservationCreators.INTERESTING_BLOCKS.get(),
+                ObservationCreators.CHAT.get()
             ),
             List.of(MobAttachments.AGENT_BACKPACK)
         );

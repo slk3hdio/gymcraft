@@ -27,6 +27,7 @@ PROTO_FILES = [
     "gymcraft/gym/action/components/drop_item.proto",
     "gymcraft/gym/action/components/use_item.proto",
     "gymcraft/gym/action/components/update_interesting_blocks.proto",
+    "gymcraft/gym/action/components/send_chat.proto",
     "gymcraft/gym/observation/observation.proto",
     "gymcraft/gym/observation/common/entity_view.proto",
     "gymcraft/gym/observation/common/block_view.proto",
@@ -40,6 +41,7 @@ PROTO_FILES = [
     "gymcraft/gym/observation/components/interesting_blocks.proto",
     "gymcraft/gym/observation/components/nearby_items.proto",
     "gymcraft/gym/observation/components/menu.proto",
+    "gymcraft/gym/observation/components/chat.proto",
     "gymcraft/gym/rpc/env_service.proto",
 ]
 

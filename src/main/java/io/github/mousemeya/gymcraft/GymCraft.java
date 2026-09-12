@@ -9,6 +9,7 @@ import io.github.mousemeya.gymcraft.item.EnvToolItem;
 import io.github.mousemeya.gymcraft.item.UuidCopierItem;
 import io.github.mousemeya.gymcraft.command.GymCraftCommands;
 import io.github.mousemeya.gymcraft.gametest.GymCraftGameTests;
+import io.github.mousemeya.gymcraft.gym.chat.ChatCapture;
 import io.github.mousemeya.gymcraft.gym.rpc.GymCraftRpcServer;
 import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentHooks;
@@ -72,6 +73,9 @@ public class GymCraft {
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onServerStopping);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, EnvToolItem::onEntityInteract);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, UuidCopierItem::onEntityInteract);
+        NeoForge.EVENT_BUS.addListener(ChatCapture::onServerChat);
+        NeoForge.EVENT_BUS.addListener(ChatCapture::onServerTickPost);
+        NeoForge.EVENT_BUS.addListener(ChatCapture::onServerStopping);
 
         ITEMS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);

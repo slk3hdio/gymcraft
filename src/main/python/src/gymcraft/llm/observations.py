@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from gymcraft.gym.observation.components import (
+    chat_pb2,
     interesting_blocks_pb2,
     menu_pb2,
     nearby_blocks_pb2,
@@ -17,6 +18,7 @@ from gymcraft.gym.observation.components import (
 )
 from gymcraft.gym.observation.common import slot_pb2
 from gymcraft.type_info import (
+    OBS_CHAT,
     OBS_INTERESTING_BLOCKS,
     OBS_MENU,
     OBS_NEARBY_BLOCKS,
@@ -31,13 +33,14 @@ from gymcraft.type_info import (
 # LLM 文本观测的裁剪和显示参数。
 @dataclass(frozen=True)
 class ObservationFormatConfig:
-    """控制观测文本精度以及实体、方块渲染上限。"""
+    """控制观测文本精度以及实体、方块、聊天渲染上限。"""
 
     float_precision: int = 2
     max_entities: int = 10
     max_blocks: int = 10
     max_interesting_blocks: int = 10
     max_items: int = 10
+    max_chat_messages: int = 16
 
     def __post_init__(self) -> None:
         """拒绝会导致空观测或不可预测格式的配置。"""
@@ -48,8 +51,9 @@ class ObservationFormatConfig:
             or self.max_blocks <= 0
             or self.max_interesting_blocks <= 0
             or self.max_items <= 0
+            or self.max_chat_messages <= 0
         ):
-            raise ValueError("entity, block, interesting block and item limits must be positive")
+            raise ValueError("entity, block, interesting block, item and chat limits must be positive")
 
 
 # 可被任意环境 wrapper 调用的纯观测格式化器。
@@ -87,6 +91,7 @@ class ObservationTextFormatter:
             )
         )
         lines.extend(self._format_menu(observation.get(OBS_MENU)))
+        lines.extend(self._format_chat(observation.get(OBS_CHAT)))
         return "\n".join(lines)
 
     def _format_header(self, observation: Observation) -> str:
@@ -213,6 +218,18 @@ class ObservationTextFormatter:
                 lines.append(
                     f"- id={button.button_id} name={self._quote(button.name)} enabled={self._bool(button.enabled)}"
                 )
+        return lines
+
+    def _format_chat(self, chat: chat_pb2.ProtoRecentChat | None) -> list[str]:
+        """格式化最近聊天栏消息窗口（时间升序，保留最近 max_chat_messages 条）。"""
+        if chat is None:
+            return ["chat: unavailable"]
+        messages = list(chat.messages)
+        shown = messages[-self.config.max_chat_messages:]
+        lines = [self._count_header("chat", len(messages), len(shown))]
+        for message in shown:
+            sender = f" sender=<{message.sender}>" if message.sender else ""
+            lines.append(f"- tick={message.game_tick}{sender} content={self._quote(message.content)}")
         return lines
 
     def _format_slots(self, menu: menu_pb2.ProtoMenuObservation) -> list[str]:

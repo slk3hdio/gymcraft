@@ -10,11 +10,13 @@ from typing import Any, cast
 
 from gymcraft.gym.action.components import (
     look_at_pb2,
+    send_chat_pb2,
     set_block_pb2,
     update_interesting_blocks_pb2,
 )
 from gymcraft.gym.observation.common import block_view_pb2, entity_view_pb2, item_entity_view_pb2, item_stack_view_pb2
 from gymcraft.gym.observation.components import (
+    chat_pb2,
     interesting_blocks_pb2,
     nearby_blocks_pb2,
     nearby_entities_pb2,
@@ -40,6 +42,7 @@ from gymcraft.type_info import (
     ACTION_JUMP,
     ACTION_LOOK_AT,
     ACTION_SET_BLOCK,
+    ACTION_SEND_CHAT,
     ACTION_UPDATE_INTERESTING_BLOCKS,
     Action,
     Observation,
@@ -135,6 +138,13 @@ def _observation(tick: int = 1) -> Observation:
                     ),
                 ]
             ),
+            "gymcraft:chat": chat_pb2.ProtoRecentChat(
+                messages=[
+                    chat_pb2.ProtoChatMessage(game_tick=1, sender="Steve", content="hello"),
+                    chat_pb2.ProtoChatMessage(game_tick=2, sender="", content="Server restarting"),
+                    chat_pb2.ProtoChatMessage(game_tick=3, sender="Alex", content="follow me"),
+                ]
+            ),
         },
     )
 
@@ -188,6 +198,29 @@ class ActionDslParserTests(unittest.TestCase):
         )
         payload = cast(set_block_pb2.ProtoSetBlock, parsed.batch.actions[0].payload)
         self.assertEqual('minecraft:chest{CustomName:\'"Box A"\'}', payload.block)
+
+    def test_send_chat_preserves_natural_text(self) -> None:
+        """聊天命令应原样保留空格、引号和自然语言撇号。"""
+        parsed = ActionDslParser().parse(
+            "```gymcraft-action\n/send_chat Hello  team, I'm \"ready\"!\n```"
+        )
+        action = parsed.batch.actions[0]
+        payload = cast(send_chat_pb2.ProtoSendChat, action.payload)
+        self.assertEqual(ACTION_SEND_CHAT, action.component_id)
+        self.assertEqual("Hello  team, I'm \"ready\"!", payload.message)
+
+    def test_send_chat_rejects_vanilla_invalid_messages(self) -> None:
+        """聊天命令应拒绝空正文、超长正文和原版禁止字符。"""
+        parser = ActionDslParser()
+        invalid_commands = [
+            "/send_chat",
+            "/send_chat " + "x" * 257,
+            "/send_chat forbidden§format",
+            "/send_chat control\tcharacter",
+        ]
+        for command in invalid_commands:
+            with self.subTest(command=command), self.assertRaises(ActionParseError):
+                parser.parse(f"```gymcraft-action\n{command}\n```")
 
     def test_duplicate_component_is_rejected(self) -> None:
         """wire map 无法表达同名组件，解析器应拒绝重复命令。"""
@@ -288,6 +321,7 @@ class ActionDslParserTests(unittest.TestCase):
             "/drop_item 0 2",
             "/use_item 0",
             "/update_interesting_blocks add minecraft:diamond_ore remove minecraft:stone",
+            "/send_chat Hello from GymCraft!",
         ]
         parser = ActionDslParser()
         for command in commands:
@@ -303,7 +337,9 @@ class ObservationAndContextTests(unittest.TestCase):
     def test_observation_is_compact_and_reports_omissions(self) -> None:
         """裁剪后的文本应保留最近目标并报告省略数量。"""
         formatter = ObservationTextFormatter(
-            ObservationFormatConfig(max_entities=1, max_blocks=1, max_interesting_blocks=1)
+            ObservationFormatConfig(
+                max_entities=1, max_blocks=1, max_interesting_blocks=1, max_chat_messages=2
+            )
         )
         text = formatter.format(_observation())
         self.assertIn("entities: total=2 shown=1 omitted=1", text)
@@ -316,6 +352,11 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertIn("interesting_blocks: total=2 shown=1 omitted=1", text)
         self.assertIn("block_id=minecraft:ancient_debris x=11 y=63 z=-2 distance=1.5", text)
         self.assertNotIn("block_id=minecraft:diamond_ore", text)
+        # 聊天窗口：只保留最近 2 条，系统消息无 sender 字段
+        self.assertIn("chat: total=3 shown=2 omitted=1", text)
+        self.assertNotIn("content=\"hello\"", text)
+        self.assertIn("tick=2 content=\"Server restarting\"", text)
+        self.assertIn("tick=3 sender=<Alex> content=\"follow me\"", text)
 
     def test_context_keeps_raw_assistant_text(self) -> None:
         """历史中应原样保存模型文本和 DSL 动作块。"""
