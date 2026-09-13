@@ -8,7 +8,7 @@ import io.github.mousemeya.gymcraft.registry.EnvFactories;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
-import net.minecraft.commands.arguments.IdentifierArgument;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
@@ -28,14 +28,14 @@ public final class GymCraftCommands {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         String defaultType = EnvFactories.SIMPLE_MOB.getId().toString();
         dispatcher.register(Commands.literal("gymcraft")
-                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("env")
                         .then(Commands.literal("create")
                                 .then(Commands.argument("target", EntityArgument.entity())
                                         .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntity(ctx, "target"), defaultType))
-                                        .then(Commands.argument("type", IdentifierArgument.id())
+                                        .then(Commands.argument("type", ResourceLocationArgument.id())
                                                 .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntity(ctx, "target"),
-                                                        IdentifierArgument.getId(ctx, "type").toString())))))
+                                                        ResourceLocationArgument.getId(ctx, "type").toString())))))
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("target", EntityArgument.entity())
                                         .executes(ctx -> remove(ctx.getSource(), EntityArgument.getEntity(ctx, "target")))))));

@@ -224,7 +224,8 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
             ));
         }
         // 与 BlockItem#canPlace 一致，按待放置方块的实际碰撞形状检查自己和其他实体。
-        CollisionContext placementContext = CollisionContext.withPosition(mob, mob.getY());
+        // 1.21.1 无 withPosition(Entity,double)：CollisionContext.of 使用实体自身位置与形状
+        CollisionContext placementContext = CollisionContext.of(mob);
         if (!level.isUnobstructed(parsed.blockState(), pos, placementContext)) {
             return ActionState.failed("target position is obstructed by an entity", Map.of(
                 "pos", pos.toShortString(),

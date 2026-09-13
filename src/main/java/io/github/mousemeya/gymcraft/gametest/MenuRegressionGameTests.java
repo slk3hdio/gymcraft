@@ -109,8 +109,8 @@ public final class MenuRegressionGameTests {
         observe(mob);
         long sid = session.sessionId();
 
-        // 书（菜单自有槽 8）→ Agent 主手（slot_id 0，menu-backed 桥接槽）
-        assertEquals(helper, ActionStatus.COMPLETED, moveMenuItem(mob, sid, 8, 0, 1).status(),
+        // 书（菜单自有槽 7；1.21.1 七装备槽）→ Agent 主手（slot_id 0，menu-backed 桥接槽）
+        assertEquals(helper, ActionStatus.COMPLETED, moveMenuItem(mob, sid, 7, 0, 1).status(),
             "moving book to mainhand failed");
         // 再次观测触发 refresh：书被取走后讲台目标失效，会话自动关闭并写回
         observe(mob);

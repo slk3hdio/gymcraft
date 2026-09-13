@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.profiling.Profiler;
+import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -322,12 +322,12 @@ public class AgentRuntime {
 
     /** 消费一个排队动作并在原版 AI 执行前应用当前控制策略。 */
     private void processActionBeforeTick() {
-        var profiler = Profiler.get();
-        try (var gymcraftZone = profiler.zone("gymcraft_pre")) {
+        var profiler = this.mob.level().getProfiler();
+        try (var gymcraftZone = zone(profiler, "gymcraft_pre")) {
             // 非阻塞消费排队的动作请求
             ActionRequest request = this.actionBuf.poll();
             if (request != null) {
-                try (var actionZone = profiler.zone("apply_action")) {
+                try (var actionZone = zone(profiler, "apply_action")) {
                     LOGGER.info(
                         "GymCraft runtime consume action command entity={} components={}",
                         this.mob.getUUID(),
@@ -361,7 +361,7 @@ public class AgentRuntime {
             }
 
             // 在原版 AI tick 之前施加控制策略（压制 goal flags / navigation / brain memory）
-            try (var policyZone = profiler.zone("apply_policy")) {
+            try (var policyZone = zone(profiler, "apply_policy")) {
                 this.applyControlPolicy();
             }
         }
@@ -388,11 +388,11 @@ public class AgentRuntime {
 
     /** 推进 RUNNING 动作、发布终态结果，并在 tick 末尾重新应用控制策略。 */
     private void processActionAfterTick() {
-        var profiler = Profiler.get();
-        try (var gymcraftZone = profiler.zone("gymcraft_post")) {
+        var profiler = this.mob.level().getProfiler();
+        try (var gymcraftZone = zone(profiler, "gymcraft_post")) {
             // RUNNING 动作：推进逐 tick 进度并检查是否产生终态
             if (this.pendingResult != null && this.pendingResult.isRunning()) {
-                try (var stateZone = profiler.zone("check_action_state")) {
+                try (var stateZone = zone(profiler, "check_action_state")) {
                     this.actionController.tick(this.pendingResult.action());
                     ActionState state = this.actionController.getState(this.pendingResult.action());
                     if (state.isTerminal()) {
@@ -411,7 +411,7 @@ public class AgentRuntime {
 
             // 已有终态：生成观测并完成 future，唤醒阻塞中的 step()
             if (this.pendingResult != null && this.pendingResult.isTerminal()) {
-                try (var observationZone = profiler.zone("create_observation")) {
+                try (var observationZone = zone(profiler, "create_observation")) {
                     ActionState state = this.pendingResult.state();
                     ProtoMcObservation observation = this.observationCreator.create(this.mob, state);
                     this.completeResult(this.pendingResult.future(), new RuntimeStepResult(observation, state));
@@ -430,7 +430,7 @@ public class AgentRuntime {
             }
 
             // tick 末尾再次施加策略：清理本 tick 内原版 AI 留下的残留状态
-            try (var policyZone = profiler.zone("apply_policy")) {
+            try (var policyZone = zone(profiler, "apply_policy")) {
                 this.applyControlPolicy();
             }
         }
@@ -587,6 +587,28 @@ public class AgentRuntime {
         ResetRequest request;
         while ((request = this.resetBuf.poll()) != null) {
             request.future().completeExceptionally(error);
+        }
+    }
+    /**
+     * 1.21.1 无 26.1 的 {@code Profiler.get()}/{@code zone()}：用 push/pop 包装出等价的
+     * try-with-resources zone 语法糖，保持既有 profiler 区段命名。
+     */
+    private static ProfilerZone zone(ProfilerFiller profiler, String name) {
+        return new ProfilerZone(profiler, name);
+    }
+
+    /** 基于 push/pop 的 AutoCloseable profiler 区段。 */
+    private static final class ProfilerZone implements AutoCloseable {
+        private final ProfilerFiller profiler;
+
+        private ProfilerZone(ProfilerFiller profiler, String name) {
+            this.profiler = profiler;
+            profiler.push(name);
+        }
+
+        @Override
+        public void close() {
+            this.profiler.pop();
         }
     }
 }

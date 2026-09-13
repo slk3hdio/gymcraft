@@ -11,7 +11,7 @@ import net.neoforged.neoforge.common.util.FakePlayer;
 
 /**
  * 切石机菜单适配器（计划 11 节）—— 选择有效配方索引
- * （{@code button_id} ∈ [0, {@link StonecutterMenu#getNumberOfVisibleRecipes()}−1]）。
+ * （{@code button_id} ∈ [0, {@link StonecutterMenu#getNumRecipes()}−1]）。
  * <p>
  * 越界索引在适配器层失败；选中当前已选索引与原版一致视为失败（原版返回 false，
  * 元数据 enabled 同步为 false，保证按钮元数据与执行结果一致）。
@@ -28,7 +28,7 @@ public final class StonecutterMenuAdapter implements MenuAdapter<StonecutterMenu
 
     @Override
     public List<MenuButtonView> buttons(StonecutterMenu menu, Mob mob) {
-        int count = menu.getNumberOfVisibleRecipes();
+        int count = menu.getNumRecipes();
         int selected = menu.getSelectedRecipeIndex();
         var buttons = new ArrayList<MenuButtonView>(count);
         for (int i = 0; i < count; i++) {
@@ -39,7 +39,7 @@ public final class StonecutterMenuAdapter implements MenuAdapter<StonecutterMenu
 
     @Override
     public ButtonClickResult clickButton(StonecutterMenu menu, FakePlayer actor, int buttonId, Mob mob) {
-        if (buttonId < 0 || buttonId >= menu.getNumberOfVisibleRecipes()) {
+        if (buttonId < 0 || buttonId >= menu.getNumRecipes()) {
             return ButtonClickResult.failed("recipe index out of range");
         }
         if (buttonId == menu.getSelectedRecipeIndex()) {

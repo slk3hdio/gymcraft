@@ -53,7 +53,7 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
             .setDayTime(level.getGameTime())
             .setRaining(level.isRaining())
             .setThundering(level.isThundering())
-            .setDimension(level.dimension().identifier().toString())
+            .setDimension(level.dimension().location().toString())
             .build();
     }
 

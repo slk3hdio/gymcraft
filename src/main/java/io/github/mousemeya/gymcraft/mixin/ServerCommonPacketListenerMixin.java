@@ -1,7 +1,8 @@
 package io.github.mousemeya.gymcraft.mixin;
 
 import io.github.mousemeya.gymcraft.gym.chat.ChatCapture;
-import io.netty.channel.ChannelFutureListener;
+
+import net.minecraft.network.PacketSendListener;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -27,11 +28,11 @@ abstract class ServerCommonPacketListenerMixin {
      * 监听器实例仅用作区分广播与私发的身份键）。
      *
      * @param packet 即将发送的包
-     * @param listener netty future 监听器（可能为 null，捕获不使用）
+     * @param listener 包发送监听器（1.21.1 为 PacketSendListener；可能为 null，捕获不使用）
      * @param ci mixin 回调
      */
-    @Inject(method = "send(Lnet/minecraft/network/protocol/Packet;Lio/netty/channel/ChannelFutureListener;)V", at = @At("HEAD"))
-    private void gymcraft$captureChat(Packet<?> packet, ChannelFutureListener listener, CallbackInfo ci) {
+    @Inject(method = "send(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketSendListener;)V", at = @At("HEAD"))
+    private void gymcraft$captureChat(Packet<?> packet, PacketSendListener listener, CallbackInfo ci) {
         ChatCapture.onOutgoingPacket(this, packet);
     }
 }

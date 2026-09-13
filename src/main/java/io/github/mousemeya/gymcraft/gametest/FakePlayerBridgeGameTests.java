@@ -38,7 +38,7 @@ public final class FakePlayerBridgeGameTests {
         var second = spawnAgent(helper, EntityType.HUSK, new BlockPos(5, 1, 2));
         first.setYRot(37.0F);
         first.setXRot(-12.0F);
-        first.addEffect(new MobEffectInstance(MobEffects.SPEED, 200));
+        first.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 200));
         first.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_PICKAXE));
         second.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STICK));
 
@@ -51,7 +51,7 @@ public final class FakePlayerBridgeGameTests {
         assertTrue(helper, Math.abs(first.getEyeY() - inventory.player().getEyeY()) < 1.0E-6,
             "inventory actor eyes are not aligned");
         assertEquals(helper, GameType.SURVIVAL, hand.player().gameMode.getGameModeForPlayer(), "hand game mode");
-        assertTrue(helper, hand.player().hasEffect(MobEffects.SPEED), "hand actor did not copy effects");
+        assertTrue(helper, hand.player().hasEffect(MobEffects.MOVEMENT_SPEED), "hand actor did not copy effects");
 
         // 人为污染复用 actor；下一次借用必须清除所有非本次 Mob 状态。
         hand.player().getInventory().setItem(10, new ItemStack(Items.DIAMOND));
@@ -60,7 +60,7 @@ public final class FakePlayerBridgeGameTests {
         assertTrue(helper, reused == hand, "hand actor was not reused in one level");
         assertTrue(helper, reused.player().getInventory().getItem(10).isEmpty(), "inventory leaked between hand actions");
         assertTrue(helper, reused.player().inventoryMenu.getCarried().isEmpty(), "carried stack leaked between hand actions");
-        assertTrue(helper, !reused.player().hasEffect(MobEffects.SPEED), "effect leaked between mobs");
+        assertTrue(helper, !reused.player().hasEffect(MobEffects.MOVEMENT_SPEED), "effect leaked between mobs");
         assertTrue(helper, reused.player().getMainHandItem() == second.getMainHandItem(), "main hand reference not shared");
         helper.succeed();
     }
@@ -73,7 +73,7 @@ public final class FakePlayerBridgeGameTests {
         AgentInventoryBridge.validateCapacity(mob);
         assertEquals(helper, 3, mob.getOffhandItem().getCount(), "capacity validation changed inventory");
 
-        try (var transaction = AgentInventoryTransaction.open(mob, EquipmentSlot.OFFHAND.getId())) {
+        try (var transaction = AgentInventoryTransaction.open(mob, io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout.equipmentSlotId(EquipmentSlot.OFFHAND))) {
             transaction.stageSelectedInMainHand();
             assertTrue(helper, transaction.player().getMainHandItem().is(Items.SNOWBALL), "selected slot was not staged");
             transaction.player().getMainHandItem().shrink(1);
@@ -95,7 +95,7 @@ public final class FakePlayerBridgeGameTests {
         var menuPlayer = session.agentPlayer().player();
         var menu = menuPlayer.containerMenu;
 
-        try (var transaction = AgentInventoryTransaction.open(mob, EquipmentSlot.MAINHAND.getId())) {
+        try (var transaction = AgentInventoryTransaction.open(mob, io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout.equipmentSlotId(EquipmentSlot.MAINHAND))) {
             assertTrue(helper, transaction.player() != menuPlayer, "inventory transaction reused menu player");
         }
         var hand = AgentFakePlayerService.borrowHandActor(mob);

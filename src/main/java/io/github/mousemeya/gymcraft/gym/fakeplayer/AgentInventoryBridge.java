@@ -25,12 +25,12 @@ import io.github.mousemeya.gymcraft.gym.inventory.LogicalSlotIdentity;
  * Agent 物品栏桥接 —— 把 Agent 统一物品栏（{@link AgentInventoryLayout}）映射到
  * FakePlayer 的玩家物品栏，并在每次菜单或物品操作后写回 Mob。
  * <p>
- * 1.26 的玩家 {@link Inventory} 是单一 36 格 {@code items} 列表加
- * {@code EntityEquipment}（槽号 36–42 映射到装备槽），{@code getContainerSize()} 为 43；
- * 绝大多数菜单只绑定 0–35 的主物品栏槽位，因此映射容量阈值取 36，不按 43 计算。
+ * 1.21.1 的玩家 {@link Inventory} 通过 0–35 的主物品栏槽位与独立装备槽
+ * 参与菜单交互；因此普通格映射容量阈值取 36。
  * </p>
  * <p>
- * 固定映射表（实现常量，不随菜单变化；slot_id == {@code EquipmentSlot#getId()}）：
+ * 固定映射表（实现常量，不随菜单变化；装备 slot_id 由
+ * {@link AgentInventoryLayout#equipmentSlotId(EquipmentSlot)} 定义）：
  * <pre>
  * slot_id 0 (MAINHAND) -&gt; 普通格 0（{@link #MAINHAND_INVENTORY_SLOT}，与 FakePlayer 默认选中格一致）
  * slot_id 1 (FEET)     -&gt; 装备槽 36
@@ -39,10 +39,9 @@ import io.github.mousemeya.gymcraft.gym.inventory.LogicalSlotIdentity;
  * slot_id 4 (HEAD)     -&gt; 装备槽 39
  * slot_id 5 (OFFHAND)  -&gt; 装备槽 40（{@code Inventory.SLOT_OFFHAND}）
  * slot_id 6 (BODY)     -&gt; 预留普通格 35（{@link #RESERVED_SLOT_BODY}）
- * slot_id 7 (SADDLE)   -&gt; 预留普通格 34（{@link #RESERVED_SLOT_SADDLE}）
- * slot_id 8+k (存储槽) -&gt; 普通格 1+k（{@link #STORAGE_BASE_SLOT} 起，最多 {@link #MAX_STORAGE_SLOTS} 格）
+ * slot_id 7+k (存储槽) -&gt; 普通格 1+k（{@link #STORAGE_BASE_SLOT} 起，最多 {@link #MAX_STORAGE_SLOTS} 格）
  * </pre>
- * 八个 Mob 装备槽优先复制到 FakePlayer 对应装备位置；BODY/SADDLE 没有参与菜单绑定的
+ * 七个 Mob 装备槽优先复制到 FakePlayer 对应装备位置（1.21.1 无 SADDLE 装备槽）；BODY 没有参与菜单绑定的
  * 对应位置，复制到预留固定普通格。预留格只用于会话桥接，不构成新的持久 Agent 背包，
  * 也不获得第二个 slot_id。
  * </p>
@@ -62,15 +61,13 @@ public final class AgentInventoryBridge {
     public static final int MAINHAND_INVENTORY_SLOT = 0;
     /** 预留固定普通格：Mob {@code EquipmentSlot.BODY} 的桥接位置。 */
     public static final int RESERVED_SLOT_BODY = 35;
-    /** 预留固定普通格：Mob {@code EquipmentSlot.SADDLE} 的桥接位置。 */
-    public static final int RESERVED_SLOT_SADDLE = 34;
     /** Mob 原生容器或专属背包存储槽映射的普通格起始位置。 */
     public static final int STORAGE_BASE_SLOT = 1;
     /**
-     * Mob 自带容器可映射的最大槽数：36 格普通物品栏扣除主手格（1）与两个预留格（2）。
-     * 映射容量阈值按计划取 36（菜单只绑定 0–35），不按 43 计算。
+     * Mob 自带容器可映射的最大槽数：使用从普通格 1 到 BODY 预留格前一格
+     * 的连续区间，即 1–34 共 34 格。
      */
-    public static final int MAX_STORAGE_SLOTS = 33;
+    public static final int MAX_STORAGE_SLOTS = RESERVED_SLOT_BODY - STORAGE_BASE_SLOT;
 
     private final Mob mob;
     private final FakePlayer player;
@@ -155,7 +152,6 @@ public final class AgentInventoryBridge {
                 case OFFHAND -> Inventory.SLOT_OFFHAND;
                 case FEET, LEGS, CHEST, HEAD -> equipment.slot().getIndex(Inventory.INVENTORY_SIZE);
                 case BODY -> RESERVED_SLOT_BODY;
-                case SADDLE -> RESERVED_SLOT_SADDLE;
             };
             case LogicalSlotIdentity.MobNativeContainer container ->
                 STORAGE_BASE_SLOT + container.localIndex();
@@ -289,7 +285,7 @@ public final class AgentInventoryBridge {
         Inventory inventory = this.player.getInventory();
         ItemStack remaining = stack.copy();
         // ① 空主手映射格（整叠放入；限制按原 Mob 主手槽规则）
-        AgentSlot mainhand = this.layout.slot(EquipmentSlot.MAINHAND.getId());
+        AgentSlot mainhand = this.layout.slot(AgentInventoryLayout.equipmentSlotId(EquipmentSlot.MAINHAND));
         if (origin != mainhand) {
             int mainhandIndex = this.inventoryIndexOf(mainhand);
             if (inventory.getItem(mainhandIndex).isEmpty() && canReturnToOrigin(mainhand, remaining)) {
@@ -309,7 +305,7 @@ public final class AgentInventoryBridge {
         }
         // ③ Mob 位置掉落
         if (this.mob.level() instanceof ServerLevel level) {
-            this.mob.spawnAtLocation(level, remaining);
+            this.mob.spawnAtLocation(remaining);
             dropped.add(new RelocatedItem(remaining.copy(), "dropped"));
         } else {
             // 非服务端环境无法掉落：记 error 兜底（按约定本类只在服务端 tick 线程调用）
@@ -389,7 +385,7 @@ public final class AgentInventoryBridge {
     private void liquidate(@Nullable AgentSlot origin, ItemStack stack, List<RelocatedItem> relocated, List<RelocatedItem> dropped) {
         ItemStack remaining = stack;
         // ① 空主手
-        AgentSlot mainhand = this.layout.slot(EquipmentSlot.MAINHAND.getId());
+        AgentSlot mainhand = this.layout.slot(AgentInventoryLayout.equipmentSlotId(EquipmentSlot.MAINHAND));
         if (origin != mainhand && mainhand.getItem().isEmpty() && canReturnToOrigin(mainhand, remaining)) {
             mainhand.setItem(remaining);
             relocated.add(new RelocatedItem(remaining.copy(), "mainhand"));
@@ -403,7 +399,7 @@ public final class AgentInventoryBridge {
         }
         // ③ Mob 位置掉落
         if (this.mob.level() instanceof ServerLevel level) {
-            this.mob.spawnAtLocation(level, remaining);
+            this.mob.spawnAtLocation(remaining);
             dropped.add(new RelocatedItem(remaining.copy(), "dropped"));
         } else {
             // 非服务端环境无法掉落：记 error 兜底（按约定本类只在服务端 tick 线程调用）

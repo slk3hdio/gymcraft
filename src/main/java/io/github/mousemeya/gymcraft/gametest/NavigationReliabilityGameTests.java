@@ -9,7 +9,7 @@ import com.google.protobuf.Any;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -185,7 +185,7 @@ public final class NavigationReliabilityGameTests {
         });
         helper.runAfterDelay(5, () -> {
             var moved = helper.absolutePos(new BlockPos(6, 2, 5)).getCenter();
-            item.snapTo(moved.x, moved.y, moved.z, 0.0F, 0.0F);
+            item.moveTo(moved.x, moved.y, moved.z, 0.0F, 0.0F);
         });
         helper.runAfterDelay(120, () -> {
             try {
@@ -257,7 +257,7 @@ public final class NavigationReliabilityGameTests {
         /** @param mob 当前测试控制的 Mob */
         private NavigationTestEnv(Mob mob) {
             super(
-                Identifier.fromNamespaceAndPath(GymCraft.MODID, "navigation_reliability_test"),
+                ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "navigation_reliability_test"),
                 mob,
                 List.of(ActionComponents.MOVE_TO.get(), ActionComponents.PICK_UP_ITEM.get()),
                 List.of()

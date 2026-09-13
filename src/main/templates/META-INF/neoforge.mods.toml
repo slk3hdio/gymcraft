@@ -4,8 +4,10 @@
 # Note that there are a couple of TOML lists in this file.
 # Find more information on toml format here:  https://github.com/toml-lang/toml
 
-# The license for you mod. This is mandatory metadata and allows for easier comprehension of your redistributive properties.
-# Review your options at https://choosealicense.com/. All rights reserved is the default copyright stance, and is thus the default here.
+# 1.21.1 的 FML 要求显式声明 modLoader 与 loaderVersion（26.1 已移除这两个字段）
+modLoader="javafml"
+# A version range for the FML version the mod requires
+loaderVersion="[4,)"
 license="${mod_license}"
 
 # A URL to refer people to when problems occur with this mod

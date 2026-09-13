@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Set;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.Block;
 
@@ -113,9 +113,9 @@ public class UpdateInterestingBlocksController extends AbstractActionComponentCo
     private static ResolvedBlocks resolveBlocks(List<String> blockIds) {
         var blocks = new LinkedHashSet<Block>();
         for (String blockId : blockIds) {
-            Identifier id;
+            ResourceLocation id;
             try {
-                id = Identifier.parse(blockId);
+                id = ResourceLocation.parse(blockId);
             } catch (RuntimeException exception) {
                 return ResolvedBlocks.failed(blockId);
             }

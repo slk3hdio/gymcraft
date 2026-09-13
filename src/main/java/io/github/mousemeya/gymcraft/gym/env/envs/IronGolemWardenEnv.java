@@ -11,18 +11,17 @@ import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Unit;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import net.minecraft.world.Container;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.animal.golem.IronGolem;
+import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -99,7 +98,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob
      */
-    public IronGolemWardenEnv(Identifier envTypeId, Mob mob) {
+    public IronGolemWardenEnv(ResourceLocation envTypeId, Mob mob) {
         super(
             envTypeId,
             mob,
@@ -154,7 +153,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
         this.buildArenaTemplate();
         this.issueSupplies(mob);
         this.spawnWarden();
-        mob.snapTo(
+        mob.moveTo(
             this.origin.getX() + 0.5,
             this.origin.getY(),
             this.origin.getZ() + 0.5,
@@ -483,11 +482,12 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      * 在战斗场角落生成持久化的 Warden 并记录其 UUID 供终止判定。
      */
     private void spawnWarden() {
-        Warden warden = EntityType.WARDEN.create(this.level, EntitySpawnReason.COMMAND);
+        // 1.21.1 的 EntityType.create(Level) 不携带生成原因，DIG_COOLDOWN 仍需手动注入
+        Warden warden = EntityType.WARDEN.create(this.level);
         if (warden == null) {
             throw new IllegalStateException("failed to create warden for iron_golem_warden");
         }
-        warden.snapTo(
+        warden.moveTo(
             this.wardenSpawn.getX() + 0.5,
             this.wardenSpawn.getY(),
             this.wardenSpawn.getZ() + 0.5,
@@ -783,7 +783,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
          * @return 新环境实例
          */
         @Override
-        public IronGolemWardenEnv create(Identifier envTypeId, Mob mob) {
+        public IronGolemWardenEnv create(ResourceLocation envTypeId, Mob mob) {
             return new IronGolemWardenEnv(envTypeId, mob);
         }
     }

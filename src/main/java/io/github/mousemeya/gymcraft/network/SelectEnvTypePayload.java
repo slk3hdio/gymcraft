@@ -5,14 +5,14 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * 客户端选择环境类型的数据包。
  */
 public record SelectEnvTypePayload(String envType) implements CustomPacketPayload {
     public static final CustomPacketPayload.Type<SelectEnvTypePayload> TYPE = new CustomPacketPayload.Type<>(
-        Identifier.fromNamespaceAndPath(GymCraft.MODID, "select_env_type")
+        ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "select_env_type")
     );
     public static final StreamCodec<RegistryFriendlyByteBuf, SelectEnvTypePayload> STREAM_CODEC = StreamCodec.composite(
         ByteBufCodecs.STRING_UTF8,

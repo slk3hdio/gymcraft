@@ -44,7 +44,7 @@ public final class MenuLifecycleGameTests {
             .setValue(ChestBlock.TYPE, ChestType.RIGHT));
 
         LogicalMenuSession session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
-        assertEquals(helper, 8 + 54, session.slots().size(),
+        assertEquals(helper, 7 + 54, session.slots().size(),
             "double chest should merge into 54 menu-owned slots");
         helper.succeed();
     }
@@ -107,7 +107,7 @@ public final class MenuLifecycleGameTests {
         LogicalMenuSession deathSession = openBlockMenu(helper, deadMob, new BlockPos(0, 1, 0));
         LogicalMenuSession leaveSession = openBlockMenu(helper, removedMob, new BlockPos(0, 1, 4));
 
-        helper.kill(deadMob);
+        deadMob.kill();
         removedMob.discard();
         helper.runAfterDelay(2, () -> {
             assertTrue(helper, deathSession.isClosed(), "death event did not close menu session");

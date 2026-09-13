@@ -10,7 +10,7 @@ import net.minecraft.world.item.ItemStack;
  * </p>
  */
 public interface AgentSlot {
-    /** @return GymCraft 统一分配的槽位 ID（装备槽 0..7，原生容器或专属背包为 8..N） */
+    /** @return GymCraft 统一分配的槽位 ID（装备槽 0..6，原生容器或专属背包为 7..N） */
     int slotId();
 
     /** @return 规范化逻辑槽身份，用于跨容器包装去重 */

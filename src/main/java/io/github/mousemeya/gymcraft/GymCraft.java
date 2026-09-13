@@ -8,7 +8,6 @@ import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import io.github.mousemeya.gymcraft.item.EnvToolItem;
 import io.github.mousemeya.gymcraft.item.UuidCopierItem;
 import io.github.mousemeya.gymcraft.command.GymCraftCommands;
-import io.github.mousemeya.gymcraft.gametest.GymCraftGameTests;
 import io.github.mousemeya.gymcraft.gym.chat.ChatCapture;
 import io.github.mousemeya.gymcraft.gym.rpc.GymCraftRpcServer;
 import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
@@ -22,6 +21,7 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.fml.common.Mod;
@@ -43,12 +43,12 @@ public class GymCraft {
     public static final DeferredItem<EnvToolItem> ENV_TOOL = ITEMS.registerItem(
             "env_tool",
             EnvToolItem::new,
-            properties -> properties.stacksTo(1));
+            new Item.Properties().stacksTo(1));
 
     public static final DeferredItem<UuidCopierItem> UUID_COPIER = ITEMS.registerItem(
             "uuid_copier",
             UuidCopierItem::new,
-            properties -> properties.stacksTo(1));
+            new Item.Properties().stacksTo(1));
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = CREATIVE_MODE_TABS.register("tab",
             () -> CreativeModeTab.builder()
@@ -84,10 +84,6 @@ public class GymCraft {
         ObservationCreators.REGISTRY.register(modEventBus);
         EnvFactories.REGISTRY.register(modEventBus);
         ModAttachments.REGISTRY.register(modEventBus);
-
-        // GameTest：测试函数注册表常驻（无运行副作用），测试实例仅在 GameTest 启用时装配
-        GymCraftGameTests.TEST_FUNCTIONS.register(modEventBus);
-        modEventBus.addListener(GymCraftGameTests::register);
 
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }

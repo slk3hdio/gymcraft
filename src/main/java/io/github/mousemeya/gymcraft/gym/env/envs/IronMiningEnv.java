@@ -11,7 +11,7 @@ import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import net.minecraft.world.Container;
@@ -74,7 +74,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob
      */
-    public IronMiningEnv(Identifier envTypeId, Mob mob) {
+    public IronMiningEnv(ResourceLocation envTypeId, Mob mob) {
         super(
             envTypeId,
             mob,
@@ -148,7 +148,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
         this.clearArenaItems();
         AgentInventoryLayout.clearAllItems(mob);
         this.buildArenaTemplate();
-        mob.snapTo(
+        mob.moveTo(
             this.origin.getX() + 0.5,
             this.origin.getY(),
             this.origin.getZ() + 0.5,
@@ -628,7 +628,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
          * @return 新环境实例
          */
         @Override
-        public IronMiningEnv create(Identifier envTypeId, Mob mob) {
+        public IronMiningEnv create(ResourceLocation envTypeId, Mob mob) {
             return new IronMiningEnv(envTypeId, mob);
         }
     }

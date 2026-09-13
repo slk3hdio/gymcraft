@@ -10,7 +10,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerListener;
 import net.minecraft.world.inventory.ContainerSynchronizer;
-import net.minecraft.world.inventory.RemoteSlot;
+import net.minecraft.core.NonNullList;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.common.util.FakePlayer;
@@ -113,14 +113,14 @@ public final class LogicalMenuHandle {
     }
 
     /**
-     * 无网络同步器 —— 菜单 broadcastChanges 触发的所有同步回调都丢弃，
-     * {@code createSlot()} 返回 {@link RemoteSlot#PLACEHOLDER}（不参与哈希同步）。
+     * 无网络同步器 —— 菜单 broadcastChanges 触发的所有同步回调都丢弃。
+     * 1.21.1 的 {@link ContainerSynchronizer} 没有 RemoteSlot/createSlot 概念。
      */
     private enum NoNetworkSynchronizer implements ContainerSynchronizer {
         INSTANCE;
 
         @Override
-        public void sendInitialData(AbstractContainerMenu container, List<ItemStack> slotItems, ItemStack carried, int[] dataSlots) {
+        public void sendInitialData(AbstractContainerMenu container, NonNullList<ItemStack> slotItems, ItemStack carried, int[] dataSlots) {
         }
 
         @Override
@@ -135,10 +135,6 @@ public final class LogicalMenuHandle {
         public void sendDataChange(AbstractContainerMenu container, int id, int value) {
         }
 
-        @Override
-        public RemoteSlot createSlot() {
-            return RemoteSlot.PLACEHOLDER;
-        }
     }
 
     /**

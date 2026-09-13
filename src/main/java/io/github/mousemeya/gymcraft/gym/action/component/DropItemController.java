@@ -116,7 +116,7 @@ public class DropItemController extends AbstractActionComponentController<ProtoD
             ? source.getCount()
             : Math.min(requestedCount, source.getCount());
         ItemStack droppedStack = source.copyWithCount(droppedCount);
-        var droppedEntity = mob.drop(droppedStack, false, true);
+        var droppedEntity = tossFromMob(mob, droppedStack);
         if (droppedEntity == null) {
             return ActionApplyResult.none(ActionState.failed("failed to spawn dropped item", Map.of(
                 "slot_id", slotId
@@ -171,5 +171,32 @@ public class DropItemController extends AbstractActionComponentController<ProtoD
         public Class<DropItemController> componentType() {
             return DropItemController.class;
         }
+    }
+    /**
+     * 复刻 1.21.1 原版 {@code Player#drop(ItemStack, boolean, boolean)}（非随机抛出、记录投掷者）
+     * 的投掷语义：按 Mob 朝向给初速度，从眼高前下方抛出并设置拾取延迟。
+     *
+     * @param mob 投掷者
+     * @param stack 待投掷堆叠
+     * @return 生成的掉落物实体；空堆叠时为 null
+     */
+    @javax.annotation.Nullable
+    private static net.minecraft.world.entity.item.ItemEntity tossFromMob(Mob mob, ItemStack stack) {
+        if (stack.isEmpty()) {
+            return null;
+        }
+        double eyeY = mob.getEyeY() - 0.3;
+        net.minecraft.world.entity.item.ItemEntity itemEntity =
+            new net.minecraft.world.entity.item.ItemEntity(mob.level(), mob.getX(), eyeY, mob.getZ(), stack);
+        itemEntity.setPickUpDelay(40);
+        itemEntity.setThrower(mob);
+        // 与原版按朝向抛出一致：初速度 = 视线方向 * 0.3 + 小幅随机抖动
+        net.minecraft.world.phys.Vec3 look = mob.getLookAngle();
+        float jitterYaw = (mob.getRandom().nextFloat() - 0.5F) * 0.05F;
+        float jitterPitch = (mob.getRandom().nextFloat() - 0.5F) * 0.05F;
+        var rotated = look.xRot(jitterPitch).yRot(jitterYaw).scale(0.3);
+        itemEntity.setDeltaMovement(rotated.x, rotated.y + mob.getRandom().nextFloat() * 0.02F, rotated.z);
+        mob.level().addFreshEntity(itemEntity);
+        return itemEntity;
     }
 }

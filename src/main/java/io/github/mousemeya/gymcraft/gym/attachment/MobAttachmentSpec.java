@@ -4,7 +4,7 @@ import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.neoforge.attachment.AttachmentType;
 
@@ -17,7 +17,7 @@ import net.neoforged.neoforge.attachment.AttachmentType;
  * @param <T> 附件数据类型
  */
 public final class MobAttachmentSpec<T> {
-    private final Identifier id;
+    private final ResourceLocation id;
     private final Supplier<? extends AttachmentType<T>> attachmentType;
     private final Predicate<Mob> supports;
 
@@ -29,7 +29,7 @@ public final class MobAttachmentSpec<T> {
      * @param supports 判断指定 Mob 是否支持该附件
      */
     public MobAttachmentSpec(
-        Identifier id,
+        ResourceLocation id,
         Supplier<? extends AttachmentType<T>> attachmentType,
         Predicate<Mob> supports
     ) {
@@ -39,7 +39,7 @@ public final class MobAttachmentSpec<T> {
     }
 
     /** @return 稳定描述器 ID */
-    public Identifier id() {
+    public ResourceLocation id() {
         return this.id;
     }
 

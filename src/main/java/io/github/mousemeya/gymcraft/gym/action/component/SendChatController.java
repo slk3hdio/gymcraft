@@ -105,7 +105,7 @@ public final class SendChatController extends AbstractActionComponentController<
         RecentChatLog.append(sender, message);
         level.getServer().getPlayerList().broadcastChatMessage(
             PlayerChatMessage.system(message),
-            mob.createCommandSourceStackForNameResolution(level),
+            mob.createCommandSourceStack(),
             ChatType.bind(ChatType.CHAT, mob)
         );
         return ActionApplyResult.applied(ActionControlPolicy.none(), completedState(sender, message));

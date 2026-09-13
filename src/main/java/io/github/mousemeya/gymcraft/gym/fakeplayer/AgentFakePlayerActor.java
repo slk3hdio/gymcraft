@@ -100,7 +100,7 @@ public final class AgentFakePlayerActor {
         List<Pair<EquipmentSlot, ItemStack>> slots = List.of(
             Pair.of(EquipmentSlot.MAINHAND, mob.getMainHandItem().copy())
         );
-        level.getChunkSource().sendToTrackingPlayers(mob, new ClientboundSetEquipmentPacket(mob.getId(), slots));
+        level.getChunkSource().broadcast(mob, new ClientboundSetEquipmentPacket(mob.getId(), slots));
     }
 
     /** 清除非菜单执行者可能跨操作泄漏的玩家状态。 */

@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Mob;
 
 /**
@@ -21,8 +21,8 @@ public final class EnvManager {
     }
 
     public static McEnv create(String envType, Mob mob) throws IllegalArgumentException {
-        var id = Identifier.parse(envType);
-        var factory = RegistryKeys.ENV_FACTORIES.getValue(id);
+        var id = ResourceLocation.parse(envType);
+        var factory = RegistryKeys.ENV_FACTORIES.get(id);
         if (factory == null) {
             throw new IllegalArgumentException("Invalid environment type: " + id);
         }

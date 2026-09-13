@@ -11,22 +11,22 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.animal.golem.IronGolem;
-import net.minecraft.world.entity.monster.zombie.ZombieVillager;
-import net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball;
+import net.minecraft.world.entity.animal.IronGolem;
+import net.minecraft.world.entity.monster.ZombieVillager;
+import net.minecraft.world.entity.projectile.Snowball;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import java.util.Optional;
+import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.alchemy.Potions;
-import net.minecraft.world.item.component.Consumable;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ComposterBlock;
 import net.minecraft.world.level.block.CropBlock;
@@ -187,7 +187,7 @@ public final class UseItemGameTests {
     public static void healIronGolem(GameTestHelper helper) {
         Mob mob = agent(helper);
         IronGolem golem = spawnAgent(helper, EntityType.IRON_GOLEM, new BlockPos(4, 1, 2));
-        golem.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 30.0F);
+        golem.hurt(helper.getLevel().damageSources().generic(), 30.0F);
         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND_SWORD));
         mob.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.IRON_INGOT, 2));
         var controller = new UseItemController(mob);
@@ -230,7 +230,7 @@ public final class UseItemGameTests {
         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STICK));
         mob.getInventory().setItem(0, new ItemStack(Items.SNOWBALL, 3));
         var session = LogicalMenuSessions.open(mob, new OpenMenuTarget.Self()).session();
-        var result = new UseItemController(mob).apply(self(8)).initialState();
+        var result = new UseItemController(mob).apply(self(7)).initialState();
         assertEquals(helper, ActionStatus.COMPLETED, result.status(), result.toString());
         assertEquals(helper, 2, mob.getInventory().getItem(0).getCount(), "container count");
         assertTrue(helper, mob.getMainHandItem().is(Items.STICK), "main hand not restored");
@@ -290,8 +290,8 @@ public final class UseItemGameTests {
                 "potion incomplete; entity_ticks=" + mob.tickCount + " remaining=" + mob.getUseItemRemainingTicks()
                     + " position=" + mob.position());
             assertEquals(helper, ActionStatus.COMPLETED, second.getState(self(0)).status(), "other incomplete");
-            assertTrue(helper, mob.hasEffect(MobEffects.SPEED), "effect did not reach mob");
-            assertTrue(helper, !other.hasEffect(MobEffects.SPEED), "effect leaked to other mob");
+            assertTrue(helper, mob.hasEffect(MobEffects.MOVEMENT_SPEED), "effect did not reach mob");
+            assertTrue(helper, !other.hasEffect(MobEffects.MOVEMENT_SPEED), "effect leaked to other mob");
             assertTrue(helper, mob.getOffhandItem().is(Items.GLASS_BOTTLE), "bottle missing");
             assertTrue(helper, mob.getMainHandItem().is(Items.STICK), "main hand not restored");
             assertEquals(helper, 1, other.getMainHandItem().getCount(), "other consumption count");
@@ -304,7 +304,7 @@ public final class UseItemGameTests {
     public static void remainderAndZeroDuration(GameTestHelper helper) {
         Mob mob = agent(helper);
         ItemStack soup = new ItemStack(Items.MUSHROOM_STEW, 2);
-        soup.set(DataComponents.CONSUMABLE, Consumable.builder().consumeSeconds(0).build());
+        soup.set(DataComponents.FOOD, new FoodProperties(2, 0.1F, false, 0.01F, Optional.of(new ItemStack(Items.BOWL)), List.of()));
         mob.setItemSlot(EquipmentSlot.OFFHAND, soup);
         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STICK));
         var result = new UseItemController(mob).apply(self(5)).initialState();
@@ -312,7 +312,8 @@ public final class UseItemGameTests {
         assertTrue(helper, mob.getOffhandItem().is(Items.MUSHROOM_STEW), "remaining soup lost");
         assertEquals(helper, 1, mob.getOffhandItem().getCount(), "soup count");
         var drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, mob.getBoundingBox().inflate(3));
-        assertEquals(helper, 1L, drops.stream().filter(item -> item.getItem().is(Items.BOWL)).count(), "bowl missing");
+        // 1.21.1 语义：usingConvertsTo（碗）仅对 Player 生效，Mob 饮食不产出容器
+        assertEquals(helper, 0L, drops.stream().filter(item -> item.getItem().is(Items.BOWL)).count(), "bowl should not drop for mob");
         helper.succeed();
     }
 
@@ -406,7 +407,7 @@ public final class UseItemGameTests {
         mob.setGuaranteedDrop(EquipmentSlot.OFFHAND);
         var controller = new UseItemController(mob);
         controller.apply(self(5));
-        helper.kill(mob);
+        mob.kill();
         controller.tick(self(5));
         assertEquals(helper, ActionStatus.FAILED, controller.getState(self(5)).status(), "death should fail consumption");
         assertTrue(helper, !mob.hasData(ModAttachments.ITEM_CONSUMPTION), "dead mob retains session");
@@ -424,7 +425,7 @@ public final class UseItemGameTests {
         mob.setInvulnerable(true);
         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STICK));
         mob.getInventory().setItem(0, new ItemStack(Items.IRON_HELMET));
-        var result = new UseItemController(mob).apply(self(8)).initialState();
+        var result = new UseItemController(mob).apply(self(7)).initialState();
         assertEquals(helper, ActionStatus.COMPLETED, result.status(), result.toString());
         assertTrue(helper, mob.getItemBySlot(EquipmentSlot.HEAD).is(Items.IRON_HELMET), "helmet not equipped");
         assertTrue(helper, mob.getMainHandItem().is(Items.STICK), "equipment changed original hand");
@@ -514,7 +515,7 @@ public final class UseItemGameTests {
         LogicalMenuSessions.open(old, new OpenMenuTarget.Self());
         LogicalMenuSessions.closeCurrent(old, "reset");
         old.discard();
-        var replacement = EntityType.HUSK.create(helper.getLevel(), EntitySpawnReason.COMMAND);
+        var replacement = EntityType.HUSK.create(helper.getLevel());
         assertTrue(helper, replacement != null, "replacement could not be created");
         replacement.setUUID(old.getUUID());
         replacement.setPos(old.position());
@@ -541,7 +542,7 @@ public final class UseItemGameTests {
          * @param mob 测试 Agent；构造时保存原始物品快照
          */
         UseTestEnv(Mob mob) {
-            super(Identifier.fromNamespaceAndPath("gymcraft", "use_item_test"), mob,
+            super(ResourceLocation.fromNamespaceAndPath("gymcraft", "use_item_test"), mob,
                 List.of(ActionComponents.USE_ITEM.get()), List.of());
         }
 

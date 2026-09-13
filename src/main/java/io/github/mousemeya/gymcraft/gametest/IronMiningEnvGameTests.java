@@ -14,7 +14,7 @@ import com.google.protobuf.Message;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
@@ -117,27 +117,37 @@ public final class IronMiningEnvGameTests {
 
                 long selfSession = openSelf(env);
                 move(env, selfSession, List.of(
-                    transfer(0, 36, 3, 1),
-                    transfer(35, 8, 4, 3)
+                    transfer(0, 35, 3, 1),
+                    transfer(34, 7, 4, 3)
                 ));
                 move(env, selfSession, List.of(
-                    transfer(8, 36, 1, 1), transfer(8, 37, 1, 1),
-                    transfer(8, 38, 1, 1), transfer(8, 39, 1, 1),
-                    transfer(35, 0, 1, 1)
+                    transfer(7, 35, 1, 1), transfer(7, 36, 1, 1),
+                    transfer(7, 37, 1, 1), transfer(7, 38, 1, 1),
+                    transfer(34, 0, 1, 1)
                 ));
                 close(env, selfSession);
 
                 BlockPos tablePos = origin.offset(0, 0, 1);
+                // 本用例验证工具链而非导航；直接将 Agent 放到确定的安全格，消除寻路停点差异。
+                BlockPos stagingPos = origin.offset(0, 0, -2);
+                originalMob.getNavigation().stop();
+                originalMob.setDeltaMovement(0.0, 0.0, 0.0);
+                originalMob.moveTo(
+                    stagingPos.getX() + 0.5, stagingPos.getY(), stagingPos.getZ() + 0.5,
+                    originalMob.getYRot(), originalMob.getXRot());
                 step(env, "gymcraft:set_block", ProtoSetBlock.newBuilder()
                     .setX(tablePos.getX()).setY(tablePos.getY()).setZ(tablePos.getZ())
                     .setBlock("minecraft:crafting_table").build());
+                if (!helper.getLevel().getBlockState(tablePos).is(Blocks.CRAFTING_TABLE)) {
+                    throw new IllegalStateException("crafting table was not placed at " + tablePos.toShortString());
+                }
                 long tableSession = openBlock(env, tablePos);
                 move(env, tableSession, List.of(
-                    transfer(8, 36, 1, 1), transfer(8, 39, 1, 1),
-                    transfer(35, 9, 4, 1),
-                    transfer(8, 36, 1, 1), transfer(8, 37, 1, 1), transfer(8, 38, 1, 1),
-                    transfer(9, 40, 1, 1), transfer(9, 43, 1, 1),
-                    transfer(35, 0, 1, 1)
+                    transfer(7, 35, 1, 1), transfer(7, 38, 1, 1),
+                    transfer(34, 8, 4, 1),
+                    transfer(7, 35, 1, 1), transfer(7, 36, 1, 1), transfer(7, 37, 1, 1),
+                    transfer(8, 39, 1, 1), transfer(8, 42, 1, 1),
+                    transfer(34, 0, 1, 1)
                 ));
                 close(env, tableSession);
 
@@ -152,11 +162,11 @@ public final class IronMiningEnvGameTests {
                 Mob currentMob = (Mob) helper.getLevel().getEntity(originalMob.getUUID());
                 int cobblestoneSlot = findItemSlot(currentMob, Items.COBBLESTONE);
                 move(env, tableSession, List.of(
-                    transfer(0, 11, 1, 1),
-                    transfer(cobblestoneSlot, 36, 1, 1), transfer(cobblestoneSlot, 37, 1, 1),
-                    transfer(cobblestoneSlot, 38, 1, 1),
-                    transfer(9, 40, 1, 1), transfer(9, 43, 1, 1),
-                    transfer(35, 0, 1, 1)
+                    transfer(0, 10, 1, 1),
+                    transfer(cobblestoneSlot, 35, 1, 1), transfer(cobblestoneSlot, 36, 1, 1),
+                    transfer(cobblestoneSlot, 37, 1, 1),
+                    transfer(8, 39, 1, 1), transfer(8, 42, 1, 1),
+                    transfer(34, 0, 1, 1)
                 ));
                 close(env, tableSession);
 
@@ -382,7 +392,7 @@ public final class IronMiningEnvGameTests {
      * @param suffix 测试场景后缀
      * @return 唯一测试 ID
      */
-    private static Identifier testId(String suffix) {
-        return Identifier.fromNamespaceAndPath(GymCraft.MODID, "iron_mining_" + suffix + "_test");
+    private static ResourceLocation testId(String suffix) {
+        return ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "iron_mining_" + suffix + "_test");
     }
 }

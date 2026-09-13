@@ -14,7 +14,7 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
-import net.neoforged.neoforge.client.network.ClientPacketDistributor;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
 @Mod(value = GymCraft.MODID, dist = Dist.CLIENT)
@@ -52,7 +52,7 @@ public class GymCraftClient {
 
         int direction = event.getScrollDeltaY() > 0.0 ? 1 : -1;
         String selected = EnvToolItem.cycleSelectedEnvType(stack, direction);
-        ClientPacketDistributor.sendToServer(new SelectEnvTypePayload(selected));
+        PacketDistributor.sendToServer(new SelectEnvTypePayload(selected));
         minecraft.player.sendSystemMessage(Component.literal("Selected environment: " + selected));
         event.setCanceled(true);
     }

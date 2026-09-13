@@ -2,7 +2,7 @@ package io.github.mousemeya.gymcraft.gym.env.envs;
 
 import java.util.List;
 
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
@@ -28,7 +28,7 @@ public class SimpleMobEnv extends AbstractMcEnv {
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Agent
      */
-    public SimpleMobEnv(Identifier envTypeId, Mob mob) {
+    public SimpleMobEnv(ResourceLocation envTypeId, Mob mob) {
         super(
             envTypeId,
             mob,
@@ -78,7 +78,7 @@ public class SimpleMobEnv extends AbstractMcEnv {
          * @return 新环境实例
          */
         @Override
-        public SimpleMobEnv create(Identifier envTypeId, Mob mob) {
+        public SimpleMobEnv create(ResourceLocation envTypeId, Mob mob) {
             return new SimpleMobEnv(envTypeId, mob);
         }
     }

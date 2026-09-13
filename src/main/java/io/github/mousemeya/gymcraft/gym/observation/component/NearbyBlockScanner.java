@@ -77,7 +77,8 @@ public final class NearbyBlockScanner {
                 }
 
                 Direction faceTowardAir = direction.getOpposite();
-                if (filter.test(state) && Block.shouldRenderFace(level, next, state, airState, faceTowardAir)) {
+                // 1.21.1 签名：shouldRenderFace(state, level, pos, direction, neighborPos)
+                if (filter.test(state) && Block.shouldRenderFace(state, level, next, faceTowardAir, airPos)) {
                     visibleBlocks.putIfAbsent(next.asLong(), new ScannedBlock(next, state, distance(center, next)));
                     if (visibleBlocks.size() >= maxBlocks) {
                         break;
@@ -100,7 +101,7 @@ public final class NearbyBlockScanner {
             BlockPos neighborPos = airPos.relative(direction);
             BlockState neighborState = level.getBlockState(neighborPos);
             if (!canTraverse(level, neighborPos, neighborState)
-                && Block.shouldRenderFace(level, neighborPos, neighborState, airState, direction.getOpposite())) {
+                && Block.shouldRenderFace(neighborState, level, neighborPos, direction.getOpposite(), airPos)) {
                 return true;
             }
         }

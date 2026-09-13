@@ -9,6 +9,8 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 
+import javax.annotation.Nullable;
+
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
@@ -104,9 +106,27 @@ public class SetAttackTargetController extends AbstractActionComponentController
             }
         }
         if (!component.getTargetUuid().isEmpty() && mob.level() instanceof ServerLevel serverLevel) {
-            Entity found = serverLevel.getEntityInAnyDimension(UUID.fromString(component.getTargetUuid()));
+            Entity found = findEntityByUuid(serverLevel.getServer(), UUID.fromString(component.getTargetUuid()));
             if (found instanceof LivingEntity living) {
                 return living;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 1.21.1 无 {@code getEntityInAnyDimension}：逐维度查找 UUID 对应实体。
+     *
+     * @param server 目标服务端
+     * @param uuid 待查找实体 UUID
+     * @return 命中的实体；不存在时为 null
+     */
+    @Nullable
+    private static Entity findEntityByUuid(net.minecraft.server.MinecraftServer server, UUID uuid) {
+        for (ServerLevel dimLevel : server.getAllLevels()) {
+            Entity found = dimLevel.getEntity(uuid);
+            if (found != null) {
+                return found;
             }
         }
         return null;

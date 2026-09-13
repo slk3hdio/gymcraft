@@ -4,7 +4,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
@@ -17,10 +17,10 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  * </p>
  */
 public final class MobAttachmentAccessScope {
-    private final Set<Identifier> allowedIds;
+    private final Set<ResourceLocation> allowedIds;
 
     /** 使用已确认允许的描述器 ID 创建不可变作用域。 */
-    private MobAttachmentAccessScope(Set<Identifier> allowedIds) {
+    private MobAttachmentAccessScope(Set<ResourceLocation> allowedIds) {
         this.allowedIds = Set.copyOf(allowedIds);
     }
 
@@ -32,7 +32,7 @@ public final class MobAttachmentAccessScope {
      * @return 新的作用域实例
      */
     public static MobAttachmentAccessScope activate(Mob mob, Collection<? extends MobAttachmentSpec<?>> specs) {
-        Set<Identifier> allowed = new LinkedHashSet<>();
+        Set<ResourceLocation> allowed = new LinkedHashSet<>();
         for (MobAttachmentSpec<?> spec : specs) {
             if (!spec.supports(mob)) {
                 continue;

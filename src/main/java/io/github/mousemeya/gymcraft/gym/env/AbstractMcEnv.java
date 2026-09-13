@@ -9,7 +9,7 @@ import com.google.protobuf.Message;
 import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
@@ -48,7 +48,7 @@ public abstract class AbstractMcEnv implements McEnv {
     /** reset options：是否在 reset 后和相邻动作之间的空闲期禁用原版 AI。 */
     public static final String DISABLE_VANILLA_AI_OPTION = "disable_vanilla_ai";
 
-    protected final Identifier envTypeId;
+    protected final ResourceLocation envTypeId;
     protected final UUID envId;
     protected final ActionDispatcher actionController;
     protected final ObservationComposer observationCreator;
@@ -78,7 +78,7 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     protected AbstractMcEnv(
-        Identifier envTypeId,
+        ResourceLocation envTypeId,
         Mob mob,
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents
@@ -96,7 +96,7 @@ public abstract class AbstractMcEnv implements McEnv {
      * @param attachmentSpecs 当前环境允许访问的附件描述器
      */
     protected AbstractMcEnv(
-        Identifier envTypeId,
+        ResourceLocation envTypeId,
         Mob mob,
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents,
@@ -143,13 +143,13 @@ public abstract class AbstractMcEnv implements McEnv {
         return this.observationCreator.getComponent(factory);
     }
 
-    protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionDispatcher actionController, ObservationComposer observationCreator) {
+    protected AbstractMcEnv(ResourceLocation envTypeId, Mob mob, ActionDispatcher actionController, ObservationComposer observationCreator) {
         this(envTypeId, mob, actionController, observationCreator, java.util.List.of());
     }
 
     /** 使用已构建组件与显式附件声明初始化环境。 */
     protected AbstractMcEnv(
-        Identifier envTypeId,
+        ResourceLocation envTypeId,
         Mob mob,
         ActionDispatcher actionController,
         ObservationComposer observationCreator,

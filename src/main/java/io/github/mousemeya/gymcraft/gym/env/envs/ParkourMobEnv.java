@@ -7,7 +7,7 @@ import java.util.Map;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
@@ -49,7 +49,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
     private boolean resourceExhausted;
 
     /** 创建跳搭环境并暴露跳跃、放置、移动和空操作组件。 */
-    public ParkourMobEnv(Identifier envTypeId, Mob mob) {
+    public ParkourMobEnv(ResourceLocation envTypeId, Mob mob) {
         super(envTypeId, mob,
             List.of(ActionComponents.NOOP.get(), ActionComponents.JUMP.get(),
                 ActionComponents.SET_BLOCK.get(), ActionComponents.STEP_MOVE.get()),
@@ -68,8 +68,9 @@ public class ParkourMobEnv extends AbstractMcEnv {
         this.maxSteps = positiveInt(options, MAX_STEPS_OPTION, DEFAULT_MAX_STEPS);
         int count = positiveInt(options, BLOCK_COUNT_OPTION, DEFAULT_BLOCK_COUNT);
         String blockId = stringOption(options, BLOCK_OPTION, "minecraft:stone");
-        Block block = BuiltInRegistries.BLOCK.get(Identifier.parse(blockId))
-            .map(reference -> reference.value()).orElse(Blocks.AIR);
+        // 1.21.1 的 Registry#get(ResourceLocation) 直接返回方块（未注册为 null）
+        Block block = java.util.Objects.requireNonNullElse(
+            BuiltInRegistries.BLOCK.get(ResourceLocation.parse(blockId)), Blocks.AIR);
         if (block == Blocks.AIR || block.asItem() == null) {
             throw new IllegalArgumentException("Invalid parkour block: " + blockId);
         }
@@ -222,7 +223,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
     public static final class Factory implements McEnvFactory {
         /** 创建指定 Mob 的跳搭环境。 */
         @Override
-        public ParkourMobEnv create(Identifier envTypeId, Mob mob) {
+        public ParkourMobEnv create(ResourceLocation envTypeId, Mob mob) {
             return new ParkourMobEnv(envTypeId, mob);
         }
     }

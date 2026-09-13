@@ -13,7 +13,7 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import net.minecraft.world.level.block.Block;
-import net.neoforged.neoforge.transfer.item.ItemStacksResourceHandler;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 /**
  * 附件类型注册入口 —— 通过 {@link DeferredRegister} 将 {@link AttachmentType}
@@ -61,10 +61,11 @@ public final class ModAttachments {
     );
 
     /** 27 格专属背包持久化附件；死亡时不复制，由掉落事件转移其内容。 */
-    public static final DeferredHolder<AttachmentType<?>, AttachmentType<ItemStacksResourceHandler>> AGENT_BACKPACK = REGISTRY.register(
+    public static final DeferredHolder<AttachmentType<?>, AttachmentType<ItemStackHandler>> AGENT_BACKPACK = REGISTRY.register(
         "agent_backpack",
+        // 1.21.1 无 NeoTransfer，改用 neoforge.items.ItemStackHandler（实现 INBTSerializable，可随附件持久化）
         () -> AttachmentType.serializable(
-            () -> new ItemStacksResourceHandler(io.github.mousemeya.gymcraft.gym.attachment.MobAttachments.AGENT_BACKPACK_SIZE)
+            () -> new ItemStackHandler(io.github.mousemeya.gymcraft.gym.attachment.MobAttachments.AGENT_BACKPACK_SIZE)
         ).build()
     );
 

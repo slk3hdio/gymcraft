@@ -7,7 +7,7 @@ import com.google.protobuf.Any;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.Blocks;
@@ -48,7 +48,7 @@ public final class AgentDeathGameTests {
     public static void idleDeathReturnsTerminatedStep(GameTestHelper helper) {
         Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
         TestEnv env = new TestEnv(mob);
-        helper.kill(mob);
+        mob.kill();
 
         // 先留出两个 tick，确保死亡发生时没有待完成动作，复现终端交互中的空闲死亡路径。
         helper.runAfterDelay(2, () -> {
@@ -109,7 +109,7 @@ public final class AgentDeathGameTests {
         helper.runAfterDelay(3, () -> {
             assertEquals(helper, target, mob.getTarget(), "set_attack_target must be running before agent death");
             assertTrue(helper, response.get() == null, "RUNNING action returned before agent death");
-            helper.kill(mob);
+            mob.kill();
 
             helper.runAfterDelay(3, () -> {
                 assertTrue(helper, failure.get() == null, "running action raised on agent death: " + failure.get());
@@ -157,7 +157,7 @@ public final class AgentDeathGameTests {
             startStep(env, action, response, failure);
             helper.runAfterDelay(2, () -> {
                 assertTrue(helper, response.get() == null, "move_to returned before agent death");
-                helper.kill(mob);
+                mob.kill();
                 helper.runAfterDelay(3, () -> {
                     assertTrue(helper, failure.get() == null, "move_to raised on agent death: " + failure.get());
                     StepResponse stepResponse = response.get();
@@ -185,7 +185,7 @@ public final class AgentDeathGameTests {
         Mob aliveMob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(6, 1, 2));
         TestEnv neverTerminateEnv = new TestEnv(deadMob, TerminationRule.NEVER);
         TestEnv alwaysTerminateEnv = new TestEnv(aliveMob, TerminationRule.ALWAYS);
-        helper.kill(deadMob);
+        deadMob.kill();
 
         helper.runAfterDelay(2, () -> {
             ProtoMcAction noop = noopAction();
@@ -292,7 +292,7 @@ public final class AgentDeathGameTests {
          */
         private TestEnv(Mob mob, TerminationRule terminationRule) {
             super(
-                Identifier.fromNamespaceAndPath(GymCraft.MODID, "agent_death_test"),
+                ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "agent_death_test"),
                 mob,
                 List.of(ActionComponents.NOOP.get(), ActionComponents.SET_ATTACK_TARGET.get(), ActionComponents.MOVE_TO.get()),
                 List.of()

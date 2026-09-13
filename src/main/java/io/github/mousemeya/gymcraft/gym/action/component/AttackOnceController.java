@@ -72,8 +72,8 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
         }
         if (target == null) target = mob.getTarget();
         boolean attacked = false;
-        if (target != null && mob.level() instanceof ServerLevel serverLevel && mob.isWithinMeleeAttackRange(target)) {
-            mob.doHurtTarget(serverLevel, target);
+        if (target != null && mob.level() instanceof ServerLevel && mob.isWithinMeleeAttackRange(target)) {
+            mob.doHurtTarget(target);
             attacked = true;
         }
         ActionState state = attacked

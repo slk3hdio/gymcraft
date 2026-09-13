@@ -51,8 +51,8 @@ base {
     archivesName = mod_id
 }
 
-// Mojang ships Java 25 to end users in 26.1, so mods should target Java 25.
-java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+// Mojang ships Java 21 to end users in 1.21.1, so mods should target Java 21.
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 neoForge {
     // Specify the version of NeoForge to use.
@@ -127,80 +127,88 @@ neoForge {
 // "optional", meaning it will not be pulled by dependents of this mod.
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+    // 1.21.1（<= 1.21.8）的 dev 运行不会自动把 implementation 依赖放进运行类路径：
+    // gRPC/protobuf 等非 MC 库声明在 libraries，同时挂到编译类路径与 additionalRuntimeClasspath；
+    // 生产环境由 jarJar 内嵌（见 dependencies 块注释）。
+    libraries
+    implementation.extendsFrom libraries
+    additionalRuntimeClasspath.extendsFrom libraries
 }
 
 dependencies {
-    implementation 'com.google.protobuf:protobuf-java:4.30.2'
-    implementation 'com.google.protobuf:protobuf-java-util:4.30.2'
-    implementation 'io.grpc:grpc-netty-shaded:1.72.0'
-    implementation 'io.grpc:grpc-protobuf:1.72.0'
-    implementation 'io.grpc:grpc-stub:1.72.0'
+    libraries 'com.google.protobuf:protobuf-java:4.30.2'
+    libraries('com.google.protobuf:protobuf-java-util:4.30.2') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }
+    // 排除 guava: MC 1.21.1 对 guava 32.1.2-jre 声明 strictly, gRPC 传递的 guava 33 会造成解析冲突;
+    // 编译/运行时 guava 均由 MC 本体提供（guava 32.1.2 满足 gRPC 用到的 API 面）。
+    libraries('io.grpc:grpc-netty-shaded:1.72.0') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }
+    libraries('io.grpc:grpc-protobuf:1.72.0') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }
+    libraries('io.grpc:grpc-stub:1.72.0') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }
     compileOnly 'org.apache.tomcat:annotations-api:6.0.53'
 
     // JarJar: 把 gRPC/protobuf 运行时依赖内嵌进模组 jar（用户端无需单独提供）。
     // grpc-netty-shaded 不含 grpc-core/api/context 等类, 需逐个显式内嵌;
     // guava/gson 由 Minecraft 本体提供, 不内嵌避免版本冲突。
-    jarJar(implementation('io.grpc:grpc-netty-shaded')) {
+    jarJar(libraries('io.grpc:grpc-netty-shaded') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '[1.72.0,1.73.0)'
             prefer '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-core')) {
+    jarJar(libraries('io.grpc:grpc-core') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '[1.72.0,1.73.0)'
             prefer '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-api')) {
+    jarJar(libraries('io.grpc:grpc-api') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '[1.72.0,1.73.0)'
             prefer '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-context')) {
+    jarJar(libraries('io.grpc:grpc-context') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '[1.72.0,1.73.0)'
             prefer '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-util')) {
+    jarJar(libraries('io.grpc:grpc-util') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '[1.72.0,1.73.0)'
             prefer '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-protobuf')) {
+    jarJar(libraries('io.grpc:grpc-protobuf') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '[1.72.0,1.73.0)'
             prefer '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-protobuf-lite')) {
+    jarJar(libraries('io.grpc:grpc-protobuf-lite') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson'; exclude group: 'com.google.protobuf', module: 'protobuf-javalite' }) {
         version {
             strictly '[1.72.0,1.73.0)'
             prefer '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-stub')) {
+    jarJar(libraries('io.grpc:grpc-stub') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '[1.72.0,1.73.0)'
             prefer '1.72.0'
         }
     }
-    jarJar(implementation('io.perfmark:perfmark-api')) {
+    jarJar(libraries('io.perfmark:perfmark-api')) {
         version {
             strictly '[0.27.0,0.28.0)'
             prefer '0.27.0'
         }
     }
-    jarJar(implementation('com.google.api.grpc:proto-google-common-protos')) {
+    jarJar(libraries('com.google.api.grpc:proto-google-common-protos') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '[2.51.0,2.52.0)'
             prefer '2.51.0'
         }
     }
-    jarJar(implementation('com.google.protobuf:protobuf-java')) {
+    jarJar(libraries('com.google.protobuf:protobuf-java')) {
         version {
             strictly '[4.30.2,4.31.0)'
             prefer '4.30.2'
@@ -287,6 +295,42 @@ publishing {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
     options.compilerArgs.add('-Xlint:deprecation')
+}
+
+var generatedGameTestsFile = layout.projectDirectory.file(
+    'src/main/java/io/github/mousemeya/gymcraft/gametest/GeneratedGameTests.java').asFile
+
+// 1.21.1 只支持注解式 GameTest；编译前确保所有公开测试方法都有且仅有一个委托入口。
+var verifyGeneratedGameTests = tasks.register('verifyGeneratedGameTests') {
+    var gameTestSources = fileTree('src/main/java/io/github/mousemeya/gymcraft/gametest') {
+        include '**/*GameTests.java'
+    }
+    inputs.files(gameTestSources)
+    doLast {
+        var methodPattern = ~/public\s+static\s+void\s+(\w+)\s*\(\s*GameTestHelper\s+helper\s*\)/
+        var delegatePattern = ~/(\w+GameTests)\.(\w+)\(helper\);/
+        var expected = [] as Set
+        gameTestSources.files.findAll { it != generatedGameTestsFile }.each { sourceFile ->
+            (sourceFile.getText('UTF-8') =~ methodPattern).each { match ->
+                expected.add("${sourceFile.name - '.java'}.${match[1]}")
+            }
+        }
+        var actual = [] as Set
+        (generatedGameTestsFile.getText('UTF-8') =~ delegatePattern).each { match ->
+            if (!actual.add("${match[1]}.${match[2]}")) {
+                throw new GradleException("GeneratedGameTests contains duplicate delegate: ${match[1]}.${match[2]}")
+            }
+        }
+        var missing = expected - actual
+        var stale = actual - expected
+        if (!missing.isEmpty() || !stale.isEmpty()) {
+            throw new GradleException("GeneratedGameTests is out of sync; missing=${missing}, stale=${stale}")
+        }
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn verifyGeneratedGameTests
 }
 
 var pythonDir = file('src/main/python')

@@ -5,6 +5,7 @@ import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryTransaction;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -66,6 +67,14 @@ public final class UseItemConsumption {
     public void onFinish(LivingEntityUseItemEvent.Finish event) {
         if (event.getEntity() == this.mob) {
             this.finished = true;
+            // 1.21.1 原版药水仅对 Player 消耗并返回玻璃瓶；Mob 饮用需补齐语义：
+            // 未消耗时收缩一份并归还玻璃瓶，保持 26.1 的消费契约
+            ItemStack result = event.getResultStack();
+            ItemStack used = event.getItem();
+            if (result.is(Items.POTION) && ItemStack.isSameItemSameComponents(result, used)) {
+                result.shrink(1);
+                event.setResultStack(result.isEmpty() ? new ItemStack(Items.GLASS_BOTTLE) : result);
+            }
         }
     }
 

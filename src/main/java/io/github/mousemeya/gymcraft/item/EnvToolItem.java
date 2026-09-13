@@ -9,7 +9,7 @@ import io.github.mousemeya.gymcraft.registry.EnvFactories;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
@@ -107,7 +107,9 @@ public class EnvToolItem extends Item {
         if (customData == null || !customData.contains(ENV_TYPE_TAG)) {
             return DEFAULT_ENV_TYPE;
         }
-        return customData.copyTag().getString(ENV_TYPE_TAG).orElse(DEFAULT_ENV_TYPE);
+                // 1.21.1 的 CompoundTag#getString 直接返回 String（键缺失时为空串）
+        String stored = customData.copyTag().getString(ENV_TYPE_TAG);
+        return stored.isEmpty() ? DEFAULT_ENV_TYPE : stored;
     }
 
     public static String cycleSelectedEnvType(ItemStack stack, int direction) {
@@ -132,7 +134,7 @@ public class EnvToolItem extends Item {
 
     private static List<String> getRegisteredEnvTypes() {
         List<String> envTypes = new ArrayList<>();
-        for (Identifier id : RegistryKeys.ENV_FACTORIES.keySet()) {
+        for (ResourceLocation id : RegistryKeys.ENV_FACTORIES.keySet()) {
             envTypes.add(id.toString());
         }
         envTypes.sort(Comparator.naturalOrder());

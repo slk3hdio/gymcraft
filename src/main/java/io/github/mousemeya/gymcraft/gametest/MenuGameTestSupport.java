@@ -67,7 +67,7 @@ public final class MenuGameTestSupport {
     /** 放置箱子并返回其 BlockEntity。 */
     public static ChestBlockEntity placeChest(GameTestHelper helper, BlockPos relPos) {
         helper.setBlock(relPos, Blocks.CHEST);
-        return helper.getBlockEntity(relPos, ChestBlockEntity.class);
+        return helper.getBlockEntity(relPos);
     }
 
     /** 打开方块菜单并断言成功。 */
@@ -134,7 +134,7 @@ public final class MenuGameTestSupport {
     /** 放置讲台并放入指定页数的成书。 */
     public static LecternBlockEntity placeLecternWithBook(GameTestHelper helper, BlockPos relPos, int pageCount) {
         helper.setBlock(relPos, Blocks.LECTERN);
-        LecternBlockEntity lectern = helper.getBlockEntity(relPos, LecternBlockEntity.class);
+        LecternBlockEntity lectern = helper.getBlockEntity(relPos);
         ItemStack book = new ItemStack(Items.WRITTEN_BOOK);
         var pages = new java.util.ArrayList<Filterable<Component>>(pageCount);
         for (int i = 0; i < pageCount; i++) {

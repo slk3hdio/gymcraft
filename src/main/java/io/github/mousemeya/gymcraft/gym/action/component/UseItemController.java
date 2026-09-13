@@ -8,11 +8,12 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
-import net.minecraft.world.entity.animal.golem.IronGolem;
-import net.minecraft.world.entity.monster.zombie.ZombieVillager;
+import net.minecraft.world.entity.animal.IronGolem;
+import net.minecraft.world.entity.monster.ZombieVillager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.context.UseOnContext;
@@ -149,7 +150,8 @@ public final class UseItemController extends AbstractActionComponentController<P
         try {
             BlockHitResult blockHit = action.hasBlock() ? this.blockTarget(action) : null;
             LivingEntity entity = action.hasEntity() ? this.entityTarget(action) : null;
-            if (!action.hasBlock() && !action.hasEntity() && stack.has(DataComponents.CONSUMABLE)) {
+            // 1.21.1 无 CONSUMABLE 组件：FOOD 组件或 EAT/DRINK 使用动作（药水、蜂蜜等饮品）都走消费会话
+            if (!action.hasBlock() && !action.hasEntity() && this.isConsumable(stack)) {
                 // 提前验证桥接容量，保证跨 tick 消费结束后一定能建立清算桥接。
                 AgentInventoryBridge.validateCapacity(this.mob());
                 this.consumption = new UseItemConsumption(this.mob(), action.getSlotId());
@@ -288,9 +290,10 @@ public final class UseItemController extends AbstractActionComponentController<P
         InteractionResult result;
         if (block != null) {
             // 原版右键方块先让方块处理手中物品；堆肥桶的投入逻辑位于此入口。
+            // NeoForge 1.21.1 的 useItemOn 返回 ItemInteractionResult，经 result() 转回原版枚举。
             result = this.mob().level().getBlockState(block.getBlockPos()).useItemOn(
                 stack, this.mob().level(), inventory.player(), InteractionHand.MAIN_HAND, block
-            );
+            ).result();
             if (!result.consumesAction()) {
                 result = stack.useOn(new UseOnContext(inventory.player(), InteractionHand.MAIN_HAND, block));
             }
@@ -299,24 +302,55 @@ public final class UseItemController extends AbstractActionComponentController<P
             // 仅开放这两个组合，避免触发交易或骑乘。
             if (entity instanceof ZombieVillager && stack.is(Items.GOLDEN_APPLE)
                 || entity instanceof IronGolem && stack.is(Items.IRON_INGOT)) {
-                result = entity.interact(inventory.player(), InteractionHand.MAIN_HAND, entity.position());
+                result = entity.interact(inventory.player(), InteractionHand.MAIN_HAND);
             } else {
                 result = stack.interactLivingEntity(inventory.player(), entity, InteractionHand.MAIN_HAND);
             }
         } else {
-            result = stack.use(this.mob().level(), inventory.player(), InteractionHand.MAIN_HAND);
+            result = this.useSustained(stack, inventory);
         }
         // 目标不接受直接交互时（如投掷物），保持已转向目标的姿态按普通使用执行，与原版右键落空后继续使用物品一致。
         if ((block != null || entity != null) && !result.consumesAction()) {
-            result = stack.use(this.mob().level(), inventory.player(), InteractionHand.MAIN_HAND);
+            result = this.useSustained(stack, inventory);
         }
-        if (result instanceof InteractionResult.Success success && success.heldItemTransformedTo() != null) {
-            inventory.player().setItemInHand(InteractionHand.MAIN_HAND, success.heldItemTransformedTo());
-        }
+        // 1.21.1 无 InteractionResult.Success#heldItemTransformedTo：普通交互直接原地修改传入堆栈，
+        // 桥接玩家主手已同步，无需额外写回。
         if (inventory.player().isUsingItem()) {
             throw new IllegalArgumentException("non-consumable sustained use is not supported");
         }
         return result;
+    }
+
+    /**
+     * @param stack 待使用的堆栈
+     * @param eater 使用者（桥接玩家）
+     * @return 该物品是否应进入跨 tick 消费会话（食物/饮品）
+     */
+    private boolean isConsumable(ItemStack stack) {
+        if (stack.has(DataComponents.FOOD)) {
+            return true;
+        }
+        // 1.21.1 的 ItemStack#getUseAnimation 无参
+        net.minecraft.world.item.UseAnim animation = stack.getUseAnimation();
+        return animation == net.minecraft.world.item.UseAnim.EAT
+            || animation == net.minecraft.world.item.UseAnim.DRINK;
+    }
+
+    /**
+     * 普通使用（饮食/投掷等）。1.21.1 的 {@code ItemStack#use} 返回
+     * {@link InteractionResultHolder}，需要把用后堆栈（如汤碗）写回主手。
+     *
+     * @param stack 使用前的主手堆栈
+     * @param inventory 桥接事务
+     * @return 原版交互结果
+     */
+    private InteractionResult useSustained(ItemStack stack, AgentInventoryTransaction inventory) {
+        InteractionResultHolder<ItemStack> holder =
+            stack.use(this.mob().level(), inventory.player(), InteractionHand.MAIN_HAND);
+        if (holder.getResult().consumesAction() && !ItemStack.matches(stack, holder.getObject())) {
+            inventory.player().setItemInHand(InteractionHand.MAIN_HAND, holder.getObject());
+        }
+        return holder.getResult();
     }
 
     /**

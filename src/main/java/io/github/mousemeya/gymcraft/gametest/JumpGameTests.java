@@ -21,7 +21,7 @@ import io.github.mousemeya.gymcraft.registry.ActionComponents;
 /**
  * 跳跃动作：apply 立即返回 COMPLETED，跳跃意图经 {@code JumpControl}
  * 传递到 Mob —— {@code JumpControl.tick()}（游戏每 tick 的常规驱动）后
- * {@code isJumping()} 为 true。
+ * {@code jumping} 字段为 true（1.21.1 无公开 isJumping()，经 AT 放开字段）。
  */
 public final class JumpGameTests {
     private JumpGameTests() {
@@ -40,7 +40,7 @@ public final class JumpGameTests {
 
         // JumpControl.tick() 是游戏每 tick 对跳跃控制的常规驱动
         mob.getJumpControl().tick();
-        assertTrue(helper, mob.isJumping(), "mob should be jumping after JumpControl tick");
+        assertTrue(helper, mob.jumping, "mob should be jumping after JumpControl tick");
         helper.succeed();
     }
 }

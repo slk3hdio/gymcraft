@@ -105,7 +105,7 @@ public final class MenuButtonGameTests {
         setMenuSlot(session, 0, new ItemStack(Items.STONE));
         observe(mob);
         long sid = session.sessionId();
-        assertTrue(helper, menu.getNumberOfVisibleRecipes() > 0, "no visible recipes for stone");
+        assertTrue(helper, menu.getNumRecipes() > 0, "no visible recipes for stone");
 
         assertEquals(helper, ActionStatus.COMPLETED, clickButton(mob, sid, 0).status(), "select recipe 0 failed");
         assertEquals(helper, 0, menu.getSelectedRecipeIndex(), "selected recipe index");
@@ -113,7 +113,7 @@ public final class MenuButtonGameTests {
         assertEquals(helper, ActionStatus.FAILED, clickButton(mob, sid, 0).status(),
             "re-selecting current recipe did not fail");
         // 越界 → 适配器层失败
-        assertEquals(helper, ActionStatus.FAILED, clickButton(mob, sid, menu.getNumberOfVisibleRecipes()).status(),
+        assertEquals(helper, ActionStatus.FAILED, clickButton(mob, sid, menu.getNumRecipes()).status(),
             "out-of-range recipe index did not fail");
         helper.succeed();
     }

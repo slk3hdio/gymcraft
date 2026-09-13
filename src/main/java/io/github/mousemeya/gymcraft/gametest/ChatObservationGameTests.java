@@ -14,7 +14,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 
@@ -54,7 +54,7 @@ public final class ChatObservationGameTests {
     public static void chatObservationShowsRecentMessages(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         SimpleMobEnv env = new SimpleMobEnv(
-            Identifier.fromNamespaceAndPath(GymCraft.MODID, "chat_observation_test"), mob);
+            ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "chat_observation_test"), mob);
         AtomicReference<StepResponse> firstStep = new AtomicReference<>();
         AtomicReference<StepResponse> windowStep = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
@@ -126,7 +126,7 @@ public final class ChatObservationGameTests {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         mob.setCustomName(Component.literal("Gym Agent"));
         SimpleMobEnv env = new SimpleMobEnv(
-            Identifier.fromNamespaceAndPath(GymCraft.MODID, "send_chat_test"), mob);
+            ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "send_chat_test"), mob);
         AtomicReference<StepResponse> response = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {

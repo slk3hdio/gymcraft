@@ -9,11 +9,10 @@ import javax.annotation.Nullable;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.animal.equine.AbstractHorse;
+import net.minecraft.world.entity.animal.horse.AbstractHorse;
 import net.minecraft.world.entity.npc.InventoryCarrier;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.neoforge.transfer.item.ItemResource;
-import net.neoforged.neoforge.transfer.item.ItemStacksResourceHandler;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentService;
@@ -24,8 +23,8 @@ import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
  * <p>
  * 编号规则（GymCraft 自定义索引，非 Minecraft 全局槽位编号）：
  * <ul>
- *   <li>{@code 0..7} —— {@link EquipmentSlot#getId()} 对应的八个装备槽</li>
- *   <li>{@code 8..N} —— Mob 自带 {@link Container} 或 env 授权专属背包的局部槽位</li>
+ *   <li>{@code 0..6} —— 装备槽（按 {@link #equipmentSlotId} 固定顺序：MAINHAND/FEET/LEGS/CHEST/HEAD/OFFHAND/BODY）</li>
+ *   <li>{@code 7..N} —— Mob 自带 {@link Container} 或 env 授权专属背包的局部槽位</li>
  * </ul>
  * Mob 自带容器的发现顺序：
  * <ol>
@@ -38,13 +37,32 @@ import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
  * </p>
  */
 public final class AgentInventoryLayout {
-    /** 装备槽段大小：slot_id 0..7 固定对应八个 {@link EquipmentSlot}。 */
-    public static final int EQUIPMENT_SLOT_COUNT = EquipmentSlot.VALUES.size();
+    /** 装备槽段大小：slot_id 0..6 固定对应七个 {@link EquipmentSlot}。 */
+    public static final int EQUIPMENT_SLOT_COUNT = EquipmentSlot.values().length;
 
     private final List<AgentSlot> slots;
 
     private AgentInventoryLayout(List<AgentSlot> slots) {
         this.slots = List.copyOf(slots);
+    }
+
+    /**
+     * 固定装备槽 slot_id 映射（1.21.1 的 EquipmentSlot 无 getId，改由本表定义，
+     * 与 FakePlayer 桥接的映射表保持一致）。
+     *
+     * @param slot 装备槽枚举
+     * @return 统一布局中的固定 slot_id
+     */
+    public static int equipmentSlotId(EquipmentSlot slot) {
+        return switch (slot) {
+            case MAINHAND -> 0;
+            case FEET -> 1;
+            case LEGS -> 2;
+            case CHEST -> 3;
+            case HEAD -> 4;
+            case OFFHAND -> 5;
+            case BODY -> 6;
+        };
     }
 
     /**
@@ -55,10 +73,10 @@ public final class AgentInventoryLayout {
      */
     public static AgentInventoryLayout resolve(Mob mob) {
         List<AgentSlot> slots = new ArrayList<>();
-        // 装备槽按 EquipmentSlot.getId() 升序（枚举声明顺序与 id 不一致：OFFHAND id=5，
-        // FEET..HEAD id=1..4），保证 slots 列表顺序 == slot_id 顺序，slot(slotId) 直取成立
-        for (var equipmentSlot : EquipmentSlot.VALUES.stream()
-            .sorted(java.util.Comparator.comparingInt(EquipmentSlot::getId))
+        // 装备槽按 equipmentSlotId 升序（沿用 26.1 版 slot_id 布局：MAINHAND=0, FEET..HEAD=1..4,
+        // OFFHAND=5, BODY=6），保证 slots 列表顺序 == slot_id 顺序，slot(slotId) 直取成立
+        for (var equipmentSlot : java.util.Arrays.stream(EquipmentSlot.values())
+            .sorted(java.util.Comparator.comparingInt(AgentInventoryLayout::equipmentSlotId))
             .toList()) {
             slots.add(new EquipmentAgentSlot(mob, equipmentSlot));
         }
@@ -68,10 +86,10 @@ public final class AgentInventoryLayout {
                 slots.add(new NativeContainerAgentSlot(mob, nativeContainer, i));
             }
         } else if (MobAttachmentAccessScope.canAccess(mob, MobAttachments.AGENT_BACKPACK)) {
-            ItemStacksResourceHandler backpack = MobAttachmentService
+            ItemStackHandler backpack = MobAttachmentService
                 .getIfPresent(mob, MobAttachments.AGENT_BACKPACK)
                 .orElseThrow(() -> new IllegalStateException("Backpack access granted without attachment: " + mob.getUUID()));
-            for (int i = 0; i < backpack.size(); i++) {
+            for (int i = 0; i < backpack.getSlots(); i++) {
                 slots.add(new BackpackAgentSlot(mob, backpack, i));
             }
         }
@@ -99,7 +117,7 @@ public final class AgentInventoryLayout {
                 continue;
             }
             slot.setItem(ItemStack.EMPTY);
-            mob.spawnAtLocation(level, stack);
+            mob.spawnAtLocation(stack);
             dropped.add(stack);
         }
         return List.copyOf(dropped);
@@ -137,7 +155,7 @@ public final class AgentInventoryLayout {
         return null;
     }
 
-    /** @return 统一物品栏槽位总数（装备槽 8 个 + 容器槽个数） */
+    /** @return 统一物品栏槽位总数（装备槽 7 个 + 容器槽个数） */
     public int size() {
         return this.slots.size();
     }
@@ -190,7 +208,7 @@ public final class AgentInventoryLayout {
 
         @Override
         public int slotId() {
-            return this.equipmentSlot.getId();
+            return equipmentSlotId(this.equipmentSlot);
         }
 
         @Override
@@ -216,15 +234,17 @@ public final class AgentInventoryLayout {
             if (this.equipmentSlot.getType() == EquipmentSlot.Type.HAND) {
                 return true;
             }
-            return this.mob.isEquippableInSlot(stack, this.equipmentSlot);
+            // 1.21.1 无 Mob#isEquippableInSlot：非手持槽要求物品声明的装备槽与目标槽一致
+            return this.mob.getEquipmentSlotForItem(stack) == this.equipmentSlot;
         }
 
         @Override
         public int maxStackSize(ItemStack stack) {
-            int limit = this.equipmentSlot.countLimit > 0
-                ? this.equipmentSlot.countLimit
-                : stack.getMaxStackSize();
-            return Math.min(limit, stack.getMaxStackSize());
+            // 1.21.1 的 EquipmentSlot#countLimit 为 private：手持槽无额外限制，盔甲类槽位为 1
+            if (this.equipmentSlot.getType() == EquipmentSlot.Type.HAND) {
+                return stack.getMaxStackSize();
+            }
+            return Math.min(1, stack.getMaxStackSize());
         }
 
         @Override
@@ -294,11 +314,11 @@ public final class AgentInventoryLayout {
      */
     private static final class BackpackAgentSlot implements AgentSlot {
         private final Mob mob;
-        private final ItemStacksResourceHandler backpack;
+        private final ItemStackHandler backpack;
         private final int localIndex;
 
         /** 保存背包处理器和局部索引，所有读写直接指向持久附件。 */
-        private BackpackAgentSlot(Mob mob, ItemStacksResourceHandler backpack, int localIndex) {
+        private BackpackAgentSlot(Mob mob, ItemStackHandler backpack, int localIndex) {
             this.mob = mob;
             this.backpack = backpack;
             this.localIndex = localIndex;
@@ -325,26 +345,25 @@ public final class AgentInventoryLayout {
         /** @return 当前背包堆栈的副本 */
         @Override
         public ItemStack getItem() {
-            int count = Math.toIntExact(this.backpack.getAmountAsLong(this.localIndex));
-            return this.backpack.getResource(this.localIndex).toStack(count);
+            return this.backpack.getStackInSlot(this.localIndex).copy();
         }
 
-        /** @return 非空物品是否可存入该资源槽 */
+        /** @return 非空物品是否可存入该背包槽 */
         @Override
         public boolean mayPlace(ItemStack stack) {
-            return !stack.isEmpty() && this.backpack.isValid(this.localIndex, ItemResource.of(stack));
+            return !stack.isEmpty() && this.backpack.isItemValid(this.localIndex, stack);
         }
 
-        /** @return 处理器对候选物品报告的容量 */
+        /** @return 背包槽位上限与物品最大堆叠数的较小值 */
         @Override
         public int maxStackSize(ItemStack stack) {
-            return Math.toIntExact(this.backpack.getCapacityAsLong(this.localIndex, ItemResource.of(stack)));
+            return Math.min(this.backpack.getSlotLimit(this.localIndex), stack.getMaxStackSize());
         }
 
-        /** 使用资源与数量覆盖背包槽。 */
+        /** 使用物品堆叠覆盖背包槽。 */
         @Override
         public void setItem(ItemStack stack) {
-            this.backpack.set(this.localIndex, ItemResource.of(stack), stack.getCount());
+            this.backpack.setStackInSlot(this.localIndex, stack.copy());
         }
     }
 }
