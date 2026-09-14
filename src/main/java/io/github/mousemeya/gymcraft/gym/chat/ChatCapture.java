@@ -80,7 +80,8 @@ public final class ChatCapture {
         if (server == null) {
             return;
         }
-        PendingKey key = new PendingKey(server.getTickCount(), sender, content);
+        // 与 header/world 观测同源的世界 gameTime（而非 server tickCount）。
+        PendingKey key = new PendingKey(RecentChatLog.currentWorldGameTick(server), sender, content);
         synchronized (LOCK) {
             PENDING.computeIfAbsent(key, missing -> new PendingBroadcast(missing.gameTick(), missing.sender(), missing.content()))
                 .recipients.add(recipient);

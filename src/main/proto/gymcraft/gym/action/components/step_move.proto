@@ -10,6 +10,8 @@ message ProtoStepMove {
   float forward = 1;
   float strafe_right = 2;
   float yaw_delta = 3;
-  float pitch_delta = 4;
+  // 4 曾为 pitch_delta：26.1 原版 LookControl 每次 AI tick 复位无注视目标 Mob
+  // 的 pitch，增量写入会被立即覆盖，字段已移除（需要精确俯仰用 look_at）。
+  reserved 4;
   bool jump = 5;
 }
