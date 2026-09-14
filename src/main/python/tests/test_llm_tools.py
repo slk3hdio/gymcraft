@@ -304,7 +304,7 @@ class ActionDslParserTests(unittest.TestCase):
         """当前全部动作组件的标准 DSL 写法都应能生成 protobuf。"""
         commands = [
             "/noop",
-            "/step_move 1 0 0 0 true",
+            "/step_move 1 0 0 true",
             "/look_at entity 2",
             "/move_to 1 64 2 1",
             "/set_attack_target entity 2",

@@ -36,14 +36,32 @@ public final class RecentChatLog {
      */
     public static void append(String sender, String content) {
         var server = ServerLifecycleHooks.getCurrentServer();
-        append(server != null ? server.getTickCount() : 0L, sender, content);
+        append(currentWorldGameTick(server), sender, content);
+    }
+
+    /**
+     * 返回当前世界 gameTime，作为聊天观测的统一时钟。
+     * <p>
+     * 必须与 header/world 观测的 ``game_tick``（{@code level.getGameTime()}）
+     * 同源，agent 才能把聊天消息与其他观测按同一时间轴对齐；注意它与
+     * {@code server.getTickCount()}（本次服务器运行起算）是两个时钟。
+     * </p>
+     *
+     * @param server 当前服务器实例，可为 null（服务器尚未启动完成时记 0）
+     * @return 主世界 gameTime；主世界尚未就绪时为 0
+     */
+    public static long currentWorldGameTick(net.minecraft.server.MinecraftServer server) {
+        if (server == null || server.overworld() == null) {
+            return 0L;
+        }
+        return server.overworld().getGameTime();
     }
 
     /**
      * 追加一条消息；同一游戏刻内发送者与内容均相同的重复发送（广播给 N 个玩家
      * 产生 N 个相同包）只记录一次，空文本直接丢弃。
      *
-     * @param gameTick 消息所在的游戏刻
+     * @param gameTick 消息所在的世界 gameTime（与 header/world 观测同源）
      * @param sender 发送者名；系统/命令消息为空串
      * @param content 消息文本
      */

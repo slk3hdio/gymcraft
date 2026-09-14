@@ -211,7 +211,7 @@ class ActionDslParser:
         """生成可直接放入 LLM system 消息的紧凑命令速查表。"""
         references = {
             "noop": "/noop",
-            "step_move": "/step_move <forward> <strafe_right> [yaw_delta] [pitch_delta] [jump]",
+            "step_move": "/step_move <forward> <strafe_right> [yaw_delta] [jump]",
             "look_at": "/look_at entity|item <entity_id>|block <x> <y> <z>",
             "move_to": "/move_to <x> <y> <z> [stop_distance]",
             "set_attack_target": "/set_attack_target clear|entity <entity_id>|uuid <uuid>",
@@ -323,18 +323,16 @@ class ActionDslParser:
         return ParsedAction(ACTION_JUMP, "jump", jump_pb2.ProtoJump())
 
     def _parse_step_move(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
-        """解析单 tick 移动、旋转和跳跃意图。"""
-        self._require_arity(tokens, 3, 6, line_number)
+        """解析单 tick 移动、偏航旋转和跳跃意图（俯仰由 look_at 负责）。"""
+        self._require_arity(tokens, 3, 5, line_number)
         forward = self._bounded_float(tokens[1], "forward", -1, 1, line_number)
         strafe = self._bounded_float(tokens[2], "strafe_right", -1, 1, line_number)
         yaw = self._bounded_float(tokens[3], "yaw_delta", -180, 180, line_number) if len(tokens) >= 4 else 0.0
-        pitch = self._bounded_float(tokens[4], "pitch_delta", -90, 90, line_number) if len(tokens) >= 5 else 0.0
-        jump = self._parse_bool(tokens[5], "jump", line_number) if len(tokens) >= 6 else False
+        jump = self._parse_bool(tokens[4], "jump", line_number) if len(tokens) >= 5 else False
         payload = step_move_pb2.ProtoStepMove(
             forward=forward,
             strafe_right=strafe,
             yaw_delta=yaw,
-            pitch_delta=pitch,
             jump=jump,
         )
         return ParsedAction(ACTION_STEP_MOVE, "step_move", payload)

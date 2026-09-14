@@ -29,7 +29,6 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
         "forward", new BoxSpace(-1, 1, 1),
         "strafe_right", new BoxSpace(-1, 1, 1),
         "yaw_delta", new BoxSpace(-180, 180, 1),
-        "pitch_delta", new BoxSpace(-90, 90, 1),
         "jump", new BooleanSpace()
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
@@ -53,7 +52,6 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
             "forward", new double[] { component.getForward() },
             "strafe_right", new double[] { component.getStrafeRight() },
             "yaw_delta", new double[] { component.getYawDelta() },
-            "pitch_delta", new double[] { component.getPitchDelta() },
             "jump", component.getJump()
         ));
     }
@@ -69,9 +67,8 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
         if (component.getJump()) {
             mob.getJumpControl().jump();
         }
-        if (component.getYawDelta() != 0 || component.getPitchDelta() != 0) {
+        if (component.getYawDelta() != 0) {
             mob.setYRot(mob.getYRot() + component.getYawDelta());
-            mob.setXRot(mob.getXRot() + component.getPitchDelta());
         }
         return ActionApplyResult.applied(ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE, Goal.Flag.LOOK, Goal.Flag.JUMP)
