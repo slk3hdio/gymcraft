@@ -140,7 +140,7 @@ class UseItemE2E:
         self.equip("offhand", "minecraft:flint_and_steel")
         self.step("/use_item 5 block 5 99 4")
         self.world_check("if block 5 100 4 minecraft:fire")
-        damage = self.command(f'data get entity {self.entity_uuid} equipment.offhand.components."minecraft:damage"')
+        damage = self.command(f'data get entity {self.entity_uuid} HandItems[1].components."minecraft:damage"')
         self.require(damage.rstrip().endswith("1"), damage)
         self.slot(0, "minecraft:stick", 1)
         self.command("setblock 5 100 4 minecraft:air")
@@ -170,7 +170,7 @@ class UseItemE2E:
         """从附近实体观测取网络 ID，再验证命名牌只作用于指定实体。"""
         cow_tag = self.tag + "_cow"
         self.command('summon minecraft:cow 6.5 100 4.5 {Tags:["' + cow_tag + '"],NoAI:1b,NoGravity:1b,Invulnerable:1b}')
-        self.equip("offhand", 'minecraft:name_tag[minecraft:custom_name="E2E cow"]', 2)
+        self.equip("offhand", "minecraft:name_tag[minecraft:custom_name='\"E2E cow\"']", 2)
         targets = self.observation[OBS_NEARBY_ENTITIES].entities
         target = next(value for value in targets if value.entity_type == "minecraft:cow")
         self.step(f"/use_item 5 entity {target.entity_id}")
@@ -291,7 +291,10 @@ class UseItemE2E:
                                "description": error.details()})
         else:
             raise AssertionError("environment close did not interrupt pending Step")
-        self.world_check(f'if data entity {self.entity_uuid} {{equipment:{{mainhand:{{id:"minecraft:stick",count:1}},offhand:{{id:"minecraft:apple",count:3}}}}}}')
+        self.world_check(
+            f'if data entity {self.entity_uuid} '
+            '{HandItems:[{id:"minecraft:stick",count:1},{id:"minecraft:apple",count:3}]}'
+        )
 
     def run(self) -> None:
         """按顺序运行独立场景并记录结果；首个失败保留完整报告后交由调用者退出。"""

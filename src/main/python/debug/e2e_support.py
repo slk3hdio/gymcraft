@@ -106,7 +106,7 @@ class E2ESuite:
         """
         response = self.command(
             f"summon minecraft:husk {x} {y} {z}"
-            f' {{Tags:["{self.tag}"],CustomName:"{name}",'
+            f" {{Tags:[\"{self.tag}\"],CustomName:'\"{name}\"',"
             "Silent:1b,Invulnerable:1b,PersistenceRequired:1b}"
         )
         self.require("Summoned" in response, response)

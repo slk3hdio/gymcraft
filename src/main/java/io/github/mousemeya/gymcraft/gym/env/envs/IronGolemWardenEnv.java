@@ -108,7 +108,8 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
                 ActionComponents.MOVE_TO.get(),
                 ActionComponents.SET_BLOCK.get(),
                 ActionComponents.USE_ITEM.get(),
-                ActionComponents.OPEN_MENU.get()
+                ActionComponents.OPEN_MENU.get(),
+                ActionComponents.CLOSE_MENU.get()
             ),
             List.of(
                 ObservationCreators.SELF.get(),

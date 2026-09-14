@@ -113,7 +113,7 @@ class ResupplyE2E:
     def assert_full_supplies(self, label: str) -> None:
         """断言物资完整：主手 4 铁块、背包 1 雕刻南瓜与 64 铁锭。"""
         supplies = self.dump_supplies(label)
-        expected = {0: ("minecraft:iron_block", 4), 8: ("minecraft:carved_pumpkin", 1), 9: ("minecraft:iron_ingot", 64)}
+        expected = {0: ("minecraft:iron_block", 4), 7: ("minecraft:carved_pumpkin", 1), 8: ("minecraft:iron_ingot", 64)}
         self.require(supplies == expected, f"{label}: expected {expected}, actual {supplies}")
 
     def initial_supplies(self) -> None:
