@@ -164,7 +164,7 @@ class ActionDslParser:
                 if action.component_id == ACTION_MOVE_MENU_ITEM:
                     self._merge_move_menu_item(parsed, action, line_number)
                     continue
-                raise ActionParseError(f"Action /{command_name} is duplicated in the same batch", line_number)
+                raise ActionParseError(f"Action /{command_name} can be performed only once per interaction round, please save any remaining /{command_name} actions for the next round.", line_number)
             self._validate_space(action, line_number)
             component_ids.add(action.component_id)
             parsed.append(action)
