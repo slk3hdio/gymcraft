@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gymcraft"
-version = "1.0.0" # 这里和模组版本号保持一致
+version = "1.1.0" # 这里和模组版本号保持一致
 description = "Python RPC client for GymCraft - Gymnasium-style RL environments in Minecraft"
 readme = "README.md"
 requires-python = ">=3.11"
