@@ -14,7 +14,7 @@ from typing import Any
 from gymcraft.client import GymCraftEnv
 from gymcraft.gym.action.components.noop_pb2 import ProtoNoop
 from gymcraft.llm import ActionDslParser, encode_action_batch
-from gymcraft.type_info import ACTION_NOOP, OBS_CHAT, OBS_SELF, TIMEOUT_SECONDS, Action
+from gymcraft.type_info import ACTION_NOOP, OBS_CHAT, OBS_SELF, TIMEOUT_SECONDS, Action, Observation
 
 ANGLE_TOLERANCE = 5.0
 
@@ -24,7 +24,7 @@ def angle_diff(a: float, b: float) -> float:
     return abs((a - b + 180.0) % 360.0 - 180.0)
 
 
-def self_state(observation: dict[str, Any]) -> Any:
+def self_state(observation: Observation) -> Any:
     """从观测字典中取出 ``gymcraft:self`` 组件状态。"""
     return observation[OBS_SELF]
 
