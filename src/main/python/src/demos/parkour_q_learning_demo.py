@@ -90,7 +90,9 @@ def train(args: argparse.Namespace) -> None:
     q_table: dict[State, list[float]] = defaultdict(lambda: [0.0] * len(actions))
     rng = random.Random(args.seed)
     successes = 0
+    best_height = 0
     try:
+        print(f"开始训练: episodes={args.episodes} max_steps={args.max_steps} target_height={args.target_height}")
         for episode in range(args.episodes):
             obs, _ = env.reset(options={
                 "disable_vanilla_ai": True,
@@ -103,6 +105,7 @@ def train(args: argparse.Namespace) -> None:
             origin_x, origin_z, base_y = math.floor(initial.x), math.floor(initial.z), initial.y
             state = encode_state(obs, args.block_count, origin_x, origin_z, base_y)
             total_reward = 0.0
+            episode_best_height = 0
             for _ in range(args.max_steps):
                 action_index = choose_action(q_table[state], args.epsilon, rng)
                 obs, reward, terminated, truncated, raw_info = env.step(
@@ -117,12 +120,23 @@ def train(args: argparse.Namespace) -> None:
                 )
                 state = next_state
                 total_reward += reward
+                # 记录本回合与历史达到的最高高度，供演示进度输出
+                current_height = int(obs[OBS_SELF].y - base_y)
+                episode_best_height = max(episode_best_height, current_height)
+                best_height = max(best_height, episode_best_height)
                 if terminated or truncated:
                     successes += int(terminated)
                     break
             if (episode + 1) % max(1, args.log_interval) == 0:
-                print(f"episode={episode + 1} reward={total_reward:+.3f} success_rate={successes / (episode + 1):.3f}")
-        print(f"training complete: episodes={args.episodes} success_rate={successes / max(1, args.episodes):.3f}")
+                print(
+                    f"[episode {episode + 1:3d}/{args.episodes}] "
+                    f"reward={total_reward:+8.3f} 本回合最高高度={episode_best_height:2d} "
+                    f"历史最高={best_height:2d} 成功率={successes / (episode + 1):.3f}"
+                )
+        print(
+            f"训练完成: episodes={args.episodes} 成功率={successes / max(1, args.episodes):.3f} "
+            f"历史最高高度={best_height}"
+        )
     finally:
         env.close()
 

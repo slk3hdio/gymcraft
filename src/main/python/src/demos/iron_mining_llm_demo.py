@@ -71,7 +71,9 @@ def run(args: argparse.Namespace) -> None:
             model_text = completion.choices[0].message.content
             if not model_text:
                 raise RuntimeError("Chat Completions API 未返回文本内容")
-            print(f"\n===== LLM turn {step_index + 1} =====\n{json.dumps(context['messages'], indent=2)}\n{model_text}")
+            # 演示输出：只打印模型本轮的决策文本与动作块，完整消息见 --trace 轨迹文件
+            print(f"\n===== LLM 第 {step_index + 1} 轮 =====")
+            print(model_text)
             context, reward, terminated, truncated, info = env.step(model_text)
             action_state = info.get("action_state", {})
             print(
