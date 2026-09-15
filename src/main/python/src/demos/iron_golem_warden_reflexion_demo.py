@@ -3,8 +3,10 @@
 四个角色映射：
 - Actor：Chat Completions LLM 经 LLMGymCraftEnv 逐回合决策；
 - Evaluator：直接采用环境 info 的 success/failure_reason（稀疏奖励任务）；
-- Self-Reflection 模型：回合失败后用同一 LLM 从轨迹摘要生成文字反思；
-- Episodic memory：只保留最近一次反思，注入下一 trial 的任务提示。
+- Self-Reflection 模型：回合失败后用同一 LLM 结合最近三轮的运行摘要与
+  历史反思，从轨迹摘要生成文字反思；
+- Episodic memory：任务提示只注入最近一次反思，反思提示额外携带最近三轮
+  的运行与反思文本。
 """
 
 from __future__ import annotations
@@ -24,28 +26,32 @@ from gymcraft.llm import LLMEnvConfig, LLMGymCraftEnv, ObservationFormatConfig
 
 
 EXPECTED_ENV_TYPE = "gymcraft:iron_golem_warden"
-DEFAULT_TASK = """You control a Minecraft Mob trapped in an enclosed glass-walled arena with a hostile Warden (500 health). You cannot attack. The Warden is weakened (it cannot kill you in one hit), but stay alert. Win by getting the Warden killed.
+DEFAULT_TASK = """You control a Minecraft Mob trapped in an enclosed glass-walled arena with a hostile Warden (500 health). You cannot attack. Win by getting the Warden killed.
 Your supplies: 4 `minecraft:iron_block` in your main hand, plus 1 `minecraft:carved_pumpkin` and 64 `minecraft:iron_ingot` in your backpack. Try to create a powerful ally and then keep it alive. Note that you can only output one action per step.
-ACT QUICKLY: You had better act quickly; The world does not pause while you think, so please directly output your action without explaining it."""
+ACT QUICKLY: You had better act quickly; The world does not pause while you think, so please directly output your action without explaining it.
+"""
 REFLECTION_PROMPT = """You are the self-reflection module of a Reflexion agent playing Minecraft. The agent attempted the task below and did not succeed.
 
 Task:
 {task}
 
-Outcome: stage_reached={stage} failure_reason={failure_reason} steps={steps}
+{history}
+Outcome of the latest failed attempt: stage_reached={stage} failure_reason={failure_reason} steps={steps}
 Final milestone status (achieved / pending / failed with reason):
 {milestones}
 Trajectory (each turn shows the model's gymcraft-action block output and the environment feedback):
 {trajectory}
 
-Write a concise reflection for the agent's next attempt: Confirm completed milestones and document exactly how they were achieved to ensure consistent reproducibility in future attempts; identify specific errors and avoid repeating them.
+Write a concise reflection for the agent's next attempt: Confirm completed milestones and document exactly how they were achieved to ensure consistent reproducibility in future attempts; identify specific errors and avoid repeating them. When doing so, take into account the recent history above — do not repeat reflections or errors already noted in earlier attempts; build on them and refine the strategy.
+
+Questions you need to clarify:
+
+1. What exactly is the correct shape? (Avoid meaningless repetition—such as simply changing the orientation, position, or sequence of placement.)
+2. Does running away help? (Try creating some distance first to see if it actually extends your survival time.)
+3. Are you performing any unnecessary actions? (Efficiency is a matter of life and death!)
 """
 
 
-# """
-# Answer the following key questions:
-# 1. Regarding shape placement: What exactly were the shapes you placed (specify the coordinates for each placement)? Was the orientation correct (e.g., placed vertically rather than horizontally)? Was the placement successful? If not, how should you attempt it next time?
-# 2. Regarding operations: Were there any failed operations (clearly state the specific commands that failed)? What was the reason for the failure? What should the correct commands have been (clearly state them)? Did your operations include redundancies that wasted time? Which operations could be omitted?"""
 
 
 def format_milestones(info: dict[str, Any]) -> str:
@@ -217,14 +223,42 @@ def format_trajectory(trajectory: list[dict[str, Any]]) -> str:
     return "\n\n".join(blocks)
 
 
+def format_history(recent_trials: list[dict[str, Any]]) -> str:
+    """把最近若干次失败 trial 的运行摘要与反思文本组装为反思提示的历史段。
+
+    参数:
+        recent_trials: 最近 trial 的记录列表，每项含 info（终局信息）、
+            trajectory（逐步轨迹）与 reflection（该 trial 结束后生成的反思文本），
+            按时间升序排列。
+    返回:
+        可直接嵌入反思提示的多行历史文本；无历史时返回空串。
+    """
+    if not recent_trials:
+        return ""
+    blocks: list[str] = []
+    for record in recent_trials:
+        info = record["info"]
+        blocks.append(
+            f"--- previous attempt (trial {record['trial'] + 1}) ---\n"
+            f"outcome: stage_reached={info.get('stage', 'unknown')} "
+            f"failure_reason={info.get('failure_reason', '') or '(truncated at step limit)'} "
+            f"steps={info.get('steps', '?')}\n"
+            f"milestones:\n{format_milestones(info)}\n"
+            f"trajectory:\n{format_trajectory(record['trajectory'])}\n"
+            f"reflection written after that attempt:\n{record['reflection']}"
+        )
+    return "Recent attempts and their reflections (oldest first, most recent last):\n\n" + "\n\n".join(blocks) + "\n"
+
+
 def reflect(
     client: OpenAI,
     args: argparse.Namespace,
     task: str,
     info: dict[str, Any],
     trajectory: list[dict[str, Any]],
+    recent_trials: list[dict[str, Any]],
 ) -> str:
-    """用同一 LLM 从失败轨迹生成 Reflexion 文字反思。
+    """用同一 LLM 从失败轨迹与近期历史生成 Reflexion 文字反思。
 
     参数:
         client: OpenAI 兼容客户端。
@@ -232,11 +266,14 @@ def reflect(
         task: 本 trial 使用的基础任务描述。
         info: 终局 info。
         trajectory: 逐步轨迹记录（含动作块输出与环境反馈）。
+        recent_trials: 最近失败 trial 的记录（info + reflection），
+            仅用于提供历史上下文，不含当前 trial。
     返回:
         反思文本。
     """
     prompt = REFLECTION_PROMPT.format(
         task=task,
+        history=format_history(recent_trials),
         stage=info.get("stage", "unknown"),
         failure_reason=info.get("failure_reason", "") or "(truncated at step limit)",
         milestones=format_milestones(info),
@@ -271,18 +308,20 @@ def run(args: argparse.Namespace) -> None:
             trace_path = Path(args.trace)
             trace_path.parent.mkdir(parents=True, exist_ok=True)
             trace_handle = trace_path.open("w", encoding="utf-8")
-        reflections: list[str] = []
+        trial_history: list[dict[str, Any]] = []
         for trial_index in range(args.max_trials):
             # Episodic memory：只把最近一次反思注入下一 trial 的任务提示。
             task = args.task
-            if reflections:
-                task = f"{args.task}\n\nReflection from your previous failed attempt:\n{reflections[-1]}"
+            if trial_history:
+                task = f"{args.task}\n\nReflection from your previous failed attempt:\n{trial_history[-1]['reflection']}"
             success, info, trajectory = run_trial(client, args, env, task, trial_index, trace_handle)
             if success:
                 print(f"===== trial {trial_index + 1}: SUCCESS (warden slain) =====")
                 return
-            reflection = reflect(client, args, args.task, info, trajectory)
-            reflections.append(reflection)
+            # 反思提示带最近三轮的运行摘要与反思文本（不含当前 trial）。
+            recent_trials = trial_history[-3:]
+            reflection = reflect(client, args, args.task, info, trajectory, recent_trials)
+            trial_history.append({"trial": trial_index, "info": info, "trajectory": trajectory, "reflection": reflection})
             print(f"===== trial {trial_index + 1}: FAILED, reflection =====\n{reflection}")
             write_trace(trace_handle, {"event": "reflection", "trial": trial_index, "reflection": reflection})
         print(f"===== all {args.max_trials} trials failed =====")
