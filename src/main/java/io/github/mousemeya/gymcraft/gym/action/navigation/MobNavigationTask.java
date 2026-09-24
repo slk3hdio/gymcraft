@@ -7,6 +7,7 @@ import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.goal.GoalSelector;
 import net.minecraft.world.level.pathfinder.Path;
@@ -35,6 +36,8 @@ public final class MobNavigationTask {
     private static final int NO_PROGRESS_TICKS = 40;
     private static final double PROGRESS_DISTANCE = 0.05;
     private static final double DIRECT_APPROACH_DISTANCE = 2.5;
+    /** 原版导航即使 FOLLOW_RANGE 更小时也使用的最小寻路长度。 */
+    private static final double MIN_PATH_SEARCH_DISTANCE = 16.0;
 
     @Nullable
     private Mob mob;
@@ -52,7 +55,37 @@ public final class MobNavigationTask {
     private boolean active;
     private boolean directApproach;
     private boolean lastPathCanReach;
-    private String navigationReason = "navigating";
+    private Reason navigationReason = Reason.NAVIGATING;
+
+    /**
+     * 导航状态或终止原因；code 同时写入动作 details，供机器稳定判断。
+     */
+    public enum Reason {
+        NAVIGATING("navigating"),
+        PARTIAL_PATH("partial_path"),
+        TARGET_MOVED("target_moved"),
+        WAITING_FOR_PICKUP_DELAY("waiting_for_pickup_delay"),
+        TARGET_TOO_FAR("target_too_far"),
+        PATH_NOT_FOUND("path_not_found"),
+        PATH_BLOCKED("path_blocked"),
+        STUCK("stuck"),
+        PATH_EXHAUSTED("path_exhausted_outside_tolerance"),
+        PATH_CLEARED("path_cleared"),
+        PATH_REPLACED("path_replaced"),
+        TARGET_MOVED_UNREACHABLE("target_moved_unreachable");
+
+        private final String code;
+
+        /** @param code 写入结构化诊断的稳定代码 */
+        Reason(String code) {
+            this.code = code;
+        }
+
+        /** @return 供动作 details 和客户端判断使用的稳定代码 */
+        public String code() {
+            return this.code;
+        }
+    }
 
     /**
      * 抢占原版移动控制并创建首条路径。
@@ -87,20 +120,20 @@ public final class MobNavigationTask {
      */
     public Update advance(Vec3 target, boolean movingTarget) {
         if (!this.active || this.mob == null) {
-            return new Update(true, "path_cleared");
+            return new Update(true, Reason.PATH_CLEARED);
         }
         this.ticks++;
         Mob currentMob = this.mob;
 
         if (this.trackProgress(currentMob.position())) {
-            this.navigationReason = "stuck";
+            this.navigationReason = Reason.STUCK;
             currentMob.getNavigation().stop();
             this.ownedPath = null;
             this.directApproach = false;
         }
 
         if (movingTarget && this.targetNeedsRefresh(target)) {
-            this.navigationReason = "target_moved";
+            this.navigationReason = Reason.TARGET_MOVED;
             currentMob.getNavigation().stop();
             this.ownedPath = null;
             this.directApproach = false;
@@ -117,16 +150,19 @@ public final class MobNavigationTask {
         }
 
         if (this.ownedPath != null && currentPath == this.ownedPath) {
-            this.navigationReason = "path_exhausted_outside_tolerance";
-        } else if (currentPath == null && !"stuck".equals(this.navigationReason)
-            && !"target_moved".equals(this.navigationReason)
-            && !"path_not_found".equals(this.navigationReason)) {
-            this.navigationReason = "path_cleared";
+            this.navigationReason = this.lastPathCanReach
+                ? Reason.PATH_EXHAUSTED
+                : this.incompletePathReason(target);
+        } else if (currentPath == null && this.navigationReason != Reason.STUCK
+            && this.navigationReason != Reason.TARGET_MOVED
+            && this.navigationReason != Reason.PATH_NOT_FOUND
+            && this.navigationReason != Reason.TARGET_TOO_FAR) {
+            this.navigationReason = Reason.PATH_CLEARED;
         } else if (currentPath != null && currentPath != this.ownedPath) {
-            this.navigationReason = "path_replaced";
+            this.navigationReason = Reason.PATH_REPLACED;
         }
 
-        if (!"stuck".equals(this.navigationReason) && this.canDirectApproach(target)) {
+        if (this.navigationReason != Reason.STUCK && this.canDirectApproach(target)) {
             currentMob.getNavigation().stop();
             this.ownedPath = null;
             this.directApproach = true;
@@ -159,7 +195,7 @@ public final class MobNavigationTask {
      *
      * @param reason 当前等待原因，会写入诊断字段
      */
-    public void holdPosition(String reason) {
+    public void holdPosition(Reason reason) {
         if (!this.active || this.mob == null) {
             return;
         }
@@ -191,7 +227,7 @@ public final class MobNavigationTask {
         double distanceLimit
     ) {
         Map<String, Object> details = new LinkedHashMap<>();
-        details.put("navigation_reason", this.navigationReason);
+        details.put("navigation_reason", this.navigationReason.code());
         details.put("repath_attempts", this.repathAttempts);
         details.put("path_owned", this.mob != null
             && this.ownedPath != null && this.mob.getNavigation().getPath() == this.ownedPath);
@@ -212,9 +248,11 @@ public final class MobNavigationTask {
      */
     private Update tryRepath(Vec3 target, boolean movingTarget) {
         if (this.repathAttempts >= MAX_REPATH_ATTEMPTS) {
-            if (movingTarget && ("path_not_found".equals(this.navigationReason)
-                || "target_moved".equals(this.navigationReason))) {
-                this.navigationReason = "target_moved_unreachable";
+            if (movingTarget && (this.navigationReason == Reason.PATH_NOT_FOUND
+                || this.navigationReason == Reason.PATH_BLOCKED
+                || this.navigationReason == Reason.TARGET_TOO_FAR
+                || this.navigationReason == Reason.TARGET_MOVED)) {
+                this.navigationReason = Reason.TARGET_MOVED_UNREACHABLE;
             }
             return new Update(true, this.navigationReason);
         }
@@ -250,7 +288,50 @@ public final class MobNavigationTask {
             ? target : Vec3.atBottomCenterOf(path.getTarget());
         boolean started = path != null && currentMob.getNavigation().moveTo(path, this.speed);
         this.ownedPath = started ? currentMob.getNavigation().getPath() : null;
-        this.navigationReason = started ? "navigating" : "path_not_found";
+        if (started) {
+            this.navigationReason = this.lastPathCanReach ? Reason.NAVIGATING : Reason.PARTIAL_PATH;
+        } else {
+            this.navigationReason = this.failedPlanReason(target);
+        }
+    }
+
+    /**
+     * 区分目标超出单次寻路范围与范围内无法创建任何路径。
+     *
+     * @param target 当前目标
+     * @return 路径规划失败原因
+     */
+    private Reason failedPlanReason(Vec3 target) {
+        return this.isBeyondSearchRange(target)
+            ? Reason.TARGET_TOO_FAR
+            : Reason.PATH_NOT_FOUND;
+    }
+
+    /**
+     * 区分部分路径因目标过远而结束，还是因障碍无法延伸到目标。
+     *
+     * @param target 当前目标
+     * @return 部分路径耗尽原因
+     */
+    private Reason incompletePathReason(Vec3 target) {
+        return this.isBeyondSearchRange(target) ? Reason.TARGET_TOO_FAR : Reason.PATH_BLOCKED;
+    }
+
+    /**
+     * 判断目标是否超出原版当前 Mob 的单次寻路搜索距离。
+     *
+     * @param target 当前目标
+     * @return 超出搜索距离时为 true
+     */
+    private boolean isBeyondSearchRange(Vec3 target) {
+        if (this.mob == null) {
+            return false;
+        }
+        double searchDistance = Math.max(
+            this.mob.getAttributeValue(Attributes.FOLLOW_RANGE),
+            MIN_PATH_SEARCH_DISTANCE
+        );
+        return horizontalDistance(this.mob.position(), target) > searchDistance;
     }
 
     /**
@@ -339,9 +420,9 @@ public final class MobNavigationTask {
     }
 
     /** 保存一次导航推进是否用尽恢复机会以及当前原因。 */
-    public record Update(boolean exhausted, String reason) {
+    public record Update(boolean exhausted, Reason reason) {
         /** @return 尚可继续推进的结果 */
-        private static Update running(String reason) {
+        private static Update running(Reason reason) {
             return new Update(false, reason);
         }
     }

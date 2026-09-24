@@ -40,9 +40,9 @@ class ParsedAction:
     payload: ProtoMessage
 
 
-# 一次模型决策产生的组合动作。
+# 一次模型决策产生的有序动作批次。
 @dataclass(frozen=True)
-class ActionBatch:
+class ParsedActionBatch:
     """表示共享同一超时设置的一组不同动作组件。"""
 
     timeout_seconds: float
@@ -56,7 +56,7 @@ class ParsedAgentResponse:
 
     raw_text: str
     narrative: str
-    batch: ActionBatch
+    batch: ParsedActionBatch
 
 
 # 历史缓冲中的一轮模型输出和环境反馈。

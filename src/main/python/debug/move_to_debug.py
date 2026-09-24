@@ -14,10 +14,10 @@ import json
 import math
 from typing import Any
 
-from gymcraft.client import GymCraftEnv
+from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components import move_to_pb2
 from gymcraft.gym.observation.components import self_pb2
-from gymcraft.type_info import ACTION_MOVE_TO, Action, OBS_SELF, TIMEOUT_SECONDS
+from gymcraft.type_info import ACTION_MOVE_TO, OBS_SELF
 
 
 def self_position(obs: Any) -> tuple[float, float, float]:
@@ -88,15 +88,14 @@ def main() -> None:
             f"initial_dist={horizontal_distance(start, target):.3f} stop_dist={args.stop_dist:.3f}"
         )
 
-        action: Action = {
-            TIMEOUT_SECONDS: 0.0,
-            ACTION_MOVE_TO: move_to_pb2.ProtoMoveTo(
+        action = single_action(
+            ACTION_MOVE_TO, move_to_pb2.ProtoMoveTo(
                 x=target[0],
                 y=target[1],
                 z=target[2],
                 stop_distance=args.stop_dist,
             ),
-        }
+        )
 
         previous = start
         for i in range(args.steps):

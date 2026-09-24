@@ -6,6 +6,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.control.MoveControl;
 import net.minecraft.world.level.Level;
 
 /**
@@ -34,6 +35,7 @@ public class PlayerSimEntity extends PathfinderMob {
      */
     public PlayerSimEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
+        this.moveControl = new PlayerSimMoveControl(this);
     }
 
     /**
@@ -82,5 +84,69 @@ public class PlayerSimEntity extends PathfinderMob {
     @Override
     public HumanoidArm getMainArm() {
         return HumanoidArm.RIGHT;
+    }
+
+    /**
+     * 玩家模拟实体的移动控制器 —— 将单步移动输入按玩家完整移动速度执行。
+     * <p>
+     * 原版 {@link MoveControl#strafe(float, float)} 固定使用 {@code 0.25} 倍属性速度，
+     * 这是 Mob 随机游走的速度语义；玩家输入则直接使用完整的
+     * {@link Attributes#MOVEMENT_SPEED}，因此这里仅覆盖该倍率。
+     * </p>
+     */
+    private static final class PlayerSimMoveControl extends MoveControl {
+        /** 与原版 MoveControl 一致的到达判定距离平方。 */
+        private static final double MIN_MOVE_DISTANCE_SQUARED = 2.5000003E-7;
+
+        /**
+         * 创建玩家速度移动控制器。
+         *
+         * @param mob 被控制的玩家模拟实体
+         */
+        private PlayerSimMoveControl(PlayerSimEntity mob) {
+            super(mob);
+        }
+
+        /**
+         * 接收前进与横移输入，并使用完整的玩家移动速度属性。
+         *
+         * @param forwards 前进输入，范围通常为 -1 到 1
+         * @param right 右移输入，范围通常为 -1 到 1
+         */
+        @Override
+        public void strafe(float forwards, float right) {
+            super.strafe(forwards, right);
+            this.speedModifier = 1.0;
+        }
+
+        /**
+         * 推进移动控制，并将寻路产生的前进输入恢复为玩家使用的满量程输入。
+         * <p>
+         * Mob 的 {@code setSpeed} 会同时把 {@code zza} 设为速度值，导致玩家的
+         * {@code 0.1} 属性在寻路时被重复乘算；保留速度值、仅恢复输入为 1，
+         * 可得到与玩家连续按住前进键一致的地面移动速度。
+         * </p>
+         */
+        @Override
+        public void tick() {
+            boolean shouldUseFullForwardInput = this.operation == Operation.JUMPING
+                || this.operation == Operation.MOVE_TO && this.distanceToWantedSqr() >= MIN_MOVE_DISTANCE_SQUARED;
+            super.tick();
+            if (shouldUseFullForwardInput && this.mob.getSpeed() > 0.0F) {
+                this.mob.setZza(1.0F);
+            }
+        }
+
+        /**
+         * 计算实体与当前 MoveControl 目标之间的三维距离平方。
+         *
+         * @return 到目标的距离平方
+         */
+        private double distanceToWantedSqr() {
+            double dx = this.wantedX - this.mob.getX();
+            double dy = this.wantedY - this.mob.getY();
+            double dz = this.wantedZ - this.mob.getZ();
+            return dx * dx + dy * dy + dz * dz;
+        }
     }
 }

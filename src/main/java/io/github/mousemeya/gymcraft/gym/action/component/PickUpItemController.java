@@ -40,7 +40,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  * <p>
  * 目标消失（被他人捡走/消失）时 {@link #getState} 返回 failed；动作级超时由
- * {@code ProtoMcAction.timeout_seconds} 统一处理。被打断时 {@link #onInterrupt} 停止导航。
+ * {@code StepRequest.timeout_seconds} 由运行时对整个批次统一处理。被打断时 {@link #onInterrupt} 停止导航。
  * </p>
  */
 public class PickUpItemController extends AbstractActionComponentController<ProtoPickUpItem> {
@@ -158,7 +158,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         double distance = horizontalDistance(mob, item);
         if (distance <= this.pickupReach) {
             if (item.hasPickUpDelay()) {
-                this.navigationTask.holdPosition("waiting_for_pickup_delay");
+                this.navigationTask.holdPosition(MobNavigationTask.Reason.WAITING_FOR_PICKUP_DELAY);
                 return ActionState.running("waiting for pickup delay", targetDetails(mob, item));
             }
             this.navigationTask.cancel();
@@ -167,7 +167,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         MobNavigationTask.Update update = this.navigationTask.advance(item.position(), true);
         if (update.exhausted()) {
             ActionState failure = ActionState.failed(
-                "navigation ended before reaching item",
+                navigationFailureDescription(update.reason()),
                 targetDetails(mob, item)
             );
             this.navigationTask.cancel();
@@ -257,6 +257,26 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         double dx = mob.getX() - item.getX();
         double dz = mob.getZ() - item.getZ();
         return Math.sqrt(dx * dx + dz * dz);
+    }
+
+    /**
+     * 把导航层终止代码转换成 pick_up_item 专用、可直接指导下一步动作的失败原因。
+     *
+     * @param reason 导航终止原因
+     * @return 面向调用方的精确失败描述
+     */
+    private static String navigationFailureDescription(MobNavigationTask.Reason reason) {
+        return switch (reason) {
+            case TARGET_TOO_FAR -> "item is beyond navigation range";
+            case PATH_NOT_FOUND -> "no navigable path could be created to item";
+            case PATH_BLOCKED -> "the path to item is blocked";
+            case STUCK -> "navigation to item was blocked and the agent became stuck";
+            case PATH_EXHAUSTED -> "path ended before the item entered pickup range";
+            case PATH_CLEARED -> "navigation was interrupted before reaching item";
+            case PATH_REPLACED -> "navigation path was unexpectedly replaced before reaching item";
+            case TARGET_MOVED_UNREACHABLE -> "item moved to an unreachable position";
+            default -> "navigation failed before reaching item: " + reason.code();
+        };
     }
 
     private Map<String, Object> targetDetails(Mob mob, ItemEntity item) {

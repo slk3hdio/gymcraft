@@ -84,12 +84,12 @@ public final class NavigationReliabilityGameTests {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
-                response.set(env.step(ProtoMcAction.newBuilder()
-                    .setTimeoutSeconds(8.0F)
-                    .putComponents("gymcraft:move_to", Any.pack(ProtoMoveTo.newBuilder()
+                response.set(env.step(List.of(ProtoMcAction.newBuilder()
+                    .setComponentId("gymcraft:move_to")
+                    .setPayload(Any.pack(ProtoMoveTo.newBuilder()
                         .setX(destination.getX()).setY(destination.getY()).setZ(destination.getZ())
                         .setStopDistance(0.2).build()))
-                    .build()));
+                    .build()), 8.0F));
             } catch (Throwable error) {
                 failure.set(error);
             }
@@ -127,12 +127,12 @@ public final class NavigationReliabilityGameTests {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
-                response.set(env.step(ProtoMcAction.newBuilder()
-                    .setTimeoutSeconds(8.0F)
-                    .putComponents("gymcraft:move_to", Any.pack(ProtoMoveTo.newBuilder()
+                response.set(env.step(List.of(ProtoMcAction.newBuilder()
+                    .setComponentId("gymcraft:move_to")
+                    .setPayload(Any.pack(ProtoMoveTo.newBuilder()
                         .setX(destination.getX() + 0.5).setY(destination.getY()).setZ(destination.getZ() + 0.5)
                         .setStopDistance(0.2).build()))
-                    .build()));
+                    .build()), 8.0F));
             } catch (Throwable error) {
                 failure.set(error);
             }
@@ -150,6 +150,8 @@ public final class NavigationReliabilityGameTests {
                     "bounded repath did not stop after three retries");
                 assertTrue(helper, response.get().getInfo().contains("path_cleared"),
                     "bounded repath did not preserve the external-clear diagnosis");
+                assertTrue(helper, response.get().getInfo().contains("navigation was interrupted before reaching target"),
+                    "bounded repath did not return a specific interruption description");
                 helper.succeed();
             } finally {
                 env.close();
@@ -174,11 +176,11 @@ public final class NavigationReliabilityGameTests {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
-                response.set(env.step(ProtoMcAction.newBuilder()
-                    .setTimeoutSeconds(8.0F)
-                    .putComponents("gymcraft:pick_up_item", Any.pack(ProtoPickUpItem.newBuilder()
+                response.set(env.step(List.of(ProtoMcAction.newBuilder()
+                    .setComponentId("gymcraft:pick_up_item")
+                    .setPayload(Any.pack(ProtoPickUpItem.newBuilder()
                         .setEntityId(item.getId()).build()))
-                    .build()));
+                    .build()), 8.0F));
             } catch (Throwable error) {
                 failure.set(error);
             }

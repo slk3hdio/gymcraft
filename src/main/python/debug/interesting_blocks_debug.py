@@ -20,13 +20,13 @@ from gymcraft.gym.action.components.update_interesting_blocks_pb2 import (
 from gymcraft.gym.observation.components.interesting_blocks_pb2 import (
     ProtoInterestingBlocks,
 )
+from gymcraft.client import single_action
 from gymcraft.llm import ActionDslParser, ObservationTextFormatter, encode_action_batch
 from gymcraft.type_info import (
     ACTION_UPDATE_INTERESTING_BLOCKS,
     OBS_INTERESTING_BLOCKS,
-    Action,
+    ActionBatch,
     Observation,
-    TIMEOUT_SECONDS,
 )
 
 Pos = tuple[int, int, int]
@@ -70,7 +70,7 @@ def parse_position(raw: list[int] | None) -> Pos | None:
     return raw[0], raw[1], raw[2]
 
 
-def parse_dsl(parser: ActionDslParser, command: str) -> Action:
+def parse_dsl(parser: ActionDslParser, command: str) -> ActionBatch:
     """把单条 GymCraft LLM DSL 命令编码为客户端动作。
 
     参数:
@@ -83,7 +83,7 @@ def parse_dsl(parser: ActionDslParser, command: str) -> Action:
     return encode_action_batch(parsed.batch)
 
 
-def step(env: GymCraftEnv, action: Action, label: str, expected: str) -> Observation:
+def step(env: GymCraftEnv, action: ActionBatch, label: str, expected: str) -> Observation:
     """执行动作并检查服务端动作状态。
 
     参数:
@@ -181,12 +181,12 @@ def main() -> None:
 
         # 混入非法 ID 的整批更新必须失败，且先前兴趣集合及观测保持不变。
         before_invalid = block_signature(observation)
-        invalid_action = cast(Action, {
-            TIMEOUT_SECONDS: 0.0,
-            ACTION_UPDATE_INTERESTING_BLOCKS: ProtoUpdateInterestingBlocks(
+        invalid_action = single_action(
+            ACTION_UPDATE_INTERESTING_BLOCKS,
+            ProtoUpdateInterestingBlocks(
                 add_block_ids=["minecraft:emerald_ore", "gymcraft:not_a_registered_block"]
             ),
-        })
+        )
         observation = step(env, invalid_action, "invalid_atomic_batch", "FAILED")
         if block_signature(observation) != before_invalid:
             raise AssertionError("invalid batch changed the interesting block observation")

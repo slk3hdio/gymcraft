@@ -4,6 +4,7 @@ import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertEq
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
 
 import java.util.Map;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -73,9 +74,10 @@ public final class PlayerSimGameTests {
         Thread.startVirtualThread(() -> {
             try {
                 env.reset(3, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
-                step.set(env.step(ProtoMcAction.newBuilder()
-                    .putComponents("gymcraft:noop", Any.pack(ProtoNoop.getDefaultInstance()))
-                    .build()));
+                step.set(env.step(List.of(ProtoMcAction.newBuilder()
+                    .setComponentId("gymcraft:noop")
+                    .setPayload(Any.pack(ProtoNoop.getDefaultInstance()))
+                    .build()), 0.0F));
                 tested.complete(null);
             } catch (Throwable error) {
                 failure.set(error);

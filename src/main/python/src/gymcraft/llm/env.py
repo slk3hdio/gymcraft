@@ -11,7 +11,7 @@ from gymcraft.llm.actions import ActionDslParser, ActionParseError, encode_actio
 from gymcraft.llm.context import ContextAssembler, ConversationHistory
 from gymcraft.llm.observations import ObservationFormatConfig, ObservationTextFormatter, format_transition_result
 from gymcraft.llm.types import LLMContext
-from gymcraft.type_info import Action, Observation
+from gymcraft.type_info import ActionBatch, Observation
 
 
 # Wrapper 所需的最小底层环境接口，便于测试和替换 transport。
@@ -29,8 +29,8 @@ class GymCraftEnvLike(Protocol):
         """重置底层环境并返回解包观测与 JSON info。"""
         ...
 
-    def step(self, action: Action) -> tuple[Observation, float, bool, bool, str]:
-        """执行 protobuf 动作字典并返回 Gymnasium 五元组。"""
+    def step(self, action: ActionBatch) -> tuple[Observation, float, bool, bool, str]:
+        """执行有序动作批次并返回 Gymnasium 五元组。"""
         ...
 
     def close(self) -> None:

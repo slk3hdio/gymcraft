@@ -31,7 +31,8 @@ public final class JumpGameTests {
         var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
         var dispatcher = new ActionDispatcher(mob, List.of(ActionComponents.JUMP.get()));
         var action = ProtoMcAction.newBuilder()
-            .putComponents("gymcraft:jump", Any.pack(ProtoJump.getDefaultInstance()))
+            .setComponentId("gymcraft:jump")
+            .setPayload(Any.pack(ProtoJump.getDefaultInstance()))
             .build();
 
         var state = dispatcher.apply(action).initialState();

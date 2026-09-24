@@ -160,8 +160,23 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
     private ActionApplyResult lookAtEntity(int entityId) {
         Mob mob = this.mob();
         Entity found = mob.level().getEntity(entityId);
-        if (found == null || found == mob || found instanceof ItemEntity || !found.isAlive()) {
-            return ActionApplyResult.none(ActionState.failed("entity target is not a valid non-item entity", Map.of(
+        if (found == null) {
+            return ActionApplyResult.none(ActionState.failed("entity target was not found or is not loaded", Map.of(
+                "entity_id", entityId
+            )));
+        }
+        if (found == mob) {
+            return ActionApplyResult.none(ActionState.failed("agent cannot look at itself as an entity target", Map.of(
+                "entity_id", entityId
+            )));
+        }
+        if (found instanceof ItemEntity) {
+            return ActionApplyResult.none(ActionState.failed("entity target is an item; use the item target variant", Map.of(
+                "entity_id", entityId
+            )));
+        }
+        if (!found.isAlive() || found.isRemoved()) {
+            return ActionApplyResult.none(ActionState.failed("entity target is dead or removed", Map.of(
                 "entity_id", entityId
             )));
         }
@@ -181,8 +196,23 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
      */
     private ActionApplyResult lookAtItem(int entityId) {
         Entity found = this.mob().level().getEntity(entityId);
-        if (!(found instanceof ItemEntity item) || item.isRemoved() || item.getItem().isEmpty()) {
-            return ActionApplyResult.none(ActionState.failed("item target is not a valid item entity", Map.of(
+        if (found == null) {
+            return ActionApplyResult.none(ActionState.failed("item target was not found or is not loaded", Map.of(
+                "entity_id", entityId
+            )));
+        }
+        if (!(found instanceof ItemEntity item)) {
+            return ActionApplyResult.none(ActionState.failed("item target ID belongs to a non-item entity", Map.of(
+                "entity_id", entityId
+            )));
+        }
+        if (item.isRemoved() || !item.isAlive()) {
+            return ActionApplyResult.none(ActionState.failed("item target is removed or no longer alive", Map.of(
+                "entity_id", entityId
+            )));
+        }
+        if (item.getItem().isEmpty()) {
+            return ActionApplyResult.none(ActionState.failed("item target contains no item stack", Map.of(
                 "entity_id", entityId
             )));
         }

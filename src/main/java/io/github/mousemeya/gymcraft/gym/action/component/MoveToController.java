@@ -134,7 +134,7 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         MobNavigationTask.Update update = this.navigationTask.advance(target, false);
         if (update.exhausted()) {
             ActionState state = ActionState.failed(
-                "navigation ended before reaching target",
+                navigationFailureDescription(update.reason()),
                 moveDetails(target, stop)
             );
             this.navigationTask.cancel();
@@ -162,6 +162,26 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         double dx = mob.getX() - target.x;
         double dz = mob.getZ() - target.z;
         return Math.sqrt(dx * dx + dz * dz);
+    }
+
+    /**
+     * 把导航层终止代码转换成 move_to 专用、可直接指导下一步动作的失败原因。
+     *
+     * @param reason 导航终止原因
+     * @return 面向调用方的精确失败描述
+     */
+    private static String navigationFailureDescription(MobNavigationTask.Reason reason) {
+        return switch (reason) {
+            case TARGET_TOO_FAR -> "target is beyond navigation range";
+            case PATH_NOT_FOUND -> "no navigable path could be created to target";
+            case PATH_BLOCKED -> "the path to target is blocked";
+            case STUCK -> "navigation was blocked and the agent became stuck";
+            case PATH_EXHAUSTED -> "path ended outside the requested stop distance";
+            case PATH_CLEARED -> "navigation was interrupted before reaching target";
+            case PATH_REPLACED -> "navigation path was unexpectedly replaced before reaching target";
+            case TARGET_MOVED_UNREACHABLE -> "target moved to an unreachable position";
+            default -> "navigation failed before reaching target: " + reason.code();
+        };
     }
 
     /** @return 包含精确距离、垂直差和导航所有权的动作诊断 */

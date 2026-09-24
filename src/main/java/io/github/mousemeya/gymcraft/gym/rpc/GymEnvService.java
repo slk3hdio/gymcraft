@@ -132,26 +132,21 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
     /**
      * {@code Step} RPC —— 执行动作并返回下一帧观测与奖励。
      * <p>
-     * 在持有会话锁的情况下调用 {@link McEnv#step(ProtoMcAction)}，
+     * 在持有会话锁的情况下调用 {@link McEnv#step(java.util.List, float)}，
      * 返回完整的 Gymnasium 五元组：{@code (observation, reward, terminated, truncated, info)}。
      * </p>
      *
-     * @param request          动作请求，含 {@code session_id} 和 {@code action}（ProtoMcAction）
+     * @param request          动作请求，含 {@code session_id}、有序 actions 和共享超时
      * @param responseObserver gRPC 流式响应观察者
      */
     @Override
     public void step(StepRequest request, StreamObserver<StepResponse> responseObserver) {
-        if (!request.hasAction()) {
-            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Missing action").asRuntimeException());
-            return;
-        }
-
         sessions.get(request.getSessionId()).ifPresentOrElse(session -> {
             // 瞬断重连：孤儿会话从新 transport 收到 RPC 时自动重绑定恢复活跃
             sessions.rebindIfOrphaned(session.id(), RemoteAddrInterceptor.REMOTE_ADDR_KEY.get());
             session.lock().lock();
             try {
-                StepResponse response = session.env().step(request.getAction());
+                StepResponse response = session.env().step(request.getActionsList(), request.getTimeoutSeconds());
                 responseObserver.onNext(response);
                 responseObserver.onCompleted();
             } catch (IllegalStateException e) {

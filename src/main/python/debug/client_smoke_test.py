@@ -11,10 +11,10 @@ import argparse
 import math
 from typing import Any
 
-from gymcraft.client import GymCraftEnv
+from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components.noop_pb2 import ProtoNoop
 from gymcraft.llm import ActionDslParser, encode_action_batch
-from gymcraft.type_info import ACTION_NOOP, OBS_CHAT, OBS_SELF, TIMEOUT_SECONDS, Action, Observation
+from gymcraft.type_info import ACTION_NOOP, OBS_CHAT, OBS_SELF, ActionBatch, Observation
 
 ANGLE_TOLERANCE = 5.0
 
@@ -29,7 +29,7 @@ def self_state(observation: Observation) -> Any:
     return observation[OBS_SELF]
 
 
-def send(env: GymCraftEnv, action: Action, expected: str = "COMPLETED") -> Any:
+def send(env: GymCraftEnv, action: ActionBatch, expected: str = "COMPLETED") -> Any:
     """发送一个原生动作并返回刷新后的观测，同时校验动作状态。"""
     obs, _reward, terminated, truncated, _info = env.step(action)
     assert not terminated and not truncated, "环境在测试中途结束"
@@ -63,7 +63,7 @@ def main() -> None:
           f"yaw={state.yaw:.1f} health={state.health}")
 
     print("[noop]")
-    obs = send(env, {TIMEOUT_SECONDS: 0.0, ACTION_NOOP: ProtoNoop()})
+    obs = send(env, single_action(ACTION_NOOP, ProtoNoop()))
 
     print("[step_move 前进 5 步]")
     state = self_state(obs)

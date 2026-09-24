@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "gymcraft:item/player_sim_spawn_egg"
+  }
+}

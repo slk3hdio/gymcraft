@@ -79,7 +79,8 @@ public final class EnvAiGameTests {
                 assertTrue(helper, mob.getNavigation().isDone(), "idle policy did not stop vanilla navigation");
 
                 ProtoMcAction action = ProtoMcAction.newBuilder()
-                    .putComponents("gymcraft:move_to", Any.pack(ProtoMoveTo.newBuilder()
+                    .setComponentId("gymcraft:move_to")
+                    .setPayload(Any.pack(ProtoMoveTo.newBuilder()
                         .setX(destination.getX() + 0.5)
                         .setY(destination.getY())
                         .setZ(destination.getZ() + 0.5)
@@ -90,7 +91,7 @@ public final class EnvAiGameTests {
                 AtomicReference<Throwable> failure = new AtomicReference<>();
                 Thread.startVirtualThread(() -> {
                     try {
-                        response.set(env.step(action));
+                        response.set(env.step(List.of(action), 0.0F));
                     } catch (Throwable error) {
                         failure.set(error);
                     }

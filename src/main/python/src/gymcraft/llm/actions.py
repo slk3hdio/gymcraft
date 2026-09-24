@@ -50,11 +50,11 @@ from gymcraft.type_info import (
     ACTION_SEND_CHAT,
     ACTION_STEP_MOVE,
     ACTION_UPDATE_INTERESTING_BLOCKS,
-    Action,
+    ActionBatch,
     TIMEOUT_SECONDS,
 )
 
-from gymcraft.llm.types import ActionBatch, ParsedAction, ParsedAgentResponse
+from gymcraft.llm.types import ParsedAction, ParsedActionBatch, ParsedAgentResponse
 
 
 _ACTION_BLOCK_MARKER = "```gymcraft-action"
@@ -77,7 +77,7 @@ class ActionParseError(ValueError):
 
 # 独立于环境 wrapper 的动作 DSL 解析器。
 class ActionDslParser:
-    """把模型纯文本中的 Minecraft 风格命令解析为组合动作。"""
+    """把模型纯文本中的 Minecraft 风格命令解析为有序动作批次。"""
 
     def __init__(
         self,
@@ -124,7 +124,6 @@ class ActionDslParser:
         timeout = self.default_timeout_seconds
         timeout_seen = False
         parsed: list[ParsedAction] = []
-        component_ids: set[str] = set()
         for line_number, raw_line in enumerate(match.group("body").splitlines(), start=1):
             line = raw_line.strip()
             if not line:
@@ -159,14 +158,13 @@ class ActionDslParser:
                 raise ActionParseError(f"Unknown action command /{command_name}", line_number)
             action = builder(tokens, line, line_number)
             self._ensure_available(action.component_id, line_number)
-            if action.component_id in component_ids:
-                # move_menu_item 是唯一的数组动作：同批次多条语句按顺序合并而非报重复
-                if action.component_id == ACTION_MOVE_MENU_ITEM:
-                    self._merge_move_menu_item(parsed, action, line_number)
-                    continue
-                raise ActionParseError(f"Action /{command_name} is duplicated in the same batch", line_number)
+            if action.component_id == ACTION_MOVE_MENU_ITEM and any(
+                existing.component_id == ACTION_MOVE_MENU_ITEM for existing in parsed
+            ):
+                # move_menu_item 保留组件原生批量负载，避免项间需要刷新菜单观测基线。
+                self._merge_move_menu_item(parsed, action, line_number)
+                continue
             self._validate_space(action, line_number)
-            component_ids.add(action.component_id)
             parsed.append(action)
 
         if not parsed:
@@ -175,7 +173,7 @@ class ActionDslParser:
         return ParsedAgentResponse(
             raw_text=response_text,
             narrative=narrative,
-            batch=ActionBatch(timeout_seconds=timeout, actions=tuple(parsed)),
+            batch=ParsedActionBatch(timeout_seconds=timeout, actions=tuple(parsed)),
         )
 
     def _merge_move_menu_item(self, parsed: Sequence[ParsedAction], action: ParsedAction, line_number: int) -> None:
@@ -638,9 +636,12 @@ class ActionDslParser:
         return x, y, z
 
 
-def encode_action_batch(batch: ActionBatch) -> Action:
-    """把通用 ActionBatch 转换为现有 GymCraftEnv 接受的动作字典。"""
-    encoded: dict[str, Any] = {TIMEOUT_SECONDS: batch.timeout_seconds}
-    for action in batch.actions:
-        encoded[action.component_id] = cast(ProtoMessage, action.payload)
-    return cast(Action, encoded)
+def encode_action_batch(batch: ParsedActionBatch) -> ActionBatch:
+    """把 LLM 解析批次转换为 ``GymCraftEnv.step`` 接受的有序批次字典。"""
+    return {
+        TIMEOUT_SECONDS: batch.timeout_seconds,
+        "actions": [
+            {"component_id": action.component_id, "payload": cast(ProtoMessage, action.payload)}
+            for action in batch.actions
+        ],
+    }

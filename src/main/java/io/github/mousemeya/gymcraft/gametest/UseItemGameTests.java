@@ -348,16 +348,29 @@ public final class UseItemGameTests {
     public static void timeout(GameTestHelper helper) {
         Mob mob = agent(helper);
         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.APPLE, 2));
-        var dispatcher = new ActionDispatcher(mob, List.of(ActionComponents.USE_ITEM.get()));
-        var action = ProtoMcAction.newBuilder().setTimeoutSeconds(0.1F)
-            .putComponents("gymcraft:use_item", Any.pack(self(0))).build();
-        dispatcher.apply(action);
-        dispatcher.tick(action);
-        dispatcher.tick(action);
-        assertEquals(helper, ActionStatus.FAILED, dispatcher.getState(action).status(), "timeout not reported");
-        assertEquals(helper, 2, mob.getMainHandItem().getCount(), "timeout consumed item");
-        assertTrue(helper, !mob.isUsingItem(), "timeout did not stop using");
-        helper.succeed();
+        var env = new UseTestEnv(mob);
+        var response = new AtomicReference<StepResponse>();
+        var failure = new AtomicReference<Throwable>();
+        ProtoMcAction action = action("gymcraft:use_item", self(0));
+        Thread.startVirtualThread(() -> {
+            try {
+                response.set(env.step(List.of(action), 0.1F));
+            } catch (Throwable exception) {
+                failure.set(exception);
+            }
+        });
+        helper.runAfterDelay(6, () -> {
+            try {
+                assertTrue(helper, failure.get() == null, "timeout step failed: " + failure.get());
+                assertTrue(helper, response.get() != null, "timeout step did not finish");
+                assertTrue(helper, response.get().getInfo().contains("action batch timeout"), "timeout not reported");
+                assertEquals(helper, 2, mob.getMainHandItem().getCount(), "timeout consumed item");
+                assertTrue(helper, !mob.isUsingItem(), "timeout did not stop using");
+                helper.succeed();
+            } finally {
+                env.close();
+            }
+        });
     }
 
     /**
@@ -374,7 +387,10 @@ public final class UseItemGameTests {
         assertEquals(helper, ActionStatus.FAILED, controller.apply(self(0)).initialState().status(), "bow accepted");
         assertTrue(helper, mob.getMainHandItem().is(Items.BOW) && !mob.isUsingItem(), "bow changed state");
         var unknown = ProtoUseItem.newBuilder().setSlotId(0).setEntity(ProtoUseItemEntityTarget.newBuilder().setEntityId(Integer.MAX_VALUE)).build();
-        assertEquals(helper, ActionStatus.FAILED, controller.apply(unknown).initialState().status(), "unknown entity accepted");
+        var unknownState = controller.apply(unknown).initialState();
+        assertEquals(helper, ActionStatus.FAILED, unknownState.status(), "unknown entity accepted");
+        assertTrue(helper, unknownState.description().contains("entity target was not found"),
+            "unknown entity returned an imprecise description: " + unknownState.description());
         var unloaded = ProtoUseItem.newBuilder().setSlotId(0).setBlock(ProtoUseItemBlockTarget.newBuilder().setX(29_000_000).setY(64)).build();
         assertEquals(helper, ActionStatus.FAILED, controller.apply(unloaded).initialState().status(), "unloaded block accepted");
         helper.succeed();
@@ -386,13 +402,34 @@ public final class UseItemGameTests {
     public static void compositeFailure(GameTestHelper helper) {
         Mob mob = agent(helper);
         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.APPLE, 2));
-        var dispatcher = new ActionDispatcher(mob, List.of(ActionComponents.USE_ITEM.get()));
-        var action = ProtoMcAction.newBuilder().putComponents("gymcraft:use_item", Any.pack(self(0)))
-            .putComponents("gymcraft:unknown", Any.pack(self(0))).build();
-        assertEquals(helper, ActionStatus.FAILED, dispatcher.apply(action).initialState().status(), "composite should fail");
-        assertEquals(helper, 2, mob.getMainHandItem().getCount(), "failed composite consumed item");
-        assertTrue(helper, !mob.isUsingItem() && !mob.hasData(ModAttachments.ITEM_CONSUMPTION), "failed composite leaked consumption");
-        helper.succeed();
+        var env = new UseTestEnv(mob);
+        var response = new AtomicReference<StepResponse>();
+        var failure = new AtomicReference<Throwable>();
+        List<ProtoMcAction> actions = List.of(
+            action("gymcraft:unknown", self(0)),
+            action("gymcraft:use_item", self(0))
+        );
+        Thread.startVirtualThread(() -> {
+            try {
+                response.set(env.step(actions, 0.0F));
+            } catch (Throwable exception) {
+                failure.set(exception);
+            }
+        });
+        helper.runAfterDelay(5, () -> {
+            try {
+                assertTrue(helper, failure.get() == null && response.get() != null,
+                    "failed batch did not finish: " + failure.get());
+                assertTrue(helper, response.get().getInfo().contains("unknown action component"),
+                    "unknown action failure missing");
+                assertEquals(helper, 2, mob.getMainHandItem().getCount(), "stopped batch consumed item");
+                assertTrue(helper, !mob.isUsingItem() && !mob.hasData(ModAttachments.ITEM_CONSUMPTION),
+                    "stopped batch leaked consumption");
+                helper.succeed();
+            } finally {
+                env.close();
+            }
+        });
     }
 
     /**
@@ -408,7 +445,10 @@ public final class UseItemGameTests {
         controller.apply(self(5));
         helper.kill(mob);
         controller.tick(self(5));
-        assertEquals(helper, ActionStatus.FAILED, controller.getState(self(5)).status(), "death should fail consumption");
+        var deathState = controller.getState(self(5));
+        assertEquals(helper, ActionStatus.FAILED, deathState.status(), "death should fail consumption");
+        assertEquals(helper, "item consumption stopped because the agent died", deathState.description(),
+            "death interruption description");
         assertTrue(helper, !mob.hasData(ModAttachments.ITEM_CONSUMPTION), "dead mob retains session");
         var drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, mob.getBoundingBox().inflate(3));
         assertEquals(helper, 3, drops.stream().filter(item -> item.getItem().is(Items.APPLE)).mapToInt(item -> item.getItem().getCount()).sum(), "death lost apples");
@@ -445,7 +485,7 @@ public final class UseItemGameTests {
         var resetDone = new java.util.concurrent.atomic.AtomicBoolean();
         Thread.startVirtualThread(() -> {
             try {
-                response.set(env.step(ProtoMcAction.newBuilder().putComponents("gymcraft:use_item", Any.pack(self(5))).build()));
+                response.set(env.step(List.of(action("gymcraft:use_item", self(5))), 0.0F));
             } catch (Throwable exception) {
                 failure.set(exception);
             }
@@ -490,7 +530,7 @@ public final class UseItemGameTests {
         var failure = new AtomicReference<Throwable>();
         Thread.startVirtualThread(() -> {
             try {
-                env.step(ProtoMcAction.newBuilder().putComponents("gymcraft:use_item", Any.pack(self(5))).build());
+                env.step(List.of(action("gymcraft:use_item", self(5))), 0.0F);
             } catch (Throwable exception) {
                 failure.set(exception);
             }
@@ -533,6 +573,20 @@ public final class UseItemGameTests {
             LogicalMenuSessions.closeCurrent(replacement, "test complete");
             helper.succeed();
         });
+    }
+
+    /**
+     * 构造单组件动作。
+     *
+     * @param componentId 组件注册 ID
+     * @param payload 组件负载
+     * @return 单组件 protobuf 动作
+     */
+    private static ProtoMcAction action(String componentId, com.google.protobuf.Message payload) {
+        return ProtoMcAction.newBuilder()
+            .setComponentId(componentId)
+            .setPayload(Any.pack(payload))
+            .build();
     }
 
     /** 仅启用使用物品的测试环境，用于验证真实 step/reset 生命周期。 */

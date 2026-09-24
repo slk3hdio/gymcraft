@@ -53,13 +53,14 @@ public final class AgentDeathGameTests {
         // 先留出两个 tick，确保死亡发生时没有待完成动作，复现终端交互中的空闲死亡路径。
         helper.runAfterDelay(2, () -> {
             ProtoMcAction action = ProtoMcAction.newBuilder()
-                .putComponents("gymcraft:noop", Any.pack(ProtoNoop.getDefaultInstance()))
+                .setComponentId("gymcraft:noop")
+                .setPayload(Any.pack(ProtoNoop.getDefaultInstance()))
                 .build();
             AtomicReference<StepResponse> response = new AtomicReference<>();
             AtomicReference<Throwable> failure = new AtomicReference<>();
             Thread.startVirtualThread(() -> {
                 try {
-                    response.set(env.step(action));
+                    response.set(env.step(List.of(action), 0.0F));
                 } catch (Throwable error) {
                     failure.set(error);
                 }
@@ -73,7 +74,7 @@ public final class AgentDeathGameTests {
                 assertTrue(helper, !stepResponse.getTruncated(), "dead-agent step must not be truncated");
                 assertEquals(helper, "FAILED", stepResponse.getObservation().getHeader().getLastActionStatus(),
                     "death observation action status");
-                assertEquals(helper, "[gymcraft:noop] agent entity is dead",
+                assertEquals(helper, "action batch stopped at index 0: agent entity is dead",
                     stepResponse.getObservation().getHeader().getLastActionDescription(),
                     "death observation action description");
                 env.close();
@@ -92,7 +93,8 @@ public final class AgentDeathGameTests {
         Mob target = spawnAgent(helper, EntityType.PIG, new BlockPos(5, 1, 2));
         TestEnv env = new TestEnv(mob);
         ProtoMcAction action = ProtoMcAction.newBuilder()
-            .putComponents("gymcraft:set_attack_target", Any.pack(ProtoSetAttackTarget.newBuilder()
+            .setComponentId("gymcraft:set_attack_target")
+            .setPayload(Any.pack(ProtoSetAttackTarget.newBuilder()
                 .setTargetEntityId(target.getId())
                 .build()))
             .build();
@@ -100,7 +102,7 @@ public final class AgentDeathGameTests {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
-                response.set(env.step(action));
+                response.set(env.step(List.of(action), 0.0F));
             } catch (Throwable error) {
                 failure.set(error);
             }
@@ -119,7 +121,7 @@ public final class AgentDeathGameTests {
                 assertTrue(helper, !stepResponse.getTruncated(), "death must not truncate the current step");
                 assertEquals(helper, "FAILED", stepResponse.getObservation().getHeader().getLastActionStatus(),
                     "running-action death status");
-                assertEquals(helper, "[gymcraft:set_attack_target] agent entity is dead",
+                assertEquals(helper, "action batch stopped at index 0: agent entity is dead",
                     stepResponse.getObservation().getHeader().getLastActionDescription(),
                     "running-action death description");
                 env.close();
@@ -143,7 +145,8 @@ public final class AgentDeathGameTests {
         TestEnv env = new TestEnv(mob);
         BlockPos destination = helper.absolutePos(new BlockPos(7, 2, 2));
         ProtoMcAction action = ProtoMcAction.newBuilder()
-            .putComponents("gymcraft:move_to", Any.pack(ProtoMoveTo.newBuilder()
+            .setComponentId("gymcraft:move_to")
+            .setPayload(Any.pack(ProtoMoveTo.newBuilder()
                 .setX(destination.getX() + 0.5)
                 .setY(destination.getY())
                 .setZ(destination.getZ() + 0.5)
@@ -165,7 +168,7 @@ public final class AgentDeathGameTests {
                     assertTrue(helper, stepResponse.getTerminated(), "move_to death must terminate the default env");
                     assertEquals(helper, "FAILED", stepResponse.getObservation().getHeader().getLastActionStatus(),
                         "move_to death status");
-                    assertEquals(helper, "[gymcraft:move_to] agent entity is dead",
+                    assertEquals(helper, "action batch stopped at index 0: agent entity is dead",
                         stepResponse.getObservation().getHeader().getLastActionDescription(),
                         "move_to death description");
                     env.close();
@@ -228,7 +231,7 @@ public final class AgentDeathGameTests {
 
         var state = dispatcher.apply(noopAction()).initialState();
         assertEquals(helper, ActionStatus.FAILED, state.status(), "removed entity action status");
-        assertEquals(helper, "[gymcraft:noop] agent entity is removed", state.description(),
+        assertEquals(helper, "agent entity is removed", state.description(),
             "removed entity action description");
         helper.succeed();
     }
@@ -236,7 +239,8 @@ public final class AgentDeathGameTests {
     /** @return 仅包含 noop 组件的动作。 */
     private static ProtoMcAction noopAction() {
         return ProtoMcAction.newBuilder()
-            .putComponents("gymcraft:noop", Any.pack(ProtoNoop.getDefaultInstance()))
+            .setComponentId("gymcraft:noop")
+            .setPayload(Any.pack(ProtoNoop.getDefaultInstance()))
             .build();
     }
 
@@ -256,7 +260,7 @@ public final class AgentDeathGameTests {
     ) {
         Thread.startVirtualThread(() -> {
             try {
-                response.set(env.step(action));
+                response.set(env.step(List.of(action), 0.0F));
             } catch (Throwable error) {
                 failure.set(error);
             }

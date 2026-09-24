@@ -49,7 +49,8 @@ public final class MenuRegressionGameTests {
         var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
         var dispatcher = new ActionDispatcher(mob, List.of(ActionComponents.OPEN_MENU.get()));
         var action = ProtoMcAction.newBuilder()
-            .putComponents("gymcraft:open_menu", Any.pack(ProtoOpenMenu.newBuilder()
+            .setComponentId("gymcraft:open_menu")
+            .setPayload(Any.pack(ProtoOpenMenu.newBuilder()
                 .setSelf(ProtoSelfMenuTarget.getDefaultInstance())
                 .build()))
             .build();
@@ -57,8 +58,7 @@ public final class MenuRegressionGameTests {
         var state = dispatcher.apply(action).initialState();
         assertEquals(helper, ActionStatus.COMPLETED, state.status(),
             "open_menu(self) should complete: " + state.description());
-        @SuppressWarnings("unchecked")
-        var details = (Map<String, Object>) state.details().get("gymcraft:open_menu");
+        var details = state.details();
         assertTrue(helper, details != null && details.containsKey("session_id"),
             "open_menu details should carry session_id");
         assertEquals(helper, "gymcraft:agent_inventory", details.get("menu_type"), "self menu menu_type");

@@ -9,11 +9,13 @@ from collections.abc import Mapping
 from typing import Any, cast
 
 from gymcraft.gym.action.components import (
+    jump_pb2,
     look_at_pb2,
     send_chat_pb2,
     set_block_pb2,
     update_interesting_blocks_pb2,
 )
+from gymcraft.client import make_action, make_step_request
 from gymcraft.gym.observation.common import block_view_pb2, entity_view_pb2, item_entity_view_pb2, item_stack_view_pb2
 from gymcraft.gym.observation.components import (
     chat_pb2,
@@ -41,10 +43,12 @@ from gymcraft.llm import (
 from gymcraft.type_info import (
     ACTION_JUMP,
     ACTION_LOOK_AT,
+    ACTION_NOOP,
     ACTION_SET_BLOCK,
     ACTION_SEND_CHAT,
     ACTION_UPDATE_INTERESTING_BLOCKS,
     Action,
+    ActionBatch,
     Observation,
 )
 
@@ -168,7 +172,7 @@ class FakeEnv:
         """初始化开放全部动作的空空间描述。"""
         self.action_space_spec: dict[str, Any] = {}
         self.step_calls = 0
-        self.last_action: Action | None = None
+        self.last_action: ActionBatch | None = None
 
     def reset(
         self,
@@ -179,7 +183,7 @@ class FakeEnv:
         """返回固定首帧观测。"""
         return _observation(), json.dumps({"seed": seed})
 
-    def step(self, action: Action) -> tuple[Observation, float, bool, bool, str]:
+    def step(self, action: ActionBatch) -> tuple[Observation, float, bool, bool, str]:
         """记录动作并返回成功 transition。"""
         self.step_calls += 1
         self.last_action = action
@@ -233,10 +237,11 @@ class ActionDslParserTests(unittest.TestCase):
             with self.subTest(command=command), self.assertRaises(ActionParseError):
                 parser.parse(f"```gymcraft-action\n{command}\n```")
 
-    def test_duplicate_component_is_rejected(self) -> None:
-        """wire map 无法表达同名组件，解析器应拒绝重复命令。"""
-        with self.assertRaises(ActionParseError):
-            ActionDslParser().parse("```gymcraft-action\n/jump\n/jump\n```")
+    def test_duplicate_component_preserves_serial_order(self) -> None:
+        """重复组件应保留为独立动作并按文本顺序编码。"""
+        parsed = ActionDslParser().parse("```gymcraft-action\n/jump\n/noop\n/jump\n```")
+        self.assertEqual([ACTION_JUMP, ACTION_NOOP, ACTION_JUMP],
+                         [action.component_id for action in parsed.batch.actions])
 
     def test_action_space_filters_commands(self) -> None:
         """实时动作空间只声明 jump 时，其余命令不应可用。"""
@@ -245,12 +250,33 @@ class ActionDslParserTests(unittest.TestCase):
         with self.assertRaises(ActionParseError):
             parser.parse("```gymcraft-action\n/noop\n```")
 
-    def test_batch_encodes_to_existing_action_dict(self) -> None:
-        """独立编码器应产生 GymCraftEnv 现有 Action 字典。"""
+    def test_batch_encodes_to_serial_action_dict(self) -> None:
+        """独立编码器应生成带共享超时的有序动作列表。"""
         parsed = ActionDslParser().parse("```gymcraft-action\n/set_block 1 64 2 minecraft:stone\n```")
         encoded = encode_action_batch(parsed.batch)
-        self.assertIn(ACTION_SET_BLOCK, encoded)
         self.assertEqual(10.0, encoded["timeout_seconds"])
+        self.assertEqual(ACTION_SET_BLOCK, encoded["actions"][0]["component_id"])
+        self.assertIsInstance(encoded["actions"][0]["payload"], set_block_pb2.ProtoSetBlock)
+
+    def test_client_encodes_ordered_actions_and_shared_timeout(self) -> None:
+        """客户端应将单组件 action 和有序批次编码到新 wire 字段。"""
+        payload = jump_pb2.ProtoJump()
+        action: Action = {"component_id": ACTION_JUMP, "payload": payload}
+        encoded_action = make_action(action)
+        self.assertEqual(ACTION_JUMP, encoded_action.component_id)
+        unpacked = jump_pb2.ProtoJump()
+        self.assertTrue(encoded_action.payload.Unpack(unpacked))
+
+        request = make_step_request("session", {
+            "timeout_seconds": 2.5,
+            "actions": [action, action],
+        })
+        self.assertEqual(2.5, request.timeout_seconds)
+        self.assertEqual([ACTION_JUMP, ACTION_JUMP], [item.component_id for item in request.actions])
+
+        empty = make_step_request("session", {"actions": []})
+        self.assertEqual(0, len(empty.actions))
+        self.assertEqual(0.0, empty.timeout_seconds)
 
     def test_look_at_parses_all_target_types(self) -> None:
         """look_at 应区分普通实体、掉落物和方块三个 oneof 分支。"""
@@ -305,7 +331,6 @@ class ActionDslParserTests(unittest.TestCase):
             ("/move_menu_item 1 8 9 3;",),
             ("/move_menu_item 1 8 9 3; 9 10 2",),
             ("/move_menu_item 1 8 9 3", "/move_menu_item 2 9 10 2"),
-            ("/noop", "/noop"),
         ):
             body = "\n".join(commands)
             with self.subTest(commands=body), self.assertRaises(ActionParseError):

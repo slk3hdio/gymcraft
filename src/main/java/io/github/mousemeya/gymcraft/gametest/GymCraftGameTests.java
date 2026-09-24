@@ -89,6 +89,12 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BACKPACK_USE_ITEM_TRANSACTION =
         TEST_FUNCTIONS.register("use_item_backpack_transaction", () -> MobAttachmentGameTests::backpackUseItemTransaction);
 
+    // ===== 动作失败反馈 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ATTACK_ONCE_FEEDBACK =
+        TEST_FUNCTIONS.register("action_feedback_attack_once", () -> ActionFeedbackGameTests::attackOnceReportsSpecificFailures);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_ATTACK_TARGET_FEEDBACK =
+        TEST_FUNCTIONS.register("action_feedback_set_attack_target", () -> ActionFeedbackGameTests::setAttackTargetReportsSpecificFailures);
+
     // ===== 公共 FakePlayer 执行与库存桥接 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> FAKE_PLAYER_ACTOR_MODES =
         TEST_FUNCTIONS.register("fake_player_actor_modes", () -> FakePlayerBridgeGameTests::actorModesAndIsolation);
@@ -142,6 +148,12 @@ public final class GymCraftGameTests {
     // ===== 14.7 动作超时 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ACTION_TIMEOUT_FAILS =
         TEST_FUNCTIONS.register("action_timeout_fails", () -> ActionTimeoutGameTests::actionTimeoutFails);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ACTION_BATCH_SERIAL =
+        TEST_FUNCTIONS.register("action_batch_serial", () -> ActionBatchGameTests::repeatedActionsRunSerially);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ACTION_BATCH_STOP_EMPTY =
+        TEST_FUNCTIONS.register("action_batch_stop_and_empty", () -> ActionBatchGameTests::failureStopsAndEmptyBatchNoops);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ACTION_BATCH_MULTIPLE_DISABLED =
+        TEST_FUNCTIONS.register("action_batch_multiple_disabled", () -> ActionBatchGameTests::multipleActionsCanBeDisabled);
 
     // ===== 方块放置 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_SELF_OBSTRUCTED =

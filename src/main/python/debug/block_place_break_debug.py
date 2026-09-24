@@ -23,17 +23,16 @@ import math
 from collections.abc import Iterable
 from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv
+from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components import break_block_pb2, noop_pb2, set_block_pb2
 from gymcraft.gym.observation.components import nearby_blocks_pb2, self_pb2
 from gymcraft.type_info import (
     ACTION_BREAK_BLOCK,
     ACTION_NOOP,
     ACTION_SET_BLOCK,
-    Action,
+    ActionBatch,
     OBS_NEARBY_BLOCKS,
     OBS_SELF,
-    TIMEOUT_SECONDS,
 )
 
 Pos = tuple[int, int, int]
@@ -130,7 +129,7 @@ def parse_pos(raw: list[int] | None) -> Pos | None:
     return raw[0], raw[1], raw[2]
 
 
-def step_and_print(env: GymCraftEnv, label: str, action: Action) -> tuple[Any, bool]:
+def step_and_print(env: GymCraftEnv, label: str, action: ActionBatch) -> tuple[Any, bool]:
     obs, reward, terminated, truncated, raw_info = env.step(action)
     info = json.loads(raw_info)
     print(f"{label} reward={reward:+.3f} term={terminated} trunc={truncated}")
@@ -171,10 +170,7 @@ def main() -> None:
         if args.no_reset:
             if ACTION_NOOP not in action_keys:
                 raise RuntimeError(f"--no-reset requires {ACTION_NOOP} in the action space to obtain an observation")
-            obs, _, _, _, _ = env.step({
-                TIMEOUT_SECONDS: 0.0,
-                ACTION_NOOP: noop_pb2.ProtoNoop(),
-            })
+            obs, _, _, _, _ = env.step(single_action(ACTION_NOOP, noop_pb2.ProtoNoop()))
             print("no_reset: skipped reset; obtained observation via noop step")
         else:
             obs, raw_reset_info = env.reset()
@@ -206,15 +202,14 @@ def main() -> None:
                 obs, completed = step_and_print(
                     env,
                     "set_block",
-                    {
-                        TIMEOUT_SECONDS: 0.0,
-                        ACTION_SET_BLOCK: set_block_pb2.ProtoSetBlock(
+                    single_action(
+                        ACTION_SET_BLOCK, set_block_pb2.ProtoSetBlock(
                             x=target[0],
                             y=target[1],
                             z=target[2],
                             block=block_id or "",
                         ),
-                    },
+                    ),
                 )
                 placed_positions.append(target)
                 if not completed:
@@ -234,14 +229,13 @@ def main() -> None:
         step_and_print(
             env,
             "break_block",
-            {
-                TIMEOUT_SECONDS: 0.0,
-                ACTION_BREAK_BLOCK: break_block_pb2.ProtoBreakBlock(
+            single_action(
+                ACTION_BREAK_BLOCK, break_block_pb2.ProtoBreakBlock(
                     x=break_pos[0],
                     y=break_pos[1],
                     z=break_pos[2],
                 ),
-            },
+            ),
         )
     finally:
         env.close()

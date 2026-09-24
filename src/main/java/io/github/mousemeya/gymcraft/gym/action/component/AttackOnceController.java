@@ -1,8 +1,11 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.Map;
+import java.util.LinkedHashMap;
 
+import net.minecraft.world.entity.Entity;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -65,26 +68,73 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
         }
-        LivingEntity target = null;
+        LivingEntity target;
         if (component.getTargetEntityId() > 0) {
-            var found = mob.level().getEntity(component.getTargetEntityId());
-            if (found instanceof LivingEntity living) target = living;
+            Entity found = mob.level().getEntity(component.getTargetEntityId());
+            if (found == null) {
+                return ActionApplyResult.none(ActionState.failed("attack target entity was not found or is not loaded", Map.of(
+                    "target_entity_id", component.getTargetEntityId()
+                )));
+            }
+            if (!(found instanceof LivingEntity living)) {
+                return ActionApplyResult.none(ActionState.failed("attack target is not a living entity", Map.of(
+                    "target_entity_id", component.getTargetEntityId()
+                )));
+            }
+            target = living;
+        } else {
+            target = mob.getTarget();
         }
-        if (target == null) target = mob.getTarget();
-        boolean attacked = false;
-        if (target != null && mob.level() instanceof ServerLevel serverLevel && mob.isWithinMeleeAttackRange(target)) {
-            mob.doHurtTarget(serverLevel, target);
-            attacked = true;
+        if (target == null) {
+            return ActionApplyResult.none(ActionState.failed("no attack target is set"));
+        }
+        Map<String, Object> details = targetDetails(mob, target);
+        if (target == mob) {
+            return ActionApplyResult.none(ActionState.failed("agent cannot attack itself", details));
+        }
+        if (!target.isAlive() || target.isRemoved()) {
+            return ActionApplyResult.none(ActionState.failed("attack target is dead or removed", details));
+        }
+        if (mob.isAlliedTo(target)) {
+            return ActionApplyResult.none(ActionState.failed("attack target is allied with the agent", details));
+        }
+        if (!mob.canAttack(target)) {
+            return ActionApplyResult.none(ActionState.failed("agent is not allowed to attack this target", details));
+        }
+        if (!mob.isWithinMeleeAttackRange(target)) {
+            return ActionApplyResult.none(ActionState.failed("attack target is outside melee range", details));
+        }
+        if (!(mob.level() instanceof ServerLevel serverLevel)) {
+            return ActionApplyResult.none(ActionState.failed("agent is not in a server level", details));
+        }
+        boolean attacked = mob.doHurtTarget(serverLevel, target);
+        if (attacked) {
+            mob.swing(InteractionHand.MAIN_HAND);
         }
         ActionState state = attacked
-            ? ActionState.completed("attack executed")
-            : ActionState.failed("no target in range", Map.of(
-                "target", target != null ? target.getUUID().toString() : "none",
-                "in_range", target != null && mob.isWithinMeleeAttackRange(target)));
+            ? ActionState.completed("attack executed", details)
+            : ActionState.failed("attack was rejected by the target or game rules", details);
         return ActionApplyResult.applied(ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE, Goal.Flag.LOOK)
             .setMemoryWithExpiry(MemoryModuleType.ATTACK_COOLING_DOWN, true, 2),
             state);
+    }
+
+    /**
+     * 构造攻击目标、距离与近战范围判定明细。
+     *
+     * @param mob 发起攻击的 Agent
+     * @param target 攻击目标
+     * @return 有序诊断字段
+     */
+    private static Map<String, Object> targetDetails(Mob mob, LivingEntity target) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("target_entity_id", target.getId());
+        details.put("target_uuid", target.getUUID().toString());
+        details.put("target_alive", target.isAlive());
+        details.put("distance", mob.distanceTo(target));
+        details.put("in_melee_range", mob.isWithinMeleeAttackRange(target));
+        return details;
     }
 
     @Override

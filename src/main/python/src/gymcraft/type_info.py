@@ -1,14 +1,8 @@
-"""GymCraft 动作 / 观测的类型信息（用户视角）。
+"""GymCraft 动作批次与观测的用户视角类型信息。
 
-wire 上 ``ProtoMcAction.components`` / ``ProtoMcObservation.components`` 是
-``map<string, google.protobuf.Any>``，键为**完整组件注册 id**
-（含模组命名空间，如 ``gymcraft:move_to``）。本模块以用户视角提供对应的 TypedDict
-（函数式定义），键即完整 wire 键（含 ``gymcraft:`` 前缀），值为解包后的具体
-protobuf 消息，可原样与 ``gymcraft.client`` 的 ``make_action`` 对接。
-
-组件注册 id 统一使用本模块的 ``ACTION_*`` / ``OBS_*`` 字符串常量；
-``Action`` 中的超时键为 ``TIMEOUT_SECONDS``，``Observation`` 中的 header 键为
-字面量 ``"header"``。
+单个 ``Action`` 由完整组件注册 ID 和 protobuf 负载组成；``ActionBatch``
+保存按顺序执行的动作列表与 step 共享超时。观测仍以完整注册 ID
+为键解包 ``ProtoMcObservation.components``。
 """
 
 from typing import Final, NotRequired, TypedDict
@@ -78,39 +72,22 @@ OBS_NEARBY_ITEMS: Final = "gymcraft:nearby_items"
 OBS_INTERESTING_BLOCKS: Final = "gymcraft:interesting_blocks"
 OBS_CHAT: Final = "gymcraft:chat"
 
-# Action dict 中的动作级超时键（秒，<= 0 表示不限制；非组件键）。
+# ActionBatch dict 中的 step 共享超时键（秒，<= 0 表示不限制）。
 TIMEOUT_SECONDS: Final = "timeout_seconds"
 
 
-Action = TypedDict(
-    "Action",
-    {
-        # 用户视角的动作（解包后的 ``ProtoMcAction``）：超时时间 + 若干动作组件。
-        # ``timeout_seconds`` 以秒为单位，``<= 0`` 表示不限制（与 wire 上
-        # ``ProtoMcAction.timeout_seconds`` 默认值一致）。
-        "timeout_seconds": float,
-        # 动作组件键即完整 wire 键（含 ``gymcraft:`` 命名空间），通常至多出现一个；
-        # 值为对应 protobuf 消息。
-        "gymcraft:step_move": NotRequired[ProtoStepMove],
-        "gymcraft:look_at": NotRequired[ProtoLookAt],
-        "gymcraft:move_to": NotRequired[ProtoMoveTo],
-        "gymcraft:set_attack_target": NotRequired[ProtoSetAttackTarget],
-        "gymcraft:attack_once": NotRequired[ProtoAttackOnce],
-        "gymcraft:noop": NotRequired[ProtoNoop],
-        "gymcraft:jump": NotRequired[ProtoJump],
-        "gymcraft:break_block": NotRequired[ProtoBreakBlock],
-        "gymcraft:set_block": NotRequired[ProtoSetBlock],
-        "gymcraft:open_menu": NotRequired[ProtoOpenMenu],
-        "gymcraft:close_menu": NotRequired[ProtoCloseMenu],
-        "gymcraft:move_menu_item": NotRequired[ProtoMoveMenuItem],
-        "gymcraft:click_menu_button": NotRequired[ProtoClickMenuButton],
-        "gymcraft:pick_up_item": NotRequired[ProtoPickUpItem],
-        "gymcraft:drop_item": NotRequired[ProtoDropItem],
-        "gymcraft:use_item": NotRequired[ProtoUseItem],
-        "gymcraft:update_interesting_blocks": NotRequired[ProtoUpdateInterestingBlocks],
-        "gymcraft:send_chat": NotRequired[ProtoSendChat],
-    },
-)
+class Action(TypedDict):
+    """表示一个且仅一个动作组件。"""
+
+    component_id: str
+    payload: ProtoMessage
+
+
+class ActionBatch(TypedDict):
+    """表示一次 step 中按输入顺序执行的动作批次。"""
+
+    actions: list[Action]
+    timeout_seconds: NotRequired[float]
 
 
 Observation = TypedDict(

@@ -31,7 +31,8 @@ from mcrcon import MCRcon  # type: ignore[import-untyped]
 from gymcraft.gym.action.components.send_chat_pb2 import ProtoSendChat
 from gymcraft.gym.observation.components.chat_pb2 import ProtoRecentChat
 from gymcraft.gym.observation.components.world_pb2 import ProtoWorldState
-from gymcraft.type_info import ACTION_SEND_CHAT, OBS_CHAT, OBS_WORLD, TIMEOUT_SECONDS
+from gymcraft.client import single_action
+from gymcraft.type_info import ACTION_SEND_CHAT, OBS_CHAT, OBS_WORLD
 
 from e2e_support import E2ESuite, read_server_properties, write_report
 
@@ -152,7 +153,7 @@ class ChatWorldE2E(E2ESuite):
         header_ticks: list[int] = []
         for message in messages:
             result = self.send(
-                {TIMEOUT_SECONDS: 0.0, ACTION_SEND_CHAT: ProtoSendChat(message=message)},
+                single_action(ACTION_SEND_CHAT, ProtoSendChat(message=message)),
                 "send_chat",
             )
             self.require("chat message sent" in result["description"], str(result))
@@ -181,15 +182,12 @@ class ChatWorldE2E(E2ESuite):
     def send_chat_invalid(self) -> None:
         """空消息与超长消息都必须被服务端拒绝且不出现在 chat 观测。"""
         self.send(
-            {TIMEOUT_SECONDS: 0.0, ACTION_SEND_CHAT: ProtoSendChat(message="")},
+            single_action(ACTION_SEND_CHAT, ProtoSendChat(message="")),
             "send_chat blank",
             "FAILED",
         )
         self.send(
-            {
-                TIMEOUT_SECONDS: 0.0,
-                ACTION_SEND_CHAT: ProtoSendChat(message="x" * (MAX_CHAT_LENGTH + 1)),
-            },
+            single_action(ACTION_SEND_CHAT, ProtoSendChat(message="x" * (MAX_CHAT_LENGTH + 1))),
             "send_chat too long",
             "FAILED",
         )

@@ -70,17 +70,24 @@ from gymcraft import GymCraftEnv
 from gymcraft.gym.action.components import noop_pb2
 
 env = GymCraftEnv("entity-uuid-here")
-observation, info = env.reset(options={"disable_vanilla_ai": True})
+observation, info = env.reset(options={
+    "disable_vanilla_ai": True,
+    "allow_multiple_actions": True,
+})
 
 observation, reward, terminated, truncated, info = env.step({
     "timeout_seconds": 0.0,
-    "gymcraft:noop": noop_pb2.ProtoNoop(),
+    "actions": [
+        {"component_id": "gymcraft:noop", "payload": noop_pb2.ProtoNoop()},
+    ],
 })
 
 env.close()
 ```
 
 `Connect` 只连接现有环境，不会自动创建环境。`disable_vanilla_ai=True` 仅在 reset 后以及一个动作结束到下一个动作开始之间压制原版 AI；动作执行期间会释放该环境级压制，并只保留动作自身声明的细粒度控制策略。
+
+`allow_multiple_actions` 默认为 `True`。设为 `False` 后，一个 step 只接受零个或一个 action；传入多个 action 时整批返回 `FAILED`，且不会执行任何一项。
 
 ## Demo
 

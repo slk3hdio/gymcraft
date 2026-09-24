@@ -170,8 +170,9 @@ public final class UseItemController extends AbstractActionComponentController<P
                     inventory.player().stopUsingItem();
                 }
             }
+            this.animateSuccessfulUse(result);
             this.state = result.consumesAction() ? ActionState.completed("item used", this.details)
-                : ActionState.failed("item did not accept target", this.details);
+                : ActionState.failed(rejectedInteractionDescription(action), this.details);
             return ActionApplyResult.applied(this.policy(), this.state);
         } catch (Exception exception) {
             if (this.consumption != null) {
@@ -222,7 +223,10 @@ public final class UseItemController extends AbstractActionComponentController<P
             }
         }
         if (hit.getType() != HitResult.Type.BLOCK || !hit.getBlockPos().equals(pos)) {
-            throw new IllegalArgumentException("block target is obstructed or has no hit shape");
+            if (this.mob().level().getBlockState(pos).getShape(this.mob().level(), pos).isEmpty()) {
+                throw new IllegalArgumentException("block target has no interactable hit shape");
+            }
+            throw new IllegalArgumentException("block target is obstructed by another block");
         }
         this.checkReach(hit.getLocation(), this.blockReachDistance);
         ActionLook.apply(this.mob(), point);
@@ -235,8 +239,17 @@ public final class UseItemController extends AbstractActionComponentController<P
      */
     private LivingEntity entityTarget(ProtoUseItem action) {
         var found = this.mob().level().getEntity(action.getEntity().getEntityId());
-        if (!(found instanceof LivingEntity entity) || entity == this.mob() || !entity.isAlive() || entity.isRemoved()) {
-            throw new IllegalArgumentException("entity target is not a valid living entity");
+        if (found == null) {
+            throw new IllegalArgumentException("entity target was not found or is not loaded");
+        }
+        if (!(found instanceof LivingEntity entity)) {
+            throw new IllegalArgumentException("entity target is not a living entity");
+        }
+        if (entity == this.mob()) {
+            throw new IllegalArgumentException("agent cannot use an item on itself as an entity target");
+        }
+        if (!entity.isAlive() || entity.isRemoved()) {
+            throw new IllegalArgumentException("entity target is dead or removed");
         }
         Vec3 eyes = this.mob().getEyePosition();
         Vec3 point = entity.getEyePosition();
@@ -255,6 +268,20 @@ public final class UseItemController extends AbstractActionComponentController<P
         }
         ActionLook.apply(this.mob(), point);
         return entity;
+    }
+
+    /**
+     * 按目标类型说明物品和原版交互入口均未接受本次使用。
+     *
+     * @param action 当前使用动作
+     * @return 精确到目标类型的失败描述
+     */
+    private static String rejectedInteractionDescription(ProtoUseItem action) {
+        return switch (action.getTargetCase()) {
+            case BLOCK -> "item cannot be used on the target block";
+            case ENTITY -> "item cannot be used on the target entity";
+            case TARGET_NOT_SET -> "item cannot be used without a target";
+        };
     }
 
     /**
@@ -320,6 +347,23 @@ public final class UseItemController extends AbstractActionComponentController<P
     }
 
     /**
+     * 将 FakePlayer 返回的成功交互动画转发给真实 Agent 实体。
+     * <p>
+     * 原版 {@code CLIENT} 挥手由发包玩家本地提前播放，但 GymCraft 的交互由服务端
+     * FakePlayer 执行，没有对应客户端，因此 {@code CLIENT}/{@code SERVER} 都必须由
+     * {@link Mob} 主动广播；{@code NONE} 用于持续消费等不应挥手的结果。
+     * </p>
+     *
+     * @param result 原版物品交互结果
+     */
+    private void animateSuccessfulUse(InteractionResult result) {
+        if (result instanceof InteractionResult.Success success
+            && success.swingSource() != InteractionResult.SwingSource.NONE) {
+            this.mob().swing(InteractionHand.MAIN_HAND);
+        }
+    }
+
+    /**
      * @param action 当前动作；观察消费结束并更新终态
      */
     @Override public void tick(ProtoUseItem action) {
@@ -327,9 +371,24 @@ public final class UseItemController extends AbstractActionComponentController<P
             this.consumption.tick();
             if (this.consumption.closed()) {
                 this.state = this.consumption.finished() ? ActionState.completed("item consumed", this.details)
-                    : ActionState.failed("item consumption interrupted", this.details);
+                    : ActionState.failed(consumptionInterruptionDescription(), this.details);
             }
         }
+    }
+
+    /**
+     * 根据实体生命周期区分消费中断原因。
+     *
+     * @return 消费未完成的具体描述
+     */
+    private String consumptionInterruptionDescription() {
+        if (this.mob().isRemoved()) {
+            return "item consumption stopped because the agent was removed";
+        }
+        if (!this.mob().isAlive() || this.mob().isDeadOrDying()) {
+            return "item consumption stopped because the agent died";
+        }
+        return "item consumption was interrupted before completion";
     }
 
     /**

@@ -129,6 +129,9 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 Goal flags、寻路和关键 Brain memory，同时保留移动、重力与跳跃物理。动作开始时会释放
 该环境级压制，执行期间仅由当前动作 Controller 按需控制原版行为；动作进入终态后恢复空闲期压制。
 
+`reset(options={"allow_multiple_actions": false})` 可禁止一个 step 执行多个动作。关闭后空批次仍按
+noop 推进一个 tick，单动作正常执行，多动作批次则在执行任何组件前整体返回 `FAILED`。该选项默认开启。
+
 ## gRPC 接口
 
 服务定义位于 `src/main/proto/gymcraft/gym/rpc/env_service.proto`。

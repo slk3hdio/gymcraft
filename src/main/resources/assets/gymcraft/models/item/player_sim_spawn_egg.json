@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "gymcraft:item/player_sim_spawn_egg"
+  }
+}

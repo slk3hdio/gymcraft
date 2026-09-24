@@ -76,7 +76,7 @@ class ContextAssembler:
             "You control an entity in Minecraft. Choose the next action batch from the task, recent results, and latest observation.\n"
             "You may begin with a short analysis, but the response must end with exactly one ```gymcraft-action fenced block. "
             "Every non-empty line inside the block must be a /command. Include at least one action and no comments.\n"
-            "Do not repeat an action in one batch. Text line order does not control execution; the server uses its declared component order.\n"
+            "Action lines execute serially in the exact order written; repeated actions are allowed.\n"
             # f"Current server execution order: {execution_order}\n"
             f"Optional /timeout <seconds>: default {self.action_parser.default_timeout_seconds:g}, "
             f"maximum {self.action_parser.max_timeout_seconds:g}.\n"
