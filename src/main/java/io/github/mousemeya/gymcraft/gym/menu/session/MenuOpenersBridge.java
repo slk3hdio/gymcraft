@@ -1,11 +1,12 @@
 package io.github.mousemeya.gymcraft.gym.menu.session;
 
+import java.util.function.Predicate;
+
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.ContainerOpenersCounter;
 
 /**
- * 容器开盖计数桥 —— 让原版 {@link ContainerOpenersCounter} 的 5 tick 自检
+ * 容器开盖计数桥 —— 让原版 {@code ContainerOpenersCounter} 的 5 tick 自检
  * （{@code recheckOpeners}）能看到 GymCraft 逻辑菜单会话。
  * <p>
  * 原版自检通过扫描世界实体统计打开者，但菜单会话独占的 FakePlayer 从未加入世界
@@ -17,7 +18,8 @@ import net.minecraft.world.level.block.entity.ContainerOpenersCounter;
  * </p>
  * <p>
  * 调用点仅 {@code ContainerOpenersCounterMixin#recheckOpeners}，运行于服务端 tick 线程。
- * {@code isOwnContainer} 为 1.21.1 的 protected 方法，经 accesstransformer.cfg 放开。
+ * {@code isOwnContainer} 在 1.21.1 为 protected，由注入类把自身判定谓词传入，
+ * 避免用 accesstransformer 放开可见性破坏原版匿名实现类的访问级别。
  * </p>
  */
 public final class MenuOpenersBridge {
@@ -33,18 +35,18 @@ public final class MenuOpenersBridge {
      * 处于交互距离内，超出距离的会话会被自动关闭。
      * </p>
      *
-     * @param counter 正在自检的开盖计数器
-     * @param level   容器所在世界
+     * @param isOwnContainer 目标容器的“玩家是否持有该容器菜单”判定（来自注入类）
+     * @param level          容器所在世界
      * @return 额外的打开者数量
      */
-    public static int extraOpeners(ContainerOpenersCounter counter, Level level) {
+    public static int extraOpeners(Predicate<Player> isOwnContainer, Level level) {
         int extra = 0;
         for (LogicalMenuSession session : MenuSessionHooks.openSessions()) {
             if (session.isClosed()) {
                 continue;
             }
             Player player = session.agentPlayer().player();
-            if (player.level() == level && counter.isOwnContainer(player)) {
+            if (player.level() == level && isOwnContainer.test(player)) {
                 extra++;
             }
         }

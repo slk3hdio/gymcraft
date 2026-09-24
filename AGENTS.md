@@ -49,18 +49,19 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 - **step 共享超时**: `StepRequest.timeout_seconds`（<=0 不限制）由 `AgentRuntime` 按 20 tick/秒换算，批次内 action 按输入顺序串行；超时中断当前组件并返回 `failed("action batch timeout")`
 - **附近结构扫描**: `gymcraft:world` 的 `structures` 字段由 `WorldLocationScanner.scanNearbyStructures` 以 `hasChunk` 守卫只读已加载区块的结构起点表（`StructureManager.getChunk(x,z,status)` 默认 `load=true`，绝不能省守卫，否则会隐式加载区块）；起点只存于生成区块，天然无重复；半径经 `WorldStateObservationCreator.setStructureChunkRadius` 覆盖
 - **容器开盖计数**: 菜单会话独占 FakePlayer 不在世界实体集合中，原版 `ContainerOpenersCounter.recheckOpeners`（打开后 5 tick）扫描不到会把计数强清为 0 并造成负泄漏（盖子永久关闭/卡开）；`ContainerOpenersCounterMixin` + `MenuOpenersBridge` 按活动会话（`MenuSessionHooks.openSessions` + `isOwnContainer`）补计数，不要把菜单 FakePlayer 加进世界（会被怪物 AI 当目标）
-- **程序化生成 Warden**: `EntityType.WARDEN.create(level, reason)` 不走 `finalizeSpawn`，`DIG_COOLDOWN` 记忆缺失会导致 Warden 立即钻地消失；生成后需 `warden.getBrain().setMemoryWithExpiry(MemoryModuleType.DIG_COOLDOWN, Unit.INSTANCE, Integer.MAX_VALUE)`（见 `IronGolemWardenEnv.spawnWarden`）
+- **程序化生成 Warden**: `EntityType.WARDEN.create(level)`（1.21.1 无生成原因参数）不走 `finalizeSpawn`，`DIG_COOLDOWN` 记忆缺失会导致 Warden 立即钻地消失；生成后需 `warden.getBrain().setMemoryWithExpiry(MemoryModuleType.DIG_COOLDOWN, Unit.INSTANCE, Integer.MAX_VALUE)`（见 `IronGolemWardenEnv.spawnWarden`）
 - **use_item 实体交互白名单**: 目标实体自身的持物交互（`entity.interact`）仅放行 虚弱僵尸村民+金苹果、受伤铁傀儡+铁锭（+25 生命）；其余走 `stack.interactLivingEntity`，不接受时回退普通使用（`UseItemController.use`）
 - **1.21.1 适配要点**（相对 26.1 的差异，本分支专属）：
   - `ResourceLocation`（无 `Identifier`）；实体类包路径为旧布局（`entity.animal.IronGolem`、`entity.monster.ZombieVillager`、`entity.projectile.Snowball`、`entity.animal.horse`）
   - 装备槽只有 7 个（无 SADDLE），slot_id 布局经 `AgentInventoryLayout.equipmentSlotId` 固定（MAINHAND=0, FEET..HEAD=1..4, OFFHAND=5, BODY=6）；`EquipmentSlot#getId` 不存在
   - `neoforge.transfer`/`ItemStacksResourceHandler` 不存在，背包用 `neoforge.items.ItemStackHandler`；`CONSUMABLE`/`Consumable` 组件不存在，消费判定用 `FOOD` + `UseAnim.EAT/DRINK`；药水/饮品对 Mob 的消耗与容器返还经 `UseItemConsumption` 的 Finish 事件补齐（原版仅对 Player）
   - `EntitySpawnReason`/`TagValueInput`/`Profiler.zone`/`RemoteSlot`/`snapTo`/`GameTestHelper#kill`/`CollisionContext.withPosition` 均为 26.1 API；1.21.1 分别用 `MobSpawnType`、`CompoundTag` 存取档、`Level#getProfiler`+push/pop、无（ContainerSynchronizer 5 方法）、`moveTo`、`entity.kill()`、`CollisionContext.of`
-  - GameTest 为注解方式：`GeneratedGameTests`（`@GameTestHolder` + `@GameTest`）注册全部 120 个测试，模板统一 `gymcraft:use_item_empty`（数据包目录是单数 `structure/`；26.1 的 TEST_FUNCTION registry 与 `minecraft:empty` 模板在 1.21.1 不可用）
+  - GameTest 为注解方式：`GeneratedGameTests`（`@GameTestHolder` + `@GameTest`）注册全部 130 个测试，模板统一 `gymcraft:use_item_empty`（数据包目录是单数 `structure/`；26.1 的 TEST_FUNCTION registry 与 `minecraft:empty` 模板在 1.21.1 不可用）
   - `neoforge.mods.toml` 模板必须保留 `modLoader="javafml"` / `loaderVersion="[4,)"` 头（1.21.1 FML 要求，26.1 已移除）
   - dev 运行（<=1.21.8）不自动携带 implementation 依赖：gRPC/protobuf 声明在 `libraries` 配置并经 `additionalRuntimeClasspath` 注入；guava/gson/protobuf-javalite 必须从 gRPC 侧排除（MC strictly 锁 guava 32.1.2 / gson 2.10.1；javalite 与 protobuf-java 4.30.2 类冲突）
   - mixin 注入点 `ServerCommonPacketListenerImpl.send(Packet, PacketSendListener)` 的第二参在 `net.minecraft.network` 包（无 protocol 前缀）
-  - `LivingEntity#isJumping` 不存在：经 `META-INF/accesstransformer.cfg` 放开 `jumping` 字段
+  - `LivingEntity#isJumping` 不存在：经 `META-INF/accesstransformer.cfg` 放开 `jumping` 字段；`ContainerOpenersCounter#isOwnContainer` 是 protected 但**不能**用 AT 放开（原版匿名实现类的窄化覆盖会让 NFRT 重编译失败），开盖计数桥经 `ContainerOpenersCounterMixin` 把自身谓词传入 `MenuOpenersBridge`
+  - 刷怪蛋用 NeoForge `DeferredSpawnEggItem`（1.21.1 无 `SpawnEggItem(Properties#spawnEgg)`）；实体 `EntityType.Builder#build` 只接受字符串 ID；渲染器无 RenderState（`HumanoidMobRenderer<T, M>` 两泛型），手臂姿态在模型 `setupAnim` 前写 `rightArmPose/leftArmPose`（见 `PlayerSimRenderer`）
   - `run/mods` 里为 Java 25 编译的 ReplayMod 与本分支不兼容，已移至 `run/mods-disabled-for-1.21.1/`
 - 用 `gh` 操作含中文的 GitHub issue 前先设 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
 - `repo/` 既是 maven-publish 目标，又存放参考资源: `Documentation` (NeoForge 文档)、`minecraft-source-1.26`/`minecraft-source-1.20.1-java` (反编译源码)、`TouhouLittleMaid-1.20` (参考模组)

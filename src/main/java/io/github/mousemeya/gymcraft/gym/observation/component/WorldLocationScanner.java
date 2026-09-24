@@ -76,8 +76,8 @@ public final class WorldLocationScanner {
         List<ScannedStructure> result = new ArrayList<>();
         for (int dx = -chunkRadius; dx <= chunkRadius; dx++) {
             for (int dz = -chunkRadius; dz <= chunkRadius; dz++) {
-                int chunkX = center.x() + dx;
-                int chunkZ = center.z() + dz;
+                int chunkX = center.x + dx;
+                int chunkZ = center.z + dz;
                 // 未加载区块直接跳过：getChunk 的默认行为会触发加载，必须显式守卫
                 if (!serverLevel.hasChunk(chunkX, chunkZ)) {
                     continue;

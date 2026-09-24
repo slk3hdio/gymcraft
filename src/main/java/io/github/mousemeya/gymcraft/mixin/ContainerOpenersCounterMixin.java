@@ -53,6 +53,19 @@ public abstract class ContainerOpenersCounterMixin {
     @Shadow
     protected abstract List<Player> getPlayersWithContainerOpen(Level level, BlockPos pos);
 
+    @Shadow
+    protected abstract boolean isOwnContainer(Player player);
+
+    /**
+     * 目标容器对指定玩家的“是否持有本容器菜单”判定（包装 shadow 的抽象方法）。
+     *
+     * @param player 待判定的玩家
+     * @return 玩家当前打开的菜单是否正是本容器
+     */
+    private boolean gymcraft$isOwnContainer(Player player) {
+        return this.isOwnContainer(player);
+    }
+
     /**
      * 重实现自检：在世界实体扫描结果上并入 GymCraft 活动菜单会话数。
      *
@@ -66,8 +79,10 @@ public abstract class ContainerOpenersCounterMixin {
             this.maxInteractionRange = Math.max(player.blockInteractionRange(), this.maxInteractionRange);
         }
 
+        // 会话补充计数经谓词传入：isOwnContainer 在 1.21.1 为 protected，
+        // 不能用 AT 放开（会破坏原版匿名实现类的窄化覆盖）
         int openCount = players.size()
-            + MenuOpenersBridge.extraOpeners((ContainerOpenersCounter) (Object) this, level);
+            + MenuOpenersBridge.extraOpeners(this::gymcraft$isOwnContainer, level);
         int prevCount = this.openCount;
         if (prevCount != openCount) {
             boolean isOpen = openCount != 0;

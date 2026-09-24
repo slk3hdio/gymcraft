@@ -249,7 +249,7 @@ public final class ChatObservationGameTests {
         var serverLevel = helper.getLevel();
         Structure treasure = serverLevel.registryAccess()
             .registryOrThrow(Registries.STRUCTURE)
-            .getValue(ResourceLocation.withDefaultNamespace("buried_treasure"));
+            .get(ResourceLocation.withDefaultNamespace("buried_treasure"));
         assertTrue(helper, treasure != null, "minecraft:buried_treasure structure is not registered");
         // 注入口必须运行在服务端线程上：区块结构引用属于服务端世界状态
         runOnServer(helper, () -> {
@@ -257,7 +257,7 @@ public final class ChatObservationGameTests {
             StructureStart start = new StructureStart(treasure, chunk.getPos(), 1,
                 new PiecesContainer(List.of(new BuriedTreasurePieces.BuriedTreasurePiece(absPos))));
             chunk.setStartForStructure(treasure, start);
-            chunk.addReferenceForStructure(treasure, chunk.getPos().pack());
+            chunk.addReferenceForStructure(treasure, chunk.getPos().toLong());
         });
         SimpleMobEnv env = new SimpleMobEnv(
             ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "world_structure_test"), mob);
