@@ -3,6 +3,7 @@ package io.github.mousemeya.gymcraft;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.EnvFactories;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
+import io.github.mousemeya.gymcraft.registry.ModEntities;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import io.github.mousemeya.gymcraft.item.EnvToolItem;
@@ -22,6 +23,7 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.SpawnEggItem;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.fml.common.Mod;
@@ -50,6 +52,11 @@ public class GymCraft {
             UuidCopierItem::new,
             properties -> properties.stacksTo(1));
 
+    // 玩家模拟实体刷怪蛋：实体注册先于物品注册（原版注册表顺序），此处 get() 安全
+    public static final DeferredItem<SpawnEggItem> PLAYER_SIM_SPAWN_EGG = ITEMS.registerItem(
+            "player_sim_spawn_egg",
+            properties -> new SpawnEggItem(properties.spawnEgg(ModEntities.PLAYER_SIM.get())));
+
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = CREATIVE_MODE_TABS.register("tab",
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.gymcraft"))
@@ -57,6 +64,7 @@ public class GymCraft {
                     .displayItems((params, output) -> {
                         output.accept(ENV_TOOL.get());
                         output.accept(UUID_COPIER.get());
+                        output.accept(PLAYER_SIM_SPAWN_EGG.get());
                     })
                     .build());
 
@@ -84,6 +92,8 @@ public class GymCraft {
         ObservationCreators.REGISTRY.register(modEventBus);
         EnvFactories.REGISTRY.register(modEventBus);
         ModAttachments.REGISTRY.register(modEventBus);
+        ModEntities.REGISTRY.register(modEventBus);
+        modEventBus.addListener(ModEntities::registerAttributes);
 
         // GameTest：测试函数注册表常驻（无运行副作用），测试实例仅在 GameTest 启用时装配
         GymCraftGameTests.TEST_FUNCTIONS.register(modEventBus);

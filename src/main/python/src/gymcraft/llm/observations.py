@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -41,6 +42,7 @@ class ObservationFormatConfig:
     max_interesting_blocks: int = 10
     max_items: int = 10
     max_chat_messages: int = 16
+    max_structures: int = 10
 
     def __post_init__(self) -> None:
         """拒绝会导致空观测或不可预测格式的配置。"""
@@ -52,8 +54,9 @@ class ObservationFormatConfig:
             or self.max_interesting_blocks <= 0
             or self.max_items <= 0
             or self.max_chat_messages <= 0
+            or self.max_structures <= 0
         ):
-            raise ValueError("entity, block, interesting block, item and chat limits must be positive")
+            raise ValueError("entity, block, interesting block, item, chat and structure limits must be positive")
 
 
 # 可被任意环境 wrapper 调用的纯观测格式化器。
@@ -70,6 +73,7 @@ class ObservationTextFormatter:
         self_state = observation.get(OBS_SELF)
         lines.append(self._format_self(self_state))
         lines.append(self._format_world(observation.get(OBS_WORLD)))
+        lines.extend(self._format_structures(observation.get(OBS_WORLD)))
         lines.extend(
             self._format_entities(
                 observation.get(OBS_NEARBY_ENTITIES),
@@ -115,13 +119,33 @@ class ObservationTextFormatter:
         )
 
     def _format_world(self, world: world_pb2.ProtoWorldState | None) -> str:
-        """格式化维度、游戏时间和原生天气布尔字段。"""
+        """格式化维度、群系、所在结构、游戏时间和原生天气布尔字段。"""
         if world is None:
             return "world: unavailable"
+        # 空结构 ID 表示不在任何结构内，用 none 显式呈现，避免空串歧义
+        structure = world.structure or "none"
         return (
-            f"world: dimension={world.dimension} day_time={world.day_time} "
-            f"raining={self._bool(world.raining)} thundering={self._bool(world.thundering)}"
+            f"world: dimension={world.dimension} biome={world.biome} structure={structure} "
+            f"day_time={world.day_time} raining={self._bool(world.raining)} "
+            f"thundering={self._bool(world.thundering)}"
         )
+
+    def _format_structures(
+        self,
+        world: world_pb2.ProtoWorldState | None,
+    ) -> list[str]:
+        """按服务端返回的距离升序输出附近结构起点（注册 ID、包围盒中心坐标和距离）。"""
+        if world is None:
+            return ["structures: unavailable"]
+        structures = list(world.structures)
+        shown = structures[: self.config.max_structures]
+        lines = [self._count_header("structures", len(structures), len(shown))]
+        for entry in shown:
+            lines.append(
+                f"- structure_id={entry.structure_id} x={entry.x} y={entry.y} z={entry.z} "
+                f"distance={self._number(entry.distance)}"
+            )
+        return lines
 
     def _format_entities(
         self,
@@ -147,7 +171,7 @@ class ObservationTextFormatter:
         self,
         nearby: nearby_blocks_pb2.ProtoNearbyBlocks | None,
     ) -> list[str]:
-        """按距离和坐标稳定排序附近可见方块。"""
+        """先按距离升序输出附近可见方块（含坐标和距离），再附加按种类聚合的数量统计。"""
         if nearby is None:
             return ["blocks: unavailable"]
         blocks = sorted(nearby.blocks, key=lambda block: (block.distance, block.x, block.y, block.z, block.block_id))
@@ -158,6 +182,20 @@ class ObservationTextFormatter:
                 f"- block_id={block.block_id} x={block.x} y={block.y} z={block.z} "
                 f"distance={self._number(block.distance)}"
             )
+        lines.extend(self._format_block_counts(nearby))
+        return lines
+
+    def _format_block_counts(
+        self,
+        nearby: nearby_blocks_pb2.ProtoNearbyBlocks,
+    ) -> list[str]:
+        """按 block_id 聚合附近可见方块，输出种类与数量（数量降序、种类名升序）。"""
+        counts = Counter(block.block_id for block in nearby.blocks)
+        kinds = sorted(counts, key=lambda block_id: (-counts[block_id], block_id))
+        shown = kinds[: self.config.max_blocks]
+        lines = [self._count_header("block_counts", len(kinds), len(shown))]
+        for block_id in shown:
+            lines.append(f"- block_id={block_id} count={counts[block_id]}")
         return lines
 
     def _format_items(

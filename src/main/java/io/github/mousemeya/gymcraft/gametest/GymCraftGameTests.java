@@ -223,6 +223,20 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SEND_CHAT_ACTION_VALIDATES =
         TEST_FUNCTIONS.register("chat_send_action_validates", () -> ChatObservationGameTests::sendChatActionValidatesMessages);
 
+    // ===== 世界状态观测（群系 / 结构） =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> WORLD_STATE_BIOME_AND_STRUCTURE =
+        TEST_FUNCTIONS.register("world_state_biome_and_structure",
+            () -> ChatObservationGameTests::worldStateReportsBiomeAndStructure);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> WORLD_STATE_STRUCTURE_PIECE =
+        TEST_FUNCTIONS.register("world_state_structure_inside_piece",
+            () -> ChatObservationGameTests::worldStateReportsStructureInsidePiece);
+
+    // ===== 玩家模拟实体 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PLAYER_SIM_PROFILE =
+        TEST_FUNCTIONS.register("player_sim_profile", () -> PlayerSimGameTests::playerSimHasPlayerLikeProfile);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PLAYER_SIM_ENV_AGENT =
+        TEST_FUNCTIONS.register("player_sim_env_agent", () -> PlayerSimGameTests::playerSimWorksAsEnvAgent);
+
     // ===== 跳跃 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> JUMP_APPLIED =
         TEST_FUNCTIONS.register("jump_applied_and_executed", () -> JumpGameTests::jumpAppliedAndExecuted);
@@ -278,6 +292,8 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("regression_drop_all_items_conserves_carried", () -> MenuRegressionGameTests::dropAllItemsConservesCarriedItems);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CLEAR_ALL_ITEMS_REMOVES =
         TEST_FUNCTIONS.register("regression_clear_all_items_removes_without_drop", () -> MenuRegressionGameTests::clearAllItemsRemovesWithoutDrop);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CHEST_LID_SURVIVES_RECHECK =
+        TEST_FUNCTIONS.register("regression_chest_lid_count_survives_recheck", () -> MenuRegressionGameTests::chestLidCountSurvivesRecheck);
 
     // 使用物品的独立场景，使用专用空结构与统一测试时限。
     static {
@@ -327,6 +343,8 @@ public final class GymCraftGameTests {
                         holder.getId().getPath().startsWith("iron_mining_") ? 12000
                             : holder.getId().getPath().startsWith("iron_golem_warden_") ? 12000
                             : holder.getId().getPath().startsWith("chat_") ? 12000
+                            : holder.getId().getPath().startsWith("world_state_") ? 12000
+                            : holder.getId().getPath().startsWith("player_sim_env") ? 12000
                             : holder.getId().getPath().startsWith("navigation_") ? 160 : MAX_TICKS,
                         0,
                         true)

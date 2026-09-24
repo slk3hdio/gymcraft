@@ -1,7 +1,9 @@
 package io.github.mousemeya.gymcraft;
 
+import io.github.mousemeya.gymcraft.client.PlayerSimRenderer;
 import io.github.mousemeya.gymcraft.item.EnvToolItem;
 import io.github.mousemeya.gymcraft.network.SelectEnvTypePayload;
+import io.github.mousemeya.gymcraft.registry.ModEntities;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
@@ -11,6 +13,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
@@ -26,6 +29,13 @@ public class GymCraftClient {
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
         // Do not forget to add translations for your config options to the en_us.json file.
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
+
+        // 玩家模拟实体渲染器（mod 总线事件，客户端装配）
+        var modEventBus = container.getEventBus();
+        if (modEventBus != null) {
+            modEventBus.addListener((EntityRenderersEvent.RegisterRenderers event) ->
+                event.registerEntityRenderer(ModEntities.PLAYER_SIM.get(), PlayerSimRenderer::new));
+        }
     }
 
     @SubscribeEvent

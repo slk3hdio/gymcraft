@@ -1,5 +1,7 @@
 {
   "itemGroup.gymcraft": "GymCraft",
   "item.gymcraft.env_tool": "Environment Tool",
-  "item.gymcraft.uuid_copier": "UUID Copier"
+  "item.gymcraft.uuid_copier": "UUID Copier",
+  "entity.gymcraft.player_sim": "Simulated Player",
+  "item.gymcraft.player_sim_spawn_egg": "Simulated Player Spawn Egg"
 }

@@ -11,4 +11,23 @@ message ProtoWorldState {
   bool raining = 2;
   bool thundering = 3;
   string dimension = 4;
+  // 受控实体当前所在群系的注册 ID，例如 "minecraft:plains"。
+  string biome = 5;
+  // 受控实体当前所在结构的注册 ID，例如 "minecraft:village_plains"；
+  // 不在任何结构内时为空字符串。
+  string structure = 6;
+  // 受控实体附近已加载区块中存在起点的结构，按距离升序排列。
+  repeated ProtoStructureLocation structures = 7;
+}
+
+// 附近结构的定位信息：注册 ID、起点包围盒中心方块坐标、与受控实体的欧氏距离。
+message ProtoStructureLocation {
+  // 结构注册 ID，例如 "minecraft:village_plains"。
+  string structure_id = 1;
+  // 结构起点包围盒中心的方块坐标。
+  int32 x = 2;
+  int32 y = 3;
+  int32 z = 4;
+  // 受控实体到包围盒中心的欧氏距离。
+  double distance = 5;
 }
