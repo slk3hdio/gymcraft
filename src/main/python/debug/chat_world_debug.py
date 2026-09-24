@@ -156,7 +156,11 @@ class ChatWorldE2E(E2ESuite):
                 single_action(ACTION_SEND_CHAT, ProtoSendChat(message=message)),
                 "send_chat",
             )
-            self.require("chat message sent" in result["description"], str(result))
+            # 串行批次后批次级描述固定为 "action batch ..."，逐项描述在明细里
+            self.require(
+                any("chat message sent" in action["description"] for action in result["actions"]),
+                str(result),
+            )
             chat = self.chat()
             match = [entry for entry in chat.messages if entry.content == message]
             self.require(len(match) == 1, f"expected exactly one chat entry for {message!r}: {list(chat.messages)}")

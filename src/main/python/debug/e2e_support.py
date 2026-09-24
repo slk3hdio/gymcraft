@@ -158,6 +158,14 @@ class E2ESuite:
             "label": label,
             "status": obs["header"].last_action_status,
             "description": obs["header"].last_action_description,
+            # 串行批次后批次级描述固定为 "action batch ..."，逐项描述在明细里
+            "actions": [
+                dict(action)
+                for action in json.loads(raw_info)
+                .get("action_state", {})
+                .get("details", {})
+                .get("actions", [])
+            ],
             "elapsed_game_ticks": obs["header"].game_tick - tick_before,
             "info": json.loads(raw_info),
         }

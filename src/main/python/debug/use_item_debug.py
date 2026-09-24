@@ -230,10 +230,10 @@ class UseItemE2E:
         self.require("minecraft:speed" in effects, effects)
 
     def timeout(self) -> None:
-        """动作级超时通过 RPC 返回 FAILED，物品与主手完整归还。"""
+        """step 共享超时通过 RPC 返回 FAILED，物品与主手完整归还。"""
         self.equip("offhand", "minecraft:apple", 3)
         result = self.step("/timeout 0.1\n/use_item 5", "FAILED")
-        self.require("action timeout" in result["description"], str(result))
+        self.require("action batch timeout" in result["description"], str(result))
         self.slot(5, "minecraft:apple", 3)
         self.slot(0, "minecraft:stick", 1)
 
