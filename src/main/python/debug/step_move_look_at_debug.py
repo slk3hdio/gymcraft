@@ -26,7 +26,8 @@ import grpc
 from mcrcon import MCRcon  # type: ignore[import-untyped]
 
 from gymcraft.gym.action.components.look_at_pb2 import ProtoLookAt
-from gymcraft.type_info import ACTION_LOOK_AT, OBS_NEARBY_ENTITIES, OBS_NEARBY_ITEMS, TIMEOUT_SECONDS
+from gymcraft.client import single_action
+from gymcraft.type_info import ACTION_LOOK_AT, OBS_NEARBY_ENTITIES, OBS_NEARBY_ITEMS
 
 from e2e_support import E2ESuite, angle_diff, expected_yaw_to, read_server_properties, write_report
 
@@ -203,7 +204,7 @@ class MovementLookE2E(E2ESuite):
     def look_at_errors(self) -> None:
         """验证未设置目标与未加载区块目标的失败路径。"""
         self.send(
-            {TIMEOUT_SECONDS: 0.0, ACTION_LOOK_AT: ProtoLookAt()},
+            single_action(ACTION_LOOK_AT, ProtoLookAt()),
             "look_at without target",
             "FAILED",
         )

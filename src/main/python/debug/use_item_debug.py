@@ -18,11 +18,11 @@ import uuid
 import grpc
 from mcrcon import MCRcon  # type: ignore[import-untyped]
 
-from gymcraft.client import GymCraftEnv, make_action, unpack_observation
+from gymcraft.client import GymCraftEnv, make_step_request, single_action, unpack_observation
 from gymcraft.gym.action.components.use_item_pb2 import ProtoUseItem
 from gymcraft.gym.rpc.env_service_pb2 import ResetRequest, ResetResponse, StepRequest, StepResponse
 from gymcraft.llm import ActionDslParser, encode_action_batch
-from gymcraft.type_info import ACTION_USE_ITEM, Action, Observation, OBS_MENU, OBS_NEARBY_ENTITIES, OBS_SELF
+from gymcraft.type_info import ACTION_USE_ITEM, ActionBatch, Observation, OBS_MENU, OBS_NEARBY_ENTITIES, OBS_SELF
 
 
 class UseItemE2E:
@@ -94,13 +94,13 @@ class UseItemE2E:
         action = encode_action_batch(self.parser.parse(f"```gymcraft-action\n{command}\n```").batch)
         return self.send(action, command, expected)
 
-    def send(self, action: Action, label: str, expected: str) -> dict[str, Any]:
+    def send(self, action: ActionBatch, label: str, expected: str) -> dict[str, Any]:
         """发送带 RPC 截止时间的动作，验证返回状态并更新完整观测。"""
         assert self.env is not None
         tick_before = self.observation["header"].game_tick
         started = time.monotonic()
         response = cast(StepResponse, self.env.stub.Step(
-            StepRequest(session_id=self.env.session_id, action=make_action(action)), timeout=15,
+            make_step_request(self.env.session_id, action), timeout=15,
         ))
         self.observation = unpack_observation(response.observation)
         result = {"command": label, "status": response.observation.header.last_action_status,
@@ -245,7 +245,7 @@ class UseItemE2E:
         self.step("/use_item 5 block 6 99 4", "FAILED")
         self.command("fill 5 100 4 5 102 4 minecraft:air")
         self.step("/use_item 5 entity 2147483647", "FAILED")
-        self.send({ACTION_USE_ITEM: ProtoUseItem(), "timeout_seconds": 10.0}, "missing slot_id", "FAILED")
+        self.send(single_action(ACTION_USE_ITEM, ProtoUseItem(), 10.0), "missing slot_id", "FAILED")
         self.equip("offhand", "minecraft:bow")
         self.step("/use_item 5", "FAILED")
         self.slot(5, "minecraft:bow", 1)
@@ -254,8 +254,8 @@ class UseItemE2E:
         """验证现有 RPC 会话锁的串行语义：Reset 等待 Step 完成后恢复原始快照。"""
         assert self.env is not None
         self.equip("offhand", "minecraft:apple", 3)
-        action = make_action({ACTION_USE_ITEM: ProtoUseItem(slot_id=5), "timeout_seconds": 10.0})
-        pending = self.env.stub.Step.future(StepRequest(session_id=self.env.session_id, action=action), timeout=15)
+        action = single_action(ACTION_USE_ITEM, ProtoUseItem(slot_id=5), 10.0)
+        pending = self.env.stub.Step.future(make_step_request(self.env.session_id, action), timeout=15)
         time.sleep(0.25)
         self.require(not pending.done(), "consumption returned before concurrent reset")
         reset_started = time.monotonic()
@@ -277,8 +277,8 @@ class UseItemE2E:
         assert self.env is not None
         self.equip("mainhand", "minecraft:stick")
         self.equip("offhand", "minecraft:apple", 3)
-        action = make_action({ACTION_USE_ITEM: ProtoUseItem(slot_id=5), "timeout_seconds": 10.0})
-        pending = self.env.stub.Step.future(StepRequest(session_id=self.env.session_id, action=action), timeout=15)
+        action = single_action(ACTION_USE_ITEM, ProtoUseItem(slot_id=5), 10.0)
+        pending = self.env.stub.Step.future(make_step_request(self.env.session_id, action), timeout=15)
         time.sleep(0.25)
         self.require(not pending.done(), "consumption finished before environment close")
         response = self.command(f"gymcraft env remove {self.entity_uuid}")

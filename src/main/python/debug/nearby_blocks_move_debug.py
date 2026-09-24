@@ -13,10 +13,10 @@ import json
 import math
 from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv
+from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components import move_to_pb2
 from gymcraft.gym.observation.components import nearby_blocks_pb2, self_pb2
-from gymcraft.type_info import ACTION_MOVE_TO, Action, OBS_NEARBY_BLOCKS, OBS_SELF, TIMEOUT_SECONDS
+from gymcraft.type_info import ACTION_MOVE_TO, OBS_NEARBY_BLOCKS, OBS_SELF
 
 
 def unpack_self(obs: Any) -> self_pb2.ProtoSelfState:
@@ -107,15 +107,14 @@ def main() -> None:
             f"target=({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f})"
         )
 
-        action: Action = {
-            TIMEOUT_SECONDS: 0.0,
-            ACTION_MOVE_TO: move_to_pb2.ProtoMoveTo(
+        action = single_action(
+            ACTION_MOVE_TO, move_to_pb2.ProtoMoveTo(
                 x=target[0],
                 y=target[1],
                 z=target[2],
                 stop_distance=args.stop_dist,
             ),
-        }
+        )
 
         previous = pos
         for step_idx in range(args.steps):

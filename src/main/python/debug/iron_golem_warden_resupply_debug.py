@@ -17,10 +17,10 @@ import uuid
 import grpc
 from mcrcon import MCRcon  # type: ignore[import-untyped]
 
-from gymcraft.client import GymCraftEnv, make_action, unpack_observation
+from gymcraft.client import GymCraftEnv, make_step_request, unpack_observation
 from gymcraft.gym.rpc.env_service_pb2 import ResetRequest, ResetResponse, StepRequest, StepResponse
 from gymcraft.llm import ActionDslParser, encode_action_batch
-from gymcraft.type_info import Action, Observation, OBS_MENU, OBS_SELF
+from gymcraft.type_info import Observation, OBS_MENU, OBS_SELF
 
 
 class ResupplyE2E:
@@ -86,7 +86,7 @@ class ResupplyE2E:
         action = encode_action_batch(self.parser.parse(f"```gymcraft-action\n{command}\n```").batch)
         tick_before = self.observation["header"].game_tick
         response = cast(StepResponse, self.env.stub.Step(
-            StepRequest(session_id=self.env.session_id, action=make_action(action)), timeout=30,
+            make_step_request(self.env.session_id, action), timeout=30,
         ))
         self.observation = unpack_observation(response.observation)
         result = {"command": command, "status": response.observation.header.last_action_status,

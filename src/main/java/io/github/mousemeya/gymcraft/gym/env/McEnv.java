@@ -4,6 +4,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -23,10 +24,11 @@ public interface McEnv {
 
     /**
      * 执行一步交互。
-     * @param action 智能体选择的动作
+     * @param actions 按顺序执行的动作列表
+     * @param timeoutSeconds 整个 step 共享的超时秒数
      * @return 包含新观测、奖励、终止标志、截断标志和额外信息的 StepResponse
      */
-    StepResponse step(ProtoMcAction action);
+    StepResponse step(List<ProtoMcAction> actions, float timeoutSeconds);
 
     // --- 核心属性 ---
     /** 返回动作空间 */

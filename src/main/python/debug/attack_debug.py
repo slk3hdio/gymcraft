@@ -13,7 +13,7 @@ import argparse
 import json
 from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv
+from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components import attack_once_pb2, set_attack_target_pb2
 from gymcraft.gym.observation.components import nearby_entities_pb2, self_pb2
 from gymcraft.type_info import (
@@ -21,7 +21,6 @@ from gymcraft.type_info import (
     ACTION_SET_ATTACK_TARGET,
     OBS_NEARBY_ENTITIES,
     OBS_SELF,
-    TIMEOUT_SECONDS,
 )
 
 
@@ -120,12 +119,11 @@ def main() -> None:
             f"uuid={target.uuid} dist={target.distance:.3f} hostile={target.hostile}"
         )
 
-        obs, reward, terminated, truncated, raw_info = env.step({
-            TIMEOUT_SECONDS: 0.0,
-            ACTION_SET_ATTACK_TARGET: set_attack_target_pb2.ProtoSetAttackTarget(
+        obs, reward, terminated, truncated, raw_info = env.step(single_action(
+            ACTION_SET_ATTACK_TARGET, set_attack_target_pb2.ProtoSetAttackTarget(
                 target_entity_id=target.entity_id
             ),
-        })
+        ))
         info = json.loads(raw_info)
         print(f"set_attack_target reward={reward:+.3f} term={terminated} trunc={truncated}")
         print_header("set_attack_target", obs, info)
@@ -135,12 +133,11 @@ def main() -> None:
             print(f"skip attack_once: {ACTION_ATTACK_ONCE} is not in action space")
             return
 
-        obs, reward, terminated, truncated, raw_info = env.step({
-            TIMEOUT_SECONDS: 0.0,
-            ACTION_ATTACK_ONCE: attack_once_pb2.ProtoAttackOnce(
+        obs, reward, terminated, truncated, raw_info = env.step(single_action(
+            ACTION_ATTACK_ONCE, attack_once_pb2.ProtoAttackOnce(
                 target_entity_id=target.entity_id
             ),
-        })
+        ))
         info = json.loads(raw_info)
         print(f"attack_once reward={reward:+.3f} term={terminated} trunc={truncated}")
         print_header("attack_once", obs, info)

@@ -29,6 +29,7 @@ from gymcraft.gym.rpc.env_service_pb2 import (
 from gymcraft.gym.rpc.env_service_pb2_grpc import GymEnvServiceStub
 from gymcraft.type_info import (
     Action,
+    ActionBatch,
     Observation,
     OBS_INTERESTING_BLOCKS,
     OBS_MENU,
@@ -86,11 +87,8 @@ class GymCraftEnv(gym.Env[Any, Any]):
         return unpack_observation(response.observation), response.info
 
     # gymnasium 约定 info 为 dict，本环境按 proto 直接透传 info 的 JSON 字符串。
-    def step(self, action: Action) -> Tuple[Observation, float, bool, bool, str]:  # type: ignore[override]  # noqa: E501
-        request = StepRequest(
-            session_id=self.session_id,
-            action=make_action(action),
-        )
+    def step(self, action: ActionBatch) -> Tuple[Observation, float, bool, bool, str]:  # type: ignore[override]  # noqa: E501
+        request = make_step_request(self.session_id, action)
         response = self.stub.Step(request)
         assert isinstance(response, StepResponse)
         return (
@@ -110,18 +108,27 @@ class GymCraftEnv(gym.Env[Any, Any]):
 
 
 def make_action(action: Action) -> ProtoMcAction:
-    """把用户视角的 ``Action``（解包后的组件 dict）打包为 wire 上的 ``ProtoMcAction``。
-
-    组件键即完整 wire 键（含 ``gymcraft:`` 命名空间），值被 Pack 到 ``components``
-    的 ``google.protobuf.Any`` 中；``timeout_seconds`` 原样透传（缺省 / ``<= 0``
-    表示不限制，与 wire 默认值一致）。
-    """
-    proto_action = ProtoMcAction()
-    proto_action.timeout_seconds = action.get(TIMEOUT_SECONDS, 0.0)
-    for key, payload in action.items():
-        if key != TIMEOUT_SECONDS:
-            proto_action.components[key].Pack(cast(message.Message, payload))
+    """把单个 ``component_id`` / ``payload`` 动作打包为 wire 消息。"""
+    proto_action = ProtoMcAction(component_id=action["component_id"])
+    proto_action.payload.Pack(cast(message.Message, action["payload"]))
     return proto_action
+
+
+def single_action(component_id: str, payload: message.Message, timeout_seconds: float = 0.0) -> ActionBatch:
+    """构造只包含一项的 step 动作批次。"""
+    return {
+        "timeout_seconds": timeout_seconds,
+        "actions": [{"component_id": component_id, "payload": payload}],
+    }
+
+
+def make_step_request(session_id: str, batch: ActionBatch) -> StepRequest:
+    """把用户视角的动作批次打包为 gRPC StepRequest。"""
+    return StepRequest(
+        session_id=session_id,
+        actions=[make_action(item) for item in batch["actions"]],
+        timeout_seconds=batch.get(TIMEOUT_SECONDS, 0.0),
+    )
 
 
 def _unpack_component(

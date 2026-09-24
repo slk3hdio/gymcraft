@@ -106,11 +106,11 @@ Observation 组件不得直接依赖 Action 的执行过程或结果。数据流
 
 动作执行的直接反馈——成功/失败、状态改变说明、物品掉落、`stale_menu_state` 等——由 `ActionState` 承载，不通过 observation 传递。observation 只反映动作之后的 Agent 状态，不区分该状态由哪个动作造成。
 
-`ProtoMcAction` 中的组件按环境定义里的 action component 声明顺序执行，不依赖 protobuf map 的迭代顺序。dispatcher 按该顺序收集每个组件的 `ActionState`，不能让后执行组件覆盖前一组件的反馈。对外聚合契约为：
+`ProtoMcAction` 严格只承载一个组件；`StepRequest.actions` 按输入顺序串行执行。每项的 `ActionState` 保留在批次 `details.actions` 中，首个失败或中断会停止后续动作。对外批次契约为：
 
-- 总体 `status` 取所有已执行组件中优先级最高的状态
-- 总体 `description` 按执行顺序拼接每个组件的非空描述，格式为 `[component_id] description`，因此非 debug 模式只读取 description 也能知道各组件结果
-- 总体 `details` 是以组件注册 ID 为 key 的有序 map，每个 value 只保存该组件自己的结构化 details；无 details 的组件可使用空 map
+- 总体 `status` 为 `COMPLETED`，或首个非完成项的 `FAILED` / `INTERRUPTED`
+- 总体 `description` 是批次完成或停止摘要
+- 总体 `details` 包含 `total_count`、`completed_count`、`stopped_index` 和按输入顺序排列的 `actions` 明细
 
 每个失败、中断、部分完成或发生掉落的组件状态都必须至少包含一句完整说明，不能把必要信息只放在 `details`。`details` 只承载 `stale_menu_state`、slot ID、请求/实际数量、掉落物等结构化数据。
 
@@ -662,7 +662,7 @@ fakePlayer.containerMenu = fakePlayer.inventoryMenu;
 - 新增 AttachmentType 注册入口（组件会话状态按需挂载 Mob）
 - 修改 Action/Observation 工厂签名为 `create(Mob)`
 - 调整 `AbstractMcEnv`、`ActionDispatcher`、`ObservationComposer` 构造链；菜单关闭与附件清理由 `AgentRuntime` 在 reset、死亡、clear 时直接驱动
-- 让 `ActionDispatcher` 严格按环境 action component 声明顺序执行，不依赖输入 map 顺序
+- 让 `ActionDispatcher` 一次只分发一个组件，由 `AgentRuntime` 按 `StepRequest.actions` 输入顺序串行
 - 将 ActionState 聚合改为按组件 ID 保存每个组件的 status、description 和 details；所有异常及掉落状态必须有可独立阅读的 description
 - 增加 menu action proto、menu observation proto 和共享 `ProtoSlotView`
 - 将 `ProtoItemStackView` 改为仅包含 item_id、count 和规范化 NBT 的纯物品数据，删除并 reserved 旧 slot/empty 字段
@@ -783,7 +783,7 @@ fakePlayer.containerMenu = fakePlayer.inventoryMenu;
 
 ### 14.5 ActionState 聚合
 
-- 多组件 action 严格按环境声明顺序执行，不依赖输入 map 顺序
+- step 内的单组件 action 严格按输入列表顺序串行执行
 - 总体 description 按执行顺序包含每个组件的 `[component_id] description`
 - 总体 details 按组件 ID 隔离，后执行组件不会覆盖前一组件的 stale、数量或掉落信息
 - 每个失败、中断、部分完成和掉落结果无需查看 details 即可从 description 得知主要结果

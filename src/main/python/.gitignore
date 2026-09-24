@@ -1,4 +1,3 @@
-src/gymcraft/gym/
 __pycache__/
 *.egg-info/
 dist/

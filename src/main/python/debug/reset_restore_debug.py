@@ -17,10 +17,10 @@ import math
 import time
 from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv
+from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components import move_to_pb2
 from gymcraft.gym.observation.components import self_pb2
-from gymcraft.type_info import ACTION_MOVE_TO, Action, OBS_SELF, TIMEOUT_SECONDS
+from gymcraft.type_info import ACTION_MOVE_TO, OBS_SELF
 
 
 def unpack_self(obs: Any) -> self_pb2.ProtoSelfState:
@@ -65,15 +65,14 @@ def same_chunk_target(state: self_pb2.ProtoSelfState, span: float) -> tuple[floa
 
 def move_once(env: GymCraftEnv, state: self_pb2.ProtoSelfState, span: float) -> tuple[Any, dict[str, Any]]:
     target = same_chunk_target(state, span)
-    action: Action = {
-        TIMEOUT_SECONDS: 0.0,
-        ACTION_MOVE_TO: move_to_pb2.ProtoMoveTo(
+    action = single_action(
+        ACTION_MOVE_TO, move_to_pb2.ProtoMoveTo(
             x=target[0],
             y=target[1],
             z=target[2],
             stop_distance=2.0,
         ),
-    }
+    )
     obs, reward, terminated, truncated, raw_info = env.step(action)
     info = json.loads(raw_info)
     print(

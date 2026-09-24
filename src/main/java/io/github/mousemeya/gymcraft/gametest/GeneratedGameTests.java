@@ -648,6 +648,33 @@ public final class GeneratedGameTests {
         MenuRegressionGameTests.chestLidCountSurvivesRecheck(helper);
     }
 
+    // ===== 动作失败反馈 =====
+    @GameTest(template = "use_item_empty", timeoutTicks = 100)
+    public static void action_feedback_attack_once(GameTestHelper helper) {
+        ActionFeedbackGameTests.attackOnceReportsSpecificFailures(helper);
+    }
+
+    @GameTest(template = "use_item_empty", timeoutTicks = 100)
+    public static void action_feedback_set_attack_target(GameTestHelper helper) {
+        ActionFeedbackGameTests.setAttackTargetReportsSpecificFailures(helper);
+    }
+
+    // ===== step 串行动作批次 =====
+    @GameTest(template = "use_item_empty", timeoutTicks = 100)
+    public static void action_batch_serial(GameTestHelper helper) {
+        ActionBatchGameTests.repeatedActionsRunSerially(helper);
+    }
+
+    @GameTest(template = "use_item_empty", timeoutTicks = 100)
+    public static void action_batch_stop_and_empty(GameTestHelper helper) {
+        ActionBatchGameTests.failureStopsAndEmptyBatchNoops(helper);
+    }
+
+    @GameTest(template = "use_item_empty", timeoutTicks = 100)
+    public static void action_batch_multiple_disabled(GameTestHelper helper) {
+        ActionBatchGameTests.multipleActionsCanBeDisabled(helper);
+    }
+
     /** 禁止实例化测试注册类。 */
     private GeneratedGameTests() {
     }

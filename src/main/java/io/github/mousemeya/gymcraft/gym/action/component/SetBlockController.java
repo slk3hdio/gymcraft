@@ -158,7 +158,8 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
         BlockInput input = new BlockInput(parsed.blockState(), parsed.properties().keySet(), parsed.nbt());
         boolean placed = input.place(level, pos, SET_BLOCK_FLAGS);
         if (!placed) {
-            return ActionApplyResult.none(ActionState.failed("set block failed", Map.of(
+            return ActionApplyResult.none(ActionState.failed(
+                "block placement was rejected by game rules or an event handler", Map.of(
                 "pos", pos.toShortString(),
                 "block", component.getBlock()
             )));

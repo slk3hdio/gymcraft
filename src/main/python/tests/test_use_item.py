@@ -16,7 +16,9 @@ class UseItemTests(unittest.TestCase):
         for suffix, target in cases:
             with self.subTest(suffix=suffix):
                 batch = ActionDslParser().parse(f"```gymcraft-action\n/use_item {suffix}\n```").batch
-                payload = encode_action_batch(batch)[ACTION_USE_ITEM]
+                encoded = encode_action_batch(batch)
+                self.assertEqual(ACTION_USE_ITEM, encoded["actions"][0]["component_id"])
+                payload = encoded["actions"][0]["payload"]
                 decoded = ProtoUseItem.FromString(payload.SerializeToString())
                 self.assertTrue(decoded.HasField("slot_id"))
                 self.assertEqual(int(suffix.split()[0]), decoded.slot_id)

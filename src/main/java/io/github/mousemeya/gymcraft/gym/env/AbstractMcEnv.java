@@ -1,6 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.env;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -47,6 +48,8 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 public abstract class AbstractMcEnv implements McEnv {
     /** reset options：是否在 reset 后和相邻动作之间的空闲期禁用原版 AI。 */
     public static final String DISABLE_VANILLA_AI_OPTION = "disable_vanilla_ai";
+    /** reset options：是否允许单个 step 串行执行多个动作。 */
+    public static final String ALLOW_MULTIPLE_ACTIONS_OPTION = "allow_multiple_actions";
 
     protected final ResourceLocation envTypeId;
     protected final UUID envId;
@@ -54,6 +57,7 @@ public abstract class AbstractMcEnv implements McEnv {
     protected final ObservationComposer observationCreator;
     protected final AgentRuntime agentRuntime;
     private boolean disableVanillaAi;
+    private boolean allowMultipleActions = true;
     private boolean closed;
 
     @Override
@@ -168,8 +172,10 @@ public abstract class AbstractMcEnv implements McEnv {
         this.ensureOpen();
         Map<String, Object> resetOptions = options == null ? Map.of() : options;
         boolean requestedDisableVanillaAi = parseDisableVanillaAi(resetOptions);
+        boolean requestedAllowMultipleActions = parseAllowMultipleActions(resetOptions);
         RuntimeStepResult result = this.agentRuntime.reset(seed, resetOptions);
         this.disableVanillaAi = requestedDisableVanillaAi;
+        this.allowMultipleActions = requestedAllowMultipleActions;
         return ResetResponse.newBuilder()
             .setObservation(result.observation())
             .setInfo(ProtoJson.toJson(this.createResetInfo()))
@@ -177,9 +183,9 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     @Override
-    public StepResponse step(ProtoMcAction action) {
+    public StepResponse step(List<ProtoMcAction> actions, float timeoutSeconds) {
         this.ensureReady();
-        RuntimeStepResult result = this.agentRuntime.step(action);
+        RuntimeStepResult result = this.agentRuntime.step(actions, timeoutSeconds);
         Map<String, Object> info = new java.util.LinkedHashMap<>(this.createStepInfo(result.observation()));
         info.put("action_state", Map.of(
             "status", result.actionState().status().name().toLowerCase(),
@@ -236,7 +242,8 @@ public abstract class AbstractMcEnv implements McEnv {
             "env_type_id", this.getRegisterId(),
             "entity_uuid", this.mob().getUUID().toString(),
             "entity_type", BuiltInRegistries.ENTITY_TYPE.getKey(this.mob().getType()).toString(),
-            DISABLE_VANILLA_AI_OPTION, this.disableVanillaAi
+            DISABLE_VANILLA_AI_OPTION, this.disableVanillaAi,
+            ALLOW_MULTIPLE_ACTIONS_OPTION, this.allowMultipleActions
         );
     }
 
@@ -262,9 +269,12 @@ public abstract class AbstractMcEnv implements McEnv {
     /** 应用通用 reset 行为并在最后提交动作间空闲期 AI 选项。 */
     protected final void resetAgent(Mob mob, Integer seed, Map<String, Object> options) {
         boolean requestedDisableVanillaAi = parseDisableVanillaAi(options);
+        boolean requestedAllowMultipleActions = parseAllowMultipleActions(options);
         this.resetMob(mob, seed, options);
         this.agentRuntime.setDisableVanillaAi(requestedDisableVanillaAi);
+        this.agentRuntime.setAllowMultipleActions(requestedAllowMultipleActions);
         this.disableVanillaAi = requestedDisableVanillaAi;
+        this.allowMultipleActions = requestedAllowMultipleActions;
     }
 
     protected double computeReward(ProtoMcObservation observation) {
@@ -283,21 +293,38 @@ public abstract class AbstractMcEnv implements McEnv {
         return Map.of(
             "env_id", this.envId.toString(),
             "entity_uuid", this.mob().getUUID().toString(),
-            DISABLE_VANILLA_AI_OPTION, this.disableVanillaAi
+            DISABLE_VANILLA_AI_OPTION, this.disableVanillaAi,
+            ALLOW_MULTIPLE_ACTIONS_OPTION, this.allowMultipleActions
         );
     }
 
+    /** @param options reset 选项 @return 是否在动作间禁用原版 AI */
     private static boolean parseDisableVanillaAi(Map<String, Object> options) {
-        Object value = options.get(DISABLE_VANILLA_AI_OPTION);
+        return parseBooleanOption(options, DISABLE_VANILLA_AI_OPTION, false);
+    }
+
+    /** @param options reset 选项 @return 是否允许单个 step 执行多个动作 */
+    private static boolean parseAllowMultipleActions(Map<String, Object> options) {
+        return parseBooleanOption(options, ALLOW_MULTIPLE_ACTIONS_OPTION, true);
+    }
+
+    /**
+     * 读取布尔 reset 选项。
+     *
+     * @param options reset 选项
+     * @param key 选项名
+     * @param fallback 缺省值
+     * @return 解析后的布尔值
+     */
+    private static boolean parseBooleanOption(Map<String, Object> options, String key, boolean fallback) {
+        Object value = options.get(key);
         if (value == null) {
-            return false;
+            return fallback;
         }
         if (value instanceof Boolean booleanValue) {
             return booleanValue;
         }
-        throw new IllegalArgumentException(
-            "Reset option '" + DISABLE_VANILLA_AI_OPTION + "' must be a boolean"
-        );
+        throw new IllegalArgumentException("Reset option '" + key + "' must be a boolean");
     }
 
     protected Map<String, Object> createStepInfo(ProtoMcObservation observation) {

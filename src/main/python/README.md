@@ -31,17 +31,22 @@ from gymcraft.gym.action.components import noop_pb2
 env = GymCraftEnv("entity-uuid-here")
 obs, reset_info = env.reset(options={
     "disable_vanilla_ai": True,
+    "allow_multiple_actions": True,
 })  # Disable vanilla AI only while waiting between actions; defaults to False.
 self_state = obs["gymcraft:self"]
 
 obs, reward, terminated, truncated, step_info = env.step({
     "timeout_seconds": 0.0,  # seconds; <= 0 means no limit
-    "gymcraft:noop": noop_pb2.ProtoNoop(),
+    "actions": [
+        {"component_id": "gymcraft:noop", "payload": noop_pb2.ProtoNoop()},
+    ],
 })
 env.close()
 ```
 
-`reset()` returns `(observation, info)` and `step()` returns `(observation, reward, terminated, truncated, info)` (Gymnasium-style). The observation is the unpacked `Observation` dict: a `header` plus component keys that are full registration ids such as `gymcraft:self`, `gymcraft:nearby_blocks`, `gymcraft:menu`. `make_action()` packs an `Action` dict (component keys + optional `timeout_seconds`) into the wire `ProtoMcAction`, and `unpack_observation()` converts a raw `ProtoMcObservation` back to an `Observation`; both are applied automatically inside `reset()`/`step()`.
+`reset()` returns `(observation, info)` and `step()` returns `(observation, reward, terminated, truncated, info)` (Gymnasium-style). The observation is the unpacked `Observation` dict: a `header` plus component keys that are full registration ids such as `gymcraft:self`, `gymcraft:nearby_blocks`, `gymcraft:menu`. A step receives an ordered `ActionBatch`; each action has exactly one `component_id` and protobuf `payload`, and the server executes the list serially under one shared `timeout_seconds`. `make_action()` packs one action into `ProtoMcAction`, while `unpack_observation()` converts a raw `ProtoMcObservation` back to an `Observation`.
+
+`allow_multiple_actions` 默认为 `True`。在 reset options 中设为 `False` 后，每个 step 最多接受一个 action；多 action 批次会整体失败且不产生动作副作用，空批次 noop 仍可使用。
 
 `gymcraft:update_interesting_blocks` 可通过 `add_block_ids` / `remove_block_ids` 批量维护当前 Agent 关注的方块类型；`gymcraft:interesting_blocks` 返回附近匹配类型的可见 `ProtoBlockView`。
 
@@ -87,7 +92,7 @@ context, reward, terminated, truncated, info = env.step(model_text)
 env.close()
 ````
 
-动作块位于回复末尾，每个非空行是一条 Minecraft 风格命令。一个动作块可以包含多个不同组件；服务端仍按环境声明顺序执行，而不是按文本行顺序执行。调用 `ActionDslParser.command_reference()` 可以取得当前环境支持的完整命令表。
+动作块位于回复末尾，每个非空行是一条 Minecraft 风格命令。一个动作块可以包含多个动作，服务端严格按文本行顺序串行执行，并允许重复同一组件。多条 `move_menu_item` 会保留为一个组件原生批量负载。调用 `ActionDslParser.command_reference()` 可以取得当前环境支持的完整命令表。
 
 LLM 可用一条原子命令同时增删兴趣类型，例如 `/update_interesting_blocks add minecraft:diamond_ore mod:target_block remove minecraft:stone`。匹配结果会在后续观测的 `interesting_blocks` 段中按距离排序；其文本裁剪上限由 `ObservationFormatConfig.max_interesting_blocks` 控制。
 

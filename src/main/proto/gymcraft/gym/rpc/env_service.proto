@@ -41,7 +41,13 @@ message ResetResponse {
 
 message StepRequest {
   string session_id = 1;
-  gymcraft.gym.action.ProtoMcAction action = 2;
+  reserved 2;
+  reserved "action";
+
+  // 按列表顺序串行执行；空列表视为一次 noop。
+  repeated gymcraft.gym.action.ProtoMcAction actions = 3;
+  // 整个 step 共享的超时（秒），<= 0 表示不限制。
+  float timeout_seconds = 4;
 }
 
 message StepResponse {

@@ -190,9 +190,10 @@ public final class ChatObservationGameTests {
         Thread.startVirtualThread(() -> {
             try {
                 env.reset(3, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
-                world.set(unpackWorld(env.step(ProtoMcAction.newBuilder()
-                    .putComponents("gymcraft:noop", Any.pack(ProtoNoop.getDefaultInstance()))
-                    .build())));
+                world.set(unpackWorld(env.step(List.of(ProtoMcAction.newBuilder()
+                    .setComponentId("gymcraft:noop")
+                    .setPayload(Any.pack(ProtoNoop.getDefaultInstance()))
+                    .build()), 0.0F)));
                 tested.complete(null);
             } catch (Throwable error) {
                 failure.set(error);
@@ -267,9 +268,10 @@ public final class ChatObservationGameTests {
         Thread.startVirtualThread(() -> {
             try {
                 env.reset(3, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
-                world.set(unpackWorld(env.step(ProtoMcAction.newBuilder()
-                    .putComponents("gymcraft:noop", Any.pack(ProtoNoop.getDefaultInstance()))
-                    .build())));
+                world.set(unpackWorld(env.step(List.of(ProtoMcAction.newBuilder()
+                    .setComponentId("gymcraft:noop")
+                    .setPayload(Any.pack(ProtoNoop.getDefaultInstance()))
+                    .build()), 0.0F)));
                 tested.complete(null);
             } catch (Throwable error) {
                 failure.set(error);
@@ -340,9 +342,10 @@ public final class ChatObservationGameTests {
      * @return step 响应
      */
     private static StepResponse step(AbstractMcEnv env) {
-        return env.step(ProtoMcAction.newBuilder()
-            .putComponents("gymcraft:noop", Any.pack(ProtoNoop.getDefaultInstance()))
-            .build());
+        return env.step(List.of(ProtoMcAction.newBuilder()
+            .setComponentId("gymcraft:noop")
+            .setPayload(Any.pack(ProtoNoop.getDefaultInstance()))
+            .build()), 0.0F);
     }
 
     /**
@@ -354,9 +357,10 @@ public final class ChatObservationGameTests {
      * @return step 响应
      */
     private static StepResponse step(AbstractMcEnv env, String componentId, com.google.protobuf.Message payload) {
-        return env.step(ProtoMcAction.newBuilder()
-            .putComponents(componentId, Any.pack(payload))
-            .build());
+        return env.step(List.of(ProtoMcAction.newBuilder()
+            .setComponentId(componentId)
+            .setPayload(Any.pack(payload))
+            .build()), 0.0F);
     }
 
     /**

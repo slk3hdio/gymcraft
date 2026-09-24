@@ -46,7 +46,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 - **无类型菜单**: self 背包直接复用原版 `InventoryMenu`（`menuType` 为 null，`idOf` 返回 `gymcraft:agent_inventory`），读菜单类型必须经 `gym/menu/MenuTypeUtil`（`typeOf`/`idOf`）
 - **菜单会话 slot_id 布局** (`AgentInventoryLayout` + `AgentInventoryBridge`): 0–6 = 装备槽（GymCraft 固定顺序），7 起 = Mob 容器槽，菜单自有槽排在最后；FakePlayer 映射常量见 `AgentInventoryBridge`
 - **菜单动作 stale 校验**: `move_menu_item`/`click_menu_button` 依赖每次 step/reset 返回的 `gymcraft:menu` 观测作基线；`close_menu` 只验 `session_id`。`move_menu_item` 的 `repeat` 字段一次动作内重复移动（合成连取产出的标准用法）
-- **动作级超时**: `ProtoMcAction.timeout_seconds`（<=0 不限制）由 `ActionDispatcher` 按 20 tick/秒换算，超时走 `onInterrupt` 并返回 `failed("action timeout")`
+- **step 共享超时**: `StepRequest.timeout_seconds`（<=0 不限制）由 `AgentRuntime` 按 20 tick/秒换算，批次内 action 按输入顺序串行；超时中断当前组件并返回 `failed("action batch timeout")`
 - **附近结构扫描**: `gymcraft:world` 的 `structures` 字段由 `WorldLocationScanner.scanNearbyStructures` 以 `hasChunk` 守卫只读已加载区块的结构起点表（`StructureManager.getChunk(x,z,status)` 默认 `load=true`，绝不能省守卫，否则会隐式加载区块）；起点只存于生成区块，天然无重复；半径经 `WorldStateObservationCreator.setStructureChunkRadius` 覆盖
 - **容器开盖计数**: 菜单会话独占 FakePlayer 不在世界实体集合中，原版 `ContainerOpenersCounter.recheckOpeners`（打开后 5 tick）扫描不到会把计数强清为 0 并造成负泄漏（盖子永久关闭/卡开）；`ContainerOpenersCounterMixin` + `MenuOpenersBridge` 按活动会话（`MenuSessionHooks.openSessions` + `isOwnContainer`）补计数，不要把菜单 FakePlayer 加进世界（会被怪物 AI 当目标）
 - **程序化生成 Warden**: `EntityType.WARDEN.create(level, reason)` 不走 `finalizeSpawn`，`DIG_COOLDOWN` 记忆缺失会导致 Warden 立即钻地消失；生成后需 `warden.getBrain().setMemoryWithExpiry(MemoryModuleType.DIG_COOLDOWN, Unit.INSTANCE, Integer.MAX_VALUE)`（见 `IronGolemWardenEnv.spawnWarden`）

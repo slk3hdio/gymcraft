@@ -4,6 +4,7 @@ import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertEq
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
 
 import java.util.Map;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -380,7 +381,11 @@ public final class IronGolemWardenEnvGameTests {
      * @return step 响应
      */
     private static StepResponse step(IronGolemWardenEnv env, String componentId, Message payload) {
-        return env.step(ProtoMcAction.newBuilder().putComponents(componentId, Any.pack(payload)).build());
+        ProtoMcAction action = ProtoMcAction.newBuilder()
+            .setComponentId(componentId)
+            .setPayload(Any.pack(payload))
+            .build();
+        return env.step(List.of(action), 0.0F);
     }
 
     /**

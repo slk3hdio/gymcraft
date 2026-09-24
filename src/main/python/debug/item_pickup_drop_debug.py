@@ -30,12 +30,12 @@ from mcrcon import MCRcon  # type: ignore[import-untyped]
 from gymcraft.gym.action.components.drop_item_pb2 import ProtoDropItem
 from gymcraft.gym.action.components.pick_up_item_pb2 import ProtoPickUpItem
 from gymcraft.gym.observation.components.menu_pb2 import ProtoMenuObservation
+from gymcraft.client import single_action
 from gymcraft.type_info import (
     ACTION_DROP_ITEM,
     ACTION_PICK_UP_ITEM,
     OBS_MENU,
     OBS_NEARBY_ITEMS,
-    TIMEOUT_SECONDS,
 )
 
 from e2e_support import E2ESuite, read_server_properties, write_report
@@ -159,7 +159,7 @@ class ItemPickupDropE2E(E2ESuite):
         session_id = self.open_agent_menu()
         slot = self.slot_of("minecraft:dirt")
         self.send(
-            {TIMEOUT_SECONDS: 0.0, ACTION_DROP_ITEM: ProtoDropItem(slot_id=slot, count=0)},
+            single_action(ACTION_DROP_ITEM, ProtoDropItem(slot_id=slot, count=0)),
             "drop_item whole stack",
         )
         self.require(self.slot_count(slot) == 0, f"slot {slot} expected empty after whole drop")
@@ -191,7 +191,7 @@ class ItemPickupDropE2E(E2ESuite):
         session_id = int(self.menu().session_id)
         self.close_agent_menu(session_id)
         self.send(
-            {TIMEOUT_SECONDS: 0.0, ACTION_DROP_ITEM: ProtoDropItem(slot_id=1000, count=1)},
+            single_action(ACTION_DROP_ITEM, ProtoDropItem(slot_id=1000, count=1)),
             "drop_item slot out of range",
             "FAILED",
         )
@@ -241,7 +241,7 @@ class ItemPickupDropE2E(E2ESuite):
     def pick_up_errors(self) -> None:
         """未知实体 ID 的拾取必须失败。"""
         self.send(
-            {TIMEOUT_SECONDS: 0.0, ACTION_PICK_UP_ITEM: ProtoPickUpItem(entity_id=2147483647)},
+            single_action(ACTION_PICK_UP_ITEM, ProtoPickUpItem(entity_id=2147483647)),
             "pick_up_item unknown entity",
             "FAILED",
         )

@@ -269,7 +269,11 @@ public final class IronMiningEnvGameTests {
      * @return step 响应
      */
     private static StepResponse step(IronMiningEnv env, String componentId, Message payload) {
-        return env.step(ProtoMcAction.newBuilder().putComponents(componentId, Any.pack(payload)).build());
+        ProtoMcAction action = ProtoMcAction.newBuilder()
+            .setComponentId(componentId)
+            .setPayload(Any.pack(payload))
+            .build();
+        return env.step(List.of(action), 0.0F);
     }
 
     /**

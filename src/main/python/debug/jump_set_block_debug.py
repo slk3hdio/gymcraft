@@ -13,10 +13,10 @@ import json
 import math
 from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv
+from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components import jump_pb2, noop_pb2, set_block_pb2
 from gymcraft.gym.observation.components import self_pb2
-from gymcraft.type_info import Action, ACTION_JUMP, ACTION_NOOP, ACTION_SET_BLOCK, OBS_SELF, TIMEOUT_SECONDS
+from gymcraft.type_info import ActionBatch, ACTION_JUMP, ACTION_NOOP, ACTION_SET_BLOCK, OBS_SELF
 
 
 def self_state(obs: Any) -> self_pb2.ProtoSelfState:
@@ -41,7 +41,7 @@ def action_status(obs: Any) -> str:
     return cast(str, obs["header"].last_action_status)
 
 
-def step_and_report(env: GymCraftEnv, label: str, action: Action) -> Any:
+def step_and_report(env: GymCraftEnv, label: str, action: ActionBatch) -> Any:
     """执行一步动作并打印位置、动作状态和终止信息。
 
     参数:
@@ -77,10 +77,7 @@ def wait_for_ground(env: GymCraftEnv, obs: Any, max_ticks: int) -> Any:
     if self_state(obs).on_ground:
         return obs
     for tick in range(1, max_ticks + 1):
-        obs = step_and_report(env, f"land_{tick}", {
-            TIMEOUT_SECONDS: 0.0,
-            ACTION_NOOP: noop_pb2.ProtoNoop(),
-        })
+        obs = step_and_report(env, f"land_{tick}", single_action(ACTION_NOOP, noop_pb2.ProtoNoop()))
         if self_state(obs).on_ground:
             return obs
     raise RuntimeError(f"agent did not land within {max_ticks} ticks")
@@ -99,10 +96,7 @@ def wait_for_airborne(env: GymCraftEnv, initial_y: float, height: float, max_tic
         达到高度且仍在空中的最新观测。
     """
     for tick in range(1, max_ticks + 1):
-        obs = step_and_report(env, f"wait_{tick}", {
-            TIMEOUT_SECONDS: 0.0,
-            ACTION_NOOP: noop_pb2.ProtoNoop(),
-        })
+        obs = step_and_report(env, f"wait_{tick}", single_action(ACTION_NOOP, noop_pb2.ProtoNoop()))
         state = self_state(obs)
         if not state.on_ground and state.y - initial_y >= height:
             return obs
@@ -160,10 +154,8 @@ def main() -> None:
                 f"{initial.y:.3f}, {initial.z:.3f}); jump_height={args.height:.3f}"
             )
 
-            obs = step_and_report(env, f"cycle_{placed_count + 1}_jump", {
-                TIMEOUT_SECONDS: 0.0,
-                ACTION_JUMP: jump_pb2.ProtoJump(),
-            })
+            obs = step_and_report(env, f"cycle_{placed_count + 1}_jump",
+                                  single_action(ACTION_JUMP, jump_pb2.ProtoJump()))
             obs = wait_for_airborne(env, initial_y, args.height, args.max_wait_ticks, obs)
 
             state = self_state(obs)
@@ -172,15 +164,14 @@ def main() -> None:
                 f"cycle={placed_count + 1} placing {args.block} under feet at target={target}; "
                 f"air_position=({state.x:.3f}, {state.y:.3f}, {state.z:.3f})"
             )
-            obs = step_and_report(env, f"cycle_{placed_count + 1}_set_block", {
-                TIMEOUT_SECONDS: 0.0,
-                ACTION_SET_BLOCK: set_block_pb2.ProtoSetBlock(
+            obs = step_and_report(env, f"cycle_{placed_count + 1}_set_block", single_action(
+                ACTION_SET_BLOCK, set_block_pb2.ProtoSetBlock(
                     x=target[0],
                     y=target[1],
                     z=target[2],
                     block=args.block,
                 ),
-            })
+            ))
             if action_status(obs) != "COMPLETED":
                 if is_block_exhausted(obs):
                     print(f"block inventory exhausted after {placed_count} placements")

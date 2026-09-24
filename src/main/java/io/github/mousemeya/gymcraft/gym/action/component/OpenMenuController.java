@@ -3,7 +3,9 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 import java.util.Map;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.Vec3;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
@@ -99,6 +101,7 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
             ));
         }
         LogicalMenuSession session = result.session();
+        animateOpen(mob, target);
         return ActionApplyResult.applied(ActionControlPolicy.none(), ActionState.completed(
             "menu opened: " + describeTarget(target) + " session_id=" + session.sessionId(),
             Map.of(
@@ -136,6 +139,28 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
             case OpenMenuTarget.Entity entity -> "entity #" + entity.entityId();
             case OpenMenuTarget.Self ignored -> "self";
         };
+    }
+
+    /**
+     * 为世界中的菜单目标播放玩家式转向与右手交互动画。
+     * 自身背包由玩家按键直接打开，原版不会挥手，因此保持静止。
+     *
+     * @param mob 执行动作的 Agent
+     * @param target 已成功打开的菜单目标
+     */
+    private static void animateOpen(Mob mob, OpenMenuTarget target) {
+        Vec3 lookTarget = switch (target) {
+            case OpenMenuTarget.Block block -> Vec3.atCenterOf(block.pos());
+            case OpenMenuTarget.Entity entity -> {
+                var targetEntity = mob.level().getEntity(entity.entityId());
+                yield targetEntity == null ? null : targetEntity.getEyePosition();
+            }
+            case OpenMenuTarget.Self ignored -> null;
+        };
+        if (lookTarget != null) {
+            ActionLook.apply(mob, lookTarget);
+            mob.swing(InteractionHand.MAIN_HAND);
+        }
     }
 
     /**

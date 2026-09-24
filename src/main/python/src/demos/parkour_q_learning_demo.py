@@ -8,7 +8,7 @@ import random
 from collections import defaultdict
 from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv
+from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components import jump_pb2, noop_pb2, set_block_pb2, step_move_pb2
 from gymcraft.gym.observation.components import nearby_blocks_pb2, self_pb2
 from gymcraft.type_info import (
@@ -16,10 +16,9 @@ from gymcraft.type_info import (
     ACTION_NOOP,
     ACTION_SET_BLOCK,
     ACTION_STEP_MOVE,
-    Action,
+    ActionBatch,
     OBS_NEARBY_BLOCKS,
     OBS_SELF,
-    TIMEOUT_SECONDS,
 )
 
 ActionName = str
@@ -52,27 +51,24 @@ def encode_state(obs: Any, remaining_blocks: int, origin_x: int, origin_z: int, 
     )
 
 
-def make_action(name: ActionName, obs: Any, block_id: str) -> Action:
+def make_action(name: ActionName, obs: Any, block_id: str) -> ActionBatch:
     """将离散动作名转换成 GymCraft protobuf 动作。"""
-    action: Action = {TIMEOUT_SECONDS: 0.0}
     state = cast(self_pb2.ProtoSelfState, obs[OBS_SELF])
     if name == "jump":
-        action[ACTION_JUMP] = jump_pb2.ProtoJump()
+        return single_action(ACTION_JUMP, jump_pb2.ProtoJump())
     elif name == "set_block":
-        action[ACTION_SET_BLOCK] = set_block_pb2.ProtoSetBlock(
+        return single_action(ACTION_SET_BLOCK, set_block_pb2.ProtoSetBlock(
             x=math.floor(state.x), y=math.floor(state.y) - 1, z=math.floor(state.z), block=block_id
-        )
+        ))
     elif name == "move_forward":
-        action[ACTION_STEP_MOVE] = step_move_pb2.ProtoStepMove(forward=0.5)
+        return single_action(ACTION_STEP_MOVE, step_move_pb2.ProtoStepMove(forward=0.5))
     elif name == "move_back":
-        action[ACTION_STEP_MOVE] = step_move_pb2.ProtoStepMove(forward=-0.5)
+        return single_action(ACTION_STEP_MOVE, step_move_pb2.ProtoStepMove(forward=-0.5))
     elif name == "move_left":
-        action[ACTION_STEP_MOVE] = step_move_pb2.ProtoStepMove(strafe_right=-0.5)
+        return single_action(ACTION_STEP_MOVE, step_move_pb2.ProtoStepMove(strafe_right=-0.5))
     elif name == "move_right":
-        action[ACTION_STEP_MOVE] = step_move_pb2.ProtoStepMove(strafe_right=0.5)
-    else:
-        action[ACTION_NOOP] = noop_pb2.ProtoNoop()
-    return action
+        return single_action(ACTION_STEP_MOVE, step_move_pb2.ProtoStepMove(strafe_right=0.5))
+    return single_action(ACTION_NOOP, noop_pb2.ProtoNoop())
 
 
 def choose_action(q_values: list[float], epsilon: float, rng: random.Random) -> int:

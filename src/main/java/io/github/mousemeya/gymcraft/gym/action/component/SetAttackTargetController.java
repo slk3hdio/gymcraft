@@ -81,21 +81,29 @@ public class SetAttackTargetController extends AbstractActionComponentController
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
         }
-        LivingEntity target = findTarget(mob, component);
-        mob.setTarget(target);
-
         var policy = ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.TARGET)
             .eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
-        if (target == null) {
+        boolean clearRequested = component.getTargetEntityId() <= 0 && component.getTargetUuid().isEmpty();
+        if (clearRequested) {
+            mob.setTarget(null);
             policy.eraseMemory(MemoryModuleType.ATTACK_TARGET);
-        } else {
-            policy.setMemory(MemoryModuleType.ATTACK_TARGET, target);
+            return ActionApplyResult.applied(policy, ActionState.completed("attack target cleared"));
         }
-        ActionState state = target != null && isValidTarget(mob, target)
-            ? ActionState.running("attack target set", targetDetails(target))
-            : ActionState.completed("attack target cleared or invalid");
-        return ActionApplyResult.applied(policy, state);
+        LivingEntity target = findTarget(mob, component);
+        if (target == null) {
+            return ActionApplyResult.none(ActionState.failed(
+                "attack target entity was not found or is not loaded",
+                requestedTargetDetails(component)
+            ));
+        }
+        ActionState invalid = invalidTargetState(mob, target);
+        if (invalid != null) {
+            return ActionApplyResult.none(invalid);
+        }
+        mob.setTarget(target);
+        policy.setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        return ActionApplyResult.applied(policy, ActionState.running("attack target set", targetDetails(target)));
     }
 
     private static LivingEntity findTarget(Mob mob, ProtoSetAttackTarget component) {
@@ -163,6 +171,47 @@ public class SetAttackTargetController extends AbstractActionComponentController
             && target.isAlive()
             && mob.canAttack(target)
             && !mob.isAlliedTo(target);
+    }
+
+    /**
+     * 返回可明确判定的目标无效原因。
+     *
+     * @param mob 受控 Agent
+     * @param target 候选攻击目标
+     * @return 无效目标的 FAILED 状态；目标有效时返回 null
+     */
+    private static ActionState invalidTargetState(Mob mob, LivingEntity target) {
+        Map<String, Object> details = targetDetails(target);
+        if (target == mob) {
+            return ActionState.failed("agent cannot target itself", details);
+        }
+        if (!target.isAlive() || target.isRemoved()) {
+            return ActionState.failed("attack target is dead or removed", details);
+        }
+        if (mob.isAlliedTo(target)) {
+            return ActionState.failed("attack target is allied with the agent", details);
+        }
+        if (!mob.canAttack(target)) {
+            return ActionState.failed("agent is not allowed to attack this target", details);
+        }
+        return null;
+    }
+
+    /**
+     * 保留请求中用于查找目标的标识，便于区分未加载和 ID 错误。
+     *
+     * @param component 设置目标动作
+     * @return 请求目标诊断字段
+     */
+    private static Map<String, Object> requestedTargetDetails(ProtoSetAttackTarget component) {
+        Map<String, Object> details = new java.util.LinkedHashMap<>();
+        if (component.getTargetEntityId() > 0) {
+            details.put("target_entity_id", component.getTargetEntityId());
+        }
+        if (!component.getTargetUuid().isEmpty()) {
+            details.put("target_uuid", component.getTargetUuid());
+        }
+        return details;
     }
 
     private static Map<String, Object> targetDetails(LivingEntity target) {

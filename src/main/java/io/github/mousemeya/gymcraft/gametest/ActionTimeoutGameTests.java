@@ -1,68 +1,76 @@
 package io.github.mousemeya.gymcraft.gametest;
 
-import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertEquals;
-import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.spawnAgent;
-
-import java.util.List;
-
 import com.google.protobuf.Any;
-
-import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.world.entity.EntityType;
-
-import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
-import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetAttackTarget;
+import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
+import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
+
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
+import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.spawnAgent;
 
 /**
- * 动作级超时：{@code timeout_seconds} 按 20 tick/秒换算，RUNNING 动作超时后
- * getState 返回 failed("action timeout") 终态；不设置超时（= 0）则不受影响。
+ * step 共享超时回归测试。
  * <p>
- * 用 set_attack_target 构造持续 RUNNING 的动作：apply 同步设置目标即返回 RUNNING，
- * 目标存活期间 getState 保持 RUNNING，不依赖实体落地/寻路。
+ * 用持续 RUNNING 的 set_attack_target 验证超时由批次运行时统一计时，
+ * 而不再属于单个 {@code ProtoMcAction}。
  * </p>
  */
 public final class ActionTimeoutGameTests {
+    /** 工具类不允许实例化。 */
     private ActionTimeoutGameTests() {
     }
 
+    /** @param helper GameTest 辅助对象 */
     public static void actionTimeoutFails(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        var target = spawnAgent(helper, EntityType.PIG, new BlockPos(5, 1, 5));
-        var setTarget = Any.pack(ProtoSetAttackTarget.newBuilder()
-            .setTargetEntityId(target.getId())
-            .build());
-        var dispatcher = new ActionDispatcher(mob, List.of(ActionComponents.SET_ATTACK_TARGET.get()));
-
-        // 0.1 秒 = 2 tick 超时
-        var action = ProtoMcAction.newBuilder()
-            .putComponents("gymcraft:set_attack_target", setTarget)
-            .setTimeoutSeconds(0.1f)
+        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        Mob target = spawnAgent(helper, EntityType.PIG, new BlockPos(5, 1, 5));
+        var env = new TimeoutTestEnv(mob);
+        ProtoMcAction action = ProtoMcAction.newBuilder()
+            .setComponentId("gymcraft:set_attack_target")
+            .setPayload(Any.pack(ProtoSetAttackTarget.newBuilder()
+                .setTargetEntityId(target.getId())
+                .build()))
             .build();
-        var state = dispatcher.apply(action).initialState();
-        assertEquals(helper, ActionStatus.RUNNING, state.status(), "set_attack_target should start running");
+        var response = new AtomicReference<StepResponse>();
+        var failure = new AtomicReference<Throwable>();
+        Thread.startVirtualThread(() -> {
+            try {
+                response.set(env.step(List.of(action), 0.1F));
+            } catch (Throwable error) {
+                failure.set(error);
+            }
+        });
+        helper.runAfterDelay(6, () -> {
+            try {
+                assertTrue(helper, failure.get() == null, "timeout raised: " + failure.get());
+                assertTrue(helper, response.get() != null, "timeout did not finish");
+                String info = response.get().getInfo();
+                assertTrue(helper, info.contains("\"status\":\"failed\""), "timeout status missing: " + info);
+                assertTrue(helper, info.contains("action batch timeout"), "timeout description missing: " + info);
+                assertTrue(helper, info.contains("\"elapsed_ticks\":2"), "timeout tick count missing: " + info);
+                helper.succeed();
+            } finally {
+                env.close();
+            }
+        });
+    }
 
-        dispatcher.tick(action); // 第 1 tick，未超时
-        assertEquals(helper, ActionStatus.RUNNING, dispatcher.getState(action).status(), "tick 1 still running");
-        dispatcher.tick(action); // 第 2 tick，达到超时
-        state = dispatcher.getState(action);
-        assertEquals(helper, ActionStatus.FAILED, state.status(), "timeout should fail");
-        assertEquals(helper, "action timeout", state.description(), "timeout description");
-        assertEquals(helper, 2, state.details().get("elapsed_ticks"), "elapsed ticks");
-        assertEquals(helper, (double) 0.1f, state.details().get("timeout_seconds"), "timeout seconds");
-
-        // 不设置超时（= 0）：任意多 tick 都不触发超时
-        var noTimeout = ProtoMcAction.newBuilder()
-            .putComponents("gymcraft:set_attack_target", setTarget)
-            .build();
-        dispatcher.apply(noTimeout);
-        for (int i = 0; i < 10; i++) {
-            dispatcher.tick(noTimeout);
+    /** 仅启用持续攻击目标动作的测试环境。 */
+    private static final class TimeoutTestEnv extends AbstractMcEnv {
+        /** @param mob 受控测试实体 */
+        private TimeoutTestEnv(Mob mob) {
+            super(ResourceLocation.fromNamespaceAndPath("gymcraft", "timeout_test"), mob,
+                List.of(ActionComponents.SET_ATTACK_TARGET.get()), List.of());
         }
-        assertEquals(helper, ActionStatus.RUNNING, dispatcher.getState(noTimeout).status(), "no timeout keeps running");
-        helper.succeed();
     }
 }

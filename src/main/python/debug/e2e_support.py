@@ -15,10 +15,10 @@ import time
 import uuid
 from typing import Any
 
-from gymcraft.client import GymCraftEnv
+from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components.noop_pb2 import ProtoNoop
 from gymcraft.llm import ActionDslParser, encode_action_batch
-from gymcraft.type_info import ACTION_NOOP, Action, Observation, OBS_SELF, TIMEOUT_SECONDS
+from gymcraft.type_info import ACTION_NOOP, ActionBatch, Observation, OBS_SELF
 
 # 生成环境实体与建立会话时等待 RCON 指令生效的通用超时（秒）。
 COMMAND_DEADLINE_SECONDS = 20.0
@@ -137,7 +137,7 @@ class E2ESuite:
         assert self.observation is not None
         return self.observation[OBS_SELF]
 
-    def send(self, action: Action, label: str, expected: str | None = "COMPLETED") -> dict[str, Any]:
+    def send(self, action: ActionBatch, label: str, expected: str | None = "COMPLETED") -> dict[str, Any]:
         """发送原生 protobuf 动作，校验返回状态并刷新观测。
 
         参数:
@@ -208,7 +208,7 @@ class E2ESuite:
 
     def noop(self) -> dict[str, Any]:
         """发送一个 noop 推进一 tick（同时刷新观测）。"""
-        return self.send({TIMEOUT_SECONDS: 0.0, ACTION_NOOP: ProtoNoop()}, "noop")
+        return self.send(single_action(ACTION_NOOP, ProtoNoop()), "noop")
 
     def teleport(self, x: float, y: float, z: float, yaw: float = 0.0, pitch: float = 0.0) -> None:
         """用 RCON 把受控生物固定到指定位置与朝向，再刷新观测。"""
