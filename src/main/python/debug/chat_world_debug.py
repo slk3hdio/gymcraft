@@ -5,7 +5,8 @@
 
 覆盖范围:
     - ``gymcraft:world``: dimension / day_time（与 header game_tick、RCON
-      gametime 双重核对）/ raining / thundering 随 ``weather`` 指令变化
+      gametime 双重核对）/ raining / thundering 随 ``weather`` 指令变化，
+      以及 biome / structure 位置字段（场景平台位于开阔海洋，不在任何结构内）
     - ``gymcraft:send_chat``: 正常广播、空消息与超长消息的失败路径
     - 观测: ``gymcraft:chat``（sender 来自实体 CustomName、内容精确匹配、
       game_tick 升序、默认窗口 16 条）
@@ -103,6 +104,18 @@ class ChatWorldE2E(E2ESuite):
             f"world.day_time {world.day_time} drifted from RCON gametime {gametime}",
         )
         self.require(not world.raining and not world.thundering, "expected clear weather baseline")
+        # biome：受控实体位于布置平台，该平台在海洋生物群系中；断言注册 ID
+        # 形态正确（无法从 RCON 独立取得该坐标的群系 ID，精确比对由 GameTest 覆盖）
+        self.require(
+            world.biome.startswith("minecraft:"),
+            f"unexpected biome id {world.biome!r}",
+        )
+        # structure：场景平台所在区域不生成结构，空串表示不在任何结构内；
+        # 结构命中路径由 GameTest 注入合成结构起点覆盖
+        self.require(
+            world.structure == "",
+            f"unexpected structure {world.structure!r} at open-ocean test platform",
+        )
 
     def weather_transition(self) -> None:
         """验证 thundering/raining 随 weather 指令翻转。"""

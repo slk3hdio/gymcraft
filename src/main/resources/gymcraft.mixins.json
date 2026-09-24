@@ -4,7 +4,8 @@
   "package": "io.github.mousemeya.gymcraft.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "ServerCommonPacketListenerMixin"
+    "ServerCommonPacketListenerMixin",
+    "ContainerOpenersCounterMixin"
   ],
   "injectors": {
     "defaultRequire": 1

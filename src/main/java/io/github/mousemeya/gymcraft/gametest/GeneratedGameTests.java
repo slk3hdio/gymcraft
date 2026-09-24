@@ -620,6 +620,34 @@ public final class GeneratedGameTests {
     public static void use_item_reset_menu_identity(GameTestHelper helper) {
         UseItemGameTests.resetMenuIdentity(helper);
     }
+
+    // ===== 世界状态观测（群系 / 结构） =====
+    @GameTest(template = "use_item_empty", timeoutTicks = 12000)
+    public static void world_state_biome_and_structure(GameTestHelper helper) {
+        ChatObservationGameTests.worldStateReportsBiomeAndStructure(helper);
+    }
+
+    @GameTest(template = "use_item_empty", timeoutTicks = 12000)
+    public static void world_state_structure_inside_piece(GameTestHelper helper) {
+        ChatObservationGameTests.worldStateReportsStructureInsidePiece(helper);
+    }
+
+    // ===== 玩家模拟实体 =====
+    @GameTest(template = "use_item_empty", timeoutTicks = 100)
+    public static void player_sim_profile(GameTestHelper helper) {
+        PlayerSimGameTests.playerSimHasPlayerLikeProfile(helper);
+    }
+
+    @GameTest(template = "use_item_empty", timeoutTicks = 12000)
+    public static void player_sim_env_agent(GameTestHelper helper) {
+        PlayerSimGameTests.playerSimWorksAsEnvAgent(helper);
+    }
+
+    @GameTest(template = "use_item_empty", timeoutTicks = 100)
+    public static void regression_chest_lid_count_survives_recheck(GameTestHelper helper) {
+        MenuRegressionGameTests.chestLidCountSurvivesRecheck(helper);
+    }
+
     /** 禁止实例化测试注册类。 */
     private GeneratedGameTests() {
     }

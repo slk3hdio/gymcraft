@@ -105,7 +105,7 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | 注册 ID | 说明 |
 |---|---|
 | `gymcraft:self` | 生命、位置、速度、姿态和目标等自身状态 |
-| `gymcraft:world` | 时间、天气和维度 |
+| `gymcraft:world` | 时间、天气、维度，所在群系/结构的注册 ID，以及附近已加载区块中的结构起点（注册 ID + 包围盒中心坐标 + 距离） |
 | `gymcraft:nearby_entities` | 一定范围内的实体 |
 | `gymcraft:nearby_blocks` | 空气连通域中可见的方块表面 |
 | `gymcraft:interesting_blocks` | 空气连通域中已标记为感兴趣的可见方块表面 |

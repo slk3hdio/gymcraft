@@ -32,7 +32,7 @@ uv run python debug/<script>.py --server-properties <服务器>/server.propertie
 | 动作 `send_chat` | `chat_world_debug.py`（正常广播 + 空消息/超长消息失败路径） |
 | 动作 `noop` | `e2e_support.py` 与所有 RCON 脚本（作为推进/刷新观测的手段） |
 | 观测 `self` | `step_move_look_at_debug.py`、`move_to_debug.py` 等（位置/朝向/着地断言） |
-| 观测 `world` | `chat_world_debug.py`（dimension、day_time 双重核对、天气翻转） |
+| 观测 `world` | `chat_world_debug.py`（dimension、day_time 双重核对、天气翻转、biome/structure 字段） |
 | 观测 `nearby_entities` | `attack_debug.py`、`step_move_look_at_debug.py` |
 | 观测 `nearby_blocks` | `nearby_blocks_move_debug.py`、`interesting_blocks_debug.py` |
 | 观测 `nearby_items` | `item_pickup_drop_debug.py`（掉落物出现/消失）、`step_move_look_at_debug.py`（item 目标） |

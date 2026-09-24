@@ -7,6 +7,7 @@ import os
 from typing import Any, cast
 
 from openai import OpenAI
+from dotenv import load_dotenv
 
 from gymcraft import GymCraftEnv
 from gymcraft.llm import LLMGymCraftEnv
@@ -33,6 +34,7 @@ def run(args: argparse.Namespace) -> None:
             print(f"\n===== LLM turn {step_index + 1} =====\n{model_text}")
             context, reward, terminated, truncated, info = env.step(model_text)
             print(
+                f"{info.get('action_state', {}).get('description', info.get('action_error', ''))}\n"
                 f"reward={reward:+.3f} terminated={terminated} truncated={truncated} "
                 f"advanced={info.get('advanced')}"
             )
@@ -44,6 +46,7 @@ def run(args: argparse.Namespace) -> None:
 
 def main() -> None:
     """解析环境、任务和通用 Chat Completions 连接参数。"""
+    load_dotenv()
     parser = argparse.ArgumentParser(description="Run a real Chat Completions LLM against GymCraft")
     parser.add_argument("entity_uuid")
     parser.add_argument("--task", required=True, help="发送给 LLM 的任务描述")

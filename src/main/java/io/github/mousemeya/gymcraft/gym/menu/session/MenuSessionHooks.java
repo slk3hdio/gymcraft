@@ -1,5 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.menu.session;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -38,6 +39,15 @@ public final class MenuSessionHooks {
     /** 注销 Mob 的菜单会话（仅当注册的仍是该会话时移除）。 */
     public static void unregister(Mob mob, LogicalMenuSession session) {
         OPEN_SESSIONS.remove(mob.getUUID(), session);
+    }
+
+    /**
+     * 全部已注册的活动菜单会话快照（供开盖计数桥遍历；返回副本可安全迭代）。
+     *
+     * @return 当前活动会话集合
+     */
+    public static Collection<LogicalMenuSession> openSessions() {
+        return List.copyOf(OPEN_SESSIONS.values());
     }
 
     /**

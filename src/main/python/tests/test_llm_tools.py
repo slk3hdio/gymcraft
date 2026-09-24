@@ -75,6 +75,17 @@ def _observation(tick: int = 1) -> Observation:
             "gymcraft:world": world_pb2.ProtoWorldState(
                 day_time=6000,
                 dimension="minecraft:overworld",
+                biome="minecraft:plains",
+                structure="minecraft:village_plains",
+                structures=[
+                    world_pb2.ProtoStructureLocation(
+                        structure_id="minecraft:village_plains",
+                        x=32,
+                        y=64,
+                        z=16,
+                        distance=26.5,
+                    ),
+                ],
             ),
             "gymcraft:nearby_entities": nearby_entities_pb2.ProtoNearbyEntities(
                 entities=[
@@ -347,6 +358,12 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertNotIn("entity_id=1 entity_type=minecraft:skeleton", text)
         self.assertNotIn("rel=", text)
         self.assertNotIn("uuid=", text)
+        # blocks 先按距离升序输出（max_blocks=1 只留最近的 chest），再附加种类聚合统计
+        self.assertIn("blocks: total=2 shown=1 omitted=1", text)
+        self.assertIn("block_id=minecraft:chest x=11 y=64 z=-2 distance=1", text)
+        self.assertNotIn("block_id=minecraft:stone x=12", text)
+        self.assertIn("block_counts: total=2 shown=1 omitted=1", text)
+        self.assertIn("- block_id=minecraft:chest count=1", text)
         self.assertIn("items: total=1 shown=1", text)
         self.assertIn("entity_id=7 item_id=minecraft:apple count=3", text)
         self.assertIn("interesting_blocks: total=2 shown=1 omitted=1", text)
@@ -357,6 +374,51 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertNotIn("content=\"hello\"", text)
         self.assertIn("tick=2 content=\"Server restarting\"", text)
         self.assertIn("tick=3 sender=<Alex> content=\"follow me\"", text)
+        # world 行：群系与结构按原生字段输出，结构 ID 为空时回退为 none
+        self.assertIn(
+            "world: dimension=minecraft:overworld biome=minecraft:plains "
+            "structure=minecraft:village_plains",
+            text,
+        )
+        # structures 段：按服务端距离升序原样输出注册 ID、包围盒中心坐标和距离
+        self.assertIn("structures: total=1 shown=1", text)
+        self.assertIn(
+            "- structure_id=minecraft:village_plains x=32 y=64 z=16 distance=26.5",
+            text,
+        )
+
+    def test_structures_are_capped_by_max_structures(self) -> None:
+        """附近结构超过 max_structures 时应裁剪并报告省略数量。"""
+        observation = _observation()
+        observation["gymcraft:world"] = world_pb2.ProtoWorldState(
+            day_time=6000,
+            dimension="minecraft:overworld",
+            biome="minecraft:ocean",
+            structures=[
+                world_pb2.ProtoStructureLocation(
+                    structure_id="minecraft:ruined_portal", x=10, y=64, z=0, distance=5.0
+                ),
+                world_pb2.ProtoStructureLocation(
+                    structure_id="minecraft:shipwreck", x=60, y=40, z=0, distance=50.0
+                ),
+            ],
+        )
+        formatter = ObservationTextFormatter(ObservationFormatConfig(max_structures=1))
+        text = formatter.format(observation)
+        self.assertIn("structures: total=2 shown=1 omitted=1", text)
+        self.assertIn("- structure_id=minecraft:ruined_portal x=10 y=64 z=0 distance=5", text)
+        self.assertNotIn("shipwreck", text)
+
+    def test_world_without_structure_renders_none(self) -> None:
+        """不在结构内时结构字段为空串，文本必须渲染为 none 而不是留空。"""
+        observation = _observation()
+        observation["gymcraft:world"] = world_pb2.ProtoWorldState(
+            day_time=6000,
+            dimension="minecraft:overworld",
+            biome="minecraft:ocean",
+        )
+        text = ObservationTextFormatter().format(observation)
+        self.assertIn("biome=minecraft:ocean structure=none", text)
 
     def test_context_keeps_raw_assistant_text(self) -> None:
         """历史中应原样保存模型文本和 DSL 动作块。"""
