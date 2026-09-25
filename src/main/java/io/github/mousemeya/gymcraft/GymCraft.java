@@ -53,10 +53,11 @@ public class GymCraft {
             new Item.Properties().stacksTo(1));
 
     // 玩家模拟实体刷怪蛋（1.21.1 无 SpawnEggItem(Properties) 便利构造，走 NeoForge
-    // 的 DeferredSpawnEggItem 惰性取实体类型）：实体注册先于物品注册（原版注册表顺序）
+    // 的 DeferredSpawnEggItem 惰性取实体类型；客户端按 backgroundColor/highlightColor
+    // 对模板两层灰度贴图做纯色染色，配色取自原 26.1 专属贴图的青绿底+深蓝斑点）
     public static final DeferredItem<DeferredSpawnEggItem> PLAYER_SIM_SPAWN_EGG = ITEMS.registerItem(
             "player_sim_spawn_egg",
-            properties -> new DeferredSpawnEggItem(ModEntities.PLAYER_SIM, 0x1F1F1F, 0x535353, properties));
+            properties -> new DeferredSpawnEggItem(ModEntities.PLAYER_SIM, 0x00AFAF, 0x102060, properties));
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = CREATIVE_MODE_TABS.register("tab",
             () -> CreativeModeTab.builder()

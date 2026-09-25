@@ -61,7 +61,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
   - dev 运行（<=1.21.8）不自动携带 implementation 依赖：gRPC/protobuf 声明在 `libraries` 配置并经 `additionalRuntimeClasspath` 注入；guava/gson/protobuf-javalite 必须从 gRPC 侧排除（MC strictly 锁 guava 32.1.2 / gson 2.10.1；javalite 与 protobuf-java 4.30.2 类冲突）
   - mixin 注入点 `ServerCommonPacketListenerImpl.send(Packet, PacketSendListener)` 的第二参在 `net.minecraft.network` 包（无 protocol 前缀）
   - `LivingEntity#isJumping` 不存在：经 `META-INF/accesstransformer.cfg` 放开 `jumping` 字段；`ContainerOpenersCounter#isOwnContainer` 是 protected 但**不能**用 AT 放开（原版匿名实现类的窄化覆盖会让 NFRT 重编译失败），开盖计数桥经 `ContainerOpenersCounterMixin` 把自身谓词传入 `MenuOpenersBridge`
-  - 刷怪蛋用 NeoForge `DeferredSpawnEggItem`（1.21.1 无 `SpawnEggItem(Properties#spawnEgg)`）；实体 `EntityType.Builder#build` 只接受字符串 ID；渲染器无 RenderState（`HumanoidMobRenderer<T, M>` 两泛型），手臂姿态在模型 `setupAnim` 前写 `rightArmPose/leftArmPose`（见 `PlayerSimRenderer`）
+  - 刷怪蛋用 NeoForge `DeferredSpawnEggItem`（1.21.1 无 `SpawnEggItem(Properties#spawnEgg)`）；客户端对**所有** SpawnEggItem 按 `backgroundColor`/`highlightColor` 对 `minecraft:item/template_spawn_egg` 模板的两层灰度贴图做不透明染色——模型必须 parent 该模板、**不能**用自带彩色贴图（会被染色压成纯色块）；实体 `EntityType.Builder#build` 只接受字符串 ID；渲染器无 RenderState（`HumanoidMobRenderer<T, M>` 两泛型），手臂姿态在模型 `setupAnim` 前写 `rightArmPose/leftArmPose`（见 `PlayerSimRenderer`）
   - `run/mods` 里为 Java 25 编译的 ReplayMod 与本分支不兼容，已移至 `run/mods-disabled-for-1.21.1/`
 - 用 `gh` 操作含中文的 GitHub issue 前先设 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
 - `repo/` 既是 maven-publish 目标，又存放参考资源: `Documentation` (NeoForge 文档)、`minecraft-source-1.26`/`minecraft-source-1.20.1-java` (反编译源码)、`TouhouLittleMaid-1.20` (参考模组)
