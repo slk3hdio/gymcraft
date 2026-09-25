@@ -460,6 +460,34 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertEqual(raw, context["messages"][2]["content"])
         self.assertEqual("assistant", context["messages"][2]["role"])
 
+    def test_history_collapses_full_batch_instead_of_rolling(self) -> None:
+        """历史满载后的下一轮应清空整批，而不是逐轮淘汰最旧内容。"""
+        history = ConversationHistory(max_turns=3)
+        history.add("assistant-1", "result-1")
+        history.add("assistant-2", "result-2")
+        history.add("assistant-3", "result-3")
+        self.assertEqual(
+            ["assistant-1", "assistant-2", "assistant-3"],
+            [turn.assistant_text for turn in history.snapshot()],
+        )
+
+        history.add("assistant-4", "result-4")
+        self.assertEqual(
+            ["assistant-4"],
+            [turn.assistant_text for turn in history.snapshot()],
+        )
+        history.add("assistant-5", "result-5")
+        self.assertEqual(
+            ["assistant-4", "assistant-5"],
+            [turn.assistant_text for turn in history.snapshot()],
+        )
+
+    def test_zero_capacity_history_stays_empty(self) -> None:
+        """零容量配置应继续禁用历史记录。"""
+        history = ConversationHistory(max_turns=0)
+        history.add("assistant", "result")
+        self.assertEqual((), history.snapshot())
+
     def test_defaults_limit_entities_and_blocks_to_ten(self) -> None:
         """默认上下文不应为实体或方块各渲染超过十条。"""
         config = ObservationFormatConfig()

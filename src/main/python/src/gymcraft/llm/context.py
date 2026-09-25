@@ -2,28 +2,29 @@
 
 from __future__ import annotations
 
-from collections import deque
 from collections.abc import Sequence
 
 from gymcraft.llm.actions import ActionDslParser
 from gymcraft.llm.types import ChatMessage, ConversationTurn, LLMContext
 
 
-# 有界保存模型原文与动作结果的短期历史。
+# 分批保存模型原文与动作结果的短期历史。
 class ConversationHistory:
-    """维护最近若干轮交互，避免长 episode 无限制增长上下文。"""
+    """维护一批完整交互；容量用尽后整批折叠并从下一轮重新积累。"""
 
     def __init__(self, max_turns: int = 8) -> None:
-        """创建固定容量的历史队列。"""
+        """创建固定批次容量的历史容器。"""
         if max_turns < 0:
             raise ValueError("max_turns must not be negative")
         self.max_turns = max_turns
-        self._turns: deque[ConversationTurn] = deque(maxlen=max_turns or None)
+        self._turns: list[ConversationTurn] = []
 
     def add(self, assistant_text: str, result_text: str) -> None:
-        """追加模型完整原文和环境结果摘要。"""
+        """追加一轮；已有批次满载时先整批折叠，再开始积累新批次。"""
         if self.max_turns == 0:
             return
+        if len(self._turns) >= self.max_turns:
+            self._turns.clear()
         self._turns.append(ConversationTurn(assistant_text=assistant_text, result_text=result_text))
 
     def clear(self) -> None:

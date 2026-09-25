@@ -69,6 +69,7 @@ GitHub Actions runs stub generation, mypy, packaging, and uploads the built dist
 - `LLMGymCraftEnv`：只负责串联上述组件与底层 `GymCraftEnv`，所有组件都可替换或单独使用。
 
 内置 system prompt、命令说明和动作纠错反馈均使用英文。观测只渲染决策所需的原生字段，不生成相对坐标等派生状态；附近实体、普通方块和感兴趣方块默认各最多 10 条。`action-result` 不包含服务端 `details`。
+`ConversationHistory` 按 `history_turns` 分批保留完整历史；当前批次满载后，下一轮会折叠整批历史并作为新批次的第一轮重新积累，不再逐轮滚动淘汰最旧上下文。
 
 最小 wrapper 示例：
 
