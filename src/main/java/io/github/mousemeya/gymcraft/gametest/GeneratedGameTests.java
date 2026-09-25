@@ -644,6 +644,26 @@ public final class GeneratedGameTests {
     }
 
     @GameTest(template = "use_item_empty", timeoutTicks = 100)
+    public static void player_sim_swing_animation(GameTestHelper helper) {
+        PlayerSimGameTests.playerSimAdvancesSwingAnimation(helper);
+    }
+
+    @GameTest(template = "use_item_empty", timeoutTicks = 100)
+    public static void player_sim_attack_target(GameTestHelper helper) {
+        PlayerSimGameTests.playerSimPursuesConfiguredAttackTarget(helper);
+    }
+
+    @GameTest(template = "use_item_empty", timeoutTicks = 100)
+    public static void player_sim_player_camp(GameTestHelper helper) {
+        PlayerSimGameTests.playerSimSharesPlayerCamp(helper);
+    }
+
+    @GameTest(template = "use_item_empty", timeoutTicks = 100)
+    public static void player_sim_hostile_targeting(GameTestHelper helper) {
+        PlayerSimGameTests.hostileMobTargetsPlayerSim(helper);
+    }
+
+    @GameTest(template = "use_item_empty", timeoutTicks = 100)
     public static void regression_chest_lid_count_survives_recheck(GameTestHelper helper) {
         MenuRegressionGameTests.chestLidCountSurvivesRecheck(helper);
     }

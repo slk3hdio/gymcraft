@@ -61,7 +61,10 @@ public final class MenuGameTestSupport {
                 helper.setBlock(relPos.offset(dx, 0, dz), Blocks.STONE);
             }
         }
-        return helper.spawnWithNoFreeWill(type, relPos.above());
+        T mob = helper.spawnWithNoFreeWill(type, relPos.above());
+        // GameTestHelper.removeFreeWill 只清 goalSelector；测试 Agent 还需清除自主索敌 Goal。
+        mob.targetSelector.removeAllGoals(goal -> true);
+        return mob;
     }
 
     /** 放置箱子并返回其 BlockEntity。 */

@@ -7,6 +7,7 @@ import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.control.MoveControl;
+import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.world.level.Level;
 
 /**
@@ -20,9 +21,10 @@ import net.minecraft.world.level.Level;
  * FakePlayer 桥执行），因此本实体对 GymCraft 环境零适配、可直接挂载。
  * </p>
  * <p>
- * 本实体不注册任何自主 AI Goal：行为完全由环境动作驱动
- * （{@code DISABLE_VANILLA_AI} 之外也没有游荡/索敌逻辑），且像玩家一样
- * 永不因距离自然消失。
+ * 本实体不注册游荡或自主索敌 Goal：攻击目标完全由环境动作指定。
+ * 仅注册原版近战执行 Goal，用于消费 {@code set_attack_target} 写入的目标，
+ * 复用标准的追击、注视、视线、攻击距离、冷却和挥手逻辑；清除目标后立即停止。
+ * 实体像玩家一样永不因距离自然消失。
  * </p>
  */
 public class PlayerSimEntity extends PathfinderMob {
@@ -59,10 +61,29 @@ public class PlayerSimEntity extends PathfinderMob {
     }
 
     /**
-     * 不注册任何 Goal：实体行为由 GymCraft 环境动作完全接管。
+     * 注册外部目标驱动的原版近战执行逻辑。
+     * <p>
+     * 不注册 {@code targetSelector} Goal，因此实体不会自主选择攻击对象；只有
+     * {@code set_attack_target} 设置目标后，本 Goal 才会寻路、注视并按原版节奏攻击。
+     * </p>
      */
     @Override
     protected void registerGoals() {
+        this.goalSelector.addGoal(1, new MeleeAttackGoal(this, 1.0, true));
+    }
+
+    /**
+     * 推进实体逻辑以及玩家式挥手动画时间轴。
+     * <p>
+     * {@link PathfinderMob} 不会像原版 {@code Player}/{@code Monster} 那样自动调用
+     * {@link #updateSwingTime()}；若不显式推进，服务端与客户端虽然都收到了挥手事件，
+     * 渲染状态中的 {@code attackAnim} 仍会一直为零。
+     * </p>
+     */
+    @Override
+    public void aiStep() {
+        super.aiStep();
+        this.updateSwingTime();
     }
 
     /**

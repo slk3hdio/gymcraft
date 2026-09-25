@@ -208,23 +208,23 @@ class ActionDslParser:
     def command_reference(self) -> str:
         """生成可直接放入 LLM system 消息的紧凑命令速查表。"""
         references = {
-            "noop": "/noop",
+            "noop": "/noop (maintain a state of no action for 1 tick.)",
             "step_move": "/step_move <forward> <strafe_right> [yaw_delta] [jump]",
             "look_at": "/look_at entity|item <entity_id>|block <x> <y> <z>",
             "move_to": "/move_to <x> <y> <z> [stop_distance]",
-            "set_attack_target": "/set_attack_target clear|entity <entity_id>|uuid <uuid>",
+            "set_attack_target": "/set_attack_target clear|entity <entity_id>|uuid <uuid> (continuely chase and attack until the target or yourself is dead)",
             "attack_once": "/attack_once <entity_id>",
-            "break_block": "/break_block <x> <y> <z>",
-            "set_block": "/set_block <x> <y> <z> <block description with optional SNBT>",
+            "break_block": "/break_block <x> <y> <z> (break the block at <x> <y> <z> using the tool on your mainhand. Note that items will only drop if the correct tool is used.)",
+            "set_block": "/set_block <x> <y> <z> <block description with optional SNBT> (place a block from your inventory at <x> <y> <z>)",
             "jump": "/jump",
             "open_menu": "/open_menu self|entity <entity_id>|block <x> <y> <z>",
             "close_menu": "/close_menu <session_id>",
             "move_menu_item": "/move_menu_item <session_id> <source_slot_id> <target_slot_id> <count> [repeat] (repeat the command on new lines to append more moves in order)",
             "click_menu_button": "/click_menu_button <session_id> <button_id>",
             "pick_up_item": "/pick_up_item <entity_id>",
-            "drop_item": "/drop_item <slot_id> [count]",
-            "use_item": "/use_item <slot_id> [self|block <x> <y> <z>|entity <id>]",
-            "update_interesting_blocks": "/update_interesting_blocks add <block_id>... [remove <block_id>...]",
+            "drop_item": "/drop_item <slot_id> [count] (throw the item as a dropped object in the direction of your line of sight.)",
+            "use_item": "/use_item <slot_id> [self|block <x> <y> <z>|entity <id>] (use, consume, eat, or throw items from your backpack.)",
+            "update_interesting_blocks": "/update_interesting_blocks add <block_id>... [remove <block_id>...] (nearby interesting blocks will be shown in current observation and the scanning range is typically greater than [nearby_blocks])",
             "send_chat": "/send_chat <message>",
         }
         lines = [references[name] for name in self.available_action_names()]
