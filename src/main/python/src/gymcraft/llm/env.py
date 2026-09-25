@@ -43,7 +43,7 @@ class GymCraftEnvLike(Protocol):
 class LLMEnvConfig:
     """集中配置薄 wrapper 使用的可复用工具组件。"""
 
-    history_turns: int = 50
+    history_turns: int = 500
     default_timeout_seconds: float = 10.0
     max_timeout_seconds: float = 60.0
     max_invalid_retries: int = 2

@@ -268,7 +268,7 @@ class ObservationTextFormatter:
         for message in shown:
             sender = f" sender=<{message.sender}>" if message.sender else ""
             lines.append(f"- tick={message.game_tick}{sender} content={self._quote(message.content)}")
-        lines.append("You can chat with other players here. No need to reply to messages you already reponded to. ")
+        lines.append("You can chat with other players here.")
         return lines
 
     def _format_slots(self, menu: menu_pb2.ProtoMenuObservation) -> list[str]:
