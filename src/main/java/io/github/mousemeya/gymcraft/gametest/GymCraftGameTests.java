@@ -248,6 +248,14 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("player_sim_profile", () -> PlayerSimGameTests::playerSimHasPlayerLikeProfile);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PLAYER_SIM_ENV_AGENT =
         TEST_FUNCTIONS.register("player_sim_env_agent", () -> PlayerSimGameTests::playerSimWorksAsEnvAgent);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PLAYER_SIM_SWING_ANIMATION =
+        TEST_FUNCTIONS.register("player_sim_swing_animation", () -> PlayerSimGameTests::playerSimAdvancesSwingAnimation);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PLAYER_SIM_ATTACK_TARGET =
+        TEST_FUNCTIONS.register("player_sim_attack_target", () -> PlayerSimGameTests::playerSimPursuesConfiguredAttackTarget);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PLAYER_SIM_PLAYER_CAMP =
+        TEST_FUNCTIONS.register("player_sim_player_camp", () -> PlayerSimGameTests::playerSimSharesPlayerCamp);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> HOSTILE_MOB_TARGETS_PLAYER_SIM =
+        TEST_FUNCTIONS.register("player_sim_hostile_targeting", () -> PlayerSimGameTests::hostileMobTargetsPlayerSim);
 
     // ===== 跳跃 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> JUMP_APPLIED =

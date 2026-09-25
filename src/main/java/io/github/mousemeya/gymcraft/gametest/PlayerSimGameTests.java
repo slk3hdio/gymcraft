@@ -5,20 +5,29 @@ import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTr
 
 import java.util.Map;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.mojang.authlib.GameProfile;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.level.block.Blocks;
+import net.neoforged.neoforge.common.util.FakePlayer;
 
 import io.github.mousemeya.gymcraft.GymCraft;
+import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
+import io.github.mousemeya.gymcraft.gym.action.component.SetAttackTargetController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetAttackTarget;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnv;
 import io.github.mousemeya.gymcraft.gym.entity.PlayerSimEntity;
@@ -97,6 +106,111 @@ public final class PlayerSimGameTests {
             } finally {
                 env.close();
             }
+        });
+    }
+
+    /**
+     * 验证玩家模拟实体会在自身 tick 中推进挥手时间轴，避免客户端收到动画事件后
+     * {@code attackAnim} 始终停留在零。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void playerSimAdvancesSwingAnimation(GameTestHelper helper) {
+        PlayerSimEntity mob = MenuGameTestSupport.spawnAgent(
+            helper,
+            ModEntities.PLAYER_SIM.get(),
+            new BlockPos(2, 1, 2)
+        );
+        mob.swing(InteractionHand.MAIN_HAND);
+        helper.runAfterDelay(2, () -> {
+            assertTrue(helper, mob.attackAnim > 0.0F,
+                "player_sim attack animation did not advance after swinging");
+            assertTrue(helper, mob.swingTime > 0,
+                "player_sim swing timeline did not advance");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * 验证 {@code set_attack_target} 可驱动玩家模拟实体复用原版近战 Goal，
+     * 主动寻路接近目标并完成攻击。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void playerSimPursuesConfiguredAttackTarget(GameTestHelper helper) {
+        for (int x = 0; x <= 8; x++) {
+            for (int z = 1; z <= 3; z++) {
+                helper.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
+            }
+        }
+        PlayerSimEntity mob = helper.spawn(ModEntities.PLAYER_SIM.get(), new BlockPos(1, 2, 2));
+        mob.setInvulnerable(true);
+        var target = helper.spawnWithNoFreeWill(EntityType.PIG, new BlockPos(7, 2, 2));
+        target.setHealth(0.5F);
+        double initialX = mob.getX();
+
+        var action = ProtoSetAttackTarget.newBuilder()
+            .setTargetEntityId(target.getId())
+            .build();
+        var result = new SetAttackTargetController(mob).apply(action);
+        result.policy().applyTo(mob);
+        assertEquals(helper, ActionStatus.RUNNING, result.initialState().status(),
+            "set_attack_target should start tracking: " + result.initialState());
+
+        helper.succeedWhen(() -> {
+            assertTrue(helper, mob.getX() > initialX + 1.0,
+                "player_sim did not pursue the configured attack target");
+            assertTrue(helper, !target.isAlive(),
+                "player_sim reached the target but did not execute melee attacks");
+        });
+    }
+
+    /**
+     * 验证 PlayerSim 与真实/FakePlayer 共享原版双向友军关系。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void playerSimSharesPlayerCamp(GameTestHelper helper) {
+        PlayerSimEntity mob = MenuGameTestSupport.spawnAgent(
+            helper,
+            ModEntities.PLAYER_SIM.get(),
+            new BlockPos(2, 1, 2)
+        );
+        FakePlayer player = new FakePlayer(
+            helper.getLevel(),
+            new GameProfile(UUID.randomUUID(), "gymcraft_ally_test")
+        );
+        assertTrue(helper, mob.isAlliedTo(player),
+            "player_sim should regard players as allies");
+        assertTrue(helper, player.isAlliedTo(mob),
+            "player should regard player_sim as an ally through symmetric vanilla checks");
+        helper.succeed();
+    }
+
+    /**
+     * 验证敌对生物会像寻找玩家一样主动选择并攻击 PlayerSim。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void hostileMobTargetsPlayerSim(GameTestHelper helper) {
+        for (int x = 0; x <= 8; x++) {
+            for (int z = 1; z <= 3; z++) {
+                helper.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
+                helper.setBlock(new BlockPos(x, 5, z), Blocks.STONE);
+            }
+        }
+        PlayerSimEntity mob = helper.spawnWithNoFreeWill(
+            ModEntities.PLAYER_SIM.get(),
+            new BlockPos(2, 2, 2)
+        );
+        var hostile = helper.spawn(EntityType.ZOMBIE, new BlockPos(3, 2, 2));
+        float initialHealth = mob.getHealth();
+
+        helper.succeedWhen(() -> {
+            assertEquals(helper, mob, hostile.getTarget(),
+                "hostile mob did not select player_sim as a player-camp target");
+            assertTrue(helper, mob.getHealth() < initialHealth,
+                "hostile mob selected player_sim but did not attack it");
         });
     }
 

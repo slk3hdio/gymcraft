@@ -173,10 +173,10 @@ class ObservationTextFormatter:
     ) -> list[str]:
         """先按距离升序输出附近可见方块（含坐标和距离），再附加按种类聚合的数量统计。"""
         if nearby is None:
-            return ["blocks: unavailable"]
+            return ["nearby_blocks: unavailable"]
         blocks = sorted(nearby.blocks, key=lambda block: (block.distance, block.x, block.y, block.z, block.block_id))
         shown = blocks[: self.config.max_blocks]
-        lines = [self._count_header("blocks", len(blocks), len(shown))]
+        lines = [self._count_header("nearby blocks", len(blocks), len(shown))]
         for block in shown:
             lines.append(
                 f"- block_id={block.block_id} x={block.x} y={block.y} z={block.z} "
@@ -193,7 +193,7 @@ class ObservationTextFormatter:
         counts = Counter(block.block_id for block in nearby.blocks)
         kinds = sorted(counts, key=lambda block_id: (-counts[block_id], block_id))
         shown = kinds[: self.config.max_blocks]
-        lines = [self._count_header("block_counts", len(kinds), len(shown))]
+        lines = [self._count_header("block summary", len(kinds), len(shown))]
         for block_id in shown:
             lines.append(f"- block_id={block_id} count={counts[block_id]}")
         return lines
@@ -261,13 +261,14 @@ class ObservationTextFormatter:
     def _format_chat(self, chat: chat_pb2.ProtoRecentChat | None) -> list[str]:
         """格式化最近聊天栏消息窗口（时间升序，保留最近 max_chat_messages 条）。"""
         if chat is None:
-            return ["chat: unavailable"]
+            return ["history chat: unavailable"]
         messages = list(chat.messages)
         shown = messages[-self.config.max_chat_messages:]
-        lines = [self._count_header("chat", len(messages), len(shown))]
+        lines = [self._count_header("history chat(ordered by game time)", len(messages), len(shown))]
         for message in shown:
             sender = f" sender=<{message.sender}>" if message.sender else ""
             lines.append(f"- tick={message.game_tick}{sender} content={self._quote(message.content)}")
+        lines.append("You can chat with other players here. No need to reply to messages you already reponded to. ")
         return lines
 
     def _format_slots(self, menu: menu_pb2.ProtoMenuObservation) -> list[str]:
