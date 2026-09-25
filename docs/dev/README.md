@@ -157,10 +157,10 @@ Python 包位于 `src/main/python/src/gymcraft`。`GymCraftEnv.reset()` 返回�
 ```powershell
 cd src\main\python
 uv sync
-uv run demos\parkour_q_learning_demo.py <entity_uuid> --episodes 200
+uv run gymcraft-demo parkour <entity_uuid> --episodes 200
 ```
 
-`demos/parkour_q_learning_demo.py` 使用表格 Q-learning 训练 `parkour_mob`：
+`gymcraft.demos.parkour_q_learning` 使用表格 Q-learning 训练 `parkour_mob`：
 
 - 状态包含相对高度、落地状态、邻近方块、剩余资源和水平偏移。
 - 动作包含跳跃、脚下放置、空操作和四向小步移动。
@@ -169,10 +169,10 @@ uv run demos\parkour_q_learning_demo.py <entity_uuid> --episodes 200
 
 `src/main/python/debug` 下的脚本用于逐项验证动作和观测，不作为稳定公共 API。
 
-`demos/iron_mining_llm_demo.py` 连接 `iron_mining` 环境，通过通用 Chat Completions API
+`gymcraft-demo iron-mining` 连接 `iron_mining` 环境，通过通用 Chat Completions API
 驱动完整工具链任务，并可使用 `--trace` 保存 JSONL 轨迹。
 
-`demos/iron_golem_warden_reflexion_demo.py` 连接 `iron_golem_warden` 环境，按
+`gymcraft-demo iron-golem-warden` 连接 `iron_golem_warden` 环境，按
 Reflexion（arXiv:2303.11366）范式运行多 trial：每 trial 失败后由同一 LLM 从轨迹摘要
 生成文字反思，反思累积进下一 trial 的任务提示，直到 Warden 被击杀或达到 `--max-trials`。
 
@@ -203,7 +203,7 @@ Reflexion（arXiv:2303.11366）范式运行多 trial：每 trial 失败后由同
 
 # Python 类型检查
 cd src\main\python
-uv run mypy src debug demos
+uv run mypy src debug tests
 
 # Python wheel/sdist
 cd ..\..\..

@@ -54,7 +54,7 @@ Typecheck the Python client:
 
 ```powershell
 cd src\main\python
-uv run mypy src debug demos tests
+uv run mypy src debug tests
 ```
 
 GitHub Actions runs stub generation, mypy, packaging, and uploads the built distributions as the `gymcraft-python-dist` artifact.
@@ -107,10 +107,10 @@ uv run python debug/interesting_blocks_debug.py <entity_uuid> --add minecraft:di
 
 ## Chat Completions 闭环 Demo
 
-Chat Completions 客户端是可选依赖：
+从 PyPI 安装客户端后，demo 可通过统一命令直接运行：
 
 ```powershell
-uv sync --extra openai
+pip install gymcraft
 ```
 
 运行 demo；`base_url`、API key 和模型均可替换为任意兼容服务提供的值：
@@ -120,7 +120,7 @@ $env:LLM_BASE_URL = "https://api.openai.com/v1"
 $env:LLM_API_KEY = "your-api-key"
 $env:LLM_MODEL = "your-model-id"
 
-uv run --extra openai demos/llm_chat_completions_demo.py `
+gymcraft-demo llm-chat `
   <entity_uuid> `
   --task "找到最近的箱子并查看其中的物品"
 ```
@@ -130,7 +130,7 @@ demo 使用通用的 `client.chat.completions.create(model=..., messages=...)` �
 连接 `gymcraft:iron_mining` 环境可运行完整生存工具链 demo：
 
 ```powershell
-uv run --extra openai demos/iron_mining_llm_demo.py `
+gymcraft-demo iron-mining `
   <entity_uuid> `
   --max-steps 64 `
   --trace traces/iron-mining.jsonl
@@ -150,5 +150,5 @@ uv run debug/llm_terminal.py <entity_uuid> --task "测试菜单和移动动作"
 
 ```powershell
 uv run python -m unittest discover -s tests -v
-uv run mypy src debug demos tests
+uv run mypy src debug tests
 ```
