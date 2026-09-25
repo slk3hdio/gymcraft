@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gymcraft"
-version = "1.2.0+mc1.21.1" # 这里和模组版本号保持一致
+version = "1.2.1+mc1.21.1" # 这里和模组版本号保持一致
 description = "Python RPC client for GymCraft - Gymnasium-style RL environments in Minecraft"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,15 +14,18 @@ dependencies = [
     "mcrcon>=0.7.0",
     "mypy>=2.1.0",
     "openai>=3.3.1",
+    "python-dotenv>=1.2.3",
     "protobuf>=6.33.6",
 ]
+
+[project.scripts]
+gymcraft-demo = "gymcraft.demos.cli:main"
 
 [dependency-groups]
 dev = [
     "grpcio-tools>=1.81.1",
     "mcp>=2.1.1",
     "openai>=2.0.0",
-    "python-dotenv>=1.2.3",
 ]
 
 [tool.setuptools.packages.find]

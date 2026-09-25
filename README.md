@@ -93,11 +93,11 @@ env.close()
 
 ### 跳搭方块 Q-learning
 
-先为 Mob 创建 `parkour_mob` 环境，然后运行：
+安装 Python 客户端、为 Mob 创建 `parkour_mob` 环境，然后运行：
 
 ```powershell
-cd src\main\python
-uv run demos\parkour_q_learning_demo.py <entity_uuid> --episodes 200
+pip install gymcraft
+gymcraft-demo parkour <entity_uuid> --episodes 200
 ```
 
 该 demo 使用不依赖深度学习框架的表格 Q-learning，让 Mob 学习组合 `jump`、
@@ -115,11 +115,9 @@ uv run demos\parkour_q_learning_demo.py <entity_uuid> --episodes 200
 然后配置任意 Chat Completions 兼容服务：
 
 ```powershell
-cd src\main\python
-uv sync --extra openai
 $env:LLM_API_KEY = "your-api-key"
 $env:LLM_MODEL = "your-model-id"
-uv run --extra openai demos\iron_mining_llm_demo.py <entity_uuid> --trace traces\iron.jsonl
+gymcraft-demo iron-mining <entity_uuid> --trace traces\iron.jsonl
 ```
 
 环境会清空 Agent 物品栏并重建固定训练场。模型需要自行采集原木，通过 self 菜单的

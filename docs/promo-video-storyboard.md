@@ -140,7 +140,7 @@
 
 ## 制作备注
 
-- **实机录制**：建议用 Replay Mod 或 OBS 录制，固定机位 + 平滑运镜；所有演示镜头来自真实运行（`demos/parkour_q_learning_demo.py`、`demos/iron_mining_llm_demo.py`），不做摆拍，可信度是本片核心卖点。
+- **实机录制**：建议用 Replay Mod 或 OBS 录制，固定机位 + 平滑运镜；所有演示镜头来自真实运行（`gymcraft-demo parkour`、`gymcraft-demo iron-mining`），不做摆拍，可信度是本片核心卖点。
 - **分屏同步**（C 段）需后期对轴：以键盘回车音为对齐点。
 - **字幕规范**：全程硬字幕；代码与命令用等宽字体；关键词（`reset` / `step` / gRPC / Q-learning）做高亮色。
 - **配音**：中文配音 + 英文字幕即可覆盖国内外；若做英文版，只需替换配音，字幕文件互换。

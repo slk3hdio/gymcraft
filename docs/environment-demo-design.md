@@ -112,7 +112,7 @@
 
 每个任务提供规则策略和运行入口，复用 `GymCraftEnv`；LLM 使用现有 `LLMGymCraftEnv`。规则基线先验证环境可解，再比较 LLM 或学习策略。客户端不重写服务端 reward、terminated 和 truncated。
 
-建议命名为 `sort_inventory_demo.py`、`craft_order_demo.py` 等，放在 `src/main/python/demos/`。日志记录 seed、任务条件、完整轨迹和指标，避免仅记录成功视频。
+建议命名为 `sort_inventory.py`、`craft_order.py` 等，放在 `src/main/python/src/gymcraft/demos/`，并通过 `gymcraft-demo` 统一分发。日志记录 seed、任务条件、完整轨迹和指标，避免仅记录成功视频。
 
 ### 验证顺序
 

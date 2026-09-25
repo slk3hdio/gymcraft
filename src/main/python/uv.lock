@@ -366,7 +366,7 @@ wheels = [
 
 [[package]]
 name = "gymcraft"
-version = "1.2.0+mc1.21.1"
+version = "1.2.1+mc1.21.1"
 source = { editable = "." }
 dependencies = [
     { name = "grpcio" },
@@ -375,6 +375,7 @@ dependencies = [
     { name = "mypy" },
     { name = "openai" },
     { name = "protobuf" },
+    { name = "python-dotenv" },
 ]
 
 [package.dev-dependencies]
@@ -382,7 +383,6 @@ dev = [
     { name = "grpcio-tools" },
     { name = "mcp" },
     { name = "openai" },
-    { name = "python-dotenv" },
 ]
 
 [package.metadata]
@@ -393,6 +393,7 @@ requires-dist = [
     { name = "mypy", specifier = ">=2.1.0" },
     { name = "openai", specifier = ">=3.3.1" },
     { name = "protobuf", specifier = ">=6.33.6" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
 ]
 
 [package.metadata.requires-dev]
@@ -400,7 +401,6 @@ dev = [
     { name = "grpcio-tools", specifier = ">=1.81.1" },
     { name = "mcp", specifier = ">=2.1.1" },
     { name = "openai", specifier = ">=2.0.0" },
-    { name = "python-dotenv", specifier = ">=1.2.3" },
 ]
 
 [[package]]
