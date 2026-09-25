@@ -384,10 +384,10 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertNotIn("rel=", text)
         self.assertNotIn("uuid=", text)
         # blocks 先按距离升序输出（max_blocks=1 只留最近的 chest），再附加种类聚合统计
-        self.assertIn("blocks: total=2 shown=1 omitted=1", text)
+        self.assertIn("nearby blocks: total=2 shown=1 omitted=1", text)
         self.assertIn("block_id=minecraft:chest x=11 y=64 z=-2 distance=1", text)
         self.assertNotIn("block_id=minecraft:stone x=12", text)
-        self.assertIn("block_counts: total=2 shown=1 omitted=1", text)
+        self.assertIn("block summary: total=2 shown=1 omitted=1", text)
         self.assertIn("- block_id=minecraft:chest count=1", text)
         self.assertIn("items: total=1 shown=1", text)
         self.assertIn("entity_id=7 item_id=minecraft:apple count=3", text)
@@ -395,7 +395,7 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertIn("block_id=minecraft:ancient_debris x=11 y=63 z=-2 distance=1.5", text)
         self.assertNotIn("block_id=minecraft:diamond_ore", text)
         # 聊天窗口：只保留最近 2 条，系统消息无 sender 字段
-        self.assertIn("chat: total=3 shown=2 omitted=1", text)
+        self.assertIn("history chat(ordered by game time): total=3 shown=2 omitted=1", text)
         self.assertNotIn("content=\"hello\"", text)
         self.assertIn("tick=2 content=\"Server restarting\"", text)
         self.assertIn("tick=3 sender=<Alex> content=\"follow me\"", text)
