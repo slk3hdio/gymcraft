@@ -1,12 +1,16 @@
 # GymCraft
 
-GymCraft 是面向 Minecraft 26.1 / NeoForge 的强化学习环境模组。把游戏中的 Mob
-包装成 Gymnasium 风格环境，外部 Python Agent 通过 gRPC 调用 `reset()` 和 `step()`。
+GymCraft 是面向 Minecraft / NeoForge 的强化学习环境模组。它把游戏中的 Mob 与
+`PlayerSimEntity` 包装成 Gymnasium 风格环境，外部 Python Agent 通过 gRPC 调用
+`reset()` 和 `step()`，也可以直接运行随 Python 包安装的训练与 LLM demo。
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Minecraft-26.1-brightgreen" alt="Minecraft 26.1">
-  <img src="https://img.shields.io/badge/NeoForge-26.1.0.19--beta-blue" alt="NeoForge">
+  <a href="https://github.com/slk3hdio/gymcraft/releases/latest"><img src="https://img.shields.io/github/v/release/slk3hdio/gymcraft" alt="GitHub Release"></a>
+  <a href="https://pypi.org/project/gymcraft/"><img src="https://img.shields.io/pypi/v/gymcraft" alt="PyPI"></a>
+  <img src="https://img.shields.io/badge/Minecraft-26.1.2-brightgreen" alt="Minecraft 26.1.2">
+  <img src="https://img.shields.io/badge/NeoForge-26.1.2.95-blue" alt="NeoForge 26.1.2.95">
   <img src="https://img.shields.io/badge/Java-25-orange" alt="Java 25">
+  <img src="https://img.shields.io/pypi/pyversions/gymcraft" alt="Python versions">
   <img src="https://img.shields.io/badge/gRPC-50051-purple" alt="gRPC">
 </p>
 
@@ -31,6 +35,13 @@ GymEnvService -> EnvManager -> AgentRuntime
 - Python `gymcraft` 包提供 `GymCraftEnv`，连接游戏内已经创建的环境。
 - 环境、动作和观测均通过 NeoForge 自定义注册表扩展。
 
+## 兼容性
+
+| Minecraft | NeoForge | Java | Release |
+|---|---|---|---|
+| 26.1.2 | 26.1.2.95 | 25 | [`v1.2.1`](https://github.com/slk3hdio/gymcraft/releases/tag/v1.2.1) |
+| 1.21.1 | 21.1.250 | 21 | [`v1.2.1+mc1.21.1`](https://github.com/slk3hdio/gymcraft/releases/tag/v1.2.1%2Bmc1.21.1) |
+
 ## 使用方法
 
 ### 1. 启动模组
@@ -47,7 +58,7 @@ Minecraft 服务端启动后会同时启动 gRPC 服务，默认监听 `localhos
 ### 2. 创建环境
 
 1. 从创造模式的 GymCraft 标签页取得 **Environment Tool** 和 **UUID Copier**。
-2. 按住 Shift 滚动滚轮，选择 `simple_mob`、`parkour_mob` 或 `iron_mining` 环境。
+2. 按住 Shift 滚动滚轮，选择 `simple_mob`、`parkour_mob`、`iron_mining`、`iron_golem_warden` 或 `general` 环境。
 3. 使用 Environment Tool 右键 Mob 创建环境；Shift + 右键移除环境。
 4. 使用 UUID Copier 右键同一 Mob，取得 Python 连接所需的实体 UUID。
 
@@ -59,6 +70,14 @@ Minecraft 服务端启动后会同时启动 gRPC 服务，默认监听 `localhos
 ```
 
 ### 3. 连接 Python 客户端
+
+从 PyPI 安装正式版本：
+
+```powershell
+pip install -U gymcraft
+```
+
+源码开发时使用 uv 安装：
 
 ```powershell
 cd src\main\python
@@ -89,14 +108,26 @@ env.close()
 
 `allow_multiple_actions` 默认为 `True`。设为 `False` 后，一个 step 只接受零个或一个 action；传入多个 action 时整批返回 `FAILED`，且不会执行任何一项。
 
-## Demo
+## 一行运行 Demo
+
+安装 `gymcraft` 后会同时安装 `gymcraft-demo` 命令。Minecraft 服务端、gRPC 服务及目标环境需要已经启动和创建。
+
+```powershell
+gymcraft-demo --help
+```
+
+| 命令 | 需要的环境 | 用途 |
+|---|---|---|
+| `gymcraft-demo parkour <entity_uuid>` | `gymcraft:parkour_mob` | 表格 Q-learning 跳跃搭高 |
+| `gymcraft-demo llm-chat <entity_uuid> --task "..."` | 任意兼容环境 | 通用 Chat Completions 闭环 |
+| `gymcraft-demo iron-mining <entity_uuid>` | `gymcraft:iron_mining` | 从空手完成采集、合成并取得粗铁 |
+| `gymcraft-demo iron-golem-warden <entity_uuid>` | `gymcraft:iron_golem_warden` | Reflexion 多轮规划与铁傀儡战斗任务 |
 
 ### 跳搭方块 Q-learning
 
-安装 Python 客户端、为 Mob 创建 `parkour_mob` 环境，然后运行：
+为 Mob 创建 `parkour_mob` 环境后运行：
 
 ```powershell
-pip install gymcraft
 gymcraft-demo parkour <entity_uuid> --episodes 200
 ```
 
@@ -115,6 +146,7 @@ gymcraft-demo parkour <entity_uuid> --episodes 200
 然后配置任意 Chat Completions 兼容服务：
 
 ```powershell
+$env:LLM_BASE_URL = "https://api.openai.com/v1"
 $env:LLM_API_KEY = "your-api-key"
 $env:LLM_MODEL = "your-model-id"
 gymcraft-demo iron-mining <entity_uuid> --trace traces\iron.jsonl
@@ -123,7 +155,8 @@ gymcraft-demo iron-mining <entity_uuid> --trace traces\iron.jsonl
 环境会清空 Agent 物品栏并重建固定训练场。模型需要自行采集原木，通过 self 菜单的
 $2\times2$ 合成格制作并放置工作台，再制作木镐、石镐并取得粗铁。
 
-`debug/` 目录还包含移动、攻击、方块和菜单等动作的调试脚本。
+使用 `gymcraft-demo <demo> --help` 可以查看该 demo 的完整参数。源码仓库的
+`src/main/python/debug/` 目录还包含移动、攻击、方块和菜单等动作的专项调试脚本。
 
 ## 开发文档
 
