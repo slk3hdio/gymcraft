@@ -108,7 +108,7 @@ env.close()
 
 `allow_multiple_actions` 默认为 `True`。设为 `False` 后，一个 step 只接受零个或一个 action；传入多个 action 时整批返回 `FAILED`，且不会执行任何一项。
 
-## 一行运行 Demo
+## 演示 Demo
 
 安装 `gymcraft` 后会同时安装 `gymcraft-demo` 命令。Minecraft 服务端、gRPC 服务及目标环境需要已经启动和创建。
 
@@ -123,40 +123,18 @@ gymcraft-demo --help
 | `gymcraft-demo iron-mining <entity_uuid>` | `gymcraft:iron_mining` | 从空手完成采集、合成并取得粗铁 |
 | `gymcraft-demo iron-golem-warden <entity_uuid>` | `gymcraft:iron_golem_warden` | Reflexion 多轮规划与铁傀儡战斗任务 |
 
-### 跳搭方块 Q-learning
-
-为 Mob 创建 `parkour_mob` 环境后运行：
-
-```powershell
-gymcraft-demo parkour <entity_uuid> --episodes 200
-```
-
-该 demo 使用不依赖深度学习框架的表格 Q-learning，让 Mob 学习组合 `jump`、
-`set_block`、`step_move` 和 `noop`，通过跳跃并在脚下放置方块到达目标高度。
-常用参数包括 `--target-height`、`--block-count`、`--max-steps` 和 `--epsilon`。
-
-### 从空手到粗铁 LLM Demo
-
-先为最近的 Zombie 创建环境；命令成功信息会直接包含实体 UUID，也可以用 UUID Copier 右键复制：
-
-```text
-/gymcraft env create @e[type=minecraft:zombie,sort=nearest,limit=1] gymcraft:iron_mining
-```
-
-然后配置任意 Chat Completions 兼容服务：
-
-```powershell
-$env:LLM_BASE_URL = "https://api.openai.com/v1"
-$env:LLM_API_KEY = "your-api-key"
-$env:LLM_MODEL = "your-model-id"
-gymcraft-demo iron-mining <entity_uuid> --trace traces\iron.jsonl
-```
-
-环境会清空 Agent 物品栏并重建固定训练场。模型需要自行采集原木，通过 self 菜单的
-$2\times2$ 合成格制作并放置工作台，再制作木镐、石镐并取得粗铁。
 
 使用 `gymcraft-demo <demo> --help` 可以查看该 demo 的完整参数。源码仓库的
 `src/main/python/debug/` 目录还包含移动、攻击、方块和菜单等动作的专项调试脚本。
+
+示例
+```cmd
+gymcraft-demo llm-chat <entity_uuid>
+    --max-steps 200 --task "beat the game" 
+    --api-key <api-key>
+    --base-url https://api.deepseek.com  
+    --model deepseek-v4-flash
+```
 
 ## 开发文档
 
