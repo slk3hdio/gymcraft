@@ -31,6 +31,11 @@ public class EnvToolItem extends Item {
     private static final String ENV_TYPE_TAG = "gymcraft_env_type";
     private static final String DEFAULT_ENV_TYPE = EnvFactories.SIMPLE_MOB.getId().toString();
 
+    /**
+     * 创建环境工具物品。
+     *
+     * @param properties 物品属性
+     */
     public EnvToolItem(Properties properties) {
         super(properties);
     }
@@ -87,7 +92,10 @@ public class EnvToolItem extends Item {
 
         if (player.isShiftKeyDown()) {
             boolean removed = EnvManager.close(mob.getUUID());
-            player.sendSystemMessage(Component.literal(removed ? "Removed environment from " + mob.getUUID() : "No environment on " + mob.getUUID()));
+            String messageKey = removed
+                ? "message.gymcraft.environment_removed"
+                : "message.gymcraft.environment_missing";
+            player.sendSystemMessage(Component.translatable(messageKey, mob.getUUID()));
             return InteractionResult.SUCCESS;
         }
 
@@ -95,13 +103,23 @@ public class EnvToolItem extends Item {
         try {
             EnvManager.create(envType, mob);
         } catch (IllegalArgumentException e) {
-            player.sendSystemMessage(Component.literal(e.getMessage()));
+            player.sendSystemMessage(Component.translatable("message.gymcraft.error", e.getMessage()));
             return InteractionResult.SUCCESS;
         }
-        player.sendSystemMessage(Component.literal("Created environment " + envType + " for " + mob.getUUID()));
+        player.sendSystemMessage(Component.translatable(
+            "message.gymcraft.environment_created",
+            envType,
+            mob.getUUID()
+        ));
         return InteractionResult.SUCCESS;
     }
 
+    /**
+     * 读取环境工具当前保存的环境类型。
+     *
+     * @param stack 环境工具物品栈
+     * @return 环境注册表 ID；未设置时返回默认环境
+     */
     public static String getSelectedEnvType(ItemStack stack) {
         CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
         if (customData == null || !customData.contains(ENV_TYPE_TAG)) {
@@ -110,6 +128,13 @@ public class EnvToolItem extends Item {
         return customData.copyTag().getString(ENV_TYPE_TAG).orElse(DEFAULT_ENV_TYPE);
     }
 
+    /**
+     * 按注册表排序循环选择环境类型，并写回物品组件。
+     *
+     * @param stack 环境工具物品栈
+     * @param direction 滚轮方向，正数向后、负数向前
+     * @return 切换后的环境注册表 ID
+     */
     public static String cycleSelectedEnvType(ItemStack stack, int direction) {
         List<String> envTypes = getRegisteredEnvTypes();
         if (envTypes.isEmpty()) {
@@ -130,6 +155,11 @@ public class EnvToolItem extends Item {
         return selected;
     }
 
+    /**
+     * 获取所有已注册环境类型并按 ID 排序。
+     *
+     * @return 已排序的环境注册表 ID 列表
+     */
     private static List<String> getRegisteredEnvTypes() {
         List<String> envTypes = new ArrayList<>();
         for (Identifier id : RegistryKeys.ENV_FACTORIES.keySet()) {
@@ -139,6 +169,12 @@ public class EnvToolItem extends Item {
         return envTypes;
     }
 
+    /**
+     * 将所选环境类型写入物品自定义数据。
+     *
+     * @param stack 环境工具物品栈
+     * @param envType 环境注册表 ID
+     */
     public static void setSelectedEnvType(ItemStack stack, String envType) {
         CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putString(ENV_TYPE_TAG, envType));
     }

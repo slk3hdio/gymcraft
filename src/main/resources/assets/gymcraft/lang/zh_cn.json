@@ -1,0 +1,14 @@
+{
+  "itemGroup.gymcraft": "GymCraft",
+  "item.gymcraft.env_tool": "环境工具",
+  "item.gymcraft.uuid_copier": "UUID 复制器",
+  "entity.gymcraft.player_sim": "模拟玩家",
+  "item.gymcraft.player_sim_spawn_egg": "模拟玩家刷怪蛋",
+  "message.gymcraft.selected_environment": "已选择环境：%s",
+  "message.gymcraft.environment_created": "已为 %2$s 创建环境 %1$s",
+  "message.gymcraft.environment_removed": "已移除 %s 的环境",
+  "message.gymcraft.environment_missing": "%s 尚未绑定环境",
+  "message.gymcraft.target_not_mob": "目标不是 Mob：%s",
+  "message.gymcraft.uuid_copied": "UUID：%s",
+  "message.gymcraft.error": "错误：%s"
+}

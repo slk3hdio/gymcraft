@@ -3,5 +3,12 @@
   "item.gymcraft.env_tool": "Environment Tool",
   "item.gymcraft.uuid_copier": "UUID Copier",
   "entity.gymcraft.player_sim": "Simulated Player",
-  "item.gymcraft.player_sim_spawn_egg": "Simulated Player Spawn Egg"
+  "item.gymcraft.player_sim_spawn_egg": "Simulated Player Spawn Egg",
+  "message.gymcraft.selected_environment": "Selected environment: %s",
+  "message.gymcraft.environment_created": "Created environment %s for %s",
+  "message.gymcraft.environment_removed": "Removed environment from %s",
+  "message.gymcraft.environment_missing": "No environment on %s",
+  "message.gymcraft.target_not_mob": "Target is not a Mob: %s",
+  "message.gymcraft.uuid_copied": "UUID: %s",
+  "message.gymcraft.error": "Error: %s"
 }

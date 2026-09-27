@@ -44,7 +44,7 @@ public class UuidCopierItem extends Item {
         if (event.getLevel().isClientSide()) {
             Minecraft.getInstance().keyboardHandler.setClipboard(uuid);
         } else {
-            event.getEntity().sendSystemMessage(Component.literal("UUID: " + uuid));
+            event.getEntity().sendSystemMessage(Component.translatable("message.gymcraft.uuid_copied", uuid));
         }
         event.setCancellationResult(InteractionResult.SUCCESS);
         event.setCanceled(true);

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="src/main/resources/gymcraft.png" width="160" alt="GymCraft 图标">
+</p>
+
 # GymCraft
 
 GymCraft 是面向 Minecraft / NeoForge 的强化学习环境模组。它把游戏中的 Mob 与
@@ -18,22 +22,78 @@ GymCraft 是面向 Minecraft / NeoForge 的强化学习环境模组。它把游�
 
 ## 基本架构
 
-```text
-Python Agent (GymCraftEnv)
-          |
-          | gRPC :50051
-          v
-GymEnvService -> EnvManager -> AgentRuntime
-                                  |
-                         Minecraft entity tick
-                                  |
-                    动作组件 / 观测组件 / 环境
+```mermaid
+flowchart LR
+    subgraph CLIENT["外部智能体 / External Agent"]
+        direction TB
+        POLICY["RL 算法 / LLM"]
+        DEMO["gymcraft-demo"]
+        PY["Python Client<br/>GymCraftEnv"]
+        POLICY --> PY
+        DEMO --> PY
+    end
+
+    subgraph BRIDGE["gRPC 桥接层 / Bridge"]
+        direction TB
+        RPC["GymCraftRpcServer<br/>:50051"]
+        SERVICE["GymEnvService"]
+        SESSION["RpcEnvSessions<br/>连接与重连"]
+        RPC --> SERVICE --> SESSION
+    end
+
+    subgraph CORE["环境运行时 / Environment Runtime"]
+        direction TB
+        MANAGER["EnvManager"]
+        ENV["McEnv<br/>reset · reward · termination"]
+        RUNTIME["AgentRuntime"]
+        BATCH["ActionBatchExecutor<br/>顺序批次 · 共享超时"]
+        COMPOSER["ObservationComposer"]
+        MANAGER --> ENV --> RUNTIME --> BATCH
+        COMPOSER --> ENV
+    end
+
+    subgraph COMPONENTS["可扩展组件 / Registries"]
+        direction TB
+        ACTIONS["动作组件<br/>移动 · 战斗 · 方块 · 物品 · 菜单"]
+        OBSERVERS["观测组件<br/>自身 · 世界 · 实体 · 方块 · 菜单 · 聊天"]
+        STATE["Attachments<br/>背包 · 会话 · 状态"]
+    end
+
+    subgraph GAME["Minecraft Server"]
+        direction TB
+        TICK["Server Tick"]
+        ENTITY["Mob / PlayerSimEntity"]
+        WORLD["世界 · 物品栏 · 容器 · 聊天"]
+        TICK --> ENTITY
+        ENTITY <--> WORLD
+    end
+
+    PY <-->|protobuf / gRPC| RPC
+    SESSION --> MANAGER
+    BATCH --> ACTIONS --> ENTITY
+    ENTITY --> OBSERVERS --> COMPOSER
+    WORLD --> OBSERVERS
+    STATE <--> ENTITY
+    ENV -.->|按环境装配| ACTIONS
+    ENV -.->|按环境装配| OBSERVERS
+
+    classDef client fill:#0284c7,color:#ffffff,stroke:#075985,stroke-width:2px;
+    classDef bridge fill:#7c3aed,color:#ffffff,stroke:#5b21b6,stroke-width:2px;
+    classDef runtime fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px;
+    classDef component fill:#059669,color:#ffffff,stroke:#047857,stroke-width:2px;
+    classDef game fill:#d97706,color:#ffffff,stroke:#92400e,stroke-width:2px;
+
+    class POLICY,DEMO,PY client;
+    class RPC,SERVICE,SESSION bridge;
+    class MANAGER,ENV,RUNTIME,BATCH,COMPOSER runtime;
+    class ACTIONS,OBSERVERS,STATE component;
+    class TICK,ENTITY,WORLD game;
 ```
 
-- Java 模组负责环境生命周期、动作执行、观测生成和奖励计算。
-- protobuf 定义动作、观测与 gRPC 接口，同时生成 Java/Python 桩。
-- Python `gymcraft` 包提供 `GymCraftEnv`，连接游戏内已经创建的环境。
-- 环境、动作和观测均通过 NeoForge 自定义注册表扩展。
+- Python Agent 通过 `GymCraftEnv` 连接游戏内已经存在的环境；`Connect` 不会创建新环境。
+- 动作从 gRPC 请求进入运行时，按批次顺序执行，并在 Minecraft server tick 中驱动实体。
+- 观测组件读取实体与世界状态，经 `ObservationComposer` 汇总后随奖励和终止状态返回。
+- 环境、动作和观测均通过 NeoForge 自定义注册表装配，组件状态保存在 attachments 中。
 
 ## 兼容性
 
@@ -84,6 +144,8 @@ cd src\main\python
 uv sync
 ```
 
+### 4. 最小示例
+
 ```python
 from gymcraft import GymCraftEnv
 from gymcraft.gym.action.components import noop_pb2
@@ -123,19 +185,16 @@ gymcraft-demo --help
 | `gymcraft-demo iron-mining <entity_uuid>` | `gymcraft:iron_mining` | 从空手完成采集、合成并取得粗铁 |
 | `gymcraft-demo iron-golem-warden <entity_uuid>` | `gymcraft:iron_golem_warden` | Reflexion 多轮规划与铁傀儡战斗任务 |
 
-
 使用 `gymcraft-demo <demo> --help` 可以查看该 demo 的完整参数。源码仓库的
 `src/main/python/debug/` 目录还包含移动、攻击、方块和菜单等动作的专项调试脚本。
 
-示例
-```cmd
-gymcraft-demo llm-chat <entity_uuid>
-    --max-steps 200 --task "beat the game" 
-    --api-key <api-key>
-    --base-url https://api.deepseek.com  
-    --model deepseek-v4-flash
+### LLM 演示示例
+
+```powershell
+gymcraft-demo llm-chat <entity_uuid> --max-steps 200 --task "beat the game" --api-key <api-key> --base-url https://api.deepseek.com --model deepseek-v4-flash
 ```
 
-## 开发文档
+## 更多文档
 
-详细架构、组件清单、协议、测试与打包说明见 [docs/dev/README.md](docs/dev/README.md)。
+- [中英文模组介绍](docs/mod-introduction.md)
+- [开发文档](docs/dev/README.md)

@@ -30,7 +30,7 @@ displayName="${mod_name}" #mandatory
 #displayURL="https://change.me.to.your.mods.homepage.example.invalid/" #optional
 
 # A file name (in the root of the mod JAR) containing a logo for display
-#logoFile="examplemod.png" #optional
+logoFile="gymcraft.png" #optional
 
 # A text field displayed in the mod UI
 #credits="" #optional
@@ -40,7 +40,11 @@ authors="MouseMeYa"
 
 # The description text for the mod (multi line!) (#mandatory)
 description='''
-Example mod description.
+GymCraft turns Minecraft mobs into Gymnasium-style environments for reinforcement learning,
+LLM agents, and automation experiments through a Python gRPC client.
+
+GymCraft 将 Minecraft 生物包装成 Gymnasium 风格环境，供强化学习、LLM Agent
+与自动化实验通过 Python gRPC 客户端进行观察和控制。
 '''
 
 # The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.

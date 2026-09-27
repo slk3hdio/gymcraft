@@ -21,9 +21,15 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
  * 便于在专用服务器控制台或 RCON 下使用。
  */
 public final class GymCraftCommands {
+    /** 禁止实例化仅包含静态指令注册逻辑的工具类。 */
     private GymCraftCommands() {
     }
 
+    /**
+     * 注册 `/gymcraft env create/remove` 指令树。
+     *
+     * @param event NeoForge 指令注册事件
+     */
     public static void register(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         String defaultType = EnvFactories.SIMPLE_MOB.getId().toString();
@@ -41,28 +47,51 @@ public final class GymCraftCommands {
                                         .executes(ctx -> remove(ctx.getSource(), EntityArgument.getEntity(ctx, "target")))))));
     }
 
+    /**
+     * 为目标 Mob 创建指定类型的环境。
+     *
+     * @param source 指令来源
+     * @param target 目标实体
+     * @param envType 环境注册表 ID
+     * @return 成功时返回 1，失败时返回 0
+     * @throws CommandSyntaxException 目标实体参数解析失败时抛出
+     */
     private static int create(CommandSourceStack source, Entity target, String envType) throws CommandSyntaxException {
         if (!(target instanceof Mob mob)) {
-            source.sendFailure(Component.literal("Target is not a Mob: " + target.getUUID()));
+            source.sendFailure(Component.translatable("message.gymcraft.target_not_mob", target.getUUID()));
             return 0;
         }
         try {
             EnvManager.create(envType, mob);
         } catch (IllegalArgumentException e) {
-            source.sendFailure(Component.literal(e.getMessage()));
+            source.sendFailure(Component.translatable("message.gymcraft.error", e.getMessage()));
             return 0;
         }
-        source.sendSuccess(() -> Component.literal("Created environment " + envType + " for " + mob.getUUID()), true);
+        source.sendSuccess(() -> Component.translatable(
+            "message.gymcraft.environment_created",
+            envType,
+            mob.getUUID()
+        ), true);
         return 1;
     }
 
+    /**
+     * 移除目标实体当前绑定的环境。
+     *
+     * @param source 指令来源
+     * @param target 目标实体
+     * @return 成功时返回 1，不存在环境时返回 0
+     */
     private static int remove(CommandSourceStack source, Entity target) {
         boolean removed = EnvManager.close(target.getUUID());
         if (removed) {
-            source.sendSuccess(() -> Component.literal("Removed environment from " + target.getUUID()), true);
+            source.sendSuccess(() -> Component.translatable(
+                "message.gymcraft.environment_removed",
+                target.getUUID()
+            ), true);
             return 1;
         }
-        source.sendFailure(Component.literal("No environment on " + target.getUUID()));
+        source.sendFailure(Component.translatable("message.gymcraft.environment_missing", target.getUUID()));
         return 0;
     }
 }
