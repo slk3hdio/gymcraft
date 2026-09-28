@@ -8,6 +8,8 @@ GymCraft 是面向 Minecraft / NeoForge 的强化学习环境模组。它把游�
 `PlayerSimEntity` 包装成 Gymnasium 风格环境，外部 Python Agent 通过 gRPC 调用
 `reset()` 和 `step()`，也可以直接运行随 Python 包安装的训练与 LLM demo。
 
+[介绍视频](https://www.bilibili.com/video/BV1yhax6fEKB/?spm_id_from=333.1387.homepage.video_card.click&vd_source=895925a189f9deccec4ac27b2c17591f)
+
 <p align="center">
   <a href="https://github.com/slk3hdio/gymcraft/releases/latest"><img src="https://img.shields.io/github/v/release/slk3hdio/gymcraft" alt="GitHub Release"></a>
   <a href="https://pypi.org/project/gymcraft/"><img src="https://img.shields.io/pypi/v/gymcraft" alt="PyPI"></a>
