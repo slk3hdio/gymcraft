@@ -559,8 +559,14 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
         return result;
     }
 
+    /**
+     * 瞬时动作不会被运行时 tick；实现仅返回已应用终态以满足接口契约。
+     *
+     * @param component 当前动作
+     * @return 完成状态
+     */
     @Override
-    public ActionState getState(ProtoMoveMenuItem component) {
+    public ActionState tick(ProtoMoveMenuItem component) {
         return ActionState.completed("move menu item applied");
     }
 

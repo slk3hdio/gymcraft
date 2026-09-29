@@ -137,13 +137,14 @@ public class DropItemController extends AbstractActionComponentController<ProtoD
     }
 
     /**
-     * 丢出动作在 apply 阶段同步完成，因此后续状态始终为完成。
+     * 丢出动作在 apply 阶段同步完成，因此后续状态始终为完成；
+     * 瞬时动作不会被运行时 tick，本实现仅返回已应用终态。
      *
      * @param component 已执行动作
      * @return 完成状态
      */
     @Override
-    public ActionState getState(ProtoDropItem component) {
+    public ActionState tick(ProtoDropItem component) {
         return ActionState.completed("drop item applied");
     }
 

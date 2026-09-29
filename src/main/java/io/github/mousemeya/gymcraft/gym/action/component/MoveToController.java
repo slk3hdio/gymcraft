@@ -114,8 +114,14 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         return ActionApplyResult.applied(policy, initialState);
     }
 
+    /**
+     * 推进导航一个 tick 并返回当前状态：未到达时驱动寻路，到达/受阻/实体失效时收尾。
+     *
+     * @param component 当前动作
+     * @return 当前动作状态
+     */
     @Override
-    public ActionState getState(ProtoMoveTo component) {
+    public ActionState tick(ProtoMoveTo component) {
         Mob mob = this.mob();
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {

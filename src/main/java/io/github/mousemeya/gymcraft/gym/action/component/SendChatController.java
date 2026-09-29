@@ -112,13 +112,13 @@ public final class SendChatController extends AbstractActionComponentController<
     }
 
     /**
-     * 返回同步动作的完成状态。
+     * 瞬时动作不会被运行时 tick；重复查询返回同步完成状态。
      *
      * @param component 聊天动作
      * @return 完成状态
      */
     @Override
-    public ActionState getState(ProtoSendChat component) {
+    public ActionState tick(ProtoSendChat component) {
         return completedState(this.mob().getDisplayName().getString(), component.getMessage());
     }
 

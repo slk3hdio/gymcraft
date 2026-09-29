@@ -165,32 +165,44 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         return ActionApplyResult.applied(policy, ActionState.running("mining", miningDetails(mining)));
     }
 
+    /**
+     * 推进挖掘进度并返回当前状态：累计破坏进度、处理实体失效与目标消失，
+     * 进度满时执行原版生存模式破坏；返回终态时一并清理挖掘会话与裂纹动画。
+     *
+     * @param component 当前动作
+     * @return 当前动作状态
+     */
     @Override
-    public void tick(ProtoBreakBlock component) {
+    public ActionState tick(ProtoBreakBlock component) {
         Mob mob = this.mob();
         MiningState mining = this.miningState;
-        if (mining == null || mining.terminal != null) {
-            return;
+        if (mining == null) {
+            return ActionState.failed("no mining in progress");
+        }
+        if (mining.terminal != null) {
+            this.miningState = null;
+            return mining.terminal;
         }
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
+            this.miningState = null;
             if (mob.level() instanceof ServerLevel level) {
+                // 清除客户端裂纹动画
                 level.destroyBlockProgress(mob.getId(), mining.pos, -1);
             }
-            mining.terminal = agentError;
-            return;
+            return agentError;
         }
         BlockPos pos = new BlockPos(component.getX(), component.getY(), component.getZ());
         if (!pos.equals(mining.pos) || !(mob.level() instanceof ServerLevel level)) {
             this.miningState = null;
-            return;
+            return ActionState.failed("no mining in progress");
         }
 
         BlockState blockState = level.getBlockState(mining.pos);
         if (blockState.isAir()) {
             // 方块被外部因素移除,挖掘目标已消失
-            mining.terminal = ActionState.completed("block already removed", miningDetails(mining));
-            return;
+            this.miningState = null;
+            return ActionState.completed("block already removed", miningDetails(mining));
         }
 
         AgentFakePlayerActor actor = AgentFakePlayerService.borrowHandActor(mob);
@@ -202,8 +214,10 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         }
         level.destroyBlockProgress(mob.getId(), mining.pos, crackStage(mining.progress));
         if (mining.progress >= 1.0F) {
-            mining.terminal = finishDestroy(mob, level, mining.pos, mining.ticks);
+            this.miningState = null;
+            return finishDestroy(mob, level, mining.pos, mining.ticks);
         }
+        return ActionState.running("mining", miningDetails(mining));
     }
 
     @Override
@@ -215,24 +229,6 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
             // 清除客户端裂纹动画
             level.destroyBlockProgress(mob.getId(), mining.pos, -1);
         }
-    }
-
-    @Override
-    public ActionState getState(ProtoBreakBlock component) {
-        MiningState mining = this.miningState;
-        if (mining == null) {
-            return ActionState.failed("no mining in progress");
-        }
-        if (mining.terminal != null) {
-            this.miningState = null;
-            return mining.terminal;
-        }
-        ActionState agentError = this.validateMobForAction();
-        if (agentError != null) {
-            this.onInterrupt(component);
-            return agentError;
-        }
-        return ActionState.running("mining", miningDetails(mining));
     }
 
     /** 目标合法性校验,返回 null 表示可挖掘。 */

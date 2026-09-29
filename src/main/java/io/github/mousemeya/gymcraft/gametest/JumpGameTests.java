@@ -37,7 +37,7 @@ public final class JumpGameTests {
 
         var state = dispatcher.apply(action).initialState();
         assertEquals(helper, ActionStatus.COMPLETED, state.status(), "jump should complete instantly");
-        assertEquals(helper, ActionStatus.COMPLETED, dispatcher.getState(action).status(), "jump state stays completed");
+        assertEquals(helper, ActionStatus.COMPLETED, dispatcher.tick(action).status(), "jump state stays completed");
 
         // JumpControl.tick() 是游戏每 tick 对跳跃控制的常规驱动
         mob.getJumpControl().tick();

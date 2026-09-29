@@ -255,13 +255,11 @@ public final class UseItemGameTests {
         var action = self(0);
         assertEquals(helper, ActionStatus.RUNNING, controller.apply(action).initialState().status(), "food should wait");
         helper.runAfterDelay(5, () -> {
-            controller.tick(action);
-            assertEquals(helper, ActionStatus.RUNNING, controller.getState(action).status(), "food completed early");
+            assertEquals(helper, ActionStatus.RUNNING, controller.tick(action).status(), "food completed early");
         });
         // 等待实体实际完成消费，避免新加载区块开始 tick 的时间差导致偶发失败。
         helper.succeedWhen(() -> {
-            controller.tick(action);
-            assertEquals(helper, ActionStatus.COMPLETED, controller.getState(action).status(), "food did not complete");
+            assertEquals(helper, ActionStatus.COMPLETED, controller.tick(action).status(), "food did not complete");
             assertEquals(helper, 2, mob.getMainHandItem().getCount(), "food must consume one");
             assertEquals(helper, 10.0F, mob.getHealth(), "food should not heal mob");
             assertTrue(helper, !mob.hasData(ModAttachments.ITEM_CONSUMPTION), "consumption attachment leaked");
@@ -284,12 +282,12 @@ public final class UseItemGameTests {
         assertEquals(helper, ActionStatus.RUNNING, first.apply(self(5)).initialState().status(), "potion should wait");
         second.apply(self(0));
         helper.succeedWhen(() -> {
-            first.tick(self(5));
-            second.tick(self(0));
-            assertEquals(helper, ActionStatus.COMPLETED, first.getState(self(5)).status(),
+            var firstState = first.tick(self(5));
+            var secondState = second.tick(self(0));
+            assertEquals(helper, ActionStatus.COMPLETED, firstState.status(),
                 "potion incomplete; entity_ticks=" + mob.tickCount + " remaining=" + mob.getUseItemRemainingTicks()
                     + " position=" + mob.position());
-            assertEquals(helper, ActionStatus.COMPLETED, second.getState(self(0)).status(), "other incomplete");
+            assertEquals(helper, ActionStatus.COMPLETED, secondState.status(), "other incomplete");
             assertTrue(helper, mob.hasEffect(MobEffects.SPEED), "effect did not reach mob");
             assertTrue(helper, !other.hasEffect(MobEffects.SPEED), "effect leaked to other mob");
             assertTrue(helper, mob.getOffhandItem().is(Items.GLASS_BOTTLE), "bottle missing");
@@ -444,8 +442,7 @@ public final class UseItemGameTests {
         var controller = new UseItemController(mob);
         controller.apply(self(5));
         helper.kill(mob);
-        controller.tick(self(5));
-        var deathState = controller.getState(self(5));
+        var deathState = controller.tick(self(5));
         assertEquals(helper, ActionStatus.FAILED, deathState.status(), "death should fail consumption");
         assertEquals(helper, "item consumption stopped because the agent died", deathState.description(),
             "death interruption description");

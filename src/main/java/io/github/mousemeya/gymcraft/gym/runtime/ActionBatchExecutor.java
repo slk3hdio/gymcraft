@@ -293,8 +293,7 @@ final class ActionBatchExecutor {
                 "elapsed_ticks", batch.elapsedTicks
             ));
         }
-        this.actionController.tick(batch.activeAction);
-        return this.actionController.getState(batch.activeAction);
+        return this.actionController.tick(batch.activeAction);
     }
 
     /** @param batch 当前批次 @return 是否已耗尽共享超时 */

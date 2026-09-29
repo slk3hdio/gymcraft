@@ -168,64 +168,37 @@ public class ActionDispatcher {
         }
     }
 
-    /** @param action 当前动作 */
-    public void tick(ProtoMcAction action) {
-        this.dispatchCallback(action, true);
+    /**
+     * 校验并推进单组件动作一个 tick。
+     *
+     * @param action 当前动作
+     * @return 推进后的动作状态；负载非法时返回 FAILED 状态
+     */
+    public ActionState tick(ProtoMcAction action) {
+        if (action == null || !action.hasPayload()) {
+            return ActionState.failed("invalid action");
+        }
+        String componentId = action.getComponentId();
+        ActionComponentController<?> controller = this.components.get(componentId);
+        if (controller == null) {
+            return ActionState.failed("unknown action component", Map.of("component_id", componentId));
+        }
+        return dispatchTick(controller, action.getPayload(), componentId);
     }
 
     /** @param action 需要中断的当前动作 */
     public void onInterrupt(ProtoMcAction action) {
-        this.dispatchCallback(action, false);
-    }
-
-    /** @param action 当前动作 @return controller 当前状态 */
-    public ActionState getState(ProtoMcAction action) {
-        if (action == null || action.getComponentId().isBlank()) {
-            return ActionState.failed("invalid action");
-        }
-        ActionComponentController<?> controller = this.components.get(action.getComponentId());
-        if (controller == null || !action.hasPayload()) {
-            return ActionState.failed("invalid action component");
-        }
-        return getComponentState(controller, action.getPayload(), action.getComponentId());
-    }
-
-    /** 校验后转发 tick 或 onInterrupt 回调。 */
-    private void dispatchCallback(ProtoMcAction action, boolean tick) {
         if (action == null || !action.hasPayload()) {
             return;
         }
         ActionComponentController<?> controller = this.components.get(action.getComponentId());
         if (controller != null) {
-            dispatchComponentCallback(controller, action.getPayload(), action.getComponentId(), tick);
+            dispatchInterrupt(controller, action.getPayload(), action.getComponentId());
         }
     }
 
-    /** 解包负载并转发 controller 回调。 */
-    private static <T extends Message> void dispatchComponentCallback(
-        ActionComponentController<T> controller,
-        Any payload,
-        String componentId,
-        boolean tick
-    ) {
-        if (!payload.is(controller.protoType())) {
-            return;
-        }
-        try {
-            T unpacked = payload.unpack(controller.protoType());
-            if (tick) {
-                controller.tick(unpacked);
-            } else {
-                controller.onInterrupt(unpacked);
-            }
-        } catch (Exception e) {
-            LOGGER.warn("Error in {} callback of action component {}: {}", tick ? "tick" : "onInterrupt",
-                componentId, e.getMessage());
-        }
-    }
-
-    /** 解包负载并查询 controller 状态。 */
-    private static <T extends Message> ActionState getComponentState(
+    /** 解包负载并推进 controller 一个 tick，返回当前状态。 */
+    private static <T extends Message> ActionState dispatchTick(
         ActionComponentController<T> controller,
         Any payload,
         String componentId
@@ -234,10 +207,29 @@ public class ActionDispatcher {
             return ActionState.failed("unexpected payload type", Map.of("component_id", componentId));
         }
         try {
-            return controller.getState(payload.unpack(controller.protoType()));
+            return controller.tick(payload.unpack(controller.protoType()));
         } catch (InvalidProtocolBufferException e) {
             LOGGER.warn("Failed to unpack action component {}: {}", componentId, e.getMessage());
             return ActionState.failed("unpack error: " + e.getMessage(), Map.of("component_id", componentId));
+        } catch (Exception e) {
+            LOGGER.warn("Error in tick of action component {}: {}", componentId, e.getMessage());
+            return ActionState.failed("tick error: " + e.getMessage(), Map.of("component_id", componentId));
+        }
+    }
+
+    /** 解包负载并转发 onInterrupt 回调。 */
+    private static <T extends Message> void dispatchInterrupt(
+        ActionComponentController<T> controller,
+        Any payload,
+        String componentId
+    ) {
+        if (!payload.is(controller.protoType())) {
+            return;
+        }
+        try {
+            controller.onInterrupt(payload.unpack(controller.protoType()));
+        } catch (Exception e) {
+            LOGGER.warn("Error in onInterrupt callback of action component {}: {}", componentId, e.getMessage());
         }
     }
 }

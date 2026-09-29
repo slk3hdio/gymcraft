@@ -177,8 +177,14 @@ public class ClickMenuButtonController extends AbstractActionComponentController
         return result;
     }
 
+    /**
+     * 瞬时动作不会被运行时 tick；实现仅返回已应用终态以满足接口契约。
+     *
+     * @param component 当前动作
+     * @return 完成状态
+     */
     @Override
-    public ActionState getState(ProtoClickMenuButton component) {
+    public ActionState tick(ProtoClickMenuButton component) {
         return ActionState.completed("click menu button applied");
     }
 

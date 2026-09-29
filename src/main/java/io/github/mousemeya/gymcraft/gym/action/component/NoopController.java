@@ -61,8 +61,14 @@ public class NoopController extends AbstractActionComponentController<ProtoNoop>
             ActionState.completed("noop"));
     }
 
+    /**
+     * 瞬时动作不会被运行时 tick；实现仅返回已应用终态以满足接口契约。
+     *
+     * @param component 当前动作
+     * @return 完成状态
+     */
     @Override
-    public ActionState getState(ProtoNoop component) {
+    public ActionState tick(ProtoNoop component) {
         return ActionState.completed("noop");
     }
 

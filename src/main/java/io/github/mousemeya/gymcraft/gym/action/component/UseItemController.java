@@ -364,9 +364,10 @@ public final class UseItemController extends AbstractActionComponentController<P
     }
 
     /**
-     * @param action 当前动作；观察消费结束并更新终态
+     * @param action 当前动作；推进消费进度并返回当前状态
+     * @return 保留的即时终态或消费进度
      */
-    @Override public void tick(ProtoUseItem action) {
+    @Override public ActionState tick(ProtoUseItem action) {
         if (this.consumption != null) {
             this.consumption.tick();
             if (this.consumption.closed()) {
@@ -374,6 +375,7 @@ public final class UseItemController extends AbstractActionComponentController<P
                     : ActionState.failed(consumptionInterruptionDescription(), this.details);
             }
         }
+        return this.state;
     }
 
     /**
@@ -400,12 +402,6 @@ public final class UseItemController extends AbstractActionComponentController<P
             this.tick(action);
         }
     }
-
-    /**
-     * @param action 当前动作
-     * @return 保留的即时终态或消费进度
-     */
-    @Override public ActionState getState(ProtoUseItem action) { return this.state; }
 
     /** 为每个环境创建独立控制器的注册工厂。 */
     public static final class Factory implements ActionComponentFactory<ProtoUseItem, UseItemController> {

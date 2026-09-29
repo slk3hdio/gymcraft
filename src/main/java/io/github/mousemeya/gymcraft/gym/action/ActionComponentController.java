@@ -21,7 +21,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  * <p>
  * 每个 controller 实例绑定一个 {@link Mob}（构造时传入），{@link #apply}、{@link #tick}、
- * {@link #onInterrupt}、{@link #getState} 等均操作该绑定实体，无需每次调用传入；
+ * {@link #onInterrupt} 等均操作该绑定实体，无需每次调用传入；
  * reset 重建实体后由运行时通过 {@link #setMob(Mob)} 更新绑定。
  * </p>
  *
@@ -64,11 +64,16 @@ public interface ActionComponentController<T extends Message> {
     /**
      * 每 tick 回调 —— 动作处于 RUNNING 状态期间由运行时逐 tick 调用一次。
      * <p>
-     * 用于推进持续性动作的进度（如按 tick 累计挖掘进度）。默认为空实现。
+     * 推进持续性动作的进度（如按 tick 累计挖掘进度、推进导航），并返回当前状态；
+     * 返回终态后运行时不再调用本方法。瞬时动作的 apply 直接返回终态、不会被 tick，
+     * 其 tick 实现仅返回已应用终态以满足接口契约。返回的状态对象允许携带清理
+     * 副作用（如释放跨 tick 会话），运行时不会将其当作纯查询重复调用。
      * </p>
+     *
+     * @param component 当前动作
+     * @return 推进后的动作状态
      */
-    default void tick(T component) {
-    }
+    ActionState tick(T component);
 
     /**
      * 中断回调 —— RUNNING 中的动作被新动作/重置/死亡打断时调用，用于清理跨 tick 状态。
@@ -76,7 +81,4 @@ public interface ActionComponentController<T extends Message> {
      */
     default void onInterrupt(T component) {
     }
-
-    /** @return 动作当前状态 */
-    ActionState getState(T component);
 }

@@ -126,13 +126,13 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
     }
 
     /**
-     * 瞬时动作始终保持已应用终态。
+     * 瞬时动作始终保持已应用终态，且不会被运行时 tick。
      *
      * @param component 注视动作负载
      * @return COMPLETED 状态
      */
     @Override
-    public ActionState getState(ProtoLookAt component) {
+    public ActionState tick(ProtoLookAt component) {
         return ActionState.completed("look at applied");
     }
 

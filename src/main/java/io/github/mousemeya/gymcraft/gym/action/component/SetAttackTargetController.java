@@ -120,8 +120,15 @@ public class SetAttackTargetController extends AbstractActionComponentController
         return null;
     }
 
+    /**
+     * 推进目标跟踪一个 tick 并返回当前状态：目标死亡/失效/被替换时结束跟踪，
+     * 实体失效时清理目标与导航。
+     *
+     * @param component 当前动作
+     * @return 当前动作状态
+     */
     @Override
-    public ActionState getState(ProtoSetAttackTarget component) {
+    public ActionState tick(ProtoSetAttackTarget component) {
         Mob mob = this.mob();
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {

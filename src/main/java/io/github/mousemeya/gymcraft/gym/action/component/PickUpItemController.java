@@ -135,8 +135,15 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         return ActionApplyResult.applied(policy, state);
     }
 
+    /**
+     * 推进拾取一个 tick 并返回当前状态：驱动导航靠近物品，到达后执行拾取；
+     * 实体失效、物品消失或导航受阻时收尾。
+     *
+     * @param component 当前动作
+     * @return 当前动作状态
+     */
     @Override
-    public ActionState getState(ProtoPickUpItem component) {
+    public ActionState tick(ProtoPickUpItem component) {
         if (this.terminal != null) {
             ActionState state = this.terminal;
             this.terminal = null;

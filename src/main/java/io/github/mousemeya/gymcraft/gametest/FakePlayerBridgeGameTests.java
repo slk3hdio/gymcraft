@@ -110,8 +110,7 @@ public final class FakePlayerBridgeGameTests {
         var controller = new BreakBlockController(mob);
         var state = controller.apply(action).initialState();
         for (int tick = 0; tick < 40 && state.status() == ActionStatus.RUNNING; tick++) {
-            controller.tick(action);
-            state = controller.getState(action);
+            state = controller.tick(action);
         }
         assertEquals(helper, ActionStatus.COMPLETED, state.status(), "break action did not complete");
         assertTrue(helper, helper.getBlockState(target).isAir(), "hand actor did not break target");
