@@ -247,11 +247,14 @@ public abstract class AbstractMcEnv implements McEnv {
         );
     }
 
+    /** 关闭环境与运行时，同时撤销仅属于本环境实例的可视化订阅。 */
     @Override
     public void close() {
         if (this.closed) {
             return;
         }
+        // 先撤销本环境的可视化订阅（内部转交服务端线程，捕获实例防止误删同 UUID 新环境的订阅）。
+        io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.close(this.mob(), this);
         this.agentRuntime.clear();
         NeoForge.EVENT_BUS.unregister(this.agentRuntime);
         this.closed = true;

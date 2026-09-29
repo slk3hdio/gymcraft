@@ -55,6 +55,16 @@ public class ObservationComposer {
         return factory.componentType().cast(creator);
     }
 
+    /**
+     * 组装一次完整观测。
+     *
+     * <p>该观测同时用于 gRPC 返回与只读可视化：末尾把这份不可变快照交给可视化
+     * 挂钩，绝不重复调用 creator（部分 creator 带有会话副作用）。</p>
+     *
+     * @param mob             采样实体
+     * @param lastActionState 上一动作的执行结果
+     * @return 同时用于 RL 返回与只读可视化的真实观测
+     */
     public ProtoMcObservation create(Mob mob, ActionState lastActionState) {
         var headerBuilder = ProtoObservationHeader.newBuilder()
             .setSchemaVersion(1)
@@ -76,7 +86,10 @@ public class ObservationComposer {
                 LOGGER.warn("Failed to create observation component {}: {}", entry.getKey(), e.getMessage());
             }
         }
-        return builder.build();
+        ProtoMcObservation observation = builder.build();
+        // 可视化只消费本次真实观测，不能重复调用有会话副作用的 creator。
+        io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.observation(mob, observation);
+        return observation;
     }
 
     public McSpace<Map<String, Object>> space() {

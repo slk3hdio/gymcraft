@@ -35,6 +35,7 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
+/** 模组公共入口；注册内容、运行时服务和协议，不加载任何客户端渲染类。 */
 @Mod(GymCraft.MODID)
 public class GymCraft {
     public static final String MODID = "gymcraft";
@@ -69,9 +70,13 @@ public class GymCraft {
                     })
                     .build());
 
+    /** @param modEventBus 模组事件总线 @param modContainer 模组容器 */
     public GymCraft(IEventBus modEventBus, ModContainer modContainer) {
         modEventBus.addListener(RegistryKeys::register);
         modEventBus.addListener(GymCraftNetwork::register);
+        // 可视化服务：每 tick 回收失效订阅，停服时清空静态状态防止跨世界泄漏。
+        NeoForge.EVENT_BUS.addListener(io.github.mousemeya.gymcraft.gym.visualization.VisualizationService::onTick);
+        NeoForge.EVENT_BUS.addListener(io.github.mousemeya.gymcraft.gym.visualization.VisualizationService::onStopping);
         NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStarted);
         NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStopping);
         NeoForge.EVENT_BUS.addListener(GymCraftCommands::register);

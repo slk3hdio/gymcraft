@@ -38,6 +38,16 @@ public final class GymCraftGameTests {
     /** 同步测试一个 tick 内完成，100 tick 超时足够冗余。 */
     private static final int MAX_TICKS = 100;
 
+    // 可视化：协议、只读适配器、订阅隔离与真实运行时生命周期。
+    static {
+        TEST_FUNCTIONS.register("visualization_codec", () -> VisualizationGameTests::boundedCodec);
+        TEST_FUNCTIONS.register("visualization_cache", () -> VisualizationGameTests::cacheIsolation);
+        TEST_FUNCTIONS.register("visualization_snapshot", () -> VisualizationGameTests::frozenObservation);
+        TEST_FUNCTIONS.register("visualization_actions", () -> VisualizationGameTests::actionAdapters);
+        TEST_FUNCTIONS.register("visualization_subscriptions", () -> VisualizationGameTests::subscriptions);
+        TEST_FUNCTIONS.register("visualization_runtime", () -> VisualizationGameTests::runtime);
+    }
+
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BATCH_MOVES_ORDER =
         TEST_FUNCTIONS.register("menu_batch_moves_order", () -> MenuSessionGameTests::batchMovesInOrder);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BATCH_MOVES_FAILURE =
@@ -359,6 +369,8 @@ public final class GymCraftGameTests {
                             || holder.getId().getPath().startsWith("iron_mining_")
                             || holder.getId().getPath().startsWith("iron_golem_warden_")
                             || holder.getId().getPath().startsWith("navigation_")
+                            // 可视化测试同样需要多格空间布置 Agent 与目标。
+                            || holder.getId().getPath().startsWith("visualization_")
                             ? USE_ITEM_STRUCTURE : EMPTY_STRUCTURE,
                         holder.getId().getPath().startsWith("iron_mining_") ? 12000
                             : holder.getId().getPath().startsWith("iron_golem_warden_") ? 12000

@@ -32,6 +32,9 @@ public class GymCraftClient {
      * @param container 当前模组容器
      */
     public GymCraftClient(ModContainer container) {
+        // 注册可视化客户端配置（总开关/穿墙/标签/隐藏图层），供模组配置界面编辑。
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT,
+            io.github.mousemeya.gymcraft.client.visualization.VisualizationConfig.SPEC);
         // 注册模组配置界面，可从模组列表中的配置按钮进入。
         // Do not forget to add translations for your config options to the en_us.json file.
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
@@ -39,6 +42,8 @@ public class GymCraftClient {
         // 玩家模拟实体渲染器（mod 总线事件，客户端装配）
         var modEventBus = container.getEventBus();
         if (modEventBus != null) {
+            // 装配可视化客户端：按键、帧载荷、HUD 与世界提取渲染（全部隔离在本包，公共端零依赖）。
+            io.github.mousemeya.gymcraft.client.visualization.VisualizationClient.register(modEventBus);
             modEventBus.addListener((EntityRenderersEvent.RegisterRenderers event) ->
                 event.registerEntityRenderer(ModEntities.PLAYER_SIM.get(), PlayerSimRenderer::new));
         }

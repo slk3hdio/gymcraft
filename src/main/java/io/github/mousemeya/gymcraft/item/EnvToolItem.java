@@ -95,7 +95,7 @@ public class EnvToolItem extends Item {
             String messageKey = removed
                 ? "message.gymcraft.environment_removed"
                 : "message.gymcraft.environment_missing";
-            player.sendSystemMessage(Component.translatable(messageKey, mob.getUUID()));
+            player.sendSystemMessage(Component.translatable(messageKey, mob.getUUID().toString()));
             return InteractionResult.SUCCESS;
         }
 
@@ -109,7 +109,7 @@ public class EnvToolItem extends Item {
         player.sendSystemMessage(Component.translatable(
             "message.gymcraft.environment_created",
             envType,
-            mob.getUUID()
+            mob.getUUID().toString()
         ));
         return InteractionResult.SUCCESS;
     }

@@ -58,7 +58,7 @@ public final class GymCraftCommands {
      */
     private static int create(CommandSourceStack source, Entity target, String envType) throws CommandSyntaxException {
         if (!(target instanceof Mob mob)) {
-            source.sendFailure(Component.translatable("message.gymcraft.target_not_mob", target.getUUID()));
+            source.sendFailure(Component.translatable("message.gymcraft.target_not_mob", target.getUUID().toString()));
             return 0;
         }
         try {
@@ -70,7 +70,7 @@ public final class GymCraftCommands {
         source.sendSuccess(() -> Component.translatable(
             "message.gymcraft.environment_created",
             envType,
-            mob.getUUID()
+            mob.getUUID().toString()
         ), true);
         return 1;
     }
@@ -87,11 +87,11 @@ public final class GymCraftCommands {
         if (removed) {
             source.sendSuccess(() -> Component.translatable(
                 "message.gymcraft.environment_removed",
-                target.getUUID()
+                target.getUUID().toString()
             ), true);
             return 1;
         }
-        source.sendFailure(Component.translatable("message.gymcraft.environment_missing", target.getUUID()));
+        source.sendFailure(Component.translatable("message.gymcraft.environment_missing", target.getUUID().toString()));
         return 0;
     }
 }

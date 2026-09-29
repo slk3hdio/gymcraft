@@ -201,6 +201,8 @@ public class AgentRuntime {
         this.attachmentScope = MobAttachmentAccessScope.activate(restoredMob, this.attachmentSpecs);
         this.actionExecutor.setMob(restoredMob);
         this.resetHandler.reset(restoredMob, seed, options);
+        // 通知可视化代次提升：客户端收到后丢弃旧观测与反馈图形，等待 reset 快照。
+        io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.reset(restoredMob);
         ActionState state = ActionState.completed("reset");
         return new RuntimeStepResult(this.observationCreator.create(restoredMob, state), state);
     }

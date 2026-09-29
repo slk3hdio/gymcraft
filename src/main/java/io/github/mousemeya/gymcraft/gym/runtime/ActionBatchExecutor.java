@@ -8,6 +8,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
+import io.github.mousemeya.gymcraft.gym.visualization.VisualizationService;
 import net.minecraft.world.entity.Mob;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -168,8 +169,14 @@ final class ActionBatchExecutor {
         if (batch != null && batch.activeAction == null && batch.hasNextAction()) {
             this.betweenActionsPolicy.releaseFrom(this.mob);
             batch.activeAction = batch.actions.get(batch.nextIndex);
+            // apply 前缓存执行前几何；瞬时动作（破坏/拾取等）的终态反馈需要它。
+            VisualizationService.beforeAction(this.mob, batch.activeAction);
             ActionApplyResult result = this.actionController.apply(batch.activeAction);
             batch.activeState = result.initialState();
+            // apply 完成立即强制推送初始状态（绕过节流）；终态由 finishActiveAction 统一推送。
+            if (!batch.activeState.isTerminal()) {
+                VisualizationService.action(this.mob, batch.activeAction, batch.activeState, true);
+            }
             this.activePolicy = result.policy();
             LOGGER.info("GymCraft runtime action applied entity={} index={} component={} status={}",
                 this.mob.getUUID(), batch.nextIndex, batch.activeAction.getComponentId(), batch.activeState.status());
@@ -199,6 +206,9 @@ final class ActionBatchExecutor {
             ActionState state = this.advanceActiveAction(batch);
             if (state.isTerminal()) {
                 this.finishActiveAction(batch, state);
+            } else {
+                // 运行中动作按 2 tick 节流推送进度图形。
+                VisualizationService.action(this.mob, batch.activeAction, state, false);
             }
         }
 
@@ -224,6 +234,8 @@ final class ActionBatchExecutor {
         if (batch.activeAction != null && batch.activeState != null
             && batch.activeState.status() == ActionStatus.RUNNING) {
             this.actionController.onInterrupt(batch.activeAction);
+            // 中断以强制推送终态，客户端立即显示灰色中断图形。
+            VisualizationService.action(this.mob, batch.activeAction, ActionState.interrupted(description), true);
             batch.executed.add(new ExecutedAction(batch.nextIndex,
                 batch.activeAction.getComponentId(), ActionState.interrupted(description)));
         }
@@ -293,6 +305,8 @@ final class ActionBatchExecutor {
     /** @param batch 当前批次 @param state 当前动作终态 */
     private void finishActiveAction(BatchExecution batch, ActionState state) {
         ProtoMcAction action = batch.activeAction;
+        // 终态强制推送；瞬时动作在服务端复用执行前几何，保证反馈不丢。
+        VisualizationService.action(this.mob, action, state, true);
         int actionIndex = batch.nextIndex;
         batch.executed.add(new ExecutedAction(actionIndex, action.getComponentId(), state));
         this.activePolicy.releaseFrom(this.mob);
