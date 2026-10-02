@@ -13,6 +13,7 @@ PROTO_FILES = [
     "gymcraft/gym/action/components/step_move.proto",
     "gymcraft/gym/action/components/look_at.proto",
     "gymcraft/gym/action/components/move_to.proto",
+    "gymcraft/gym/action/components/swim_to.proto",
     "gymcraft/gym/action/components/set_attack_target.proto",
     "gymcraft/gym/action/components/attack_once.proto",
     "gymcraft/gym/action/components/noop.proto",

@@ -5,7 +5,9 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ServerCommonPacketListenerMixin",
-    "ContainerOpenersCounterMixin"
+    "ContainerOpenersCounterMixin",
+    "MobMoveControlAccessor",
+    "MobLookControlAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

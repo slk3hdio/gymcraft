@@ -343,6 +343,7 @@ class ActionDslParserTests(unittest.TestCase):
             "/step_move 1 0 0 true",
             "/look_at entity 2",
             "/move_to 1 64 2 1",
+            "/swim_to 1 64 2 1",
             "/set_attack_target entity 2",
             "/break_block 1 64 2",
             "/set_block 1 64 2 minecraft:stone",

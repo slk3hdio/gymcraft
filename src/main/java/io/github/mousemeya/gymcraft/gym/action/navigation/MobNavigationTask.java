@@ -10,9 +10,10 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.goal.GoalSelector;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
 /**
  * 单个 Mob 导航动作的内部状态机。
@@ -21,8 +22,12 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
  * 执行期间跟踪自有路径、目标移动、位移进度和有限重规划次数。实例只允许由一个动作
  * controller 独占，不跨动作或 Mob 共享。
  * </p>
+ * <p>
+ * 默认使用 {@link Mob#getNavigation()}；子类可覆盖 {@link #navigation(Mob)} 提供
+ * 专属导航实例（如两栖导航），并通过 {@link #tickOwnedNavigation()} 自驱其 tick。
+ * </p>
  */
-public final class MobNavigationTask {
+public class MobNavigationTask {
     /** 初始路径之外允许执行的最大重规划次数。 */
     public static final int MAX_REPATH_ATTEMPTS = 3;
     /** 两次路径规划之间的最小 tick 间隔。 */
@@ -40,7 +45,7 @@ public final class MobNavigationTask {
     private static final double MIN_PATH_SEARCH_DISTANCE = 16.0;
 
     @Nullable
-    private Mob mob;
+    protected Mob mob;
     @Nullable
     private Path ownedPath;
     private Vec3 plannedTarget = Vec3.ZERO;
@@ -124,17 +129,18 @@ public final class MobNavigationTask {
         }
         this.ticks++;
         Mob currentMob = this.mob;
+        this.tickOwnedNavigation();
 
         if (this.trackProgress(currentMob.position())) {
             this.navigationReason = Reason.STUCK;
-            currentMob.getNavigation().stop();
+            this.navigation(currentMob).stop();
             this.ownedPath = null;
             this.directApproach = false;
         }
 
         if (movingTarget && this.targetNeedsRefresh(target)) {
             this.navigationReason = Reason.TARGET_MOVED;
-            currentMob.getNavigation().stop();
+            this.navigation(currentMob).stop();
             this.ownedPath = null;
             this.directApproach = false;
         }
@@ -144,7 +150,7 @@ public final class MobNavigationTask {
             return Update.running(this.navigationReason);
         }
 
-        Path currentPath = currentMob.getNavigation().getPath();
+        Path currentPath = this.navigation(currentMob).getPath();
         if (currentPath == this.ownedPath && currentPath != null && !currentPath.isDone()) {
             return Update.running(this.navigationReason);
         }
@@ -163,7 +169,7 @@ public final class MobNavigationTask {
         }
 
         if (this.navigationReason != Reason.STUCK && this.canDirectApproach(target)) {
-            currentMob.getNavigation().stop();
+            this.navigation(currentMob).stop();
             this.ownedPath = null;
             this.directApproach = true;
             currentMob.getMoveControl().setWantedPosition(target.x, target.y, target.z, this.speed);
@@ -177,9 +183,9 @@ public final class MobNavigationTask {
      */
     public void cancel() {
         if (this.mob != null && this.active) {
-            Path current = this.mob.getNavigation().getPath();
+            Path current = this.navigation(this.mob).getPath();
             if (current == this.ownedPath || this.directApproach) {
-                this.mob.getNavigation().stop();
+                this.navigation(this.mob).stop();
                 this.mob.getMoveControl().setWantedPosition(
                     this.mob.getX(), this.mob.getY(), this.mob.getZ(), 0.0
                 );
@@ -199,9 +205,9 @@ public final class MobNavigationTask {
         if (!this.active || this.mob == null) {
             return;
         }
-        Path current = this.mob.getNavigation().getPath();
+        Path current = this.navigation(this.mob).getPath();
         if (current == this.ownedPath || this.directApproach) {
-            this.mob.getNavigation().stop();
+            this.navigation(this.mob).stop();
             this.mob.getMoveControl().setWantedPosition(
                 this.mob.getX(), this.mob.getY(), this.mob.getZ(), 0.0
             );
@@ -209,6 +215,25 @@ public final class MobNavigationTask {
         this.ownedPath = null;
         this.directApproach = false;
         this.navigationReason = reason;
+    }
+
+    /**
+     * 返回仍由本任务持有且正在跟随的当前路径（只读，供可视化采样）。
+     * <p>
+     * 末段直行、驻留等待与任务取消期间没有跟随中的路径，返回 null；返回对象为
+     * 导航内部实例，调用方不得修改。任务未活动时不会触碰 {@link #navigation(Mob)}，
+     * 避免触发子类导航实例的懒创建。
+     * </p>
+     *
+     * @return 当前跟随中的路径；无活动路径或路径已被替换时为 null
+     */
+    @Nullable
+    public Path currentPath() {
+        Mob currentMob = this.mob;
+        if (!this.active || currentMob == null || this.ownedPath == null) {
+            return null;
+        }
+        return this.navigation(currentMob).getPath() == this.ownedPath ? this.ownedPath : null;
     }
 
     /**
@@ -230,7 +255,7 @@ public final class MobNavigationTask {
         details.put("navigation_reason", this.navigationReason.code());
         details.put("repath_attempts", this.repathAttempts);
         details.put("path_owned", this.mob != null
-            && this.ownedPath != null && this.mob.getNavigation().getPath() == this.ownedPath);
+            && this.ownedPath != null && this.navigation(this.mob).getPath() == this.ownedPath);
         details.put("path_can_reach", this.lastPathCanReach);
         details.put("horizontal_distance", horizontalDistance);
         details.put(distanceKey, distanceLimit);
@@ -276,7 +301,7 @@ public final class MobNavigationTask {
             return;
         }
         int reachRange = exact ? 0 : 1;
-        Path path = currentMob.getNavigation().createPath(BlockPos.containing(target), reachRange);
+        Path path = this.navigation(currentMob).createPath(BlockPos.containing(target), reachRange);
         this.lastPlanTick = this.ticks;
         this.lastTargetRefreshTick = this.ticks;
         this.plannedTarget = target;
@@ -286,11 +311,13 @@ public final class MobNavigationTask {
         this.lastPathCanReach = path != null && path.canReach();
         this.lastPathTarget = path == null || path.getTarget() == null
             ? target : Vec3.atBottomCenterOf(path.getTarget());
-        boolean started = path != null && currentMob.getNavigation().moveTo(path, this.speed);
-        this.ownedPath = started ? currentMob.getNavigation().getPath() : null;
+        boolean started = path != null && this.navigation(currentMob).moveTo(path, this.speed);
+        this.ownedPath = started ? this.navigation(currentMob).getPath() : null;
         if (started) {
             this.navigationReason = this.lastPathCanReach ? Reason.NAVIGATING : Reason.PARTIAL_PATH;
         } else {
+            // 规划失败时同步清掉导航里的旧路径，避免后续推进把残留路径误判为 PATH_REPLACED
+            this.navigation(currentMob).stop();
             this.navigationReason = this.failedPlanReason(target);
         }
     }
@@ -356,7 +383,7 @@ public final class MobNavigationTask {
      * @return 连续无有效位移达到阈值时为 true
      */
     private boolean trackProgress(Vec3 position) {
-        if (horizontalDistance(position, this.lastProgressPosition) >= PROGRESS_DISTANCE) {
+        if (this.progressDistance(position, this.lastProgressPosition) >= PROGRESS_DISTANCE) {
             this.lastProgressPosition = position;
             this.noProgressTicks = 0;
             return false;
@@ -366,19 +393,59 @@ public final class MobNavigationTask {
     }
 
     /**
+     * 计算看门狗使用的有效位移；默认仅水平位移。
+     * <p>
+     * 子类可覆盖以计入垂直位移（如游泳上浮），默认保持 move_to 的判定不变。
+     * </p>
+     *
+     * @param from 上次位置
+     * @param to 当前位置
+     * @return 有效位移
+     */
+    protected double progressDistance(Vec3 from, Vec3 to) {
+        return horizontalDistance(from, to);
+    }
+
+    /**
      * 判断目标附近是否适合绕过已耗尽路径做精确末段接近。
+     * <p>
+     * 子类可覆盖以放宽判定（如水中直行）；默认保持原版导航的末段语义不变。
+     * </p>
      *
      * @param target 请求目标
      * @return 可直接接近时为 true
      */
-    private boolean canDirectApproach(Vec3 target) {
+    protected boolean canDirectApproach(Vec3 target) {
         if (this.mob == null || horizontalDistance(this.mob.position(), target) > DIRECT_APPROACH_DISTANCE) {
             return false;
         }
         if (Math.abs(this.mob.getY() - target.y) >= 1.5) {
             return false;
         }
-        return this.mob.getNavigation().isStableDestination(BlockPos.containing(target));
+        return this.navigation(this.mob).isStableDestination(BlockPos.containing(target));
+    }
+
+    /**
+     * 提供本任务使用的导航实例；默认复用 Mob 的原版导航。
+     * <p>
+     * 子类可返回自有实例（如两栖导航）以改变寻路能力；返回实例必须已绑定传入的 Mob。
+     * </p>
+     *
+     * @param mob 当前受控 Mob
+     * @return 导航实例
+     */
+    protected PathNavigation navigation(Mob mob) {
+        return mob.getNavigation();
+    }
+
+    /**
+     * 每 tick 自驱 {@link #navigation(Mob)} 返回的实例。
+     * <p>
+     * 默认空实现：原版导航已由 {@code Mob.aiStep} 驱动。子类持有独立导航实例时
+     * 必须覆盖本方法调用其 {@code tick()}。
+     * </p>
+     */
+    protected void tickOwnedNavigation() {
     }
 
     /**

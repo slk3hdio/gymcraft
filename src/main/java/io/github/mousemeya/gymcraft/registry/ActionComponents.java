@@ -19,6 +19,7 @@ import io.github.mousemeya.gymcraft.gym.action.component.SetAttackTargetControll
 import io.github.mousemeya.gymcraft.gym.action.component.SetBlockController;
 import io.github.mousemeya.gymcraft.gym.action.component.SendChatController;
 import io.github.mousemeya.gymcraft.gym.action.component.StepMoveController;
+import io.github.mousemeya.gymcraft.gym.action.component.SwimToController;
 import io.github.mousemeya.gymcraft.gym.action.component.UseItemController;
 import io.github.mousemeya.gymcraft.gym.action.component.UpdateInterestingBlocksController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItem;
@@ -39,6 +40,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetAttackTarget;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSendChat;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoStepMove;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSwimTo;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -62,6 +64,10 @@ public final class ActionComponents {
     public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoMoveTo, MoveToController>> MOVE_TO = REGISTRY.register(
         "move_to",
         MoveToController.Factory::new
+    );
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoSwimTo, SwimToController>> SWIM_TO = REGISTRY.register(
+        "swim_to",
+        SwimToController.Factory::new
     );
     public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoStepMove, StepMoveController>> STEP_MOVE = REGISTRY.register(
         "step_move",

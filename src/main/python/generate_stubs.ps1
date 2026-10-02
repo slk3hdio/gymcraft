@@ -15,6 +15,7 @@ $Args = @(
     "$ProjectRoot\src\main\proto\gymcraft\gym\action\action.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\action\components\step_move.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\action\components\move_to.proto",
+    "$ProjectRoot\src\main\proto\gymcraft\gym\action\components\swim_to.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\action\components\set_attack_target.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\action\components\attack_once.proto",
     "$ProjectRoot\src\main\proto\gymcraft\gym\action\components\noop.proto",

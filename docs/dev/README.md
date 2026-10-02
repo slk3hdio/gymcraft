@@ -83,6 +83,7 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:look_at` | 将当前视线对准实体、掉落物或方块 |
 | `gymcraft:use_item` | 按 Agent 槽号向方块、实体或自身使用物品；食物药水等待消费完成，详见[使用物品动作](../use-item-action.md) |
 | `gymcraft:move_to` | 使用寻路移动到目标坐标，按 Mob 中心的水平距离精确判定 `stop_distance` |
+| `gymcraft:swim_to` | 参数与判定同 `move_to`，但使用两栖寻路（原版海龟同款）：水中、深水起点或目标在彼岸时仍可规划路径，陆地等价 `move_to`；动作期间临时换用三维游泳移动控制（海豚/青蛙同款，结束自动恢复），不切换游泳姿态。深水垂直岸沿（无坡度直壁）爬升能力有限，优先经岸坡/台阶出水 |
 | `gymcraft:set_attack_target` | 设置实体攻击目标 |
 | `gymcraft:attack_once` | 执行一次近战攻击 |
 | `gymcraft:noop` | 空操作 |

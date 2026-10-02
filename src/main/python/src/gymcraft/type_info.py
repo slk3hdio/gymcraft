@@ -26,6 +26,7 @@ from gymcraft.gym.action.components.set_attack_target_pb2 import ProtoSetAttackT
 from gymcraft.gym.action.components.set_block_pb2 import ProtoSetBlock
 from gymcraft.gym.action.components.send_chat_pb2 import ProtoSendChat
 from gymcraft.gym.action.components.step_move_pb2 import ProtoStepMove
+from gymcraft.gym.action.components.swim_to_pb2 import ProtoSwimTo
 from gymcraft.gym.action.components.update_interesting_blocks_pb2 import (
     ProtoUpdateInterestingBlocks,
 )
@@ -47,6 +48,7 @@ from gymcraft.gym.observation.observation_pb2 import ProtoObservationHeader
 ACTION_STEP_MOVE: Final = "gymcraft:step_move"
 ACTION_LOOK_AT: Final = "gymcraft:look_at"
 ACTION_MOVE_TO: Final = "gymcraft:move_to"
+ACTION_SWIM_TO: Final = "gymcraft:swim_to"
 ACTION_SET_ATTACK_TARGET: Final = "gymcraft:set_attack_target"
 ACTION_ATTACK_ONCE: Final = "gymcraft:attack_once"
 ACTION_NOOP: Final = "gymcraft:noop"

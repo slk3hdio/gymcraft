@@ -29,6 +29,7 @@ from gymcraft.gym.action.components import (
     set_block_pb2,
     send_chat_pb2,
     step_move_pb2,
+    swim_to_pb2,
     update_interesting_blocks_pb2,
 )
 from gymcraft.type_info import (
@@ -49,6 +50,7 @@ from gymcraft.type_info import (
     ACTION_SET_BLOCK,
     ACTION_SEND_CHAT,
     ACTION_STEP_MOVE,
+    ACTION_SWIM_TO,
     ACTION_UPDATE_INTERESTING_BLOCKS,
     ActionBatch,
     TIMEOUT_SECONDS,
@@ -97,6 +99,7 @@ class ActionDslParser:
             "step_move": self._parse_step_move,
             "look_at": self._parse_look_at,
             "move_to": self._parse_move_to,
+            "swim_to": self._parse_swim_to,
             "set_attack_target": self._parse_set_attack_target,
             "break_block": self._parse_break_block,
             "set_block": self._parse_set_block,
@@ -212,6 +215,7 @@ class ActionDslParser:
             "step_move": "/step_move <forward> <strafe_right> [yaw_delta] [jump]",
             "look_at": "/look_at entity|item <entity_id>|block <x> <y> <z>",
             "move_to": "/move_to <x> <y> <z> [stop_distance]",
+            "swim_to": "/swim_to <x> <y> <z> [stop_distance] (amphibious pathfinding: use in water, deep water, or when the target is across water; on land it behaves like move_to)",
             "set_attack_target": "/set_attack_target clear|entity <entity_id>|uuid <uuid> (continuely chase and attack until the target or yourself is dead)",
             "attack_once": "/attack_once <entity_id>",
             "break_block": "/break_block <x> <y> <z> [slot_id] (break the block at <x> <y> <z> using the tool from inventory slot_id, default slot 0 = main hand; the tool swaps into the main hand and stays there. Note that items will only drop if the correct tool is used.)",
@@ -361,6 +365,13 @@ class ActionDslParser:
         x, y, z = self._parse_position(tokens[1:4], line_number)
         stop = self._bounded_float(tokens[4], "stop_distance", 0, 128, line_number) if len(tokens) == 5 else 1.0
         return ParsedAction(ACTION_MOVE_TO, "move_to", move_to_pb2.ProtoMoveTo(x=x, y=y, z=z, stop_distance=stop))
+
+    def _parse_swim_to(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
+        """解析带可选停止距离的两栖寻路命令；水中与渡水时使用。"""
+        self._require_arity(tokens, 4, 5, line_number)
+        x, y, z = self._parse_position(tokens[1:4], line_number)
+        stop = self._bounded_float(tokens[4], "stop_distance", 0, 128, line_number) if len(tokens) == 5 else 1.0
+        return ParsedAction(ACTION_SWIM_TO, "swim_to", swim_to_pb2.ProtoSwimTo(x=x, y=y, z=z, stop_distance=stop))
 
     def _parse_set_attack_target(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
         """解析清除、entity id 或 UUID 三种攻击目标写法。"""

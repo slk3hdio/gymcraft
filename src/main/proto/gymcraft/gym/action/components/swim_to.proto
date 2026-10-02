@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package gymcraft.gym.action;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.action.proto";
+option java_outer_classname = "SwimToProto";
+
+// 使用两栖寻路移动到目标坐标：可在水中、水面与陆地之间规划路径，
+// 陆地表现与 move_to 一致，是 move_to 的水域增强变体。
+message ProtoSwimTo {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+  double stop_distance = 4;
+}

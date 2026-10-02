@@ -211,6 +211,12 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NAVIGATION_REPATH_BUDGET =
         TEST_FUNCTIONS.register("navigation_repath_budget", () -> NavigationReliabilityGameTests::repathBudgetIsBounded);
 
+    // ===== 水域两栖导航 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SWIM_WATER_CROSSING =
+        TEST_FUNCTIONS.register("swim_water_crossing", () -> NavigationWaterGameTests::crossingCompletes);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SWIM_WATER_ESCAPE =
+        TEST_FUNCTIONS.register("swim_water_escape", () -> NavigationWaterGameTests::escapeFromDeepWater);
+
     // ===== 铁矿工具链环境 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_MINING_RESET_RESTORE =
         TEST_FUNCTIONS.register("iron_mining_reset_restore", () -> IronMiningEnvGameTests::resetAndCloseRestoreArena);
@@ -383,6 +389,8 @@ public final class GymCraftGameTests {
                             || holder.getId().getPath().startsWith("iron_mining_")
                             || holder.getId().getPath().startsWith("iron_golem_warden_")
                             || holder.getId().getPath().startsWith("navigation_")
+                            // 水域导航需要多格空间布置水坑。
+                            || holder.getId().getPath().startsWith("swim_")
                             // 可视化测试同样需要多格空间布置 Agent 与目标。
                             || holder.getId().getPath().startsWith("visualization_")
                             ? USE_ITEM_STRUCTURE : EMPTY_STRUCTURE,
@@ -393,7 +401,9 @@ public final class GymCraftGameTests {
                             : holder.getId().getPath().startsWith("damage_log_") ? 1200
                             : holder.getId().getPath().startsWith("world_state_") ? 12000
                             : holder.getId().getPath().startsWith("player_sim_env") ? 12000
-                            : holder.getId().getPath().startsWith("navigation_") ? 160 : MAX_TICKS,
+                            : holder.getId().getPath().startsWith("navigation_") ? 160
+                            : holder.getId().getPath().startsWith("swim_") ? 600
+                            : MAX_TICKS,
                         0,
                         true)
                 )
