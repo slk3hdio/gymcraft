@@ -30,6 +30,7 @@ from gymcraft.gym.action.components.update_interesting_blocks_pb2 import (
     ProtoUpdateInterestingBlocks,
 )
 from gymcraft.gym.observation.components.chat_pb2 import ProtoRecentChat
+from gymcraft.gym.observation.components.health_log_pb2 import ProtoHealthLog
 from gymcraft.gym.observation.components.interesting_blocks_pb2 import (
     ProtoInterestingBlocks,
 )
@@ -71,6 +72,7 @@ OBS_MENU: Final = "gymcraft:menu"
 OBS_NEARBY_ITEMS: Final = "gymcraft:nearby_items"
 OBS_INTERESTING_BLOCKS: Final = "gymcraft:interesting_blocks"
 OBS_CHAT: Final = "gymcraft:chat"
+OBS_HEALTH_LOG: Final = "gymcraft:health_log"
 
 # ActionBatch dict 中的 step 共享超时键（秒，<= 0 表示不限制）。
 TIMEOUT_SECONDS: Final = "timeout_seconds"
@@ -105,5 +107,6 @@ Observation = TypedDict(
         "gymcraft:nearby_items": NotRequired[ProtoNearbyItems],
         "gymcraft:interesting_blocks": NotRequired[ProtoInterestingBlocks],
         "gymcraft:chat": NotRequired[ProtoRecentChat],
+        "gymcraft:health_log": NotRequired[ProtoHealthLog],
     },
 )

@@ -12,6 +12,7 @@ import io.github.mousemeya.gymcraft.command.GymCraftCommands;
 import io.github.mousemeya.gymcraft.gametest.GymCraftGameTests;
 import io.github.mousemeya.gymcraft.gym.chat.ChatCapture;
 import io.github.mousemeya.gymcraft.gym.entity.PlayerSimTargetingHooks;
+import io.github.mousemeya.gymcraft.gym.health.DamageLogHooks;
 import io.github.mousemeya.gymcraft.gym.rpc.GymCraftRpcServer;
 import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentHooks;
@@ -90,6 +91,8 @@ public class GymCraft {
         NeoForge.EVENT_BUS.addListener(ChatCapture::onServerChat);
         NeoForge.EVENT_BUS.addListener(ChatCapture::onServerTickPost);
         NeoForge.EVENT_BUS.addListener(ChatCapture::onServerStopping);
+        // 伤害日志：受伤事件最终值写入挂有附件的受控 Agent，供 gymcraft:health_log 观测
+        NeoForge.EVENT_BUS.addListener(DamageLogHooks::onLivingDamagePost);
         NeoForge.EVENT_BUS.addListener(PlayerSimTargetingHooks::onEntityJoinLevel);
 
         ITEMS.register(modEventBus);

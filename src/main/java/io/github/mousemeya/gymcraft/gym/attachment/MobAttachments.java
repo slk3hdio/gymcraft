@@ -6,6 +6,7 @@ import net.minecraft.world.entity.npc.InventoryCarrier;
 import net.neoforged.neoforge.transfer.item.ItemStacksResourceHandler;
 
 import io.github.mousemeya.gymcraft.GymCraft;
+import io.github.mousemeya.gymcraft.gym.health.DamageLog;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 /**
@@ -23,6 +24,16 @@ public final class MobAttachments {
         Identifier.fromNamespaceAndPath(GymCraft.MODID, "agent_backpack"),
         ModAttachments.AGENT_BACKPACK,
         mob -> !(mob instanceof InventoryCarrier) && !(mob instanceof AbstractHorse)
+    );
+
+    /**
+     * 伤害待读日志：任何 Mob 均可挂载，供 {@code gymcraft:health_log} 观测消费。
+     * 纯运行时状态，reset 替换实体后自然清空。
+     */
+    public static final MobAttachmentSpec<DamageLog> DAMAGE_LOG = new MobAttachmentSpec<>(
+        Identifier.fromNamespaceAndPath(GymCraft.MODID, "damage_log"),
+        ModAttachments.DAMAGE_LOG,
+        mob -> true
     );
 
     /** 禁止实例化描述器目录。 */

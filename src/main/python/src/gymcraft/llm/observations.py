@@ -9,6 +9,7 @@ from typing import Any
 
 from gymcraft.gym.observation.components import (
     chat_pb2,
+    health_log_pb2,
     interesting_blocks_pb2,
     menu_pb2,
     nearby_blocks_pb2,
@@ -20,6 +21,7 @@ from gymcraft.gym.observation.components import (
 from gymcraft.gym.observation.common import slot_pb2
 from gymcraft.type_info import (
     OBS_CHAT,
+    OBS_HEALTH_LOG,
     OBS_INTERESTING_BLOCKS,
     OBS_MENU,
     OBS_NEARBY_BLOCKS,
@@ -42,6 +44,7 @@ class ObservationFormatConfig:
     max_interesting_blocks: int = 10
     max_items: int = 10
     max_chat_messages: int = 16
+    max_health_records: int = 16
     max_structures: int = 10
 
     def __post_init__(self) -> None:
@@ -54,9 +57,10 @@ class ObservationFormatConfig:
             or self.max_interesting_blocks <= 0
             or self.max_items <= 0
             or self.max_chat_messages <= 0
+            or self.max_health_records <= 0
             or self.max_structures <= 0
         ):
-            raise ValueError("entity, block, interesting block, item, chat and structure limits must be positive")
+            raise ValueError("entity, block, interesting block, item, chat, damage and structure limits must be positive")
 
 
 # 可被任意环境 wrapper 调用的纯观测格式化器。
@@ -68,7 +72,7 @@ class ObservationTextFormatter:
         self.config = config or ObservationFormatConfig()
 
     def format(self, observation: Observation) -> str:
-        """按 header、self、world、entities、blocks、interesting blocks、items、menu 顺序组装观测。"""
+        """按 header、self、world、entities、blocks、interesting blocks、items、menu、damage 顺序组装观测。"""
         lines = [self._format_header(observation)]
         self_state = observation.get(OBS_SELF)
         lines.append(self._format_self(self_state))
@@ -96,6 +100,7 @@ class ObservationTextFormatter:
         )
         lines.extend(self._format_menu(observation.get(OBS_MENU)))
         lines.extend(self._format_chat(observation.get(OBS_CHAT)))
+        lines.extend(self._format_health_log(observation.get(OBS_HEALTH_LOG)))
         return "\n".join(lines)
 
     def _format_header(self, observation: Observation) -> str:
@@ -269,6 +274,23 @@ class ObservationTextFormatter:
             sender = f" sender=<{message.sender}>" if message.sender else ""
             lines.append(f"- tick={message.game_tick}{sender} content={self._quote(message.content)}")
         lines.append("You can chat with other players here.")
+        return lines
+
+    def _format_health_log(self, log: health_log_pb2.ProtoHealthLog | None) -> list[str]:
+        """格式化自上次观测以来受到的伤害（时间升序，读后即清空的增量记录）。"""
+        if log is None:
+            return ["recent damage: unavailable"]
+        records = list(log.damage_records)
+        shown = records[-self.config.max_health_records :]
+        lines = [self._count_header("recent damage(since last observation)", len(records), len(shown))]
+        for record in shown:
+            # 来源：肇事者实体优先，其次直接来源（箭矢等），均无则只保留伤害类型
+            source = f" from=<{record.source_entity_type}#{record.source_entity_id}>" if record.source_entity_type else ""
+            via = f" via=<{record.direct_entity_type}>" if record.direct_entity_type else ""
+            lines.append(
+                f"- tick={record.game_tick} damage={self._number(record.health_damage)} "
+                f"original={self._number(record.original_damage)} type={record.damage_type}{source}{via}"
+            )
         return lines
 
     def _format_slots(self, menu: menu_pb2.ProtoMenuObservation) -> list[str]:

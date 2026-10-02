@@ -245,6 +245,14 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SEND_CHAT_ACTION_VALIDATES =
         TEST_FUNCTIONS.register("chat_send_action_validates", () -> ChatObservationGameTests::sendChatActionValidatesMessages);
 
+    // ===== 生命日志观测（伤害增量） =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> HEALTH_LOG_INCREMENTAL =
+        TEST_FUNCTIONS.register("damage_log_incremental",
+            () -> DamageLogGameTests::healthLogObservesDamageBetweenObservations);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> HEALTH_LOG_SOURCE_ENTITY =
+        TEST_FUNCTIONS.register("damage_log_source_entity",
+            () -> DamageLogGameTests::healthLogRecordsDamageSourceEntity);
+
     // ===== 世界状态观测（群系 / 结构） =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> WORLD_STATE_BIOME_AND_STRUCTURE =
         TEST_FUNCTIONS.register("world_state_biome_and_structure",
@@ -375,6 +383,8 @@ public final class GymCraftGameTests {
                         holder.getId().getPath().startsWith("iron_mining_") ? 12000
                             : holder.getId().getPath().startsWith("iron_golem_warden_") ? 12000
                             : holder.getId().getPath().startsWith("chat_") ? 12000
+                            // 伤害日志用例含 600ms 无敌帧等待与多次阻塞 step，放宽时限
+                            : holder.getId().getPath().startsWith("damage_log_") ? 1200
                             : holder.getId().getPath().startsWith("world_state_") ? 12000
                             : holder.getId().getPath().startsWith("player_sim_env") ? 12000
                             : holder.getId().getPath().startsWith("navigation_") ? 160 : MAX_TICKS,

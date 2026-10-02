@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package gymcraft.gym.observation;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.observation.proto";
+option java_outer_classname = "HealthLogProto";
+
+// agent 受到的一次伤害记录：受伤游戏刻、减免前后伤害值与伤害来源描述
+message ProtoDamageRecord {
+  int64 game_tick = 1;
+  float health_damage = 2;
+  float original_damage = 3;
+  string damage_type = 4;
+  string source_entity_type = 5;
+  int32 source_entity_id = 6;
+  string direct_entity_type = 7;
+}
+
+// 自上次观测以来新增的伤害记录（时间升序，旧->新；观测读取后即清空）
+// 将来扩展回血记录时在同一消息内追加 heal_records 字段
+message ProtoHealthLog {
+  repeated ProtoDamageRecord damage_records = 1;
+}

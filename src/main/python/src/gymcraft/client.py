@@ -10,6 +10,7 @@ from google.protobuf import message
 
 from gymcraft.gym.action.action_pb2 import ProtoMcAction
 from gymcraft.gym.observation.components.chat_pb2 import ProtoRecentChat
+from gymcraft.gym.observation.components.health_log_pb2 import ProtoHealthLog
 from gymcraft.gym.observation.components.menu_pb2 import ProtoMenuObservation
 from gymcraft.gym.observation.components.interesting_blocks_pb2 import ProtoInterestingBlocks
 from gymcraft.gym.observation.components.nearby_blocks_pb2 import ProtoNearbyBlocks
@@ -37,6 +38,7 @@ from gymcraft.type_info import (
     OBS_NEARBY_ENTITIES,
     OBS_NEARBY_ITEMS,
     OBS_CHAT,
+    OBS_HEALTH_LOG,
     OBS_SELF,
     OBS_WORLD,
     TIMEOUT_SECONDS,
@@ -55,6 +57,7 @@ _OBSERVATION_COMPONENT_TYPES: dict[str, type[message.Message]] = {
     OBS_NEARBY_ITEMS: ProtoNearbyItems,
     OBS_INTERESTING_BLOCKS: ProtoInterestingBlocks,
     OBS_CHAT: ProtoRecentChat,
+    OBS_HEALTH_LOG: ProtoHealthLog,
 }
 
 

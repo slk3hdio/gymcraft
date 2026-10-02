@@ -60,9 +60,10 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ObservationCreators.NEARBY_ITEMS.get(),
                 ObservationCreators.MENU.get(),
                 ObservationCreators.INTERESTING_BLOCKS.get(),
-                ObservationCreators.CHAT.get()
+                ObservationCreators.CHAT.get(),
+                ObservationCreators.HEALTH_LOG.get()
             ),
-            List.of(MobAttachments.AGENT_BACKPACK)
+            List.of(MobAttachments.AGENT_BACKPACK, MobAttachments.DAMAGE_LOG)
         );
     }
 

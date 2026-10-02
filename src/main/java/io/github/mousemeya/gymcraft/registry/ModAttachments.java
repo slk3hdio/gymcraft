@@ -6,6 +6,7 @@ import java.util.function.Supplier;
 
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.action.component.UseItemConsumption;
+import io.github.mousemeya.gymcraft.gym.health.DamageLog;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import net.neoforged.neoforge.attachment.AttachmentType;
@@ -66,6 +67,17 @@ public final class ModAttachments {
         () -> AttachmentType.serializable(
             () -> new ItemStacksResourceHandler(io.github.mousemeya.gymcraft.gym.attachment.MobAttachments.AGENT_BACKPACK_SIZE)
         ).build()
+    );
+
+    /**
+     * 当前 Mob 的伤害待读日志；纯运行时、不序列化。
+     * 默认供应商只在环境访问作用域激活（{@code getData}）时创建实例，
+     * 事件钩子经 {@code hasData} 守卫避免给野生实体误建附件；
+     * reset 更换实体后日志自然归零（首个观测必为空）。
+     */
+    public static final DeferredHolder<AttachmentType<?>, AttachmentType<DamageLog>> DAMAGE_LOG = REGISTRY.register(
+        "damage_log",
+        () -> AttachmentType.<DamageLog>builder(DamageLog::new).build()
     );
 
     /** 当前 env 的临时附件访问作用域；不序列化，也不随实体快照复制。 */
