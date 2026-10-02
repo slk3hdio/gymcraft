@@ -1,5 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import javax.annotation.Nullable;
@@ -8,8 +9,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.item.ItemStack;
@@ -19,6 +22,8 @@ import net.neoforged.neoforge.common.util.FakePlayer;
 
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerActor;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerService;
+import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
+import io.github.mousemeya.gymcraft.gym.inventory.AgentSlot;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
@@ -31,7 +36,19 @@ import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
- * 破坏方块动作组件 —— 让 Mob 用手持工具按原版规则挖掘指定方块。
+ * 破坏方块动作组件 —— 让 Mob 用指定槽位的工具按原版规则挖掘指定方块。
+ * <p>
+ * 动作必须显式指定工具槽位 {@code slot_id}（Agent 统一物品栏编号，见
+ * {@link AgentInventoryLayout}）；校验通过后该槽与主手<b>交换</b>（交换而非移动，
+ * 保持物品守恒，与 set_block 一致），挖掘全程由主手持有工具，结束后工具留在主手；
+ * 指向空槽视为空手挖掘。错误工具不拦截，按原版规则仅影响速度与掉落。
+ * </p>
+ * <p>
+ * 动作反馈（RUNNING 与终态 details）始终携带 {@code slot_id}/{@code tool}/
+ * {@code correct_tool} 字段；发生主手交换时附 {@code main_hand_swapped} 与
+ * {@code previous_main_hand}；工具不适合目标方块时附 {@code warning}
+ * （区分“不掉落”与“仅降速”两种后果）。
+ * </p>
  * <p>
  * 破坏耗时完全复用原版计算链:每 tick 进度增量为
  * {@code BlockState#getDestroyProgress(player, level, pos)}（内含工具速度、
@@ -40,9 +57,8 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 执行者是通过 {@link AgentFakePlayerService} 同步了 Mob 状态的 {@link FakePlayer}。
  * </p>
  * <p>
- * 要求生物具备手持能力（{@link Mob#canHoldItem}）;空手挖掘同样遵循原版规则。
- * 挖掘为多 tick 动作:进度在 {@link #tick} 中推进,被新动作打断时 {@link #onInterrupt}
- * 清理进度与裂纹动画。
+ * 要求生物具备手持能力（{@link Mob#canHoldItem}）。挖掘为多 tick 动作:进度在
+ * {@link #tick} 中推进,被新动作打断时 {@link #onInterrupt} 清理进度与裂纹动画。
  * </p>
  */
 public class BreakBlockController extends AbstractActionComponentController<ProtoBreakBlock> {
@@ -56,7 +72,8 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
         "y", new BoxSpace(-2048, 2048, 1),
-        "z", new BoxSpace(-30_000_000, 30_000_000, 1)
+        "z", new BoxSpace(-30_000_000, 30_000_000, 1),
+        "slot_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
     ));
     /** 当前环境实例的跨 tick 挖掘状态（仅服务端 tick 线程访问）。 */
     @Nullable
@@ -69,13 +86,16 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     /** 单个 Mob 的挖掘进度。 */
     private static final class MiningState {
         final BlockPos pos;
+        /** 工具与换手反馈字段（slot_id/tool/correct_tool/main_hand_swapped/warning）。 */
+        final Map<String, Object> toolDetails;
         float progress;
         int ticks;
         /** 非 null 表示挖掘已结束（成功或失败）。 */
         ActionState terminal;
 
-        MiningState(BlockPos pos) {
+        MiningState(BlockPos pos, Map<String, Object> toolDetails) {
             this.pos = pos;
+            this.toolDetails = toolDetails;
         }
     }
 
@@ -119,10 +139,11 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
 
     @Override
     public boolean contains(ProtoBreakBlock component) {
-        return component != null && this.space().contains(Map.of(
+        return component != null && component.hasSlotId() && this.space().contains(Map.of(
             "x", new double[] { component.getX() },
             "y", new double[] { component.getY() },
-            "z", new double[] { component.getZ() }
+            "z", new double[] { component.getZ() },
+            "slot_id", new double[] { component.getSlotId() }
         ));
     }
 
@@ -143,7 +164,30 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
             return ActionApplyResult.none(validationError);
         }
 
+        // 所有失败校验通过后才改动物品栏：工具槽与主手交换（交换而非移动），挖掘全程主手持工具。
+        var layout = AgentInventoryLayout.resolve(mob);
+        int slotId = component.getSlotId();
+        if (slotId < 0 || slotId >= layout.size()) {
+            return ActionApplyResult.none(ActionState.failed("slot id out of range", Map.of(
+                "slot_id", slotId,
+                "inventory_size", layout.size()
+            )));
+        }
+        AgentSlot toolSlot = layout.slot(slotId);
+        boolean swapped = slotId != EquipmentSlot.MAINHAND.getId();
+        ItemStack held = mob.getMainHandItem();
+        String previousMainHandId = itemId(held);
+        if (swapped) {
+            mob.setItemSlot(EquipmentSlot.MAINHAND, toolSlot.getItem());
+            toolSlot.setItem(held);
+        }
+
         AgentFakePlayerActor actor = AgentFakePlayerService.borrowHandActor(mob);
+        // 与原版 getDestroyProgress 的判定口径一致：无需正确工具即可掉落的方块恒为 true
+        boolean correctTool = !blockState.requiresCorrectToolForDrops()
+            || mob.getMainHandItem().isCorrectToolForDrops(blockState);
+        Map<String, Object> toolDetails = toolDetails(slotId, itemId(mob.getMainHandItem()),
+            correctTool, swapped, previousMainHandId, blockState);
         // 首 tick 进度与原版 START_DESTROY_BLOCK 一致:立即累计一次
         float progress = blockState.getDestroyProgress(actor.player(), level, pos);
         mob.getLookControl().setLookAt(Vec3.atCenterOf(pos));
@@ -153,10 +197,10 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
             .disableGoalFlags(Goal.Flag.MOVE, Goal.Flag.LOOK, Goal.Flag.JUMP);
         if (progress >= 1.0F) {
             // 秒挖（如空手挖草方块）,与原版 insta-mine 分支一致
-            return ActionApplyResult.applied(policy, finishDestroy(mob, level, pos, 1));
+            return ActionApplyResult.applied(policy, finishDestroy(mob, level, pos, 1, toolDetails));
         }
 
-        MiningState mining = new MiningState(pos);
+        MiningState mining = new MiningState(pos, toolDetails);
         mining.progress = progress;
         mining.ticks = 1;
         this.miningState = mining;
@@ -215,7 +259,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         level.destroyBlockProgress(mob.getId(), mining.pos, crackStage(mining.progress));
         if (mining.progress >= 1.0F) {
             this.miningState = null;
-            return finishDestroy(mob, level, mining.pos, mining.ticks);
+            return finishDestroy(mob, level, mining.pos, mining.ticks, mining.toolDetails);
         }
         return ActionState.running("mining", miningDetails(mining));
     }
@@ -254,8 +298,14 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         return null;
     }
 
-    /** 通过假玩家执行原版生存模式破坏（含工具耐久损耗与掉落物）。 */
-    private static ActionState finishDestroy(Mob mob, ServerLevel level, BlockPos pos, int ticks) {
+    /**
+     * 通过假玩家执行原版生存模式破坏（含工具耐久损耗与掉落物）。
+     *
+     * @param toolDetails 工具与换手反馈字段，并入终态 details
+     */
+    private static ActionState finishDestroy(
+        Mob mob, ServerLevel level, BlockPos pos, int ticks, Map<String, Object> toolDetails
+    ) {
         AgentFakePlayerActor actor = AgentFakePlayerService.borrowHandActor(mob);
         boolean destroyed;
         try {
@@ -263,29 +313,67 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         } finally {
             actor.writeMainHandTo(mob);
         }
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("pos", pos.toShortString());
+        details.put("ticks", ticks);
+        details.putAll(toolDetails);
         if (destroyed) {
             LOGGER.info("GymCraft BreakBlock done entity={} pos={} ticks={}", mob.getUUID(), pos.toShortString(), ticks);
-            return ActionState.completed("block broken", Map.of(
-                "pos", pos.toShortString(),
-                "ticks", ticks
-            ));
+            return ActionState.completed("block broken", details);
         }
         // 例如被其他 mod 的 BreakEvent 取消
         level.destroyBlockProgress(mob.getId(), pos, -1);
         LOGGER.info("GymCraft BreakBlock rejected entity={} pos={}", mob.getUUID(), pos.toShortString());
-        return ActionState.failed("block break was rejected", Map.of("pos", pos.toShortString()));
+        return ActionState.failed("block break was rejected", details);
     }
 
     private static int crackStage(float progress) {
         return (int) (progress * 10.0F);
     }
 
+    /**
+     * 构造工具与换手反馈字段；工具不适合目标方块时附带 warning。
+     *
+     * @param slotId 工具来源槽位
+     * @param toolId 工具物品 id（"empty" 表示空手）
+     * @param correctTool 工具是否适合挖掘目标方块（决定速度与掉落）
+     * @param swapped 工具槽是否与主手发生交换
+     * @param previousMainHandId 交换前主手物品 id（"empty" 表示空手）
+     * @param blockState 目标方块状态（用于区分"不掉落"与"仅降速"）
+     * @return 有序反馈字段
+     */
+    private static Map<String, Object> toolDetails(
+        int slotId, String toolId, boolean correctTool,
+        boolean swapped, String previousMainHandId, BlockState blockState
+    ) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("slot_id", slotId);
+        details.put("tool", toolId);
+        details.put("correct_tool", correctTool);
+        if (swapped) {
+            details.put("main_hand_swapped", true);
+            details.put("previous_main_hand", previousMainHandId);
+        }
+        if (!correctTool) {
+            details.put("warning", blockState.requiresCorrectToolForDrops()
+                ? "incorrect tool: the block will not drop items"
+                : "incorrect tool: mining speed is reduced");
+        }
+        return details;
+    }
+
+    /** @return 物品堆的注册表 id，空堆返回 "empty" */
+    private static String itemId(ItemStack stack) {
+        return stack.isEmpty() ? "empty" : BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+    }
+
     private static Map<String, Object> miningDetails(MiningState mining) {
-        return Map.of(
-            "pos", mining.pos.toShortString(),
-            "progress", mining.progress,
-            "ticks", mining.ticks
-        );
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("pos", mining.pos.toShortString());
+        details.put("progress", mining.progress);
+        details.put("ticks", mining.ticks);
+        details.putAll(mining.toolDetails);
+        return details;
     }
 
     private static Map<String, Object> targetDetails(BlockPos pos, BlockState blockState) {

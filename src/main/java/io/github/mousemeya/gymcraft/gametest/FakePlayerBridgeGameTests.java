@@ -105,8 +105,10 @@ public final class FakePlayerBridgeGameTests {
         BlockPos target = new BlockPos(3, 2, 2);
         helper.setBlock(target, Blocks.STONE);
         BlockPos absolute = helper.absolutePos(target);
+        // slot 0 即主手槽：沿用主手钻石镐挖掘，保持本测试既有的挖掘时序
         ProtoBreakBlock action = ProtoBreakBlock.newBuilder()
-            .setX(absolute.getX()).setY(absolute.getY()).setZ(absolute.getZ()).build();
+            .setX(absolute.getX()).setY(absolute.getY()).setZ(absolute.getZ())
+            .setSlotId(EquipmentSlot.MAINHAND.getId()).build();
         var controller = new BreakBlockController(mob);
         var state = controller.apply(action).initialState();
         for (int tick = 0; tick < 40 && state.status() == ActionStatus.RUNNING; tick++) {

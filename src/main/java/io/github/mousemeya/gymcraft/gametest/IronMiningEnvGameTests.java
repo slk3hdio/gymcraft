@@ -110,8 +110,9 @@ public final class IronMiningEnvGameTests {
                 env.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
                 List<BlockPos> logs = List.of(
                     origin.offset(2, 0, -1), origin.offset(2, 0, 0), origin.offset(2, 0, 1));
+                // 原木空手即可挖掘：reset 后主手为空，slot 0 即主手槽
                 for (BlockPos log : logs) {
-                    StepResponse broken = step(env, "gymcraft:break_block", breakBlock(log));
+                    StepResponse broken = step(env, "gymcraft:break_block", breakBlock(log, 0));
                     pickUpIfPresent(env, nearbyItems(broken), Items.OAK_LOG);
                 }
 
@@ -144,13 +145,14 @@ public final class IronMiningEnvGameTests {
                 List<BlockPos> stones = List.of(
                     origin.offset(-2, 0, -1), origin.offset(-2, 0, 0), origin.offset(-2, 0, 1));
                 for (BlockPos stone : stones) {
-                    StepResponse broken = step(env, "gymcraft:break_block", breakBlock(stone));
+                    // 每次挖掘前实时查槽：上轮挖掘会把工具换到主手（slot 0）
+                    int pickaxeSlot = findItemSlot(currentMob(helper, originalMob), Items.WOODEN_PICKAXE);
+                    StepResponse broken = step(env, "gymcraft:break_block", breakBlock(stone, pickaxeSlot));
                     pickUpIfPresent(env, nearbyItems(broken), Items.COBBLESTONE);
                 }
 
                 tableSession = openBlock(env, tablePos);
-                Mob currentMob = (Mob) helper.getLevel().getEntity(originalMob.getUUID());
-                int cobblestoneSlot = findItemSlot(currentMob, Items.COBBLESTONE);
+                int cobblestoneSlot = findItemSlot(currentMob(helper, originalMob), Items.COBBLESTONE);
                 move(env, tableSession, List.of(
                     transfer(0, 11, 1, 1),
                     transfer(cobblestoneSlot, 36, 1, 1), transfer(cobblestoneSlot, 37, 1, 1),
@@ -160,7 +162,9 @@ public final class IronMiningEnvGameTests {
                 ));
                 close(env, tableSession);
 
-                StepResponse ironBroken = step(env, "gymcraft:break_block", breakBlock(origin.offset(0, 0, 3)));
+                int stonePickaxeSlot = findItemSlot(currentMob(helper, originalMob), Items.STONE_PICKAXE);
+                StepResponse ironBroken = step(env, "gymcraft:break_block",
+                    breakBlock(origin.offset(0, 0, 3), stonePickaxeSlot));
                 finalResponse.set(pickUpIfPresent(env, nearbyItems(ironBroken), Items.RAW_IRON));
             } catch (Throwable error) {
                 failure.set(error);
@@ -270,10 +274,19 @@ public final class IronMiningEnvGameTests {
      * 构建指定坐标的挖掘消息。
      *
      * @param pos 方块坐标
+     * @param toolSlot 工具槽位（Agent 统一物品栏 slot_id，空槽等价空手）
      * @return 挖掘 protobuf
      */
-    private static ProtoBreakBlock breakBlock(BlockPos pos) {
-        return ProtoBreakBlock.newBuilder().setX(pos.getX()).setY(pos.getY()).setZ(pos.getZ()).build();
+    private static ProtoBreakBlock breakBlock(BlockPos pos, int toolSlot) {
+        return ProtoBreakBlock.newBuilder()
+            .setX(pos.getX()).setY(pos.getY()).setZ(pos.getZ())
+            .setSlotId(toolSlot)
+            .build();
+    }
+
+    /** 取 reset 后同一 UUID 的当前受控 Mob 实例。 */
+    private static Mob currentMob(GameTestHelper helper, Mob original) {
+        return (Mob) helper.getLevel().getEntity(original.getUUID());
     }
 
     /**

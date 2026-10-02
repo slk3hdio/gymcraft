@@ -87,7 +87,7 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:attack_once` | 执行一次近战攻击 |
 | `gymcraft:noop` | 空操作 |
 | `gymcraft:jump` | 提交一次跳跃意图 |
-| `gymcraft:break_block` | 通过 FakePlayer 复用原版方块破坏逻辑 |
+| `gymcraft:break_block` | 必须指定工具槽位 `slot_id`；执行时该槽与主手交换（交换而非移动），通过 FakePlayer 复用原版方块破坏逻辑，结束后工具留在主手；空槽等价空手 |
 | `gymcraft:set_block` | 校验距离和实体碰撞后放置方块；物品栏任一槽位有匹配方块物品即可，放置前自动换到主手 |
 | `gymcraft:update_interesting_blocks` | 原子地批量添加或移除 Agent 感兴趣的方块类型 |
 | `gymcraft:send_chat` | 以受控 Mob 的显示名称向全服聊天栏发送纯文本消息；正文最长 256 个 UTF-16 单元 |

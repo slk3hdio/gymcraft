@@ -147,7 +147,7 @@ public final class VisualizationGameTests {
         Vec3 position = mob.position();
         float health = target.getHealth();
         var actions = List.of(
-            action("break_block", ProtoBreakBlock.newBuilder().setX(3).build()),
+            action("break_block", ProtoBreakBlock.newBuilder().setX(3).setSlotId(0).build()),
             action("set_block", ProtoSetBlock.newBuilder().setX(3).setBlock("minecraft:stone").build()),
             action("move_to", ProtoMoveTo.newBuilder().setX(5).build()),
             action("jump", ProtoJump.getDefaultInstance()),
@@ -192,7 +192,7 @@ public final class VisualizationGameTests {
             VisualizationService.subscribe(second, new VisualSubscribePayload(UUID.randomUUID(), mob.getUUID(), false));
             assertEquals(helper, VisualFrame.Kind.SUBSCRIBED, first.latest().kind(), "admin could not subscribe");
             assertTrue(helper, first.frames.stream().noneMatch(f -> f.kind() == VisualFrame.Kind.OBSERVATION), "subscription created a synthetic observation");
-            var action = action("break_block", ProtoBreakBlock.newBuilder().setX(mob.getBlockX()).setY(mob.getBlockY()).setZ(mob.getBlockZ()).build());
+            var action = action("break_block", ProtoBreakBlock.newBuilder().setX(mob.getBlockX()).setY(mob.getBlockY()).setZ(mob.getBlockZ()).setSlotId(0).build());
             VisualizationService.beforeAction(mob, action);
             VisualizationService.action(mob, action, ActionState.completed("done"), true);
             assertTrue(helper, !first.latest().elements().isEmpty(), "instant action lost feedback");

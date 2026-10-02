@@ -165,6 +165,12 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ACTION_BATCH_MULTIPLE_DISABLED =
         TEST_FUNCTIONS.register("action_batch_multiple_disabled", () -> ActionBatchGameTests::multipleActionsCanBeDisabled);
 
+    // ===== 方块破坏 =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BREAK_BLOCK_TOOL_SWAP =
+        TEST_FUNCTIONS.register("break_block_tool_swap", () -> BreakBlockGameTests::toolSwapsIntoMainHand);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BREAK_BLOCK_WRONG_TOOL =
+        TEST_FUNCTIONS.register("break_block_wrong_tool_warns", () -> BreakBlockGameTests::wrongToolWarnsAndDropsNothing);
+
     // ===== 方块放置 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_SELF_OBSTRUCTED =
         TEST_FUNCTIONS.register("set_block_self_obstructed", () -> SetBlockGameTests::selfObstructionBlocksPlacement);

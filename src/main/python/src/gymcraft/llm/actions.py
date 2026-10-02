@@ -214,7 +214,7 @@ class ActionDslParser:
             "move_to": "/move_to <x> <y> <z> [stop_distance]",
             "set_attack_target": "/set_attack_target clear|entity <entity_id>|uuid <uuid> (continuely chase and attack until the target or yourself is dead)",
             "attack_once": "/attack_once <entity_id>",
-            "break_block": "/break_block <x> <y> <z> (break the block at <x> <y> <z> using the tool on your mainhand. Note that items will only drop if the correct tool is used.)",
+            "break_block": "/break_block <x> <y> <z> [slot_id] (break the block at <x> <y> <z> using the tool from inventory slot_id, default slot 0 = main hand; the tool swaps into the main hand and stays there. Note that items will only drop if the correct tool is used.)",
             "set_block": "/set_block <x> <y> <z> <block description with optional SNBT> (place a block from your inventory at <x> <y> <z>)",
             "jump": "/jump",
             "open_menu": "/open_menu self|entity <entity_id>|block <x> <y> <z>",
@@ -387,10 +387,11 @@ class ActionDslParser:
         return ParsedAction(ACTION_ATTACK_ONCE, "attack_once", attack_once_pb2.ProtoAttackOnce(target_entity_id=entity_id))
 
     def _parse_break_block(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
-        """解析整数方块坐标的破坏命令。"""
-        self._require_arity(tokens, 4, 4, line_number)
+        """解析整数方块坐标的破坏命令；slot_id 缺省时用主手（slot 0）。"""
+        self._require_arity(tokens, 4, 5, line_number)
         x, y, z = self._parse_block_position(tokens[1:4], line_number)
-        return ParsedAction(ACTION_BREAK_BLOCK, "break_block", break_block_pb2.ProtoBreakBlock(x=x, y=y, z=z))
+        slot_id = self._non_negative_int(tokens[4], "slot_id", line_number) if len(tokens) == 5 else 0
+        return ParsedAction(ACTION_BREAK_BLOCK, "break_block", break_block_pb2.ProtoBreakBlock(x=x, y=y, z=z, slot_id=slot_id))
 
     def _parse_set_block(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
         """解析方块放置命令，并把第四参数后的内容原样作为 block 描述。"""

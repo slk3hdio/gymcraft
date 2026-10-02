@@ -6,8 +6,13 @@ option java_multiple_files = true;
 option java_package = "io.github.mousemeya.gymcraft.gym.action.proto";
 option java_outer_classname = "BreakBlockProto";
 
+// 破坏指定坐标的方块，使用 Agent 统一物品栏指定槽位中的工具按原版规则挖掘。
 message ProtoBreakBlock {
   int32 x = 1;
   int32 y = 2;
   int32 z = 3;
+  // 工具来源槽位（Agent 统一物品栏 slot_id：0-7 为装备槽，8 起为容器槽）。
+  // 必须显式设置；执行时该槽与主手交换（交换而非移动），挖掘结束后工具留在主手；
+  // 指向空槽视为空手挖掘，同样遵循原版速度与掉落规则。
+  optional int32 slot_id = 4;
 }

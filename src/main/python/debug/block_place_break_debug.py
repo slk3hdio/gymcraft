@@ -144,6 +144,7 @@ def main() -> None:
     parser.add_argument("--place-pos", nargs=3, type=int, metavar=("X", "Y", "Z"), help="Block position to place into")
     parser.add_argument("--place-count", type=int, default=1, help="How many blocks to place consecutively")
     parser.add_argument("--break-pos", nargs=3, type=int, metavar=("X", "Y", "Z"), help="Block position to break")
+    parser.add_argument("--tool-slot", type=int, default=0, help="Inventory slot_id of the mining tool (default 0 = main hand; empty slot mines bare-handed)")
     parser.add_argument("--block", default=None, help='Block id to set, e.g. "minecraft:stone" or "minecraft:oak_stairs[facing=north]"')
     parser.add_argument("--max-reach", type=float, default=4.5, help="Maximum eye distance used by auto target selection")
     parser.add_argument("--limit", type=int, default=20, help="How many nearby blocks to print")
@@ -225,7 +226,7 @@ def main() -> None:
             print("no break target; provide --break-pos X Y Z or allow set_block first")
             return
 
-        print(f"break_block target={break_pos}")
+        print(f"break_block target={break_pos} tool_slot={args.tool_slot}")
         step_and_print(
             env,
             "break_block",
@@ -234,6 +235,7 @@ def main() -> None:
                     x=break_pos[0],
                     y=break_pos[1],
                     z=break_pos[2],
+                    slot_id=args.tool_slot,
                 ),
             ),
         )
