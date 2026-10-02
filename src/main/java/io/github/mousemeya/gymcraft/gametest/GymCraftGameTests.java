@@ -106,6 +106,14 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_ATTACK_TARGET_FEEDBACK =
         TEST_FUNCTIONS.register("action_feedback_set_attack_target", () -> ActionFeedbackGameTests::setAttackTargetReportsSpecificFailures);
 
+    // ===== 观测承载决策信息（header 逐项反馈 / self 主手持物） =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> OBSERVATION_HEADER_BATCH_COMPLETED =
+        TEST_FUNCTIONS.register("observation_header_batch_feedback", () -> ObservationFeedbackGameTests::headerAggregatesCompletedBatch);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> OBSERVATION_HEADER_BATCH_FAILED =
+        TEST_FUNCTIONS.register("observation_header_batch_failure", () -> ObservationFeedbackGameTests::headerAggregatesFailedBatch);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> OBSERVATION_SELF_MAIN_HAND =
+        TEST_FUNCTIONS.register("observation_self_main_hand_item", () -> ObservationFeedbackGameTests::selfObservationReportsMainHandItem);
+
     // ===== 公共 FakePlayer 执行与库存桥接 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> FAKE_PLAYER_ACTOR_MODES =
         TEST_FUNCTIONS.register("fake_player_actor_modes", () -> FakePlayerBridgeGameTests::actorModesAndIsolation);

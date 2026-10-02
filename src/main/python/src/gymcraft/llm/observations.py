@@ -73,7 +73,7 @@ class ObservationTextFormatter:
 
     def format(self, observation: Observation) -> str:
         """按 header、self、world、entities、blocks、interesting blocks、items、menu、damage 顺序组装观测。"""
-        lines = [self._format_header(observation)]
+        lines = self._format_header(observation)
         self_state = observation.get(OBS_SELF)
         lines.append(self._format_self(self_state))
         lines.append(self._format_world(observation.get(OBS_WORLD)))
@@ -103,24 +103,38 @@ class ObservationTextFormatter:
         lines.extend(self._format_health_log(observation.get(OBS_HEALTH_LOG)))
         return "\n".join(lines)
 
-    def _format_header(self, observation: Observation) -> str:
-        """仅格式化决策需要的 tick 和上一动作原生字段。"""
+    def _format_header(self, observation: Observation) -> list[str]:
+        """格式化 tick、上一批次摘要与逐动作反馈（决策相关，由观测承载而非 info）。"""
         header = observation["header"]
         last_status = header.last_action_status.lower() if header.last_action_status else "none"
         description = self._quote(header.last_action_description) if header.last_action_description else '""'
-        return f"[observation] game_tick={header.game_tick} last_action_status={last_status} last_action_description={description}"
+        lines = [
+            f"[observation] game_tick={header.game_tick} last_action_status={last_status} last_action_description={description}"
+        ]
+        for entry in header.last_actions:
+            lines.append(
+                f"last_action[{entry.index}] {entry.component_id} status={entry.status.lower()} "
+                f"description={self._quote(entry.description)}"
+            )
+        return lines
 
     def _format_self(self, state: self_pb2.ProtoSelfState | None) -> str:
-        """格式化受控实体决策所需的生命、位置、朝向和状态字段。"""
+        """格式化受控实体决策所需的生命、位置、朝向、状态字段和主手持物。"""
         if state is None:
             return "self: unavailable"
+        main_hand = (
+            f"{state.main_hand_item.item_id}x{state.main_hand_item.count}"
+            if state.HasField("main_hand_item")
+            else "empty"
+        )
         return (
             f"self: entity_type={state.entity_type} health={self._number(state.health)} "
             f"max_health={self._number(state.max_health)} x={self._number(state.x)} y={self._number(state.y)} "
             f"z={self._number(state.z)} yaw={self._number(state.yaw)} pitch={self._number(state.pitch)} "
             f"on_ground={self._bool(state.on_ground)} in_water={self._bool(state.in_water)} "
             f"in_lava={self._bool(state.in_lava)} alive={self._bool(state.alive)} "
-            f"navigating={self._bool(state.navigating)} target_entity_id={state.target_entity_id}"
+            f"navigating={self._bool(state.navigating)} target_entity_id={state.target_entity_id} "
+            f"main_hand={main_hand}"
         )
 
     def _format_world(self, world: world_pb2.ProtoWorldState | None) -> str:
@@ -360,7 +374,11 @@ def format_transition_result(
     *,
     advanced: bool = True,
 ) -> str:
-    """把环境 step 结果压缩成下一轮上下文中的 action-result 消息。"""
+    """把环境 step 结果压缩成下一轮上下文中的 action-result 消息。
+
+    只保留批次摘要（info 仅用于调试与记录）；逐动作反馈由下一次观测
+    header 的 last_actions 承载，这里不再展开 info 明细。
+    """
     lines = [
         f"[action-result] advanced={'true' if advanced else 'false'} reward={reward:g} "
         f"terminated={'true' if terminated else 'false'} truncated={'true' if truncated else 'false'}"

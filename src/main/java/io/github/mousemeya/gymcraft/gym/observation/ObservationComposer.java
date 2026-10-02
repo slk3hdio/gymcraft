@@ -2,7 +2,11 @@ package io.github.mousemeya.gymcraft.gym.observation;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+
+import javax.annotation.Nullable;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +14,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import net.minecraft.world.entity.Mob;
 
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoActionFeedback;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoObservationHeader;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
@@ -74,6 +79,11 @@ public class ObservationComposer {
         if (lastActionState != null) {
             headerBuilder.setLastActionStatus(lastActionState.status().name());
             headerBuilder.setLastActionDescription(lastActionState.description());
+            // 批次状态 details["actions"] 携带逐项明细（ActionBatchExecutor.batchState），
+            // 聚合到 header.last_actions，使逐动作反馈成为观测的一部分而非仅存在于 info
+            for (ProtoActionFeedback feedback : expandActionFeedback(lastActionState)) {
+                headerBuilder.addLastActions(feedback);
+            }
         }
 
         var builder = ProtoMcObservation.newBuilder()
@@ -90,6 +100,43 @@ public class ObservationComposer {
         // 可视化只消费本次真实观测，不能重复调用有会话副作用的 creator。
         io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.observation(mob, observation);
         return observation;
+    }
+
+    /**
+     * 把批次状态 {@code details["actions"]} 中的逐项明细展开为 header 反馈列表。
+     * <p>
+     * details 是面向 info JSON 的弱类型映射，这里做防御性解析：缺键或元素类型不符时
+     * 跳过对应项，返回空列表也不影响摘要字段。status 统一大写，与
+     * {@code last_action_status} 的 {@code ActionStatus.name()} 口径一致。
+     * </p>
+     *
+     * @param lastActionState 上一批次的终态
+     * @return 逐动作反馈列表（无明细时为空）
+     */
+    private static List<ProtoActionFeedback> expandActionFeedback(ActionState lastActionState) {
+        Object actions = lastActionState.details().get("actions");
+        if (!(actions instanceof List<?> list)) {
+            return List.of();
+        }
+        var result = new java.util.ArrayList<ProtoActionFeedback>(list.size());
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> map)) {
+                continue;
+            }
+            Object index = map.get("index");
+            result.add(ProtoActionFeedback.newBuilder()
+                .setIndex(index instanceof Number number ? number.intValue() : result.size())
+                .setComponentId(asString(map.get("component_id")))
+                .setStatus(asString(map.get("status")).toUpperCase(Locale.ROOT))
+                .setDescription(asString(map.get("description")))
+                .build());
+        }
+        return result;
+    }
+
+    /** @return 弱类型明细值的字符串形式，缺失时为 "" */
+    private static String asString(@Nullable Object value) {
+        return value == null ? "" : String.valueOf(value);
     }
 
     public McSpace<Map<String, Object>> space() {

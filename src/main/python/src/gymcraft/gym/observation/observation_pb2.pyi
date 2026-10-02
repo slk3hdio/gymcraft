@@ -2,24 +2,38 @@ from google.protobuf import any_pb2 as _any_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from collections.abc import Mapping as _Mapping
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class ProtoActionFeedback(_message.Message):
+    __slots__ = ("index", "component_id", "status", "description")
+    INDEX_FIELD_NUMBER: _ClassVar[int]
+    COMPONENT_ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    index: int
+    component_id: str
+    status: str
+    description: str
+    def __init__(self, index: _Optional[int] = ..., component_id: _Optional[str] = ..., status: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
+
 class ProtoObservationHeader(_message.Message):
-    __slots__ = ("schema_version", "game_tick", "agent_id", "last_action_status", "last_action_description")
+    __slots__ = ("schema_version", "game_tick", "agent_id", "last_action_status", "last_action_description", "last_actions")
     SCHEMA_VERSION_FIELD_NUMBER: _ClassVar[int]
     GAME_TICK_FIELD_NUMBER: _ClassVar[int]
     AGENT_ID_FIELD_NUMBER: _ClassVar[int]
     LAST_ACTION_STATUS_FIELD_NUMBER: _ClassVar[int]
     LAST_ACTION_DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    LAST_ACTIONS_FIELD_NUMBER: _ClassVar[int]
     schema_version: int
     game_tick: int
     agent_id: str
     last_action_status: str
     last_action_description: str
-    def __init__(self, schema_version: _Optional[int] = ..., game_tick: _Optional[int] = ..., agent_id: _Optional[str] = ..., last_action_status: _Optional[str] = ..., last_action_description: _Optional[str] = ...) -> None: ...
+    last_actions: _containers.RepeatedCompositeFieldContainer[ProtoActionFeedback]
+    def __init__(self, schema_version: _Optional[int] = ..., game_tick: _Optional[int] = ..., agent_id: _Optional[str] = ..., last_action_status: _Optional[str] = ..., last_action_description: _Optional[str] = ..., last_actions: _Optional[_Iterable[_Union[ProtoActionFeedback, _Mapping]]] = ...) -> None: ...
 
 class ProtoMcObservation(_message.Message):
     __slots__ = ("header", "components")

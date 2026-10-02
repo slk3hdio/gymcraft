@@ -1,4 +1,4 @@
-﻿syntax = "proto3";
+syntax = "proto3";
 
 package gymcraft.gym.observation;
 
@@ -8,12 +8,21 @@ option java_multiple_files = true;
 option java_package = "io.github.mousemeya.gymcraft.gym.observation.proto";
 option java_outer_classname = "ObservationProto";
 
+// 上批动作中单个已执行动作的反馈（仅状态与描述；details 等调试信息仍在 info）。
+message ProtoActionFeedback {
+  int32 index = 1;
+  string component_id = 2;
+  string status = 3; // ActionStatus.name()，与 last_action_status 同口径
+  string description = 4;
+}
+
 message ProtoObservationHeader {
   int32 schema_version = 1;
   int64 game_tick = 2;
   string agent_id = 3;
   string last_action_status = 4;
   string last_action_description = 5;
+  repeated ProtoActionFeedback last_actions = 6; // 上批动作逐项反馈；reset 后或无明细时为空
 }
 
 message ProtoMcObservation {

@@ -17,7 +17,8 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 /**
  * 自身状态观测组件 —— 构建 {@link ProtoSelfState}，包含 Mob 实体的基础属性快照。
  * <p>
- * 输出：实体类型、UUID、生命值、位置、速度、姿态、标志位（地面/水中/熔岩/存活）和当前攻击目标 ID。
+ * 输出：实体类型、UUID、生命值、位置、速度、姿态、标志位（地面/水中/熔岩/存活）、
+ * 当前攻击目标 ID 与主手持物（空手时 {@code main_hand_item} 不设置）。
  * </p>
  */
 public class SelfStateObservationCreator extends AbstractObservationComponentCreator<ProtoSelfState> {
@@ -37,7 +38,12 @@ public class SelfStateObservationCreator extends AbstractObservationComponentCre
         Map.entry("navigating", new BooleanSpace()),
         Map.entry("at_target", new BooleanSpace()),
         Map.entry("target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)),
-        Map.entry("control_mode", new TextSpace())
+        Map.entry("control_mode", new TextSpace()),
+        Map.entry("main_hand_item", new DictSpace(Map.of(
+            "item_id", new TextSpace(),
+            "count", new BoxSpace(0, Integer.MAX_VALUE, 1),
+            "nbt", new TextSpace()
+        )))
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
     public SelfStateObservationCreator() {
@@ -86,6 +92,11 @@ public class SelfStateObservationCreator extends AbstractObservationComponentCre
             .setAlive(mob.isAlive());
         if (mob.getTarget() != null) {
             builder.setTargetEntityId(mob.getTarget().getId());
+        }
+        // 主手持物复用菜单观测的物品视图构建，保证两处字段语义一致；空手不设置该字段
+        var mainHand = mob.getMainHandItem();
+        if (!mainHand.isEmpty()) {
+            builder.setMainHandItem(MenuObservationCreator.buildItemView(mainHand, mob.level().registryAccess()));
         }
         return builder.build();
     }

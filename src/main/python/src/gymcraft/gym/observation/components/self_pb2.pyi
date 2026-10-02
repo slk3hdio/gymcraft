@@ -1,11 +1,13 @@
+from gymcraft.gym.observation.common import item_stack_view_pb2 as _item_stack_view_pb2
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Optional as _Optional
+from collections.abc import Mapping as _Mapping
+from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class ProtoSelfState(_message.Message):
-    __slots__ = ("entity_type", "uuid", "health", "max_health", "x", "y", "z", "vx", "vy", "vz", "yaw", "pitch", "on_ground", "in_water", "in_lava", "alive", "navigating", "at_target", "target_entity_id", "control_mode")
+    __slots__ = ("entity_type", "uuid", "health", "max_health", "x", "y", "z", "vx", "vy", "vz", "yaw", "pitch", "on_ground", "in_water", "in_lava", "alive", "navigating", "at_target", "target_entity_id", "control_mode", "main_hand_item")
     ENTITY_TYPE_FIELD_NUMBER: _ClassVar[int]
     UUID_FIELD_NUMBER: _ClassVar[int]
     HEALTH_FIELD_NUMBER: _ClassVar[int]
@@ -26,6 +28,7 @@ class ProtoSelfState(_message.Message):
     AT_TARGET_FIELD_NUMBER: _ClassVar[int]
     TARGET_ENTITY_ID_FIELD_NUMBER: _ClassVar[int]
     CONTROL_MODE_FIELD_NUMBER: _ClassVar[int]
+    MAIN_HAND_ITEM_FIELD_NUMBER: _ClassVar[int]
     entity_type: str
     uuid: str
     health: float
@@ -46,4 +49,5 @@ class ProtoSelfState(_message.Message):
     at_target: bool
     target_entity_id: int
     control_mode: str
-    def __init__(self, entity_type: _Optional[str] = ..., uuid: _Optional[str] = ..., health: _Optional[float] = ..., max_health: _Optional[float] = ..., x: _Optional[float] = ..., y: _Optional[float] = ..., z: _Optional[float] = ..., vx: _Optional[float] = ..., vy: _Optional[float] = ..., vz: _Optional[float] = ..., yaw: _Optional[float] = ..., pitch: _Optional[float] = ..., on_ground: _Optional[bool] = ..., in_water: _Optional[bool] = ..., in_lava: _Optional[bool] = ..., alive: _Optional[bool] = ..., navigating: _Optional[bool] = ..., at_target: _Optional[bool] = ..., target_entity_id: _Optional[int] = ..., control_mode: _Optional[str] = ...) -> None: ...
+    main_hand_item: _item_stack_view_pb2.ProtoItemStackView
+    def __init__(self, entity_type: _Optional[str] = ..., uuid: _Optional[str] = ..., health: _Optional[float] = ..., max_health: _Optional[float] = ..., x: _Optional[float] = ..., y: _Optional[float] = ..., z: _Optional[float] = ..., vx: _Optional[float] = ..., vy: _Optional[float] = ..., vz: _Optional[float] = ..., yaw: _Optional[float] = ..., pitch: _Optional[float] = ..., on_ground: _Optional[bool] = ..., in_water: _Optional[bool] = ..., in_lava: _Optional[bool] = ..., alive: _Optional[bool] = ..., navigating: _Optional[bool] = ..., at_target: _Optional[bool] = ..., target_entity_id: _Optional[int] = ..., control_mode: _Optional[str] = ..., main_hand_item: _Optional[_Union[_item_stack_view_pb2.ProtoItemStackView, _Mapping]] = ...) -> None: ...

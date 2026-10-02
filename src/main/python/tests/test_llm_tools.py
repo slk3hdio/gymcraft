@@ -26,7 +26,8 @@ from gymcraft.gym.observation.components import (
     self_pb2,
     world_pb2,
 )
-from gymcraft.gym.observation.observation_pb2 import ProtoObservationHeader
+from gymcraft.gym.observation.common import item_stack_view_pb2
+from gymcraft.gym.observation.observation_pb2 import ProtoActionFeedback, ProtoObservationHeader
 from gymcraft.llm import (
     ActionDslParser,
     ActionParseError,
@@ -496,8 +497,93 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertEqual(10, config.max_blocks)
         self.assertEqual(10, config.max_interesting_blocks)
 
-    def test_action_result_omits_details(self) -> None:
-        """action-result 只保留状态和描述，不把服务端 details 放入 prompt。"""
+    def test_action_result_keeps_summary_even_with_per_action_details(self) -> None:
+        """info 仅用于调试：即使带逐项明细，action-result 也只渲染批次摘要行。"""
+        info = {
+            "action_state": {
+                "status": "completed",
+                "description": "action batch completed (2/2)",
+                "details": {
+                    "total_count": 2,
+                    "completed_count": 2,
+                    "stopped_index": -1,
+                    "actions": [
+                        {
+                            "index": 0,
+                            "component_id": "gymcraft:break_block",
+                            "status": "completed",
+                            "description": "block broken",
+                            "details": {"pos": "1, 2, 3"},
+                        },
+                        {
+                            "index": 1,
+                            "component_id": "gymcraft:noop",
+                            "status": "completed",
+                            "description": "noop",
+                            "details": {},
+                        },
+                    ],
+                },
+            }
+        }
+        text = format_transition_result(1.0, False, False, info)
+        self.assertIn("status=completed", text)
+        self.assertIn('"action batch completed (2/2)"', text)
+        # 逐项反馈由观测 header.last_actions 承载，action-result 不展开 info 明细
+        self.assertNotIn("action[0]", text)
+        self.assertNotIn("block broken", text)
+
+    def test_header_lists_per_action_feedback(self) -> None:
+        """观测 header 应逐项输出上批动作的状态与描述。"""
+        observation = _observation()
+        observation["header"] = ProtoObservationHeader(
+            schema_version=1,
+            game_tick=7,
+            agent_id="agent-test",
+            last_action_status="COMPLETED",
+            last_action_description="action batch completed (2/2)",
+            last_actions=[
+                ProtoActionFeedback(
+                    index=0,
+                    component_id="gymcraft:break_block",
+                    status="COMPLETED",
+                    description="block broken",
+                ),
+                ProtoActionFeedback(
+                    index=1,
+                    component_id="gymcraft:noop",
+                    status="FAILED",
+                    description="agent is dead",
+                ),
+            ],
+        )
+        text = ObservationTextFormatter().format(observation)
+        self.assertIn('last_action[0] gymcraft:break_block status=completed description="block broken"', text)
+        self.assertIn('last_action[1] gymcraft:noop status=failed description="agent is dead"', text)
+
+    def test_self_renders_main_hand_item(self) -> None:
+        """self 行应输出主手持物；空手时渲染为 empty。"""
+        observation = _observation()
+        held = self_pb2.ProtoSelfState(
+            entity_type="minecraft:zombie",
+            uuid="00000000-0000-0000-0000-000000000001",
+            health=18,
+            max_health=20,
+            alive=True,
+            main_hand_item=item_stack_view_pb2.ProtoItemStackView(
+                item_id="minecraft:iron_pickaxe", count=1
+            ),
+        )
+        observation["gymcraft:self"] = held
+        text = ObservationTextFormatter().format(observation)
+        self.assertIn("main_hand=minecraft:iron_pickaxex1", text)
+
+        observation["gymcraft:self"] = self_pb2.ProtoSelfState(entity_type="minecraft:zombie")
+        text = ObservationTextFormatter().format(observation)
+        self.assertIn("main_hand=empty", text)
+
+    def test_action_result_without_actions_keeps_summary_only(self) -> None:
+        """无逐项明细（单动作/空批次）时不渲染 action 行，只保留摘要。"""
         text = format_transition_result(
             1.0,
             False,
@@ -505,7 +591,7 @@ class ObservationAndContextTests(unittest.TestCase):
             {"action_state": {"status": "completed", "description": "ok", "details": {"secret": 1}}},
         )
         self.assertIn("status=completed", text)
-        self.assertNotIn("details", text)
+        self.assertNotIn("action[0]", text)
         self.assertNotIn("secret", text)
 
     def test_rendered_transcript_has_no_role_prefixes(self) -> None:

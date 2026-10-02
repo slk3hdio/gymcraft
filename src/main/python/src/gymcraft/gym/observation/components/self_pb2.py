@@ -22,9 +22,10 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from gymcraft.gym.observation.common import item_stack_view_pb2 as gymcraft_dot_gym_dot_observation_dot_common_dot_item__stack__view__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n.gymcraft/gym/observation/components/self.proto\x12\x18gymcraft.gym.observation\"\xd4\x02\n\x0eProtoSelfState\x12\x13\n\x0b\x65ntity_type\x18\x01 \x01(\t\x12\x0c\n\x04uuid\x18\x02 \x01(\t\x12\x0e\n\x06health\x18\x03 \x01(\x01\x12\x12\n\nmax_health\x18\x04 \x01(\x01\x12\t\n\x01x\x18\x05 \x01(\x01\x12\t\n\x01y\x18\x06 \x01(\x01\x12\t\n\x01z\x18\x07 \x01(\x01\x12\n\n\x02vx\x18\x08 \x01(\x01\x12\n\n\x02vy\x18\t \x01(\x01\x12\n\n\x02vz\x18\n \x01(\x01\x12\x0b\n\x03yaw\x18\x0b \x01(\x02\x12\r\n\x05pitch\x18\x0c \x01(\x02\x12\x11\n\ton_ground\x18\r \x01(\x08\x12\x10\n\x08in_water\x18\x0e \x01(\x08\x12\x0f\n\x07in_lava\x18\x0f \x01(\x08\x12\r\n\x05\x61live\x18\x10 \x01(\x08\x12\x12\n\nnavigating\x18\x11 \x01(\x08\x12\x11\n\tat_target\x18\x12 \x01(\x08\x12\x18\n\x10target_entity_id\x18\x13 \x01(\x05\x12\x14\n\x0c\x63ontrol_mode\x18\x14 \x01(\tBF\n2io.github.mousemeya.gymcraft.gym.observation.protoB\x0eSelfStateProtoP\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n.gymcraft/gym/observation/components/self.proto\x12\x18gymcraft.gym.observation\x1a\x35gymcraft/gym/observation/common/item_stack_view.proto\"\x9a\x03\n\x0eProtoSelfState\x12\x13\n\x0b\x65ntity_type\x18\x01 \x01(\t\x12\x0c\n\x04uuid\x18\x02 \x01(\t\x12\x0e\n\x06health\x18\x03 \x01(\x01\x12\x12\n\nmax_health\x18\x04 \x01(\x01\x12\t\n\x01x\x18\x05 \x01(\x01\x12\t\n\x01y\x18\x06 \x01(\x01\x12\t\n\x01z\x18\x07 \x01(\x01\x12\n\n\x02vx\x18\x08 \x01(\x01\x12\n\n\x02vy\x18\t \x01(\x01\x12\n\n\x02vz\x18\n \x01(\x01\x12\x0b\n\x03yaw\x18\x0b \x01(\x02\x12\r\n\x05pitch\x18\x0c \x01(\x02\x12\x11\n\ton_ground\x18\r \x01(\x08\x12\x10\n\x08in_water\x18\x0e \x01(\x08\x12\x0f\n\x07in_lava\x18\x0f \x01(\x08\x12\r\n\x05\x61live\x18\x10 \x01(\x08\x12\x12\n\nnavigating\x18\x11 \x01(\x08\x12\x11\n\tat_target\x18\x12 \x01(\x08\x12\x18\n\x10target_entity_id\x18\x13 \x01(\x05\x12\x14\n\x0c\x63ontrol_mode\x18\x14 \x01(\t\x12\x44\n\x0emain_hand_item\x18\x15 \x01(\x0b\x32,.gymcraft.gym.observation.ProtoItemStackViewBF\n2io.github.mousemeya.gymcraft.gym.observation.protoB\x0eSelfStateProtoP\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,6 +33,6 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'gymcraft.gym.observation.co
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n2io.github.mousemeya.gymcraft.gym.observation.protoB\016SelfStateProtoP\001'
-  _globals['_PROTOSELFSTATE']._serialized_start=77
-  _globals['_PROTOSELFSTATE']._serialized_end=417
+  _globals['_PROTOSELFSTATE']._serialized_start=132
+  _globals['_PROTOSELFSTATE']._serialized_end=542
 # @@protoc_insertion_point(module_scope)
