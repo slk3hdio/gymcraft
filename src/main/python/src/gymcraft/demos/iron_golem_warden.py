@@ -14,13 +14,13 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, TextIO, cast
+from typing import Any, TextIO
 
 from openai import OpenAI
 from dotenv import load_dotenv
 
 from gymcraft import GymCraftEnv
-from gymcraft.llm import LLMEnvConfig, LLMGymCraftEnv, ObservationFormatConfig
+from gymcraft.llm import LLMEnvConfig, LLMGymCraftEnv, ObservationFormatConfig, chat_completion_text
 
 
 EXPECTED_ENV_TYPE = "gymcraft:iron_golem_warden"
@@ -84,7 +84,7 @@ def write_trace(handle: TextIO | None, record: dict[str, Any]) -> None:
 
 
 def chat(client: OpenAI, args: argparse.Namespace, messages: Any) -> str:
-    """调用 Chat Completions 并返回模型文本。
+    """调用 Chat Completions 并返回模型文本（空回复/瞬时错误自动重试）。
 
     参数:
         client: OpenAI 兼容客户端。
@@ -93,15 +93,12 @@ def chat(client: OpenAI, args: argparse.Namespace, messages: Any) -> str:
     返回:
         模型回复文本。
     """
-    completion = client.chat.completions.create(
-        model=args.model,
-        messages=cast(Any, messages),
+    return chat_completion_text(
+        client,
+        args.model,
+        messages,
         extra_body={"thinking": {"type": "disabled"}},
     )
-    text = completion.choices[0].message.content
-    if not text:
-        raise RuntimeError("Chat Completions API 未返回文本内容")
-    return text
 
 
 def run_trial(

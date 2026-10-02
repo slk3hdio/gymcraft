@@ -6,13 +6,13 @@ import argparse
 import json
 import os
 from pathlib import Path
-from typing import Any, TextIO, cast
+from typing import Any, TextIO
 
 from openai import OpenAI
 from dotenv import load_dotenv
 
 from gymcraft import GymCraftEnv
-from gymcraft.llm import LLMEnvConfig, LLMGymCraftEnv, ObservationFormatConfig
+from gymcraft.llm import LLMEnvConfig, LLMGymCraftEnv, ObservationFormatConfig, chat_completion_text
 
 
 EXPECTED_ENV_TYPE = "gymcraft:iron_mining"
@@ -63,14 +63,12 @@ def run(args: argparse.Namespace) -> None:
         )
         write_trace(trace_handle, {"event": "reset", "context": context, "info": reset_info})
         for step_index in range(args.max_steps):
-            completion = client.chat.completions.create(
-                model=args.model,
-                messages=cast(Any, context["messages"]),
-                extra_body={"thinking": {"type": "disabled"}}
+            model_text = chat_completion_text(
+                client,
+                args.model,
+                context["messages"],
+                extra_body={"thinking": {"type": "disabled"}},
             )
-            model_text = completion.choices[0].message.content
-            if not model_text:
-                raise RuntimeError("Chat Completions API 未返回文本内容")
             print(f"\n===== LLM turn {step_index + 1} =====\n{json.dumps(context['messages'], indent=2)}\n{model_text}")
             context, reward, terminated, truncated, info = env.step(model_text)
             action_state = info.get("action_state", {})

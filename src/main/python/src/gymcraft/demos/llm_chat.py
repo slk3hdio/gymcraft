@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import argparse
 import os
-from typing import Any, cast
 
 from openai import OpenAI
 from dotenv import load_dotenv
 
 from gymcraft import GymCraftEnv
-from gymcraft.llm import LLMGymCraftEnv
+from gymcraft.llm import LLMGymCraftEnv, chat_completion_text
 
 
 def run(args: argparse.Namespace) -> None:
@@ -24,13 +23,7 @@ def run(args: argparse.Namespace) -> None:
             options={"disable_vanilla_ai": args.disable_vanilla_ai},
         )
         for step_index in range(args.max_steps):
-            completion = client.chat.completions.create(
-                model=args.model,
-                messages=cast(Any, context["messages"]),
-            )
-            model_text = completion.choices[0].message.content
-            if not model_text:
-                raise RuntimeError("Chat Completions API 未返回文本内容")
+            model_text = chat_completion_text(client, args.model, context["messages"])
             print(f"\n===== LLM turn {step_index + 1} =====\n{model_text}")
             context, reward, terminated, truncated, info = env.step(model_text)
             print(
