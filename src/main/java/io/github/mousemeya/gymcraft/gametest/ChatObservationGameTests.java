@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.protobuf.Any;
@@ -32,6 +33,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSendChat;
 import io.github.mousemeya.gymcraft.gym.chat.ChatCapture;
+import io.github.mousemeya.gymcraft.gym.chat.RecentChatLog;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnv;
 import io.github.mousemeya.gymcraft.gym.observation.component.WorldStateObservationCreator;
@@ -54,13 +56,17 @@ import io.github.mousemeya.gymcraft.gym.space.DictSpace;
  * </p>
  */
 public final class ChatObservationGameTests {
+    /** 游标独立性探针的读取上限（取缓冲全量，等于 RecentChatLog 的环形容量）。 */
+    private static final int CAPACITY_PROBE = 64;
+
     /** 禁止实例化仅包含静态 GameTest 的工具类。 */
     private ChatObservationGameTests() {
     }
 
     /**
-     * 验证广播消息进入聊天观测、仅单一接收者的私发被过滤、超出窗口的消息被裁剪
-     * 且顺序保持时间升序。
+     * 验证增量消费语义：私发被过滤、广播进入下一次观测且读后游标推进（无新消息
+     * 的观测为空）、超出单次上限保留最新消息且顺序保持时间升序；共享缓冲的游标
+     * 按环境独立推进，单个消费者不会清空其他环境的未读消息。
      *
      * @param helper GameTest 辅助对象
      */
@@ -70,6 +76,8 @@ public final class ChatObservationGameTests {
             Identifier.fromNamespaceAndPath(GymCraft.MODID, "chat_observation_test"), mob);
         AtomicReference<StepResponse> firstStep = new AtomicReference<>();
         AtomicReference<StepResponse> windowStep = new AtomicReference<>();
+        AtomicReference<StepResponse> idleStep = new AtomicReference<>();
+        AtomicBoolean cursorProbeOk = new AtomicBoolean(false);
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
@@ -86,7 +94,7 @@ public final class ChatObservationGameTests {
                 });
                 firstStep.set(step(env));
 
-                // 连发 20 条超出默认窗口（16）的广播，最旧的 bulk 消息应被裁剪
+                // 连发 20 条超出单次上限（16）的广播，最旧的 bulk 消息应被裁剪
                 runOnServer(helper, () -> {
                     for (int i = 0; i < 20; i++) {
                         Packet<?> bulk = new ClientboundSystemChatPacket(
@@ -96,6 +104,20 @@ public final class ChatObservationGameTests {
                     }
                 });
                 windowStep.set(step(env));
+                // 无新消息的观测应返回空列表（游标已推进）
+                idleStep.set(step(env));
+                // 游标独立性探针：消费者 A 从头读全部并推进游标后，消费者 B 仍能从头
+                // 读到同一条消息（共享缓冲不能被单个消费者清空），A 再读则不含旧消息
+                runOnServer(helper, () -> {
+                    RecentChatLog.append(1, "cursor-probe", "gymcraft chat: cursor-probe");
+                    List<RecentChatLog.ChatEntry> readerA1 = RecentChatLog.since(0, CAPACITY_PROBE);
+                    long cursorA = readerA1.get(readerA1.size() - 1).seq();
+                    List<RecentChatLog.ChatEntry> readerB = RecentChatLog.since(0, CAPACITY_PROBE);
+                    List<RecentChatLog.ChatEntry> readerA2 = RecentChatLog.since(cursorA, CAPACITY_PROBE);
+                    cursorProbeOk.set(
+                        readerB.stream().anyMatch(entry -> entry.content().equals("gymcraft chat: cursor-probe"))
+                            && readerA2.stream().noneMatch(entry -> entry.content().equals("gymcraft chat: cursor-probe")));
+                });
             } catch (Throwable error) {
                 failure.set(error);
             }
@@ -123,6 +145,12 @@ public final class ChatObservationGameTests {
                         .noneMatch(message -> message.getContent().equals("gymcraft chat: private-marker")),
                     "private message leaked into chat window");
                 assertTrue(helper, isAscending(window), "chat window must be ordered by tick");
+                // 增量语义：无新消息的观测必须为空（上游窗口的 20 条 bulk 已被消费）
+                ProtoRecentChat idle = unpack(idleStep.get());
+                assertTrue(helper, idle != null && idle.getMessagesCount() == 0,
+                    "chat observation without new messages must be empty: " + idle);
+                assertTrue(helper, cursorProbeOk.get(),
+                    "shared chat buffer must not be drained by a single consumer");
                 helper.succeed();
             } finally {
                 env.close();

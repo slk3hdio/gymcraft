@@ -15,21 +15,27 @@ import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
 /**
- * 最近聊天观测组件 —— 返回服务端聊天栏的最近消息窗口（{@code gymcraft:chat}）。
+ * 最近聊天观测组件 —— 返回自上次观测以来聊天栏的新增消息（{@code gymcraft:chat}）。
  * <p>
  * 数据源是服务器级共享的 {@link RecentChatLog}（由聊天事件与出站包 mixin 捕获），
- * 与 Mob 本体无关：观测反映任意玩家聊天栏出现过的最近消息，跨环境与 reset 持续。
- * 消息按时间升序返回（旧->新），窗口大小可在环境构造期经 {@link #setMaxMessages} 覆盖。
+ * 与 Mob 本体无关。组件语义为增量消费：每个环境实例自持游标，每次 create 取回
+ * 上次观测（step/reset 采样点）之后的新消息并推进游标，无新消息时返回空列表；
+ * 首个观测游标从 0 起步，返回缓冲内现存的消息作为初始上下文。缓冲被所有环境
+ * 共享，游标按环境独立推进，互不影响。单次返回条数上限可在环境构造期经
+ * {@link #setMaxMessages} 覆盖，超出上限保留最新消息。
  * </p>
  */
 public class ChatObservationCreator extends AbstractObservationComponentCreator<ProtoRecentChat> {
-    /** 默认返回的最近消息条数。 */
+    /** 默认单次观测返回的消息条数上限。 */
     public static final int DEFAULT_MAX_MESSAGES = 16;
 
-    /** 当前环境实例的返回消息数上限。 */
+    /** 当前环境实例的单次返回条数上限。 */
     private int maxMessages = DEFAULT_MAX_MESSAGES;
 
-    /** 创建使用默认窗口的观测生成器。 */
+    /** 本环境已消费到的最后一条消息序号（增量游标；0 表示尚未消费）。 */
+    private long cursor = 0L;
+
+    /** 创建使用默认返回上限的观测生成器。 */
     public ChatObservationCreator() {
     }
 
@@ -45,16 +51,16 @@ public class ChatObservationCreator extends AbstractObservationComponentCreator<
         return buildSpace(DEFAULT_MAX_MESSAGES);
     }
 
-    /** 判断结果条数是否落在当前配置的窗口内。 */
+    /** 判断结果条数是否落在当前配置的上限内。 */
     @Override
     public boolean contains(ProtoRecentChat component) {
         return component != null && component.getMessagesCount() <= this.maxMessages;
     }
 
     /**
-     * 设置返回消息数上限并同步重建观测空间。
+     * 设置单次观测返回的消息条数上限并同步重建观测空间。
      *
-     * @param maxMessages 新的窗口大小（必须为正，超出缓冲容量的部分自然取不到）
+     * @param maxMessages 新的上限（必须为正；超出共享缓冲容量的部分自然取不到）
      */
     public void setMaxMessages(int maxMessages) {
         if (maxMessages <= 0) {
@@ -64,11 +70,16 @@ public class ChatObservationCreator extends AbstractObservationComponentCreator<
         this.setSpace(buildSpace(maxMessages));
     }
 
-    /** 从服务端共享缓冲读取最近窗口。 */
+    /** 从服务端共享缓冲读取上次观测以来的新消息并推进增量游标。 */
     @Override
     public ProtoRecentChat create(Mob mob) {
+        var entries = RecentChatLog.since(this.cursor, this.maxMessages);
+        if (!entries.isEmpty()) {
+            // 推进到本批最后一条的序号；下批观测从其后开始
+            this.cursor = entries.get(entries.size() - 1).seq();
+        }
         var builder = ProtoRecentChat.newBuilder();
-        for (RecentChatLog.ChatEntry entry : RecentChatLog.recent(this.maxMessages)) {
+        for (RecentChatLog.ChatEntry entry : entries) {
             builder.addMessages(ProtoChatMessage.newBuilder()
                 .setGameTick(entry.gameTick())
                 .setSender(entry.sender())
@@ -77,7 +88,7 @@ public class ChatObservationCreator extends AbstractObservationComponentCreator<
         return builder.build();
     }
 
-    /** 构造与指定窗口匹配的观测空间。 */
+    /** 构造与指定单次返回上限匹配的观测空间。 */
     private static McSpace<Map<String, Object>> buildSpace(int maxMessages) {
         return new DictSpace(Map.of("messages", new SequenceSpace<>(new TextSpace(), maxMessages)));
     }

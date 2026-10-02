@@ -2,7 +2,6 @@ package io.github.mousemeya.gymcraft.gym.chat;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
@@ -13,19 +12,24 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
  * 缓冲为服务器级共享（聊天栏本身全服可见），跨环境实例与 reset 持续累积，
  * 服务器停止时清空。聊天事件可能来自异步线程（聊天验证线程池），所有访问经
  * {@code synchronized} 串行化；环形容量固定，追加超出后丢弃最旧条目。
+ * 消费语义为增量：每条消息带全局单调递增序号，观测组件以自持游标经
+ * {@link #since} 取"上次观测之后"的新消息——缓冲被所有环境共享，不能读后清空，
+ * 各环境按游标独立推进，互不偷走对方未读的消息。
  * </p>
  */
 public final class RecentChatLog {
-    /** 缓冲容量；观测窗口（默认 16）之上留足余量。 */
+    /** 缓冲容量；单次观测返回上限（默认 16）之上留足余量。 */
     private static final int CAPACITY = 64;
     /** 升序消息队列（队尾最新）。 */
     private static final ArrayDeque<ChatEntry> ENTRIES = new ArrayDeque<>(CAPACITY);
+    /** 下一条消息的全局单调递增序号；服务器停止清空缓冲时不重置，避免游标回退。 */
+    private static long nextSeq = 1L;
 
     private RecentChatLog() {
     }
 
-    /** 单条聊天消息：入队时的游戏刻、发送者名（系统/命令消息为空串）与文本内容。 */
-    public record ChatEntry(long gameTick, String sender, String content) {
+    /** 单条聊天消息：全局序号、入队时的游戏刻、发送者名（系统/命令消息为空串）与文本内容。 */
+    public record ChatEntry(long seq, long gameTick, String sender, String content) {
     }
 
     /**
@@ -77,7 +81,7 @@ public final class RecentChatLog {
                 && newest.sender().equals(safeSender) && newest.content().equals(content)) {
                 return;
             }
-            ENTRIES.addLast(new ChatEntry(tick, safeSender, content));
+            ENTRIES.addLast(new ChatEntry(nextSeq++, tick, safeSender, content));
             while (ENTRIES.size() > CAPACITY) {
                 ENTRIES.pollFirst();
             }
@@ -85,24 +89,35 @@ public final class RecentChatLog {
     }
 
     /**
-     * 返回最近的消息窗口（时间升序，旧→新）；读取前先清算捕获候选，
+     * 返回游标之后的新消息（时间升序，旧->新）；读取前先清算捕获候选，
      * 保证同 tick 广播也能被本次观测看到。
+     * <p>
+     * 增量消费契约：调用方（每个环境一份的观测组件实例）自持游标，取回消息后把
+     * 游标推进到最后一条的 {@code seq}。新消息超出 {@code max} 时丢弃最旧、保留最新
+     * max 条；环境太久未观测导致部分消息已被环形容量淘汰时，游标与现存最早序号之间
+     * 的缺口直接跳过（返回现存全部）。共享缓冲不会被清空，其他环境的未读消息不受影响。
+     * </p>
      *
-     * @param max 返回条数上限
-     * @return 升序快照列表
+     * @param cursor 调用方已消费到的最后一条消息序号（0 表示从缓冲现存最早开始）
+     * @param max    返回条数上限（超出保留最新）
+     * @return 升序快照列表；推进后的游标取最后一条的 seq（列表为空时游标不变）
      */
-    public static List<ChatEntry> recent(int max) {
+    public static List<ChatEntry> since(long cursor, int max) {
         ChatCapture.flushPending();
-        int count = Math.min(Math.max(max, 0), CAPACITY);
         synchronized (ENTRIES) {
-            count = Math.min(count, ENTRIES.size());
-            List<ChatEntry> result = new ArrayList<>(count);
-            var iterator = ENTRIES.descendingIterator();
-            for (int i = 0; i < count && iterator.hasNext(); i++) {
-                result.add(iterator.next());
+            // 收集游标之后的全部现存消息（升序）
+            List<ChatEntry> newer = new ArrayList<>();
+            for (ChatEntry entry : ENTRIES) {
+                if (entry.seq() > cursor) {
+                    newer.add(entry);
+                }
             }
-            Collections.reverse(result);
-            return result;
+            if (newer.isEmpty()) {
+                return newer;
+            }
+            // 超出上限时保留最新 max 条
+            int from = Math.max(0, newer.size() - Math.max(max, 0));
+            return new ArrayList<>(newer.subList(from, newer.size()));
         }
     }
 

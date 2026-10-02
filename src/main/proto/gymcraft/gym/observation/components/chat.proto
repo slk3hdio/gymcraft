@@ -13,7 +13,8 @@ message ProtoChatMessage {
   string content = 3;
 }
 
-// 最近聊天栏消息窗口（时间升序，旧->新；窗口大小由环境配置）
+// 自上次观测以来聊天栏新增的消息（时间升序，旧->新；按环境游标增量消费，
+// 首个观测返回缓冲内现存消息；单次返回上限由环境配置）
 message ProtoRecentChat {
   repeated ProtoChatMessage messages = 1;
 }

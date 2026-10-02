@@ -259,12 +259,12 @@ class ObservationTextFormatter:
         return lines
 
     def _format_chat(self, chat: chat_pb2.ProtoRecentChat | None) -> list[str]:
-        """格式化最近聊天栏消息窗口（时间升序，保留最近 max_chat_messages 条）。"""
+        """格式化自上次观测以来的新增聊天消息（时间升序，读后游标推进的增量记录）。"""
         if chat is None:
-            return ["history chat: unavailable"]
+            return ["new chat: unavailable"]
         messages = list(chat.messages)
-        shown = messages[-self.config.max_chat_messages:]
-        lines = [self._count_header("history chat(ordered by game time)", len(messages), len(shown))]
+        shown = messages[-self.config.max_chat_messages :]
+        lines = [self._count_header("new chat(since last observation)", len(messages), len(shown))]
         for message in shown:
             sender = f" sender=<{message.sender}>" if message.sender else ""
             lines.append(f"- tick={message.game_tick}{sender} content={self._quote(message.content)}")
