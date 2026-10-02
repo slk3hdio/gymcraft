@@ -14,6 +14,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 | 打包 Python wheel/sdist | `.\gradlew packagePython` → `dist/` |
 | 运行 GameTest | `.\gradlew runGameTestServer` |
 | LLM 调试 MCP 服务器 | `cd src/main/python && uv run python debug/llm_mcp_server.py` |
+| 环境交互 MCP 服务器（观测需主动获取） | `cd src/main/python && uv run gymcraft-mcp`（pip 安装需 `gymcraft[mcp]` extra） |
 
 ## Architecture
 

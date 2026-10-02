@@ -20,6 +20,10 @@ dependencies = [
 
 [project.scripts]
 gymcraft-demo = "gymcraft.demos.cli:main"
+gymcraft-mcp = "gymcraft.mcp_server:main"
+
+[project.optional-dependencies]
+mcp = ["mcp>=2.1.1"]
 
 [dependency-groups]
 dev = [

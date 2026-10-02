@@ -6,6 +6,7 @@ import argparse
 
 from gymcraft import GymCraftEnv
 from gymcraft.llm import LLMGymCraftEnv, render_chat_transcript
+from gymcraft.llm.actions import wrap_commands as _wrap_commands
 from gymcraft.llm.types import LLMContext
 
 
@@ -21,24 +22,6 @@ def _read_turn() -> str | None:
             break
         lines.append(line)
     return "\n".join(lines)
-
-
-def _wrap_commands(text: str) -> str:
-    """为终端直接输入的 /command 自动添加动作围栏，保留其余叙述文本。"""
-    if "```gymcraft-action" in text:
-        return text
-    narrative: list[str] = []
-    commands: list[str] = []
-    for line in text.splitlines():
-        if line.strip().startswith("/"):
-            commands.append(line.strip())
-        else:
-            narrative.append(line)
-    if not commands:
-        return text
-    prefix = "\n".join(narrative).rstrip()
-    block = "```gymcraft-action\n" + "\n".join(commands) + "\n```"
-    return f"{prefix}\n\n{block}" if prefix else block
 
 
 def _print_context(context: LLMContext, *, full: bool = True) -> None:

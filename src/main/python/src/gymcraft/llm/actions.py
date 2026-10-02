@@ -66,6 +66,28 @@ _ACTION_BLOCK_PATTERN = re.compile(
 )
 
 
+def wrap_commands(text: str) -> str:
+    """为裸 /command 文本自动添加动作围栏，保留其余叙述文本。
+
+    已包含 ```gymcraft-action 围栏的文本原样返回；MCP 服务器、终端等直接输入
+    通道用它在解析前补齐协议要求的动作块。
+    """
+    if _ACTION_BLOCK_MARKER in text:
+        return text
+    narrative: list[str] = []
+    commands: list[str] = []
+    for line in text.splitlines():
+        if line.strip().startswith("/"):
+            commands.append(line.strip())
+        else:
+            narrative.append(line)
+    if not commands:
+        return text
+    prefix = "\n".join(narrative).rstrip()
+    block = _ACTION_BLOCK_MARKER + "\n" + "\n".join(commands) + "\n```"
+    return f"{prefix}\n\n{block}" if prefix else block
+
+
 # DSL 解析失败时向模型返回带行号的可修复错误。
 class ActionParseError(ValueError):
     """表示动作块缺失、语法错误、越界或当前环境不支持动作。"""
