@@ -34,6 +34,7 @@
   "layer.gymcraft.action.step_move": "步进移动",
   "layer.gymcraft.action.look_at": "注视",
   "layer.gymcraft.action.move_to": "移动到",
+  "layer.gymcraft.action.swim_to": "游到",
   "layer.gymcraft.action.set_attack_target": "设置攻击目标",
   "layer.gymcraft.action.attack_once": "攻击一次",
   "layer.gymcraft.action.noop": "无操作",

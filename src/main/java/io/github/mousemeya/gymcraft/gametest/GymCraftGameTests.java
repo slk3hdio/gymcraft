@@ -44,6 +44,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("visualization_cache", () -> VisualizationGameTests::cacheIsolation);
         TEST_FUNCTIONS.register("visualization_snapshot", () -> VisualizationGameTests::frozenObservation);
         TEST_FUNCTIONS.register("visualization_actions", () -> VisualizationGameTests::actionAdapters);
+        TEST_FUNCTIONS.register("visualization_navigation_path", () -> VisualizationGameTests::navigationPath);
         TEST_FUNCTIONS.register("visualization_subscriptions", () -> VisualizationGameTests::subscriptions);
         TEST_FUNCTIONS.register("visualization_runtime", () -> VisualizationGameTests::runtime);
     }

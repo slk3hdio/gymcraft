@@ -1,9 +1,12 @@
 package io.github.mousemeya.gymcraft.gym.visualization;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import javax.annotation.Nullable;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -15,6 +18,9 @@ import net.minecraft.world.phys.Vec3;
  * {@code observation} 参数决定客户端的图层键与配色。</p>
  */
 public final class VisualGeometry {
+    /** 单条路径最多绘制的线段数；超出时丢弃远离 Mob 的尾段，保证帧体积有界。 */
+    private static final int MAX_PATH_SEGMENTS = 64;
+
     /** 禁止实例化静态构建器。 */
     private VisualGeometry() { }
 
@@ -38,8 +44,39 @@ public final class VisualGeometry {
 
     /** @param mob Agent @param component 组件 ID @param point 目标点 @return 小型目标框及连线 */
     public static List<VisualElement> point(Mob mob, String component, Vec3 point) {
-        return List.of(box(component, false, new AABB(point.subtract(.15, .15, .15), point.add(.15, .15, .15)), component),
+        return List.of(target(component, point),
             shape(component, false, VisualElement.Shape.LINE, mob.getEyePosition(), point, ""));
+    }
+
+    /** @param component 组件 ID @param point 目标点 @return 小型目标框（无视线连线） */
+    public static VisualElement target(String component, Vec3 point) {
+        return box(component, false, new AABB(point.subtract(.15, .15, .15), point.add(.15, .15, .15)), component);
+    }
+
+    /**
+     * 把实际规划路径转换为从 Mob 当前位置出发的线段序列。
+     *
+     * <p>首段连接 Mob 脚下位置与下一个路径节点，之后逐节点相连；节点坐标经
+     * {@link Path#getEntityPosAtNode} 按实体体型取行走位置，与真实跟随轨迹一致。
+     * 路径为 null 或已走完时返回空列表；线段不携带实体锚点，固定于采样时刻，
+     * 超出 {@link #MAX_PATH_SEGMENTS} 的尾段被丢弃（靠近 Mob 的部分优先保留）。</p>
+     *
+     * @param component 组件 ID
+     * @param mob       正在跟随路径的 Mob
+     * @param path      当前规划路径；可为 null
+     * @return 路径线段图形，可能为空
+     */
+    public static List<VisualElement> path(String component, Mob mob, @Nullable Path path) {
+        if (path == null || path.isDone()) return List.of();
+        int count = path.getNodeCount();
+        var result = new ArrayList<VisualElement>(Math.min(count, MAX_PATH_SEGMENTS));
+        Vec3 previous = mob.position();
+        for (int i = path.getNextNodeIndex(); i < count && result.size() < MAX_PATH_SEGMENTS; i++) {
+            Vec3 node = path.getEntityPosAtNode(mob, i);
+            result.add(shape(component, false, VisualElement.Shape.LINE, previous, node, ""));
+            previous = node;
+        }
+        return List.copyOf(result);
     }
 
     /**

@@ -2,12 +2,15 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.Map;
 
+import javax.annotation.Nullable;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
@@ -16,6 +19,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.navigation.MobNavigationTask;
+import io.github.mousemeya.gymcraft.gym.action.navigation.NavigationPathProvider;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveTo;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -27,7 +31,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 参数空间包含坐标、速度修正值、停止距离和超时时间。
  * </p>
  */
-public class MoveToController extends AbstractActionComponentController<ProtoMoveTo> {
+public class MoveToController extends AbstractActionComponentController<ProtoMoveTo> implements NavigationPathProvider {
     private static final Logger LOGGER = LoggerFactory.getLogger(MoveToController.class);
 
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
@@ -156,6 +160,17 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
     @Override
     public void onInterrupt(ProtoMoveTo component) {
         this.navigationTask.cancel();
+    }
+
+    /**
+     * 返回当前动作正在跟随的实际规划路径（只读，供可视化采样）。
+     *
+     * @return 跟随中的路径；动作未运行、末段直行或路径已释放时为 null
+     */
+    @Override
+    @Nullable
+    public Path currentPath() {
+        return this.navigationTask.currentPath();
     }
 
     /** @return protobuf 坐标对应的原始目标，不做方块中心修正 */

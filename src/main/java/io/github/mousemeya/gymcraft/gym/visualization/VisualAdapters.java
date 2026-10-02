@@ -2,17 +2,22 @@ package io.github.mousemeya.gymcraft.gym.visualization;
 
 import com.google.protobuf.Any;
 import io.github.mousemeya.gymcraft.GymCraft;
+import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
+import io.github.mousemeya.gymcraft.gym.action.navigation.NavigationPathProvider;
 import io.github.mousemeya.gymcraft.gym.action.proto.*;
+import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.observation.proto.*;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import javax.annotation.Nullable;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -98,10 +103,12 @@ public final class VisualAdapters {
     }
 
     /**
-     * 注册十二种空间动作适配器。
+     * 注册十三种空间动作适配器。
      *
-     * <p>几何仅表达动作的输入目标（方块/实体/方向），不预测导航路径或执行结果；
-     * 与移动、朝向相关的箭头使用与原版输入变换一致的数学，保证视觉方向可信。</p>
+     * <p>几何表达动作的输入目标（方块/实体/方向）；寻路类动作（move_to/swim_to/
+     * pick_up_item）在运行中额外绘制 controller 持有的实际规划路径，路径不可用时
+     * 退回目标点与视线连线。与移动、朝向相关的箭头使用与原版输入变换一致的数学，
+     * 保证视觉方向可信。</p>
      */
     private static void registerActions() {
         // 破坏/放置：目标方块线框 + 视线连线。
@@ -113,10 +120,14 @@ public final class VisualAdapters {
             var p = payload.unpack(ProtoSetBlock.class);
             return VisualGeometry.block(mob, "gymcraft:set_block", new Vec3(p.getX(), p.getY(), p.getZ()));
         });
-        // 移动类：move_to 画地面目标点，jump 画竖直箭头。
+        // 寻路类：目标点 + 实际规划路径（无活动路径时退回目标点 + 视线连线）。
         registerAction("gymcraft:move_to", (mob, payload, state) -> {
             var p = payload.unpack(ProtoMoveTo.class);
-            return VisualGeometry.point(mob, "gymcraft:move_to", new Vec3(p.getX(), p.getY(), p.getZ()));
+            return navigation(mob, "gymcraft:move_to", new Vec3(p.getX(), p.getY(), p.getZ()));
+        });
+        registerAction("gymcraft:swim_to", (mob, payload, state) -> {
+            var p = payload.unpack(ProtoSwimTo.class);
+            return navigation(mob, "gymcraft:swim_to", new Vec3(p.getX(), p.getY(), p.getZ()));
         });
         registerAction("gymcraft:jump", (mob, payload, state) -> {
             payload.unpack(ProtoJump.class);
@@ -133,11 +144,16 @@ public final class VisualAdapters {
         registerAction("gymcraft:look_at", VisualAdapters::lookAt);
         registerAction("gymcraft:open_menu", VisualAdapters::openMenu);
         registerAction("gymcraft:use_item", VisualAdapters::useItem);
-        // 攻击/拾取/设目标：目标实体框 + 连线（设目标支持 UUID 回退解析）。
+        // 攻击/拾取/设目标：目标实体框 + 连线（设目标支持 UUID 回退解析）；
+        // 拾取在寻路接近期间同时绘制实际规划路径。
         registerAction("gymcraft:attack_once", (mob, payload, state) -> VisualGeometry.entity(mob, "gymcraft:attack_once",
             mob.level().getEntity(payload.unpack(ProtoAttackOnce.class).getTargetEntityId()), false));
-        registerAction("gymcraft:pick_up_item", (mob, payload, state) -> VisualGeometry.entity(mob, "gymcraft:pick_up_item",
-            mob.level().getEntity(payload.unpack(ProtoPickUpItem.class).getEntityId()), false));
+        registerAction("gymcraft:pick_up_item", (mob, payload, state) -> {
+            var elements = new ArrayList<>(VisualGeometry.entity(mob, "gymcraft:pick_up_item",
+                mob.level().getEntity(payload.unpack(ProtoPickUpItem.class).getEntityId()), false));
+            elements.addAll(VisualGeometry.path("gymcraft:pick_up_item", mob, currentPath(mob, "gymcraft:pick_up_item")));
+            return elements;
+        });
         registerAction("gymcraft:set_attack_target", (mob, payload, state) -> {
             var p = payload.unpack(ProtoSetAttackTarget.class);
             // 网络 ID 优先；非生物目标或 ID 未命中时回退观测中的 UUID 解析。
@@ -192,6 +208,42 @@ public final class VisualAdapters {
     private static List<VisualElement> arrow(Mob mob, String id, Vec3 direction) {
         Vec3 start = mob.getBoundingBox().getCenter();
         return List.of(VisualGeometry.shape(id, false, VisualElement.Shape.ARROW, start, start.add(direction), id));
+    }
+
+    /**
+     * 寻路类动作的目标标记与实时路径组合：存在跟随中的路径时绘制路径线段并省去
+     * 视线连线（路径已从 Mob 脚下出发），规划失败、末段直行等无路径时刻退回
+     * 目标点与视线连线。
+     *
+     * @param mob    Agent
+     * @param id     组件 ID
+     * @param target 动作请求目标
+     * @return 目标点与路径线段图形
+     */
+    private static List<VisualElement> navigation(Mob mob, String id, Vec3 target) {
+        List<VisualElement> path = VisualGeometry.path(id, mob, currentPath(mob, id));
+        if (path.isEmpty()) {
+            return VisualGeometry.point(mob, id, target);
+        }
+        var elements = new ArrayList<VisualElement>(path.size() + 1);
+        elements.add(VisualGeometry.target(id, target));
+        elements.addAll(path);
+        return elements;
+    }
+
+    /**
+     * 经环境解析寻路动作 controller 持有的实际规划路径；环境未注册、组件缺失或
+     * 组件不是寻路动作时返回 null，只读取既有状态，绝不触碰导航或世界。
+     *
+     * @param mob         Agent 实体
+     * @param componentId 组件注册 ID
+     * @return 正在跟随的规划路径，可能为 null
+     */
+    @Nullable
+    private static Path currentPath(Mob mob, String componentId) {
+        if (!(EnvManager.get(mob.getUUID()).orElse(null) instanceof AbstractMcEnv env)) return null;
+        if (!(env.findActionComponent(componentId).orElse(null) instanceof NavigationPathProvider provider)) return null;
+        return provider.currentPath();
     }
 
     /**

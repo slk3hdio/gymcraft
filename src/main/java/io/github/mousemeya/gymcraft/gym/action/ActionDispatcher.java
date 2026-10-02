@@ -11,6 +11,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Mob;
 import org.slf4j.Logger;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -69,6 +70,17 @@ public class ActionDispatcher {
             throw new IllegalArgumentException("Unknown action component: " + factory.getRegisterId());
         }
         return factory.componentType().cast(controller);
+    }
+
+    /**
+     * 按组件注册 ID 查找 controller 实例（只读）。
+     *
+     * @param componentId 组件注册 ID
+     * @return controller 实例；未注册时为 null
+     */
+    @Nullable
+    public ActionComponentController<?> findComponent(String componentId) {
+        return this.components.get(componentId);
     }
 
     /** @param mob reset 后的新受控实体 */

@@ -3,6 +3,7 @@ package io.github.mousemeya.gymcraft.gym.env;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.google.protobuf.Message;
@@ -129,6 +130,17 @@ public abstract class AbstractMcEnv implements McEnv {
         ActionComponentFactory<T, C> factory
     ) {
         return this.actionController.getComponent(factory);
+    }
+
+    /**
+     * 按组件注册 ID 查找当前环境的动作 controller 实例（只读），
+     * 供可视化等环境外扩展在运行期解析组件状态，不得用于调用动作生命周期方法。
+     *
+     * @param componentId 组件注册 ID（如 {@code gymcraft:move_to}）
+     * @return 该组件的 controller 实例；环境未声明该组件时为空
+     */
+    public Optional<ActionComponentController<?>> findActionComponent(String componentId) {
+        return Optional.ofNullable(this.actionController.findComponent(componentId));
     }
 
     /**

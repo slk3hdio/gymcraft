@@ -26,6 +26,7 @@ public final class VisualizationConfig {
     /** 设置界面的图层清单；顺序即分页顺序。 */
     public static final List<String> LAYERS = List.of(
         "action/gymcraft:step_move", "action/gymcraft:look_at", "action/gymcraft:move_to",
+        "action/gymcraft:swim_to",
         "action/gymcraft:set_attack_target", "action/gymcraft:attack_once", "action/gymcraft:noop",
         "action/gymcraft:jump", "action/gymcraft:break_block", "action/gymcraft:set_block",
         "action/gymcraft:open_menu", "action/gymcraft:close_menu", "action/gymcraft:move_menu_item",

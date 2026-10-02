@@ -34,6 +34,7 @@
   "layer.gymcraft.action.step_move": "Step move",
   "layer.gymcraft.action.look_at": "Look at",
   "layer.gymcraft.action.move_to": "Move to",
+  "layer.gymcraft.action.swim_to": "Swim to",
   "layer.gymcraft.action.set_attack_target": "Set attack target",
   "layer.gymcraft.action.attack_once": "Attack once",
   "layer.gymcraft.action.noop": "No-op",

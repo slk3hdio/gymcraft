@@ -8,7 +8,9 @@ import com.google.protobuf.Message;
 import com.mojang.authlib.GameProfile;
 import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
+import io.github.mousemeya.gymcraft.gym.action.component.MoveToController;
 import io.github.mousemeya.gymcraft.gym.action.proto.*;
+import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.observation.proto.*;
 import io.github.mousemeya.gymcraft.gym.visualization.*;
 import io.github.mousemeya.gymcraft.network.VisualFramePayload;
@@ -34,6 +36,7 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -150,6 +153,7 @@ public final class VisualizationGameTests {
             action("break_block", ProtoBreakBlock.newBuilder().setX(3).setSlotId(0).build()),
             action("set_block", ProtoSetBlock.newBuilder().setX(3).setBlock("minecraft:stone").build()),
             action("move_to", ProtoMoveTo.newBuilder().setX(5).build()),
+            action("swim_to", ProtoSwimTo.newBuilder().setX(5).build()),
             action("jump", ProtoJump.getDefaultInstance()),
             action("step_move", ProtoStepMove.newBuilder().setStrafeRight(1).build()),
             action("look_at", ProtoLookAt.newBuilder().setEntity(ProtoLookAtEntityTarget.newBuilder().setEntityId(target.getId())).build()),
@@ -162,12 +166,55 @@ public final class VisualizationGameTests {
         // 已有执行结果用于 drop_item 解析实体；适配器本身不能生成物品。
         ActionState result = ActionState.completed("test", Map.of("entity_id", target.getId()));
         for (var action : actions) assertTrue(helper, !VisualAdapters.action(mob, action, result).isEmpty(), "missing adapter: " + action.getComponentId());
-        var strafe = VisualAdapters.action(mob, actions.get(4), result).getFirst();
+        var strafe = VisualAdapters.action(mob, actions.get(5), result).getFirst();
         assertTrue(helper, strafe.to().x > strafe.from().x, "strafe arrow disagrees with vanilla input transform");
         assertEquals(helper, position, mob.position(), "adapter moved the agent");
         assertEquals(helper, health, target.getHealth(), "adapter attacked the target");
         assertTrue(helper, mob.getTarget() == null, "adapter changed attack target");
         mob.discard(); target.discard(); helper.succeed();
+    }
+
+    /**
+     * 寻路路径可视化：move_to 运行期间适配器输出与导航任务实际规划路径一致的线段
+     * （从 Agent 脚下出发逐节点相连、不再保留视线连线），动作打断后退回目标点与
+     * 视线连线。
+     *
+     * @param helper 测试场景
+     */
+    public static void navigationPath(GameTestHelper helper) {
+        for (int x = 0; x <= 13; x++) for (int z = 0; z <= 6; z++) helper.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
+        Mob mob = helper.spawn(EntityType.HUSK, new BlockPos(1, 2, 2));
+        var env = EnvManager.create("gymcraft:general", mob);
+        // 等待数 tick 让实体落地稳定，与导航回归测试的布置保持一致。
+        helper.runAfterDelay(3, () -> {
+            try {
+                var moveTo = (MoveToController) ((AbstractMcEnv) env).findActionComponent("gymcraft:move_to").orElseThrow();
+                BlockPos destination = helper.absolutePos(new BlockPos(6, 2, 2));
+                var payload = ProtoMoveTo.newBuilder()
+                    .setX(destination.getX() + .5).setY(destination.getY()).setZ(destination.getZ() + .5)
+                    .setStopDistance(.5).build();
+                var applied = moveTo.apply(payload);
+                assertTrue(helper, !applied.initialState().isTerminal(), "move_to did not start navigating");
+                var path = moveTo.currentPath();
+                assertTrue(helper, path != null && path.getNodeCount() > 1, "planned path missing");
+                var elements = VisualAdapters.action(mob, action("move_to", payload), applied.initialState());
+                var lines = elements.stream().filter(e -> e.shape() == VisualElement.Shape.LINE).toList();
+                assertEquals(helper, path.getNodeCount() - path.getNextNodeIndex(), lines.size(),
+                    "path segments disagree with the planned path");
+                assertEquals(helper, mob.position(), lines.getFirst().from(), "path does not start at the agent");
+                assertEquals(helper, path.getEntityPosAtNode(mob, path.getNodeCount() - 1), lines.getLast().to(),
+                    "path does not end at the last planned node");
+                moveTo.onInterrupt(payload);
+                assertTrue(helper, moveTo.currentPath() == null, "path survived interrupt");
+                assertEquals(helper, 2,
+                    VisualAdapters.action(mob, action("move_to", payload), ActionState.running("test")).size(),
+                    "fallback target marker changed");
+            } finally {
+                EnvManager.close(mob.getUUID());
+                mob.discard();
+            }
+            helper.succeed();
+        });
     }
 
     /**

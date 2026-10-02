@@ -15,6 +15,7 @@ import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
@@ -23,6 +24,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.navigation.MobNavigationTask;
+import io.github.mousemeya.gymcraft.gym.action.navigation.NavigationPathProvider;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoPickUpItem;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentSlot;
@@ -43,7 +45,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * {@code StepRequest.timeout_seconds} 由运行时对整个批次统一处理。被打断时 {@link #onInterrupt} 停止导航。
  * </p>
  */
-public class PickUpItemController extends AbstractActionComponentController<ProtoPickUpItem> {
+public class PickUpItemController extends AbstractActionComponentController<ProtoPickUpItem> implements NavigationPathProvider {
     private static final Logger LOGGER = LoggerFactory.getLogger(PickUpItemController.class);
 
     /** 默认拾取距离（与原版生物拾取范围同量级）。 */
@@ -187,6 +189,17 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
     public void onInterrupt(ProtoPickUpItem component) {
         this.terminal = null;
         this.navigationTask.cancel();
+    }
+
+    /**
+     * 返回当前动作正在跟随的实际规划路径（只读，供可视化采样）。
+     *
+     * @return 跟随中的路径；动作未运行、等待拾取延迟或路径已释放时为 null
+     */
+    @Override
+    @Nullable
+    public Path currentPath() {
+        return this.navigationTask.currentPath();
     }
 
     /**
