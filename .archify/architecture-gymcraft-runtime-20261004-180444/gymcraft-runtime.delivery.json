@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "0dfdc74b-89ae-4792-aa39-8376a649d464",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "D:\\projects\\minecraft\\withme\\.archify\\architecture-gymcraft-runtime-20261004-180444\\candidate.json",
+  "output": "D:\\projects\\minecraft\\withme\\.archify\\architecture-gymcraft-runtime-20261004-180444\\gymcraft-runtime.html",
+  "specification": {
+    "sha256": "d263bc297e0c362428feb41f6d45ec60269f825a68672aeb6e690e7d7b6ff0cb",
+    "bytes": 11679
+  },
+  "artifact": {
+    "sha256": "dfbb0c349128defe011552dabc9e4dca83e84a19f290bbba14fab344770bec38",
+    "bytes": 790722
+  }
+}

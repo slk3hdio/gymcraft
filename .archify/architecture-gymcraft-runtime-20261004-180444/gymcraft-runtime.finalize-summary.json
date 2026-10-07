@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\projects\\minecraft\\withme\\.archify\\architecture-gymcraft-runtime-20261004-180444\\candidate.json",
+    "sha256": "d263bc297e0c362428feb41f6d45ec60269f825a68672aeb6e690e7d7b6ff0cb",
+    "bytes": 11679
+  },
+  "artifact": {
+    "path": "D:\\projects\\minecraft\\withme\\.archify\\architecture-gymcraft-runtime-20261004-180444\\gymcraft-runtime.html",
+    "sha256": "dfbb0c349128defe011552dabc9e4dca83e84a19f290bbba14fab344770bec38",
+    "bytes": 790722
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\projects\\minecraft\\withme\\.archify\\architecture-gymcraft-runtime-20261004-180444\\gymcraft-runtime.finalize.json",
+    "summaryReceipt": "D:\\projects\\minecraft\\withme\\.archify\\architecture-gymcraft-runtime-20261004-180444\\gymcraft-runtime.finalize-summary.json",
+    "browserCheckReceipt": "D:\\projects\\minecraft\\withme\\.archify\\architecture-gymcraft-runtime-20261004-180444\\gymcraft-runtime.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.0.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-04T10:05:25.810Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 11396,
+  "visualReviewRecommendation": {
+    "action": "inspect-route-readability",
+    "signals": {
+      "routesOverSuggestedBends": 1
+    },
+    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
+    "affectedRoutes": {
+      "crossings": [],
+      "detours": [
+        {
+          "relationship": {
+            "id": "world-obs",
+            "from": "world",
+            "to": "obs",
+            "label": "读取世界状态",
+            "collectionIndex": 13,
+            "artifactIndex": 14
+          },
+          "bends": 3,
+          "stretch": 1.333,
+          "directCorridorBlockers": [
+            {
+              "id": "menu",
+              "label": "菜单会话系统",
+              "box": [
+                232,
+                500,
+                164,
+                64
+              ]
+            }
+          ]
+        }
+      ],
+      "truncated": false
+    },
+    "repair": "Trace these relationships at the desktop viewport. For Architecture, use references/architecture-layout-repair.md: reflow a blocked main path or tangled connected scene, and repair an isolated defect locally only when the surrounding composition is accepted. Preserve all semantic content and user-fixed geometry. Rerun finalize once after the edit."
+  }
+}

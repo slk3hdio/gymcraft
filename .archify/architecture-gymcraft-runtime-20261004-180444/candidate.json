@@ -1,0 +1,356 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "GymCraft 运行时架构",
+    "locale": "zh-CN",
+    "output": ".archify/architecture-gymcraft-runtime-20261004-180444/gymcraft-runtime.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/slk3hdio/gymcraft",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "c5e75da2113267e5fe622af2dd075440768eb54c"
+    }
+  },
+  "components": [
+    {
+      "id": "agent",
+      "type": "external",
+      "label": "外部智能体",
+      "sublabel": "RL 训练 / LLM 决策",
+      "pos": [30, 120],
+      "size": [136, 64],
+      "sources": [
+        { "path": "src/main/python/src/gymcraft/demos/parkour_q_learning.py" },
+        { "path": "src/main/python/src/gymcraft/llm/env.py" }
+      ]
+    },
+    {
+      "id": "adapter",
+      "type": "backend",
+      "label": "MCP / LLM 适配",
+      "sublabel": "gymcraft-mcp 动作 DSL",
+      "pos": [204, 120],
+      "size": [156, 64],
+      "sources": [
+        { "path": "src/main/python/src/gymcraft/mcp_server.py" },
+        { "path": "src/main/python/src/gymcraft/llm/actions.py" }
+      ]
+    },
+    {
+      "id": "client",
+      "type": "backend",
+      "label": "GymCraftEnv 客户端",
+      "sublabel": "gym.Env · proto 编解码",
+      "pos": [396, 120],
+      "size": [148, 64],
+      "sources": [
+        { "path": "src/main/python/src/gymcraft/client.py" }
+      ]
+    },
+    {
+      "id": "grpc",
+      "type": "cloud",
+      "label": "gRPC 桥接层",
+      "sublabel": "Netty :50051 · keepalive",
+      "pos": [660, 120],
+      "size": [156, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/rpc/GymCraftRpcServer.java" },
+        { "path": "src/main/proto/gymcraft/gym/rpc/env_service.proto" }
+      ]
+    },
+    {
+      "id": "sessions",
+      "type": "security",
+      "label": "RpcEnvSessions",
+      "sublabel": "孤儿接管·一实体一端",
+      "pos": [856, 120],
+      "size": [148, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/rpc/RpcEnvSessions.java" }
+      ]
+    },
+    {
+      "id": "mob",
+      "type": "backend",
+      "label": "受控 Mob · player_sim",
+      "sublabel": "Agent 载体 · 附件状态",
+      "pos": [30, 300],
+      "size": [148, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/entity/PlayerSimEntity.java" },
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/registry/ModAttachments.java" }
+      ]
+    },
+    {
+      "id": "actions",
+      "type": "backend",
+      "label": "动作组件 ×19",
+      "sublabel": "move_to · break_block 等",
+      "pos": [232, 300],
+      "size": [164, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/registry/ActionComponents.java" }
+      ]
+    },
+    {
+      "id": "executor",
+      "type": "backend",
+      "label": "动作执行管线",
+      "sublabel": "BatchExecutor·Dispatcher",
+      "pos": [432, 300],
+      "size": [164, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/runtime/ActionBatchExecutor.java" },
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/action/ActionDispatcher.java" }
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "AgentRuntime",
+      "sublabel": "gRPC 线程 ↔ tick 线程",
+      "pos": [660, 300],
+      "size": [156, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/runtime/AgentRuntime.java" }
+      ]
+    },
+    {
+      "id": "mcenv",
+      "type": "backend",
+      "label": "McEnv / AbstractMcEnv",
+      "sublabel": "step/reset 五元组",
+      "pos": [856, 300],
+      "size": [148, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/env/McEnv.java" },
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/env/AbstractMcEnv.java" }
+      ]
+    },
+    {
+      "id": "envmgr",
+      "type": "database",
+      "label": "EnvManager",
+      "sublabel": "UUID→McEnv 注册表",
+      "pos": [1030, 300],
+      "size": [140, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/EnvManager.java" }
+      ]
+    },
+    {
+      "id": "world",
+      "type": "database",
+      "label": "Minecraft 世界",
+      "sublabel": "tick 模拟 · 方块/实体",
+      "pos": [30, 500],
+      "size": [148, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/GymCraft.java" }
+      ]
+    },
+    {
+      "id": "menu",
+      "type": "backend",
+      "label": "菜单会话系统",
+      "sublabel": "FakePlayer · 槽位映射",
+      "pos": [232, 500],
+      "size": [164, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/menu/session/LogicalMenuSessions.java" },
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/fakeplayer/AgentFakePlayerService.java" }
+      ]
+    },
+    {
+      "id": "obs",
+      "type": "backend",
+      "label": "观测组件 ×9",
+      "sublabel": "self·nearby_*·chat·menu",
+      "pos": [432, 500],
+      "size": [164, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/registry/ObservationCreators.java" }
+      ]
+    },
+    {
+      "id": "composer",
+      "type": "backend",
+      "label": "ObservationComposer",
+      "sublabel": "header + Any 打包",
+      "pos": [660, 500],
+      "size": [156, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/observation/ObservationComposer.java" }
+      ]
+    },
+    {
+      "id": "visual",
+      "type": "frontend",
+      "label": "可视化服务",
+      "sublabel": "visual-1 · 快照复用推帧",
+      "pos": [852, 500],
+      "size": [164, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/visualization/VisualizationService.java" }
+      ]
+    },
+    {
+      "id": "chat",
+      "type": "backend",
+      "label": "聊天捕获",
+      "sublabel": "Mixin 出站包→环形缓冲",
+      "pos": [432, 680],
+      "size": [164, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/gym/chat/ChatCapture.java" },
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/mixin/ServerCommonPacketListenerMixin.java" }
+      ]
+    },
+    {
+      "id": "operator",
+      "type": "external",
+      "label": "运维 / 布景入口",
+      "sublabel": "EnvTool · RCON 布景",
+      "pos": [1030, 810],
+      "size": [140, 64],
+      "sources": [
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/item/EnvToolItem.java" },
+        { "path": "src/main/java/io/github/mousemeya/gymcraft/command/GymCraftCommands.java" }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Python Agent 进程 (uv · src/main/python)",
+      "wraps": ["agent", "adapter", "client"]
+    },
+    {
+      "kind": "security-group",
+      "label": "gRPC 接入 (gym/rpc)",
+      "wraps": ["grpc", "sessions"],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "Minecraft 专用服务器 · NeoForge + GymCraft (JVM)",
+      "wraps": ["grpc", "sessions", "envmgr", "mcenv", "runtime", "executor", "actions", "mob", "world", "menu", "obs", "composer", "visual", "chat"]
+    }
+  ],
+  "connections": [
+    { "id": "agent-adapter", "from": "agent", "to": "adapter" },
+    { "id": "adapter-client", "from": "adapter", "to": "client" },
+    {
+      "id": "client-grpc",
+      "from": "client",
+      "to": "grpc",
+      "label": "gRPC :50051",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -10
+    },
+    {
+      "id": "grpc-client-return",
+      "from": "grpc",
+      "to": "client",
+      "label": "StepResponse",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "right",
+      "labelDy": 12
+    },
+    { "id": "grpc-sessions", "from": "grpc", "to": "sessions" },
+    { "id": "sessions-mcenv", "from": "sessions", "to": "mcenv", "fromSide": "bottom", "toSide": "top" },
+    { "id": "mcenv-runtime", "from": "mcenv", "to": "runtime", "fromSide": "left", "toSide": "right" },
+    { "id": "runtime-executor", "from": "runtime", "to": "executor", "fromSide": "left", "toSide": "right" },
+    { "id": "executor-actions", "from": "executor", "to": "actions", "fromSide": "left", "toSide": "right" },
+    { "id": "actions-mob", "from": "actions", "to": "mob", "fromSide": "left", "toSide": "right" },
+    {
+      "id": "runtime-grpc-return",
+      "from": "runtime",
+      "to": "grpc",
+      "label": "五元组+观测",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDx": 46
+    },
+    {
+      "id": "composer-runtime-return",
+      "from": "composer",
+      "to": "runtime",
+      "label": "回填观测",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDx": 44
+    },
+    {
+      "id": "mob-world",
+      "from": "mob",
+      "to": "world",
+      "label": "交互",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": -26,
+      "labelDy": 24
+    },
+    {
+      "id": "world-obs",
+      "from": "world",
+      "to": "obs",
+      "label": "读取世界状态",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "via": [[104, 624], [410, 624], [410, 532]],
+      "labelAt": [260, 616]
+    },
+    { "id": "chat-obs", "from": "chat", "to": "obs", "label": "chat 观测源", "fromSide": "top", "toSide": "bottom", "labelDx": 42 },
+    { "id": "obs-composer", "from": "obs", "to": "composer", "fromSide": "right", "toSide": "left" },
+    { "id": "composer-visual", "from": "composer", "to": "visual", "variant": "dashed", "fromSide": "right", "toSide": "left" },
+    { "id": "actions-menu", "from": "actions", "to": "menu", "label": "菜单 4 件套", "fromSide": "bottom", "toSide": "top" },
+    { "id": "envmgr-sessions", "from": "envmgr", "to": "sessions", "label": "Connect 取已有 env" },
+    {
+      "id": "operator-envmgr",
+      "from": "operator",
+      "to": "envmgr",
+      "label": "创建/移除环境",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDx": -44
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "动作下发",
+      "items": [
+        "动作 = (component_id, Any payload) 列表，批内按输入顺序串行，每动作至少 1 tick",
+        "共享 timeout_seconds（≤0 不限制），按 20 tick/秒换算，超时中断当前组件",
+        "gRPC 线程阻塞在 CompletableFuture，由服务器 tick 线程（EntityTick Pre/Post）驱动并唤醒"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "环境与会话",
+      "items": [
+        "环境仅能场内创建（EnvToolItem / /gymcraft 指令 / RCON 布景），Connect 只按实体 UUID 绑定已有环境",
+        "断连标记孤儿会话：10 秒清扫 × 60 秒宽限，瞬断重连透明恢复，新进程可直接接管",
+        "组件会话状态挂在 Mob 附件上；reset 从 NBT 快照按原 UUID 重建实体，物品默认清除"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "观测回传",
+      "items": [
+        "观测 = header + Any 组件地图（gymcraft:self 等 9 项），last_actions 提供逐动作反馈",
+        "菜单动作经专属 FakePlayer 会话（不在世界实体集合），Mixin 修补容器开盖计数",
+        "聊天观测来自出站包 Mixin 捕获的环形缓冲；visual-1 自定义载荷通道独立推送调试可视化"
+      ]
+    }
+  ]
+}

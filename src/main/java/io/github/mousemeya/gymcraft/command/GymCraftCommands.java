@@ -3,6 +3,8 @@ package io.github.mousemeya.gymcraft.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
+import java.util.Collection;
+
 import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.registry.EnvFactories;
 import net.minecraft.commands.CommandSourceStack;
@@ -18,7 +20,8 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
  * /gymcraft 指令。
  *
  * <p>提供与 {@link io.github.mousemeya.gymcraft.item.EnvToolItem} 等价的环境创建/删除能力，
- * 便于在专用服务器控制台或 RCON 下使用。
+ * 便于在专用服务器控制台或 RCON 下使用。目标参数接受多实体选择器
+ * （如 {@code @e[type=zombie,limit=3]}），对每个目标逐一执行，返回成功数。</p>
  */
 public final class GymCraftCommands {
     /** 禁止实例化仅包含静态指令注册逻辑的工具类。 */
@@ -37,61 +40,70 @@ public final class GymCraftCommands {
                 .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .then(Commands.literal("env")
                         .then(Commands.literal("create")
-                                .then(Commands.argument("target", EntityArgument.entity())
-                                        .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntity(ctx, "target"), defaultType))
+                                .then(Commands.argument("target", EntityArgument.entities())
+                                        .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"), defaultType))
                                         .then(Commands.argument("type", IdentifierArgument.id())
-                                                .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntity(ctx, "target"),
+                                                .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
                                                         IdentifierArgument.getId(ctx, "type").toString())))))
                         .then(Commands.literal("remove")
-                                .then(Commands.argument("target", EntityArgument.entity())
-                                        .executes(ctx -> remove(ctx.getSource(), EntityArgument.getEntity(ctx, "target")))))));
+                                .then(Commands.argument("target", EntityArgument.entities())
+                                        .executes(ctx -> remove(ctx.getSource(), EntityArgument.getEntities(ctx, "target")))))));
     }
 
     /**
-     * 为目标 Mob 创建指定类型的环境。
+     * 为每个目标 Mob 创建指定类型的环境，逐个反馈成功/失败。
      *
      * @param source 指令来源
-     * @param target 目标实体
+     * @param targets 目标实体集合（多实体选择器展开结果）
      * @param envType 环境注册表 ID
-     * @return 成功时返回 1，失败时返回 0
+     * @return 成功创建环境的目标数（0 表示全部失败）
      * @throws CommandSyntaxException 目标实体参数解析失败时抛出
      */
-    private static int create(CommandSourceStack source, Entity target, String envType) throws CommandSyntaxException {
-        if (!(target instanceof Mob mob)) {
-            source.sendFailure(Component.translatable("message.gymcraft.target_not_mob", target.getUUID().toString()));
-            return 0;
+    private static int create(CommandSourceStack source, Collection<? extends Entity> targets, String envType)
+            throws CommandSyntaxException {
+        int created = 0;
+        for (Entity target : targets) {
+            // 非 Mob 目标跳过并逐个反馈，不中断其余目标的处理
+            if (!(target instanceof Mob mob)) {
+                source.sendFailure(Component.translatable("message.gymcraft.target_not_mob", target.getUUID().toString()));
+                continue;
+            }
+            try {
+                EnvManager.create(envType, mob);
+            } catch (IllegalArgumentException e) {
+                source.sendFailure(Component.translatable("message.gymcraft.error", e.getMessage()));
+                continue;
+            }
+            created++;
+            source.sendSuccess(() -> Component.translatable(
+                "message.gymcraft.environment_created",
+                envType,
+                mob.getUUID().toString()
+            ), true);
         }
-        try {
-            EnvManager.create(envType, mob);
-        } catch (IllegalArgumentException e) {
-            source.sendFailure(Component.translatable("message.gymcraft.error", e.getMessage()));
-            return 0;
-        }
-        source.sendSuccess(() -> Component.translatable(
-            "message.gymcraft.environment_created",
-            envType,
-            mob.getUUID().toString()
-        ), true);
-        return 1;
+        return created;
     }
 
     /**
-     * 移除目标实体当前绑定的环境。
+     * 移除每个目标实体当前绑定的环境，逐个反馈成功/失败。
      *
      * @param source 指令来源
-     * @param target 目标实体
-     * @return 成功时返回 1，不存在环境时返回 0
+     * @param targets 目标实体集合（多实体选择器展开结果）
+     * @return 成功移除环境的目标数（0 表示全部失败）
      */
-    private static int remove(CommandSourceStack source, Entity target) {
-        boolean removed = EnvManager.close(target.getUUID());
-        if (removed) {
-            source.sendSuccess(() -> Component.translatable(
-                "message.gymcraft.environment_removed",
-                target.getUUID().toString()
-            ), true);
-            return 1;
+    private static int remove(CommandSourceStack source, Collection<? extends Entity> targets) {
+        int removed = 0;
+        for (Entity target : targets) {
+            if (EnvManager.close(target.getUUID())) {
+                removed++;
+                source.sendSuccess(() -> Component.translatable(
+                    "message.gymcraft.environment_removed",
+                    target.getUUID().toString()
+                ), true);
+            } else {
+                source.sendFailure(Component.translatable("message.gymcraft.environment_missing", target.getUUID().toString()));
+            }
         }
-        source.sendFailure(Component.translatable("message.gymcraft.environment_missing", target.getUUID().toString()));
-        return 0;
+        return removed;
     }
 }
