@@ -10,6 +10,7 @@ import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.profiling.Profiler;
@@ -27,6 +28,7 @@ import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import javax.annotation.Nullable;
 
 /**
  * Agent 运行时，负责在 Minecraft tick 循环中串行执行一个 step 的动作批次。
@@ -46,6 +48,11 @@ public class AgentRuntime {
     private final ResetHandler resetHandler;
     private final List<MobAttachmentSpec<?>> attachmentSpecs;
     private MobAttachmentAccessScope attachmentScope;
+    /**
+     * 环境完整状态基线（方块 + 区域实体 + agent），首个 reset 搭建场景后由环境冻结；
+     * 冻结后每次 reset 恢复基线，替代 {@link #initialSnapshot} 的纯实体回退路径。
+     */
+    @Nullable private EnvStateSnapshot stateSnapshot;
     private final ArrayBlockingQueue<ActionBatchExecutor.Request> actionBuf = new ArrayBlockingQueue<>(1);
     private final ArrayBlockingQueue<ResetRequest> resetBuf = new ArrayBlockingQueue<>(1);
     private boolean entityPostObserved;
@@ -93,6 +100,20 @@ public class AgentRuntime {
     /** @return 当前受控 Mob，reset 后可能是新实例 */
     public Mob mob() {
         return this.mob;
+    }
+
+    /**
+     * 冻结环境状态基线；冻结后每次 reset 恢复完整环境状态而不仅是 agent 实体。
+     *
+     * @param snapshot 场景搭建完成后捕获的完整环境快照
+     */
+    public void setStateSnapshot(EnvStateSnapshot snapshot) {
+        this.stateSnapshot = snapshot;
+    }
+
+    /** @return 环境状态基线是否已冻结 */
+    public boolean hasStateSnapshot() {
+        return this.stateSnapshot != null;
     }
 
     /** @param disableVanillaAi 是否在批次之间禁用原版 AI */
@@ -183,7 +204,18 @@ public class AgentRuntime {
         this.actionExecutor.clearState();
         this.closeMenuSession(this.mob, "reset");
 
-        Mob restoredMob = this.initialSnapshot.restore();
+        Mob restoredMob;
+        if (this.stateSnapshot != null) {
+            // 先恢复环境范围内的方块与区域实体，保证 agent 落脚的方块已就位
+            if (!(this.mob.level() instanceof ServerLevel worldLevel)) {
+                throw new IllegalStateException("Cannot restore environment state outside a server level: "
+                    + this.mob.getUUID());
+            }
+            this.stateSnapshot.restoreWorldAndEntities(worldLevel);
+            restoredMob = this.stateSnapshot.restoreAgent();
+        } else {
+            restoredMob = this.initialSnapshot.restore();
+        }
         LOGGER.info("GymCraft runtime reset restore entity old={} new={}", this.mob.getUUID(), restoredMob.getUUID());
         AgentInventoryLayout.clearAllItems(this.mob);
         this.attachmentScope.deactivate(this.mob);

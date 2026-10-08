@@ -5,24 +5,19 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
-import net.neoforged.neoforge.server.ServerLifecycleHooks;
-import net.minecraft.world.Container;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -32,15 +27,19 @@ import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
+import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
+import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 
 /**
  * 从空物品栏开始完成木材、工作台、木镐、石镐与粗铁获取链路的任务环境。
  * <p>
- * 环境在创建位置周围占用固定 9x9 训练区域，首次构造时保存原方块和方块实体数据，
- * reset 时重建确定性资源布局，close 时恢复原世界。任务状态只从真实世界与 Agent
- * 统一物品栏推导，不依赖 Python 客户端自行判分。
+ * 环境在创建位置周围占用固定 9x9 训练区域：构造时捕获原世界（close 时经基类恢复），
+ * 首个 reset 搭建确定性资源布局并冻结状态基线，此后 reset 由 {@code gym/state}
+ * 状态基线恢复（方块差异写回 + 区域实体清除），close 恢复原世界。
+ * 任务状态只从真实世界与 Agent 统一物品栏推导，不依赖 Python 客户端自行判分。
  * </p>
  */
 public final class IronMiningEnv extends AbstractMcEnv {
@@ -56,7 +55,6 @@ public final class IronMiningEnv extends AbstractMcEnv {
     private final ServerLevel level;
     private final BlockPos origin;
     private final AABB arenaBounds;
-    private final Map<BlockPos, ArenaBlockSnapshot> originalBlocks;
     private final List<BlockPos> logPositions;
     private final List<BlockPos> stonePositions;
     private final BlockPos ironOrePosition;
@@ -64,12 +62,10 @@ public final class IronMiningEnv extends AbstractMcEnv {
 
     private int maxSteps = DEFAULT_MAX_STEPS;
     private int steps;
-    private boolean arenaActive;
-    private boolean environmentClosed;
     private StepEvaluation evaluation = StepEvaluation.initial();
 
     /**
-     * 创建并绑定固定训练区域，但在首次 reset 前不修改世界。
+     * 创建并绑定固定训练区域、捕获原世界快照，但在首个 reset 前不修改世界。
      *
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob
@@ -126,7 +122,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
             this.origin.offset(-2, 0, 2)
         );
         this.ironOrePosition = this.origin.offset(0, 0, 3);
-        this.originalBlocks = captureArena(serverLevel, this.origin);
+        this.captureOriginalWorld(serverLevel);
         this.resetMilestones();
 
         // 紧凑训练场中的方块掉落常停在方块边缘；略微放宽距离可避免寻路在邻格中心提前结束。
@@ -134,8 +130,16 @@ public final class IronMiningEnv extends AbstractMcEnv {
         pickUp.setPickupReach(2.0);
     }
 
+    /** 环境状态范围：整个训练区域（方块 + 区域实体进入基线）。 */
+    @Override
+    protected EnvStateScope stateScope() {
+        return EnvStateScope.of(new BoundingBox(
+            (int) this.arenaBounds.minX, (int) this.arenaBounds.minY, (int) this.arenaBounds.minZ,
+            (int) this.arenaBounds.maxX - 1, (int) this.arenaBounds.maxY - 1, (int) this.arenaBounds.maxZ - 1));
+    }
+
     /**
-     * 清空 Agent、重建场地并初始化本回合计数器。
+     * 首个 reset 清场并搭建训练场（此后由状态基线恢复），每回合重置计数器与里程碑。
      *
      * @param mob reset 后的新 Mob 实体
      * @param seed 未用于固定布局的可选种子
@@ -145,22 +149,24 @@ public final class IronMiningEnv extends AbstractMcEnv {
     protected void resetMob(Mob mob, Integer seed, Map<String, Object> options) {
         int requestedMaxSteps = positiveInt(options, MAX_STEPS_OPTION, DEFAULT_MAX_STEPS);
         super.resetMob(mob, seed, options);
-        this.clearArenaItems();
-        AgentInventoryLayout.clearAllItems(mob);
-        this.buildArenaTemplate();
-        mob.snapTo(
-            this.origin.getX() + 0.5,
-            this.origin.getY(),
-            this.origin.getZ() + 0.5,
-            mob.getYRot(),
-            0.0F
-        );
-        mob.setDeltaMovement(Vec3.ZERO);
+        if (!this.isStateBaselineFrozen()) {
+            RegionEntitySnapshot.discardRegionEntities(
+                this.level, this.stateScope().entityRegions(), mob.getUUID());
+            AgentInventoryLayout.clearAllItems(mob);
+            this.buildArenaTemplate();
+            mob.snapTo(
+                this.origin.getX() + 0.5,
+                this.origin.getY(),
+                this.origin.getZ() + 0.5,
+                mob.getYRot(),
+                0.0F
+            );
+            mob.setDeltaMovement(Vec3.ZERO);
+        }
         this.maxSteps = requestedMaxSteps;
         this.steps = 0;
         this.evaluation = StepEvaluation.initial();
         this.resetMilestones();
-        this.arenaActive = true;
     }
 
     /**
@@ -224,25 +230,6 @@ public final class IronMiningEnv extends AbstractMcEnv {
         info.put("success", false);
         info.put("failure_reason", "");
         return info;
-    }
-
-    /**
-     * 清理任务掉落并恢复环境创建前的世界状态。
-     */
-    @Override
-    public void close() {
-        if (this.environmentClosed) {
-            return;
-        }
-        this.environmentClosed = true;
-        super.close();
-        this.runOnServerThread(() -> {
-            if (this.arenaActive) {
-                this.clearArenaItems();
-                this.restoreOriginalArena();
-                this.arenaActive = false;
-            }
-        });
     }
 
     /**
@@ -348,57 +335,25 @@ public final class IronMiningEnv extends AbstractMcEnv {
     }
 
     /**
-     * 将固定模板写入训练区域，覆盖上一回合放置或破坏的方块。
+     * 将固定模板写入训练区域（仅首个 reset 的场景搭建分支调用一次）。
      */
     private void buildArenaTemplate() {
         for (int x = -ARENA_RADIUS; x <= ARENA_RADIUS; x++) {
             for (int z = -ARENA_RADIUS; z <= ARENA_RADIUS; z++) {
-                replaceWithoutDrops(this.level, this.origin.offset(x, ARENA_BOTTOM_OFFSET, z), Blocks.BEDROCK.defaultBlockState());
+                RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, ARENA_BOTTOM_OFFSET, z), Blocks.BEDROCK.defaultBlockState());
                 for (int y = 0; y < ARENA_TOP_OFFSET; y++) {
-                    replaceWithoutDrops(this.level, this.origin.offset(x, y, z), Blocks.AIR.defaultBlockState());
+                    RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, y, z), Blocks.AIR.defaultBlockState());
                 }
-                replaceWithoutDrops(this.level, this.origin.offset(x, ARENA_TOP_OFFSET, z), Blocks.BEDROCK.defaultBlockState());
+                RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, ARENA_TOP_OFFSET, z), Blocks.BEDROCK.defaultBlockState());
             }
         }
         for (BlockPos pos : this.logPositions) {
-            replaceWithoutDrops(this.level, pos, Blocks.OAK_LOG.defaultBlockState());
+            RegionBlockSnapshot.replaceWithoutDrops(this.level, pos, Blocks.OAK_LOG.defaultBlockState());
         }
         for (BlockPos pos : this.stonePositions) {
-            replaceWithoutDrops(this.level, pos, Blocks.STONE.defaultBlockState());
+            RegionBlockSnapshot.replaceWithoutDrops(this.level, pos, Blocks.STONE.defaultBlockState());
         }
-        replaceWithoutDrops(this.level, this.ironOrePosition, Blocks.IRON_ORE.defaultBlockState());
-    }
-
-    /**
-     * 恢复构造时保存的全部方块状态和方块实体数据。
-     */
-    private void restoreOriginalArena() {
-        for (Map.Entry<BlockPos, ArenaBlockSnapshot> entry : this.originalBlocks.entrySet()) {
-            BlockPos pos = entry.getKey();
-            ArenaBlockSnapshot snapshot = entry.getValue();
-            replaceWithoutDrops(this.level, pos, snapshot.state());
-            if (snapshot.blockEntityData() != null) {
-                BlockEntity restored = BlockEntity.loadStatic(
-                    pos,
-                    snapshot.state(),
-                    snapshot.blockEntityData().copy(),
-                    this.level.registryAccess()
-                );
-                if (restored != null) {
-                    this.level.getChunkAt(pos).setBlockEntity(restored);
-                    restored.setChanged();
-                }
-            }
-        }
-    }
-
-    /**
-     * 删除训练区域内的掉落物，防止上一回合资源残留。
-     */
-    private void clearArenaItems() {
-        for (ItemEntity item : this.level.getEntitiesOfClass(ItemEntity.class, this.arenaBounds)) {
-            item.discard();
-        }
+        RegionBlockSnapshot.replaceWithoutDrops(this.level, this.ironOrePosition, Blocks.IRON_ORE.defaultBlockState());
     }
 
     /**
@@ -455,41 +410,6 @@ public final class IronMiningEnv extends AbstractMcEnv {
     }
 
     /**
-     * 捕获整个训练区域的原方块和方块实体数据。
-     *
-     * @param level 服务端世界
-     * @param origin 训练区域原点
-     * @return 位置到快照的有序映射
-     */
-    private static Map<BlockPos, ArenaBlockSnapshot> captureArena(ServerLevel level, BlockPos origin) {
-        Map<BlockPos, ArenaBlockSnapshot> snapshots = new LinkedHashMap<>();
-        BlockPos min = origin.offset(-ARENA_RADIUS, ARENA_BOTTOM_OFFSET, -ARENA_RADIUS);
-        BlockPos max = origin.offset(ARENA_RADIUS, ARENA_TOP_OFFSET, ARENA_RADIUS);
-        for (BlockPos cursor : BlockPos.betweenClosed(min, max)) {
-            BlockPos pos = cursor.immutable();
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-            CompoundTag data = blockEntity == null ? null : blockEntity.saveWithFullMetadata(level.registryAccess());
-            snapshots.put(pos, new ArenaBlockSnapshot(level.getBlockState(pos), data));
-        }
-        return Map.copyOf(snapshots);
-    }
-
-    /**
-     * 在替换方块前清空容器，防止保存过的原物品被原版移除回调额外掉落。
-     *
-     * @param level 服务端世界
-     * @param pos 目标位置
-     * @param state 新方块状态
-     */
-    private static void replaceWithoutDrops(ServerLevel level, BlockPos pos, BlockState state) {
-        BlockEntity existing = level.getBlockEntity(pos);
-        if (existing instanceof Container container) {
-            container.clearContent();
-        }
-        level.setBlock(pos, state, 3);
-    }
-
-    /**
      * 读取正整数 reset option。
      *
      * @param options reset 配置
@@ -530,33 +450,6 @@ public final class IronMiningEnv extends AbstractMcEnv {
             result.add(serializePos(pos));
         }
         return List.copyOf(result);
-    }
-
-    /**
-     * 在服务端线程执行世界清理；外部 RPC 线程调用 close 时等待任务完成。
-     *
-     * @param task 要执行的世界操作
-     */
-    private void runOnServerThread(Runnable task) {
-        var server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null || server.isSameThread()) {
-            task.run();
-            return;
-        }
-        CompletableFuture<Void> completion = new CompletableFuture<>();
-        server.execute(() -> {
-            try {
-                task.run();
-                completion.complete(null);
-            } catch (RuntimeException error) {
-                completion.completeExceptionally(error);
-            }
-        });
-        completion.join();
-    }
-
-    /** 保存单个原世界方块及其可选方块实体 NBT。 */
-    private record ArenaBlockSnapshot(BlockState state, @Nullable CompoundTag blockEntityData) {
     }
 
     /** 定义任务的有序里程碑、info 标识和首次完成奖励。 */

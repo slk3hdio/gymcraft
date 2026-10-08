@@ -30,6 +30,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 - **组件会话状态**挂 Mob 的 NeoForge attachment（注册入口 `registry/ModAttachments`）；菜单按钮经 `gym/menu/adapter/MenuAdapters` 按菜单类查适配器
 - **menu 包结构**: `gym/menu/` 分 `session/`（会话生命周期与槽位映射）与 `adapter/`（按钮适配器）两个子包；`MenuTypeUtil` 在根包
 - 菜单交互设计文档: `docs/menu-interaction-implementation-plan.md`
+- **环境状态基线** (`gym/state/`): 占用世界的环境覆盖 `AbstractMcEnv.stateScope()` 声明区域（`EnvStateScope`，`BoundingBox` 闭区间）；`captureOriginalWorld` 在首次改世界前捕获原状（close 时基类恢复），首个 reset 的场景搭建完成后冻结完整基线（区域方块 + 区域实体 + agent，`EnvStateSnapshot`），此后 reset 由 `AgentRuntime` 走快照恢复（方块默认 `StateRestoreMode.DIFF` 差异写回，区域实体保留原 UUID 重建）。`resetMob` 只在基线冻结前（`!isStateBaselineFrozen()`）搭建场景，冻结后只做计数器/选项/实体补丁。设计文档: `docs/environment-state-system.md`
 - **Mixin**: 已启用（`gymcraft.mixins.json` + mods.toml `[[mixins]]`）；注入点：`ServerCommonPacketListenerMixin`（出站包咽喉，捕获聊天包供 `gymcraft:chat` 观测；`gym/chat/` 为捕获与环形缓冲）、`ContainerOpenersCounterMixin`（容器开盖 5-tick 自检并入菜单会话计数，计数桥 `gym/menu/session/MenuOpenersBridge`）
 
 ## Gotchas
@@ -53,7 +54,8 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 - **info 仅用于调试/记录，agent 决策只能依赖观测**: 上批动作的逐项状态/描述由观测 header `last_actions` 聚合（`ObservationComposer` 从批次 `details["actions"]` 展开，status 大写），摘要仍在 `last_action_status`/`last_action_description`；主手持物经 `self.main_hand_item` 被动可见（空手不设置）。LLM 的 action-result 消息只保留批次摘要，逐项反馈从观测读取
 - **附近结构扫描**: `gymcraft:world` 的 `structures` 字段由 `WorldLocationScanner.scanNearbyStructures` 以 `hasChunk` 守卫只读已加载区块的结构起点表（`StructureManager.getChunk(x,z,status)` 默认 `load=true`，绝不能省守卫，否则会隐式加载区块）；起点只存于生成区块，天然无重复；半径经 `WorldStateObservationCreator.setStructureChunkRadius` 覆盖
 - **容器开盖计数**: 菜单会话独占 FakePlayer 不在世界实体集合中，原版 `ContainerOpenersCounter.recheckOpeners`（打开后 5 tick）扫描不到会把计数强清为 0 并造成负泄漏（盖子永久关闭/卡开）；`ContainerOpenersCounterMixin` + `MenuOpenersBridge` 按活动会话（`MenuSessionHooks.openSessions` + `isOwnContainer`）补计数，不要把菜单 FakePlayer 加进世界（会被怪物 AI 当目标）
-- **程序化生成 Warden**: `EntityType.WARDEN.create(level, reason)` 不走 `finalizeSpawn`，`DIG_COOLDOWN` 记忆缺失会导致 Warden 立即钻地消失；生成后需 `warden.getBrain().setMemoryWithExpiry(MemoryModuleType.DIG_COOLDOWN, Unit.INSTANCE, Integer.MAX_VALUE)`（见 `IronGolemWardenEnv.spawnWarden`）
+- **程序化生成 Warden**: `EntityType.WARDEN.create(level, reason)` 不走 `finalizeSpawn`，`DIG_COOLDOWN` 记忆缺失会导致 Warden 立即钻地消失；生成后需 `warden.getBrain().setMemoryWithExpiry(MemoryModuleType.DIG_COOLDOWN, Unit.INSTANCE, Integer.MAX_VALUE)`（见 `IronGolemWardenEnv.spawnWarden`）。该记忆**不随 NBT 序列化**，状态基线重建的 Warden 必须在每次 reset 重新注入（`IronGolemWardenEnv.repinWarden`）
+- **状态基线 gotchas**: 区域区块必须已加载（`RegionBlockSnapshot.requireChunksLoaded` 未加载直接抛错，无头服务器务必 `forceload`）；影响场景布局的 reset options（如 parkour 的 `target_height`/`block_count`/`block`）只在**首个 reset** 生效并冻结进基线，后续 reset 忽略；快照排除真实玩家与受控 agent，乘客实体由载具根实体代表；计划刻/流体/游戏时间不进快照；快照仅内存，环境 close 即丢弃
 - **use_item 实体交互白名单**: 目标实体自身的持物交互（`entity.interact`）仅放行 虚弱僵尸村民+金苹果、受伤铁傀儡+铁锭（+25 生命）；其余走 `stack.interactLivingEntity`，不接受时回退普通使用（`UseItemController.use`）
 - 用 `gh` 操作含中文的 GitHub issue 前先设 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
 - `repo/` 既是 maven-publish 目标，又存放参考资源: `Documentation` (NeoForge 文档)、`minecraft-source-1.26`/`minecraft-source-1.20.1-java` (反编译源码)、`TouhouLittleMaid-1.20` (参考模组)

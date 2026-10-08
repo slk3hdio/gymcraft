@@ -246,6 +246,16 @@ public final class GymCraftGameTests {
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_GOLEM_WARDEN_RESUPPLY =
         TEST_FUNCTIONS.register("iron_golem_warden_resupply", () -> IronGolemWardenEnvGameTests::suppliesReissuedAcrossResets);
 
+    // ===== 环境状态基线（gym/state） =====
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> STATE_BLOCK_ROLLBACK =
+        TEST_FUNCTIONS.register("state_block_rollback", () -> EnvStateGameTests::blockRollbackAcrossResets);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> STATE_ENTITY_ROLLBACK =
+        TEST_FUNCTIONS.register("state_entity_rollback", () -> EnvStateGameTests::entityRollbackAcrossResets);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> STATE_ITEM_CLEANUP =
+        TEST_FUNCTIONS.register("state_item_cleanup", () -> EnvStateGameTests::itemEntitiesClearedAcrossResets);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> STATE_WARDEN_NO_DIG =
+        TEST_FUNCTIONS.register("state_warden_no_dig", () -> EnvStateGameTests::wardenBaselineResetKeepsSurfaced);
+
     // ===== Agent 死亡生命周期 =====
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IDLE_DEATH_RETURNS_TERMINATED_STEP =
         TEST_FUNCTIONS.register("agent_idle_death_returns_terminated_step", () -> AgentDeathGameTests::idleDeathReturnsTerminatedStep);
@@ -397,6 +407,8 @@ public final class GymCraftGameTests {
                         holder.getId().getPath().startsWith("use_item_")
                             || holder.getId().getPath().startsWith("iron_mining_")
                             || holder.getId().getPath().startsWith("iron_golem_warden_")
+                            // 状态基线测试搭建完整任务场地，同样需要多格空间。
+                            || holder.getId().getPath().startsWith("state_")
                             || holder.getId().getPath().startsWith("navigation_")
                             // 水域导航需要多格空间布置水坑。
                             || holder.getId().getPath().startsWith("swim_")
@@ -405,6 +417,7 @@ public final class GymCraftGameTests {
                             ? USE_ITEM_STRUCTURE : EMPTY_STRUCTURE,
                         holder.getId().getPath().startsWith("iron_mining_") ? 12000
                             : holder.getId().getPath().startsWith("iron_golem_warden_") ? 12000
+                            : holder.getId().getPath().startsWith("state_") ? 12000
                             : holder.getId().getPath().startsWith("chat_") ? 12000
                             // 伤害日志用例含 600ms 无敌帧等待与多次阻塞 step，放宽时限
                             : holder.getId().getPath().startsWith("damage_log_") ? 1200

@@ -1,0 +1,155 @@
+package io.github.mousemeya.gymcraft.gym.state;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.phys.AABB;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * 区域实体快照：基线时刻区域内全部可序列化实体的 NBT 列表。
+ * <p>
+ * 排除规则（捕获与清除共用同一过滤器）：真实玩家（{@link ServerPlayer}）绝不进入
+ * 快照也不会被清除；受控 agent 本体由 {@code gym/env/EntitySnapshot} 单独处理；
+ * 乘客实体跳过——原版把乘客递归存进载具 NBT，只存根实体避免恢复时双重生成。
+ * 恢复时先按同过滤器清除区域内现存实体，再从 NBT 重建并经
+ * {@link ServerLevel#addWithUUID} 保留原 UUID（环境里 {@code wardenUuid} 之类的
+ * 引用因此跨 reset 保持有效）。
+ * </p>
+ * <p>
+ * 已知限制：骑乘关系中的乘客不随恢复重建（环境区域内不应出现骑乘实体）；
+ * 计划刻、实体脑记忆等不随 NBT 序列化的运行时状态不在快照内，需要环境在
+ * reset 流程中自行补齐（如 Warden 的 DIG_COOLDOWN 重注入）。
+ * </p>
+ */
+public final class RegionEntitySnapshot {
+    private static final Logger LOGGER = LoggerFactory.getLogger(RegionEntitySnapshot.class);
+
+    /** 基线实体：类型 + NBT（{@code saveWithoutId} 不含类型 id 键，必须分开保存）。 */
+    private record SavedEntity(EntityType<?> type, CompoundTag data) {
+    }
+
+    private final List<AABB> regions;
+    private final UUID agentUuid;
+    private final List<SavedEntity> entities;
+
+    private RegionEntitySnapshot(List<AABB> regions, UUID agentUuid, List<SavedEntity> entities) {
+        this.regions = regions;
+        this.agentUuid = agentUuid;
+        this.entities = entities;
+    }
+
+    /**
+     * 捕获区域内全部符合过滤器的实体。
+     * <p>
+     * {@code saveWithoutId} 不写实体类型 {@code id} 键，类型必须与 NBT 分开保存
+     * （与 {@code gym/env/EntitySnapshot} 同一处理）。
+     * </p>
+     *
+     * @param level 服务端世界
+     * @param regions 实体查询区域（半开区间）
+     * @param agent 受控 agent（按 UUID 排除）
+     * @return 区域实体快照
+     */
+    public static RegionEntitySnapshot capture(ServerLevel level, List<AABB> regions, Mob agent) {
+        List<SavedEntity> entities = new ArrayList<>();
+        for (Entity entity : collectRegionEntities(level, regions, agent.getUUID())) {
+            try (ProblemReporter.ScopedCollector reporter =
+                new ProblemReporter.ScopedCollector(entity.problemPath(), LOGGER)) {
+                TagValueOutput output = TagValueOutput.createWithContext(reporter, level.registryAccess());
+                entity.saveWithoutId(output);
+                entities.add(new SavedEntity(entity.getType(), output.buildResult().copy()));
+            }
+        }
+        return new RegionEntitySnapshot(regions, agent.getUUID(), List.copyOf(entities));
+    }
+
+    /**
+     * 清除区域内现存实体后重建基线实体（保留原 UUID）。
+     *
+     * @param level 服务端世界
+     */
+    public void restore(ServerLevel level) {
+        discardRegionEntities(level, this.regions, this.agentUuid);
+        for (SavedEntity saved : this.entities) {
+            Entity entity;
+            try (ProblemReporter.ScopedCollector reporter = new ProblemReporter.ScopedCollector(LOGGER)) {
+                entity = EntityType.create(
+                    saved.type(),
+                    TagValueInput.create(reporter, level.registryAccess(), saved.data().copy()),
+                    level,
+                    EntitySpawnReason.LOAD
+                ).orElseThrow(() -> new IllegalStateException("Failed to restore region entity from snapshot"));
+            }
+            if (!level.addWithUUID(entity)) {
+                throw new IllegalStateException("Failed to add restored region entity to level: " + entity.getUUID());
+            }
+        }
+    }
+
+    /**
+     * @return 基线实体数量
+     */
+    public int size() {
+        return this.entities.size();
+    }
+
+    /**
+     * 按过滤器清除区域内现存实体（真实玩家与受控 agent 除外）。
+     * <p>
+     * 供场景搭建前清场、基线恢复前清场与 close 清场共用。
+     * </p>
+     *
+     * @param level 服务端世界
+     * @param regions 实体查询区域（半开区间）
+     * @param agentUuid 受控 agent 的 UUID（豁免清除）
+     */
+    public static void discardRegionEntities(ServerLevel level, List<AABB> regions, UUID agentUuid) {
+        for (Entity entity : collectRegionEntities(level, regions, agentUuid)) {
+            entity.discard();
+        }
+    }
+
+    /**
+     * 收集区域内符合过滤器的实体：排除真实玩家、受控 agent 与乘客实体。
+     *
+     * @param level 服务端世界
+     * @param regions 实体查询区域（半开区间）
+     * @param agentUuid 受控 agent 的 UUID
+     * @return 区域内待处理的实体列表
+     */
+    private static List<Entity> collectRegionEntities(ServerLevel level, List<AABB> regions, UUID agentUuid) {
+        List<Entity> result = new ArrayList<>();
+        for (AABB region : regions) {
+            for (Entity entity : level.getEntities((Entity) null, region, RegionEntitySnapshot::isManaged)) {
+                if (!entity.getUUID().equals(agentUuid) && !result.contains(entity)) {
+                    result.add(entity);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 判断实体是否属于环境状态管理范围（真实玩家除外；乘客由载具根实体代表）。
+     *
+     * @param entity 候选实体
+     * @return 纳入管理时为 true
+     */
+    private static boolean isManaged(Entity entity) {
+        return !(entity instanceof ServerPlayer) && !entity.isPassenger();
+    }
+}

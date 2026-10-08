@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import javax.annotation.Nullable;
 
 import com.google.protobuf.Message;
 
@@ -13,6 +16,7 @@ import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -33,6 +37,11 @@ import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime.RuntimeStepResult;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
+import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
+import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
+import io.github.mousemeya.gymcraft.gym.state.StateRestoreMode;
 
 
 
@@ -60,6 +69,10 @@ public abstract class AbstractMcEnv implements McEnv {
     private boolean disableVanillaAi;
     private boolean allowMultipleActions = true;
     private boolean closed;
+    /** 环境搭建场景前的原世界方块快照（close 时恢复）；空范围环境始终为 null。 */
+    @Nullable private List<RegionBlockSnapshot> originalWorldBlocks;
+    /** 捕获原世界快照时所在的服务端世界。 */
+    @Nullable private ServerLevel originalWorldLevel;
 
     @Override
     public String getRegisterId() {
@@ -259,7 +272,7 @@ public abstract class AbstractMcEnv implements McEnv {
         );
     }
 
-    /** 关闭环境与运行时，同时撤销仅属于本环境实例的可视化订阅。 */
+    /** 关闭环境与运行时，恢复原世界并撤销仅属于本环境实例的可视化订阅。 */
     @Override
     public void close() {
         if (this.closed) {
@@ -269,9 +282,130 @@ public abstract class AbstractMcEnv implements McEnv {
         io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.close(this.mob(), this);
         this.agentRuntime.clear();
         NeoForge.EVENT_BUS.unregister(this.agentRuntime);
+        this.restoreOriginalWorld();
         this.closed = true;
     }
 
+    /**
+     * 环境状态范围：环境占用的世界区域与是否捕获区域内实体。
+     * <p>
+     * 默认空范围——不做世界快照，reset 只重建 agent 实体（等价引入状态系统前的行为）。
+     * 占用世界的任务环境应覆盖此方法；范围在首个 reset 冻结基线后必须保持稳定。
+     * </p>
+     *
+     * @return 环境状态范围
+     */
+    protected EnvStateScope stateScope() {
+        return EnvStateScope.empty();
+    }
+
+    /**
+     * 方块恢复模式：默认差异恢复（只写回变更位置）。
+     *
+     * @return 恢复模式
+     */
+    protected StateRestoreMode stateRestoreMode() {
+        return StateRestoreMode.DIFF;
+    }
+
+    /**
+     * 在首次修改世界前捕获原世界方块快照，close 时恢复。空范围或已捕获时不做事。
+     * <p>
+     * 调用时机约束：必须早于任何场景搭建（区域在捕获后发生的修改才会被 close 还原）。
+     * 区域在构造期即可确定的环境在构造器尾部调用；区域依赖首个 reset 的
+     * 布局选项时在 resetMob 的场景搭建分支开头调用。
+     * </p>
+     *
+     * @param level 服务端世界
+     */
+    protected final void captureOriginalWorld(ServerLevel level) {
+        EnvStateScope scope = this.stateScope();
+        if (scope.isEmpty() || this.originalWorldBlocks != null) {
+            return;
+        }
+        this.originalWorldLevel = level;
+        this.originalWorldBlocks = scope.regions().stream()
+            .map(region -> RegionBlockSnapshot.capture(level, region))
+            .toList();
+    }
+
+    /**
+     * @return 状态基线是否已冻结（首个 reset 的场景搭建完成后冻结，此后 reset 走快照恢复）
+     */
+    protected final boolean isStateBaselineFrozen() {
+        return this.agentRuntime.hasStateSnapshot();
+    }
+
+    /**
+     * 在服务端线程执行世界操作；外部 RPC 线程调用时等待任务完成。
+     *
+     * @param task 要执行的世界操作
+     */
+    protected static void runOnServerThread(Runnable task) {
+        var server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null || server.isSameThread()) {
+            task.run();
+            return;
+        }
+        CompletableFuture<Void> completion = new CompletableFuture<>();
+        server.execute(() -> {
+            try {
+                task.run();
+                completion.complete(null);
+            } catch (RuntimeException error) {
+                completion.completeExceptionally(error);
+            }
+        });
+        completion.join();
+    }
+
+    /**
+     * 首个 reset 的场景搭建完成后冻结完整环境基线（方块 + 区域实体 + agent）。
+     *
+     * @param mob 场景搭建完成后的受控 Mob
+     */
+    private void freezeStateBaseline(Mob mob) {
+        EnvStateScope scope = this.stateScope();
+        if (scope.isEmpty() || this.agentRuntime.hasStateSnapshot()) {
+            return;
+        }
+        if (!(mob.level() instanceof ServerLevel serverLevel)) {
+            throw new IllegalStateException("Cannot capture environment state outside a server level: " + this.envId);
+        }
+        EnvStateSnapshot snapshot = EnvStateSnapshot.capture(serverLevel, mob, scope, this.stateRestoreMode());
+        this.agentRuntime.setStateSnapshot(snapshot);
+    }
+
+    /**
+     * close 时在服务端线程恢复原世界方块；基线已冻结且范围含实体时一并清除区域实体。
+     */
+    private void restoreOriginalWorld() {
+        if (this.originalWorldBlocks == null || this.originalWorldLevel == null) {
+            return;
+        }
+        List<RegionBlockSnapshot> blocks = this.originalWorldBlocks;
+        ServerLevel level = this.originalWorldLevel;
+        EnvStateScope scope = this.stateScope();
+        boolean discardEntities = scope.captureEntities() && this.agentRuntime.hasStateSnapshot();
+        UUID agentUuid = this.mob().getUUID();
+        runOnServerThread(() -> {
+            for (RegionBlockSnapshot region : blocks) {
+                region.restore(level, this.stateRestoreMode());
+            }
+            if (discardEntities) {
+                RegionEntitySnapshot.discardRegionEntities(level, scope.entityRegions(), agentUuid);
+            }
+        });
+    }
+
+    /**
+     * 每回合环境逻辑：清理脑记忆/导航（基类部分），子类叠加计数器归零、选项重读与
+     * 快照无法承载的实体补丁（如不随 NBT 序列化的脑记忆）。
+     * <p>
+     * 占用世界区域的环境（{@link #stateScope()} 非空）只在首个 reset（基线冻结前）
+     * 搭建场景；基线冻结后场景由状态快照恢复，本方法不再触碰世界。
+     * </p>
+     */
     protected void resetMob(Mob mob, Integer seed, Map<String, Object> options) {
         mob.getNavigation().stop();
         mob.setTarget(null);
@@ -281,11 +415,12 @@ public abstract class AbstractMcEnv implements McEnv {
         mob.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
     }
 
-    /** 应用通用 reset 行为并在最后提交动作间空闲期 AI 选项。 */
+    /** 应用通用 reset 行为：场景分支、冻结状态基线，最后提交动作间空闲期 AI 选项。 */
     protected final void resetAgent(Mob mob, Integer seed, Map<String, Object> options) {
         boolean requestedDisableVanillaAi = parseDisableVanillaAi(options);
         boolean requestedAllowMultipleActions = parseAllowMultipleActions(options);
         this.resetMob(mob, seed, options);
+        this.freezeStateBaseline(mob);
         this.agentRuntime.setDisableVanillaAi(requestedDisableVanillaAi);
         this.agentRuntime.setAllowMultipleActions(requestedAllowMultipleActions);
         this.disableVanillaAi = requestedDisableVanillaAi;

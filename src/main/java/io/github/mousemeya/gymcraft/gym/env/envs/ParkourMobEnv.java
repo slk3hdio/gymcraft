@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.env.envs;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,17 +13,24 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
+import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 
 /**
  * 跳跃搭方块环境：Mob 在受限水平区域中跳跃并将手持方块放到脚下，逐层到达目标高度。
- * reset 会生成起点平台并发放资源；环境只清理自己生成的方块，不改动其他世界状态。
+ * <p>
+ * 首个 reset 按布局选项（{@code block}/{@code block_count}/{@code target_height}）生成起点
+ * 平台并发放资源，随后冻结状态基线（含平台层与训练柱区域的原世界捕获，close 时恢复）；
+ * 此后 reset 由 {@code gym/state} 状态基线恢复训练柱——布局选项只在首个 reset 生效，
+ * 更换布局需重建环境。区域内其他实体不进入基线（blocksOnly）。
+ * </p>
  */
 public class ParkourMobEnv extends AbstractMcEnv {
     private static final String BLOCK_OPTION = "block";
@@ -36,7 +42,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
     private static final int DEFAULT_MAX_STEPS = 256;
     private static final int MOVE_RADIUS = 3;
 
-    private final List<TrackedBlock> generatedBlocks = new ArrayList<>();
+    /** 首个 reset 才确定（依赖当次 Mob 位置与布局选项），此前为 null。 */
     private BlockPos origin;
     private double baseY;
     private int targetHeight = DEFAULT_TARGET_HEIGHT;
@@ -59,32 +65,56 @@ public class ParkourMobEnv extends AbstractMcEnv {
         observationComponent(ObservationCreators.NEARBY_BLOCKS.get()).setMaxBlocks(64);
     }
 
-    /** 重置 Mob、训练场和本回合计数器。 */
+    /**
+     * 环境状态范围：平台层与训练柱（7×7，脚底下一格到目标高度上方两格）。
+     * 首个 reset 前原点未定，返回空范围（不做世界快照）。
+     */
+    @Override
+    protected EnvStateScope stateScope() {
+        if (this.origin == null) {
+            return EnvStateScope.empty();
+        }
+        return EnvStateScope.blocksOnly(new BoundingBox(
+            this.origin.getX() - MOVE_RADIUS,
+            this.origin.getY() - 1,
+            this.origin.getZ() - MOVE_RADIUS,
+            this.origin.getX() + MOVE_RADIUS,
+            this.origin.getY() + this.targetHeight + 2,
+            this.origin.getZ() + MOVE_RADIUS));
+    }
+
+    /** 首个 reset 搭建平台并发放资源（冻结基线），每回合重置计数器。 */
     @Override
     protected void resetMob(Mob mob, Integer seed, Map<String, Object> options) {
         super.resetMob(mob, seed, options);
-        clearGeneratedBlocks();
-        this.targetHeight = positiveInt(options, TARGET_HEIGHT_OPTION, DEFAULT_TARGET_HEIGHT);
         this.maxSteps = positiveInt(options, MAX_STEPS_OPTION, DEFAULT_MAX_STEPS);
-        int count = positiveInt(options, BLOCK_COUNT_OPTION, DEFAULT_BLOCK_COUNT);
-        String blockId = stringOption(options, BLOCK_OPTION, "minecraft:stone");
-        Block block = BuiltInRegistries.BLOCK.get(Identifier.parse(blockId))
-            .map(reference -> reference.value()).orElse(Blocks.AIR);
-        if (block == Blocks.AIR || block.asItem() == null) {
-            throw new IllegalArgumentException("Invalid parkour block: " + blockId);
-        }
-        this.origin = BlockPos.containing(mob.position());
-        this.baseY = this.origin.getY();
-        ServerLevel level = (ServerLevel) mob.level();
-        clearTrainingColumn(level);
-        for (int dx = -MOVE_RADIUS; dx <= MOVE_RADIUS; dx++) {
-            for (int dz = -MOVE_RADIUS; dz <= MOVE_RADIUS; dz++) {
-                trackAndPlace(level, this.origin.offset(dx, -1, dz), Blocks.STONE.defaultBlockState());
+        if (!this.isStateBaselineFrozen()) {
+            // 布局选项仅首个 reset 生效并冻结进基线；后续 reset 忽略布局选项
+            this.targetHeight = positiveInt(options, TARGET_HEIGHT_OPTION, DEFAULT_TARGET_HEIGHT);
+            int count = positiveInt(options, BLOCK_COUNT_OPTION, DEFAULT_BLOCK_COUNT);
+            String blockId = stringOption(options, BLOCK_OPTION, "minecraft:stone");
+            Block block = BuiltInRegistries.BLOCK.get(Identifier.parse(blockId))
+                .map(reference -> reference.value()).orElse(Blocks.AIR);
+            if (block == Blocks.AIR || block.asItem() == null) {
+                throw new IllegalArgumentException("Invalid parkour block: " + blockId);
             }
+            this.origin = BlockPos.containing(mob.position());
+            this.baseY = this.origin.getY();
+            ServerLevel level = (ServerLevel) mob.level();
+            this.captureOriginalWorld(level);
+            clearTrainingColumn(level);
+            for (int dx = -MOVE_RADIUS; dx <= MOVE_RADIUS; dx++) {
+                for (int dz = -MOVE_RADIUS; dz <= MOVE_RADIUS; dz++) {
+                    RegionBlockSnapshot.replaceWithoutDrops(
+                        level, this.origin.offset(dx, -1, dz), Blocks.STONE.defaultBlockState());
+                }
+            }
+            mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(block.asItem(), count));
+            this.previousCount = count;
+        } else {
+            this.previousCount = mob.getMainHandItem().getCount();
         }
-        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(block.asItem(), count));
         this.steps = 0;
-        this.previousCount = count;
         this.previousY = mob.getY();
         this.success = false;
         this.outOfBounds = false;
@@ -145,15 +175,8 @@ public class ParkourMobEnv extends AbstractMcEnv {
         return info;
     }
 
-    /** 关闭环境并清除本环境创建的方块。 */
-    @Override
-    public void close() {
-        clearGeneratedBlocks();
-        super.close();
-    }
-
     /**
-     * 清空移动范围内从起始脚底到目标上方的训练柱体。
+     * 清空移动范围内从起始脚底到目标上方的训练柱体（仅首个 reset 的场景搭建分支调用）。
      *
      * @param level 训练环境所在的服务端世界
      */
@@ -169,30 +192,6 @@ public class ParkourMobEnv extends AbstractMcEnv {
                 }
             }
         }
-    }
-
-    /**
-     * 记录原方块状态并放置环境平台方块。
-     *
-     * @param level 训练环境所在的服务端世界
-     * @param pos 平台方块位置
-     * @param state 要放置的方块状态
-     */
-    private void trackAndPlace(ServerLevel level, BlockPos pos, BlockState state) {
-        BlockState previous = level.getBlockState(pos);
-        if (level.setBlock(pos, state, 3)) {
-            this.generatedBlocks.add(new TrackedBlock(level, pos, previous, state));
-        }
-    }
-
-    /** 清理环境拥有的方块，保留其他方块。 */
-    private void clearGeneratedBlocks() {
-        for (TrackedBlock tracked : this.generatedBlocks) {
-            if (tracked.level().getBlockState(tracked.pos()).equals(tracked.placedState())) {
-                tracked.level().setBlock(tracked.pos(), tracked.previousState(), 3);
-            }
-        }
-        this.generatedBlocks.clear();
     }
 
     /** 读取正整数 reset option。 */
@@ -213,9 +212,6 @@ public class ParkourMobEnv extends AbstractMcEnv {
             throw new IllegalArgumentException("Reset option '" + key + "' must be a non-empty string");
         }
         return string;
-    }
-
-    private record TrackedBlock(ServerLevel level, BlockPos pos, BlockState previousState, BlockState placedState) {
     }
 
     /** 注册表使用的环境工厂。 */
