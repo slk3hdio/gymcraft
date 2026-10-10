@@ -5,9 +5,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
-import javax.annotation.Nullable;
 
 import com.google.protobuf.Message;
 
@@ -15,13 +12,10 @@ import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
@@ -38,9 +32,6 @@ import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime.RuntimeStepResult;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
-import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
-import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.state.StateRestoreMode;
 
 
@@ -54,6 +45,10 @@ import io.github.mousemeya.gymcraft.gym.state.StateRestoreMode;
  * <p>
  * 工厂方法 {@link #create(String, UUID)} 根据环境类型创建对应子类实例
  * 环境实现由 NeoForge 自定义注册表中的 McEnvFactory 创建。
+ * <p>
+ * 内部职责委托给两个协作类：环境状态系统（快照捕获/恢复）由 {@link EnvStateManager}
+ * 持有，附件访问作用域与 reset 实体替换由 {@link AgentMobLifecycle} 执行，本类只保留
+ * 身份、组件装配与 RL 主流程的编排。
  */
 public abstract class AbstractMcEnv implements McEnv {
     /** reset options：是否在 reset 后和相邻动作之间的空闲期禁用原版 AI。 */
@@ -69,30 +64,14 @@ public abstract class AbstractMcEnv implements McEnv {
     private boolean disableVanillaAi;
     private boolean allowMultipleActions = true;
     private boolean closed;
-    /** 环境搭建场景前的原世界方块快照（close 时恢复）；空范围环境始终为 null。 */
-    @Nullable private List<RegionBlockSnapshot> originalWorldBlocks;
-    /** 捕获原世界快照时所在的服务端世界。 */
-    @Nullable private ServerLevel originalWorldLevel;
+    /** 环境状态管理器：状态系统（原世界快照、完整基线、初始实体快照）的全部持有状态与操作。 */
+    private final EnvStateManager stateManager;
+    /** 受控实体生命周期：附件访问作用域与 reset 实体替换。 */
+    private final AgentMobLifecycle mobLifecycle;
 
     @Override
     public String getRegisterId() {
         return this.envTypeId.toString();
-    }
-
-    protected static Mob getMobFromEntityUuid(UUID entityUuid) {
-        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null) {
-            throw new IllegalStateException("Cannot create environment before server is available");
-        }
-
-        for (var level : server.getAllLevels()) {
-            Entity entity = level.getEntity(entityUuid);
-            if (entity instanceof Mob mob) {
-                return mob;
-            }
-        }
-
-        throw new IllegalArgumentException("No loaded Mob entity found for UUID: " + entityUuid);
     }
 
     protected AbstractMcEnv(
@@ -188,19 +167,18 @@ public abstract class AbstractMcEnv implements McEnv {
         this.envId = UUID.randomUUID();
         this.actionController = actionController;
         this.observationCreator = observationCreator;
-        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob, this::resetAgent, attachmentSpecs);
+        // 协作类创建顺序等价原内联顺序：激活附件作用域 → 捕获初始实体快照 → 建运行时。
+        this.mobLifecycle = new AgentMobLifecycle(mob, List.copyOf(attachmentSpecs));
+        this.stateManager = new EnvStateManager(mob, this.envId, this::stateScope, this::stateRestoreMode);
+        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
         NeoForge.EVENT_BUS.register(this.agentRuntime);
     }
-      
+
     @Override
     public ResetResponse reset(Integer seed, Map<String, Object> options) {
         this.ensureOpen();
-        Map<String, Object> resetOptions = options == null ? Map.of() : options;
-        boolean requestedDisableVanillaAi = parseDisableVanillaAi(resetOptions);
-        boolean requestedAllowMultipleActions = parseAllowMultipleActions(resetOptions);
-        RuntimeStepResult result = this.agentRuntime.reset(seed, resetOptions);
-        this.disableVanillaAi = requestedDisableVanillaAi;
-        this.allowMultipleActions = requestedAllowMultipleActions;
+        RuntimeStepResult result = this.agentRuntime.reset(
+            seed, options == null ? Map.of() : options, this::resetEnvironment);
         return ResetResponse.newBuilder()
             .setObservation(result.observation())
             .setInfo(ProtoJson.toJson(this.createResetInfo()))
@@ -281,8 +259,10 @@ public abstract class AbstractMcEnv implements McEnv {
         // 先撤销本环境的可视化订阅（内部转交服务端线程，捕获实例防止误删同 UUID 新环境的订阅）。
         io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.close(this.mob(), this);
         this.agentRuntime.clear();
+        // 附件访问权必须在组件释放清算完成后撤销（清算经物品栏布局读取背包附件）。
+        this.mobLifecycle.deactivate(this.mob());
         NeoForge.EVENT_BUS.unregister(this.agentRuntime);
-        this.restoreOriginalWorld();
+        this.stateManager.restoreOriginalWorld(this.mob().getUUID());
         this.closed = true;
     }
 
@@ -297,6 +277,17 @@ public abstract class AbstractMcEnv implements McEnv {
      */
     protected EnvStateScope stateScope() {
         return EnvStateScope.empty();
+    }
+
+    /**
+     * 环境状态范围的只读视图，供可视化等环境外消费者读取；子类仍经
+     * {@link #stateScope()} 覆盖声明。范围可能在首个 reset 才随布局选项确定，
+     * 调用方不应缓存结果。
+     *
+     * @return 当前环境状态范围
+     */
+    public final EnvStateScope stateScopeView() {
+        return this.stateScope();
     }
 
     /**
@@ -319,83 +310,14 @@ public abstract class AbstractMcEnv implements McEnv {
      * @param level 服务端世界
      */
     protected final void captureOriginalWorld(ServerLevel level) {
-        EnvStateScope scope = this.stateScope();
-        if (scope.isEmpty() || this.originalWorldBlocks != null) {
-            return;
-        }
-        this.originalWorldLevel = level;
-        this.originalWorldBlocks = scope.regions().stream()
-            .map(region -> RegionBlockSnapshot.capture(level, region))
-            .toList();
+        this.stateManager.captureOriginalWorld(level);
     }
 
     /**
      * @return 状态基线是否已冻结（首个 reset 的场景搭建完成后冻结，此后 reset 走快照恢复）
      */
     protected final boolean isStateBaselineFrozen() {
-        return this.agentRuntime.hasStateSnapshot();
-    }
-
-    /**
-     * 在服务端线程执行世界操作；外部 RPC 线程调用时等待任务完成。
-     *
-     * @param task 要执行的世界操作
-     */
-    protected static void runOnServerThread(Runnable task) {
-        var server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null || server.isSameThread()) {
-            task.run();
-            return;
-        }
-        CompletableFuture<Void> completion = new CompletableFuture<>();
-        server.execute(() -> {
-            try {
-                task.run();
-                completion.complete(null);
-            } catch (RuntimeException error) {
-                completion.completeExceptionally(error);
-            }
-        });
-        completion.join();
-    }
-
-    /**
-     * 首个 reset 的场景搭建完成后冻结完整环境基线（方块 + 区域实体 + agent）。
-     *
-     * @param mob 场景搭建完成后的受控 Mob
-     */
-    private void freezeStateBaseline(Mob mob) {
-        EnvStateScope scope = this.stateScope();
-        if (scope.isEmpty() || this.agentRuntime.hasStateSnapshot()) {
-            return;
-        }
-        if (!(mob.level() instanceof ServerLevel serverLevel)) {
-            throw new IllegalStateException("Cannot capture environment state outside a server level: " + this.envId);
-        }
-        EnvStateSnapshot snapshot = EnvStateSnapshot.capture(serverLevel, mob, scope, this.stateRestoreMode());
-        this.agentRuntime.setStateSnapshot(snapshot);
-    }
-
-    /**
-     * close 时在服务端线程恢复原世界方块；基线已冻结且范围含实体时一并清除区域实体。
-     */
-    private void restoreOriginalWorld() {
-        if (this.originalWorldBlocks == null || this.originalWorldLevel == null) {
-            return;
-        }
-        List<RegionBlockSnapshot> blocks = this.originalWorldBlocks;
-        ServerLevel level = this.originalWorldLevel;
-        EnvStateScope scope = this.stateScope();
-        boolean discardEntities = scope.captureEntities() && this.agentRuntime.hasStateSnapshot();
-        UUID agentUuid = this.mob().getUUID();
-        runOnServerThread(() -> {
-            for (RegionBlockSnapshot region : blocks) {
-                region.restore(level, this.stateRestoreMode());
-            }
-            if (discardEntities) {
-                RegionEntitySnapshot.discardRegionEntities(level, scope.entityRegions(), agentUuid);
-            }
-        });
+        return this.stateManager.isBaselineFrozen();
     }
 
     /**
@@ -415,12 +337,33 @@ public abstract class AbstractMcEnv implements McEnv {
         mob.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
     }
 
+    /**
+     * 环境侧重置（由 runtime 在服务端 tick 线程经 {@code ResetHandler} 回调）的编排：
+     * 恢复状态基线、替换受控实体（含附件作用域迁移），最后执行每回合逻辑
+     * （场景分支、冻结基线、选项应用）。
+     * <p>
+     * 顺序约束由协作类保证：旧实体的组件会话已由 runtime 先行释放；背包附件受访问
+     * 作用域门控，故 {@code clearAllItems} 必须先于 scope 撤销，新实体的 scope 激活
+     * 必须先于 {@link #resetAgent} 的场景搭建分支（如发放补给）。
+     * </p>
+     *
+     * @param currentMob 当前（待替换）实体
+     * @param seed 可选种子
+     * @param options 重置选项
+     * @return 重建后已加入世界的实体
+     */
+    private Mob resetEnvironment(Mob currentMob, Integer seed, Map<String, Object> options) {
+        Mob newMob = this.mobLifecycle.replace(currentMob, this.stateManager.restoreForReset(currentMob));
+        this.resetAgent(newMob, seed, options);
+        return newMob;
+    }
+
     /** 应用通用 reset 行为：场景分支、冻结状态基线，最后提交动作间空闲期 AI 选项。 */
     protected final void resetAgent(Mob mob, Integer seed, Map<String, Object> options) {
         boolean requestedDisableVanillaAi = parseDisableVanillaAi(options);
         boolean requestedAllowMultipleActions = parseAllowMultipleActions(options);
         this.resetMob(mob, seed, options);
-        this.freezeStateBaseline(mob);
+        this.stateManager.freezeBaseline(mob);
         this.agentRuntime.setDisableVanillaAi(requestedDisableVanillaAi);
         this.agentRuntime.setAllowMultipleActions(requestedAllowMultipleActions);
         this.disableVanillaAi = requestedDisableVanillaAi;

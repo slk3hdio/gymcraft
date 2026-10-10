@@ -46,17 +46,20 @@ EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateS
 环境构造          captureOriginalWorld（区域已知时；parkour 推迟到首个 reset）
 首个 reset        initialSnapshot 重建 agent → resetMob 搭建场景（清场/模板/补给/生成实体）
                   → resetAgent 冻结基线（EnvStateSnapshot.capture）
-后续 reset        AgentRuntime：恢复区域方块（DIFF）→ 清除并重建区域实体 → 基线重建 agent
-                  → resetMob 只做计数器/选项/实体补丁（如 Warden DIG_COOLDOWN 重注入）
-close             基类恢复原世界方块（DIFF）；基线已冻结且范围含实体时清除区域实体
+后续 reset        runtime 清理动作管线 → 组件 release 自清会话（菜单/消费）→
+                  AbstractMcEnv.resetEnvironment 编排：EnvStateManager 恢复区域方块（DIFF）→
+                  清除并重建区域实体 → 基线重建 agent → AgentMobLifecycle 替换实体
+                  （清背包/迁移附件作用域）→ resetMob 只做计数器/选项/实体补丁（如 Warden DIG_COOLDOWN 重注入）
+close             runtime 组件 release → AgentMobLifecycle 撤销附件作用域 →
+                  EnvStateManager 恢复原世界方块（DIFF）；基线已冻结且范围含实体时清除区域实体
 ```
 
 接入点：
 
 - `AbstractMcEnv.stateScope()`：模板方法，默认空范围
-- `AbstractMcEnv.captureOriginalWorld(ServerLevel)`：必须在首次修改世界前调用（幂等）
+- `AbstractMcEnv.captureOriginalWorld(ServerLevel)`：必须在首次修改世界前调用（幂等，委托 `EnvStateManager`）
 - `AbstractMcEnv.isStateBaselineFrozen()`：`resetMob` 的场景搭建分支守卫
-- `AgentRuntime.setStateSnapshot/hasStateSnapshot`：基线冻结与 reset 分支选择
+- 基线快照、初始实体快照与原世界快照由 `EnvStateManager`（gym/env，包私有）持有，附件作用域与实体替换由 `AgentMobLifecycle` 持有；`AgentRuntime` 不保存环境状态，reset 逻辑由 env 每次经 `AgentRuntime.reset(seed, options, ResetHandler)` 传入（`resetEnvironment`）
 
 ## 环境迁移要点
 

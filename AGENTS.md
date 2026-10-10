@@ -27,10 +27,10 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 - **组件默认值覆盖**: 环境构造函数里经 `AbstractMcEnv.actionComponent(factory)`/`observationComponent(factory)` 取实例再调组件 setter（`setRadius`/`setSpeed`/`setReachDistance` 等，见各组件类）；观测组件 setter 会同步重建观测空间
 - **gRPC 桥接** (`gym/rpc/`): `GymCraftRpcServer` 随 `ServerStartedEvent` 启动；`Connect` **只连接已存在的环境** (`EnvManager.get(uuid)`)，不创建环境
 - **GameTest** (`gametest/` 包, main 源集): `GymCraftGameTests` 注册全部测试（空环境 + `minecraft:empty` 结构）；`MenuGameTestSupport` 提供断言辅助
-- **组件会话状态**挂 Mob 的 NeoForge attachment（注册入口 `registry/ModAttachments`）；菜单按钮经 `gym/menu/adapter/MenuAdapters` 按菜单类查适配器
+- **组件会话状态**挂 Mob 的 NeoForge attachment（注册入口 `registry/ModAttachments`）；菜单按钮经 `gym/menu/adapter/MenuAdapters` 按菜单类查适配器；reset/close 时组件经 `ActionComponentController.release(reason)` 自清跨动作会话（菜单会话由 `OpenMenuController`、use_item 消费由 `UseItemController`），`AgentRuntime` 只经 `ActionDispatcher.releaseComponents` 转发，不硬编码具体组件
 - **menu 包结构**: `gym/menu/` 分 `session/`（会话生命周期与槽位映射）与 `adapter/`（按钮适配器）两个子包；`MenuTypeUtil` 在根包
 - 菜单交互设计文档: `docs/menu-interaction-implementation-plan.md`
-- **环境状态基线** (`gym/state/`): 占用世界的环境覆盖 `AbstractMcEnv.stateScope()` 声明区域（`EnvStateScope`，`BoundingBox` 闭区间）；`captureOriginalWorld` 在首次改世界前捕获原状（close 时基类恢复），首个 reset 的场景搭建完成后冻结完整基线（区域方块 + 区域实体 + agent，`EnvStateSnapshot`），此后 reset 由 `AgentRuntime` 走快照恢复（方块默认 `StateRestoreMode.DIFF` 差异写回，区域实体保留原 UUID 重建）。`resetMob` 只在基线冻结前（`!isStateBaselineFrozen()`）搭建场景，冻结后只做计数器/选项/实体补丁。设计文档: `docs/environment-state-system.md`
+- **环境状态基线** (`gym/state/`): 占用世界的环境覆盖 `AbstractMcEnv.stateScope()` 声明区域（`EnvStateScope`，`BoundingBox` 闭区间）；`captureOriginalWorld` 在首次改世界前捕获原状（close 时基类恢复），首个 reset 的场景搭建完成后冻结完整基线（区域方块 + 区域实体 + agent，`EnvStateSnapshot`），此后 reset 由 `AbstractMcEnv` 走快照恢复（方块默认 `StateRestoreMode.DIFF` 差异写回，区域实体保留原 UUID 重建）。`resetMob` 只在基线冻结前（`!isStateBaselineFrozen()`）搭建场景，冻结后只做计数器/选项/实体补丁。环境状态（基线快照、初始实体快照、原世界快照）由 `EnvStateManager`（gym/env，包私有）持有，附件作用域与 reset 实体替换由 `AgentMobLifecycle` 执行，`AbstractMcEnv` 只做编排；reset 逻辑每次经 `AgentRuntime.reset(..., ResetHandler)` 传入，runtime 不保存环境状态。设计文档: `docs/environment-state-system.md`
 - **Mixin**: 已启用（`gymcraft.mixins.json` + mods.toml `[[mixins]]`）；注入点：`ServerCommonPacketListenerMixin`（出站包咽喉，捕获聊天包供 `gymcraft:chat` 观测；`gym/chat/` 为捕获与环形缓冲）、`ContainerOpenersCounterMixin`（容器开盖 5-tick 自检并入菜单会话计数，计数桥 `gym/menu/session/MenuOpenersBridge`）
 
 ## Gotchas
