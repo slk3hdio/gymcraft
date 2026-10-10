@@ -247,6 +247,75 @@ public final class ScenarioGameTests {
     }
 
     /**
+     * 验证场景挂载即自动完成首个 reset：spawn 后不手动调用 reset，基线应已冻结、
+     * 平台与 agent 物资按场景内容就位、preset options 已生效——挂载完成即可 step/save。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void mountAutoResets(GameTestHelper helper) {
+        Mob mobA = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
+        ServerLevel level = helper.getLevel();
+        BlockPos absB = helper.absolutePos(new BlockPos(2, 2, 0));
+        Path storeDir = createTempStoreDir();
+        ScenarioStore store = new ScenarioStore(storeDir);
+        AtomicReference<UUID> mobBUuid = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        McEnv envA = EnvManager.create("gymcraft:parkour_mob", mobA);
+        Thread.startVirtualThread(() -> {
+            try {
+                envA.reset(1, Map.of(
+                    "block", "minecraft:oak_planks",
+                    "target_height", 3,
+                    AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
+                runOnServer(helper, () -> {
+                    try {
+                        ScenarioOps.capture("autoreset", envA, mobA, store);
+                        EnvManager.close(mobA.getUUID());
+                        ensureChunksLoaded(level, absB.offset(-3, 0, -3), absB.offset(3, 0, 3));
+                        // 关键差异：spawn 之后不调用 envB.reset——挂载应自动完成首个 reset
+                        Mob mobB = ScenarioOps.spawn(store.load("autoreset"), level, Vec3.atBottomCenterOf(absB));
+                        mobBUuid.set(mobB.getUUID());
+                    } catch (Throwable error) {
+                        throw new IllegalStateException(error);
+                    }
+                });
+            } catch (Throwable error) {
+                failure.set(error);
+            }
+        });
+        helper.runAfterDelay(300, () -> {
+            try {
+                assertTrue(helper, failure.get() == null, "scenario mount auto-reset setup failed: " + failure.get());
+                McEnv envB = EnvManager.get(mobBUuid.get()).orElse(null);
+                assertTrue(helper, envB instanceof AbstractMcEnv,
+                    "spawned scenario env not registered");
+                AbstractMcEnv spawnedEnv = (AbstractMcEnv) envB;
+                assertTrue(helper, spawnedEnv.baselineSnapshot() != null,
+                    "scenario mount did not auto-reset (state baseline not frozen)");
+                assertTrue(helper, level.getBlockState(absB.offset(0, -1, 0)).is(Blocks.STONE),
+                    "parkour platform missing at load position");
+                assertTrue(helper, level.getBlockState(absB.offset(3, -1, -3)).is(Blocks.STONE),
+                    "parkour platform corner missing at load position");
+                Map<String, Object> frozen = spawnedEnv.frozenOptionsView();
+                assertTrue(helper, frozen.get("target_height") instanceof Number height && height.intValue() == 3,
+                    "auto-reset did not freeze the scenario preset options");
+                Mob mobB = (Mob) level.getEntity(mobBUuid.get());
+                assertTrue(helper, mobB != null && mobB.isAlive(), "scenario agent missing after auto reset");
+                assertTrue(helper, mobB.getMainHandItem().is(Items.OAK_PLANKS)
+                    && mobB.getMainHandItem().getCount() == 32,
+                    "scenario agent supplies were not restored by auto reset");
+                helper.succeed();
+            } finally {
+                if (mobBUuid.get() != null) {
+                    EnvManager.close(mobBUuid.get());
+                }
+                EnvManager.close(mobA.getUUID());
+                deleteRecursivelyQuietly(storeDir);
+            }
+        });
+    }
+
+    /**
      * 验证场景存储的边界行为：非法名称拒绝、同名覆盖、列表排序与损坏条目跳过、缺失
      * world.nbt 回退空世界内容、删除幂等与未找到报错。纯文件 I/O，不触碰世界。
      *

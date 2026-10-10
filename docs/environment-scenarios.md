@@ -72,7 +72,8 @@
 ```
 
 `load mob` 时目标 Mob 与场景 agent 类型不一致只警告、仍创建环境（观测/动作组件以场景
-env 类型为准）。占用世界的环境必须完成首次 reset（基线已冻结）才能保存。
+env 类型为准）。占用世界的环境必须完成首次 reset（基线已冻结）才能保存；场景加载的
+环境在挂载时自动完成首个 reset（见下），无此等待窗口。
 
 ## 关键语义
 
@@ -83,11 +84,14 @@ env 类型为准）。占用世界的环境必须完成首次 reset（基线已�
 - **放置先于环境创建**：`load` 先把世界内容写进世界，再 `EnvManager.create`——构造期
   `captureOriginalWorld` 捕获的"原世界"就是已放置场景，因此场景加载的环境 **close 时保留
   场景**（与硬编码搭建环境 close 恢复原世界的语义相反，文档使用者需注意）。
-- **首个 reset 重新冻结基线**：加载后环境的首个 reset 跳过硬编码场景搭建
-  （`shouldBuildScene() == false`），从已放置世界重新冻结基线，此后与常规环境完全同构
-  （reset 走基线快照恢复，不复用文件数据）。
+- **挂载即自动首个 reset**：加载收尾后立即在后台线程执行首个 reset（跳过硬编码场景
+  搭建 `shouldBuildScene() == false`），从已放置世界冻结基线并使 preset options 生效。
+  挂载完成的环境立即可 step、可再次 `env save`；外部后续 reset 走基线快照恢复，与常规
+  环境完全同构（不复用文件数据）。
 - **options 优先级**：当次 reset options > 场景 preset options > 默认值。场景 options
-  只合并进首个 reset（布局选项本就只在首个 reset 生效）。
+  只合并进首个 reset（即挂载时自动执行的那次；布局选项本就只在首个 reset 生效）。
+  注意 `/gymcraft env create` 的普通挂载不做自动 reset——首个 reset 仍由外部发起，
+  以保留其 options/seed 的布局效果。
 - **区域实体重新分配 UUID**：模板放置剥离原 UUID（避免与源世界实体冲突）；按 UUID 追踪
   区域实体的环境必须覆盖 `onScenarioLoaded()` 重新定位（`IronGolemWardenEnv` 已实现）。
 - **目标区域区块必须已加载**：放置前逐区域校验（未加载直接报错，不产生半份场景）；
@@ -109,5 +113,7 @@ env 类型为准）。占用世界的环境必须完成首次 reset（基线已�
   物资/冻结 options 随场景迁移，源环境 close 恢复原世界
 - `scenario_warden_relocation`：iron_golem_warden 保存 → 异位置加载 → 新 UUID Warden
   在场、虚弱效果与 DIG_COOLDOWN 记忆补丁生效、建材（主手铁块 + 背包南瓜）随 agent 迁移
+- `scenario_mount_auto_resets`：场景 spawn 后不手动 reset，断言挂载自动完成首个 reset
+  （基线已冻结、平台/物资就位、preset options 生效）
 - `scenario_store_edges`：存储边界（非法名称、覆盖写、列表排序、损坏条目跳过、缺失
   world.nbt 回退、删除幂等）

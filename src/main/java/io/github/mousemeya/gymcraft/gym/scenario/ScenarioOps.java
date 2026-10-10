@@ -1,6 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.scenario;
 
 import java.io.IOException;
+import java.util.Map;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
@@ -34,10 +35,10 @@ import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
  * <p>
  * 所有方法必须在服务端线程调用（指令执行天然满足）。加载流程：放置场景内容
  * （先于环境创建，使构造期捕获的"原世界"即已放置场景，close 语义为保留场景）→
- * {@link EnvManager#create} 创建环境 → 注入场景 preset options（首个 reset 生效）→
- * 标记场景已放置（首个 reset 跳过硬编码搭建）→ {@link AbstractMcEnv#onScenarioLoaded()}
- * 补丁运行时引用。重建环境的首个 reset 从已放置世界重新冻结基线，此后与常规环境
- * 完全同构。
+ * {@link EnvManager#create} 创建环境 → 注入场景 preset options → 标记场景已放置
+ * （首个 reset 跳过硬编码搭建）→ {@link AbstractMcEnv#onScenarioLoaded()} 补丁
+ * 运行时引用 → 后台线程自动执行首个 reset，从已放置世界重新冻结基线。挂载完成后
+ * 环境与常规环境完全同构，且立即可 step / 可再次 save。
  * </p>
  */
 public final class ScenarioOps {
@@ -98,6 +99,7 @@ public final class ScenarioOps {
         ScenarioWorldCodec.place(level, loaded.world(), BlockPos.containing(mob.position()), mob.getUUID());
         McEnv env = EnvManager.create(loaded.scenario().envTypeId(), mob);
         finishLoad(loaded, env);
+        mountAutoReset(env);
         return env;
     }
 
@@ -124,6 +126,29 @@ public final class ScenarioOps {
             absEnv.markScenarioScenePlaced();
             absEnv.onScenarioLoaded();
         }
+    }
+
+    /**
+     * 挂载即自动完成首个 reset：从已放置的场景内容冻结基线，环境立即可 step、
+     * 可再次 save。preset options 已在 {@link #finishLoad} 注入，布局选项随本次
+     * reset 冻结生效，外部后续 reset 走快照恢复。
+     * <p>
+     * 调用方（指令/放置流程）运行在服务端线程，而阻塞式 reset 依赖服务端 tick
+     * 消费请求，必须经独立线程执行；环境在请求被消费前关闭时，运行时会以异常
+     * 完成未消费的 reset 请求（{@link io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime#clear}），
+     * 不会悬挂线程。
+     * </p>
+     *
+     * @param env 挂载完成的环境
+     */
+    private static void mountAutoReset(McEnv env) {
+        Thread.ofVirtual().name("gymcraft-scenario-autoreset").start(() -> {
+            try {
+                env.reset(null, Map.of());
+            } catch (Throwable error) {
+                LOGGER.error("GymCraft scenario auto-reset failed: env type={}", env.getRegisterId(), error);
+            }
+        });
     }
 
     /** 从场景 agent NBT 重建实体：剥离 UUID（分配新 UUID）、覆写 Pos 为目标位置。 */
