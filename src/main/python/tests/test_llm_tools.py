@@ -396,8 +396,8 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertIn("interesting_blocks: total=2 shown=1 omitted=1", text)
         self.assertIn("block_id=minecraft:ancient_debris x=11 y=63 z=-2 distance=1.5", text)
         self.assertNotIn("block_id=minecraft:diamond_ore", text)
-        # 聊天窗口：只保留最近 2 条，系统消息无 sender 字段
-        self.assertIn("history chat(ordered by game time): total=3 shown=2 omitted=1", text)
+        # 聊天窗口：只保留最近 2 条，系统消息无 sender 字段（增量游标语义标题）
+        self.assertIn("new chat(since last observation): total=3 shown=2 omitted=1", text)
         self.assertNotIn("content=\"hello\"", text)
         self.assertIn("tick=2 content=\"Server restarting\"", text)
         self.assertIn("tick=3 sender=<Alex> content=\"follow me\"", text)

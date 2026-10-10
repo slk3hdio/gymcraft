@@ -11,7 +11,7 @@ import argparse
 import re
 import time
 
-from mcrcon import MCRcon
+from mcrcon import MCRcon  # type: ignore[import-untyped]
 
 # 场景区域（方块坐标）与地面高度；地面上表面为 FLOOR_Y + 1。
 X0, Z0, X1, Z1, FLOOR_Y = 96, 96, 127, 127, 64
