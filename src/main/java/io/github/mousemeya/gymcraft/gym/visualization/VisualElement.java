@@ -16,6 +16,14 @@ public record VisualElement(Shape shape, String component, boolean observation, 
     /** 客户端统一支持的几何类型。 */
     public enum Shape { BOX, POINT, LINE, ARROW }
 
+    /**
+     * 环境边界图形的组件 ID。
+     *
+     * <p>并非真实注册的组件：边界来自环境状态范围而非任何动作/观测组件，
+     * 借用组件字段只为复用图层开关与配色机制。</p>
+     */
+    public static final String ENV_BOUNDARY_COMPONENT = "gymcraft:env_boundary";
+
     /** 校验有限坐标并限制文本，防止异常适配器产生无界载荷。 */
     public VisualElement {
         component = shorten(component, 96);

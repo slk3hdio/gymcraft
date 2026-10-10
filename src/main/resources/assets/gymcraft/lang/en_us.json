@@ -58,6 +58,7 @@
   "layer.gymcraft.observation.interesting_blocks": "Interesting blocks",
   "layer.gymcraft.observation.menu": "Menu",
   "layer.gymcraft.observation.chat": "Chat",
+  "layer.gymcraft.observation.env_boundary": "Environment boundary",
   "item.gymcraft.env_tool": "Environment Tool",
   "item.gymcraft.uuid_copier": "UUID Copier",
   "entity.gymcraft.player_sim": "Simulated Player",

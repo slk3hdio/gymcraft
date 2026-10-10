@@ -10,7 +10,9 @@ import java.util.UUID;
  *
  * <p>渲染层唯一的消息入口：按订阅标识、环境 ID、代次与序号校验每条服务端消息，
  * 丢弃旧环境、乱序与重放数据；仅保留最新全量观测、当前运行中动作和最多十六条
- * 短暂终态（1.5 秒过期）。不依赖 Minecraft 客户端类，可在无头 GameTest 中验证。</p>
+ * 短暂终态（1.5 秒过期）。环境边界图形随订阅确认与 reset 帧整体替换，不参与
+ * 代次清空（同环境边界跨 reset 稳定）。不依赖 Minecraft 客户端类，可在无头
+ * GameTest 中验证。</p>
  */
 public final class VisualSnapshotCache {
     /** 终态反馈的显示时长（1.5 秒，按客户端单调时钟计）。 */
@@ -24,6 +26,8 @@ public final class VisualSnapshotCache {
     private VisualFrame active;
     private VisualFrame lastAction;
     private final ArrayDeque<Feedback> feedback = new ArrayDeque<>();
+    /** 环境边界线框；随订阅确认与 reset 帧整体替换，clear 时清空。 */
+    private List<VisualElement> boundary = List.of();
     private String message = "";
     private String dimension = "";
 
@@ -79,9 +83,9 @@ public final class VisualSnapshotCache {
         dimension = frame.dimension();
         generation = frame.generation();
         sequence = frame.sequence();
-        // 全量观测替换，避免旧快照中已消失的方块继续残留。
+        // 全量观测替换，避免旧快照中已消失的方块继续残留；边界随控制帧整体替换。
         switch (frame.kind()) {
-            case SUBSCRIBED, RESET -> message = frame.description();
+            case SUBSCRIBED, RESET -> { message = frame.description(); boundary = frame.elements(); }
             case OBSERVATION -> { observation = frame; message = ""; }
             case ACTION -> {
                 lastAction = frame;
@@ -104,7 +108,7 @@ public final class VisualSnapshotCache {
         subscription = null; agent = null; environment = null;
         generation = -1; sequence = -1; dimension = "";
         observation = null; active = null; lastAction = null;
-        feedback.clear(); message = "";
+        feedback.clear(); boundary = List.of(); message = "";
     }
 
     /**
@@ -124,6 +128,8 @@ public final class VisualSnapshotCache {
     public String dimension() { return dimension; }
     /** @return 最新观测或 null */
     public VisualFrame observation() { return observation; }
+    /** @return 当前环境边界线框（可能为空） */
+    public List<VisualElement> boundary() { return boundary; }
     /** @return 运行中动作或 null */
     public VisualFrame active() { return active; }
     /** @return 最近动作，仅供状态文字显示 */

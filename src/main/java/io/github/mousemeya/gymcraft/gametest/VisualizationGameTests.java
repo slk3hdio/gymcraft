@@ -37,6 +37,7 @@ import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -104,6 +105,32 @@ public final class VisualizationGameTests {
         cache.begin(UUID.randomUUID(), agent);
         cache.accept(first, 0);
         assertTrue(helper, cache.observation() == null, "old subscription packet survived selection change");
+        helper.succeed();
+    }
+
+    /**
+     * 环境边界缓存语义：边界图形随订阅确认帧到达、随 reset 帧整体替换，普通观测
+     * 不触碰边界，取消订阅后边界立即清空。
+     *
+     * @param helper 测试场景
+     */
+    public static void boundaryCache(GameTestHelper helper) {
+        var cache = new VisualSnapshotCache();
+        UUID request = UUID.randomUUID();
+        UUID agent = UUID.randomUUID();
+        UUID env = UUID.randomUUID();
+        var first = List.of(VisualGeometry.box(VisualElement.ENV_BOUNDARY_COMPONENT, true, new AABB(0, 0, 0, 8, 4, 8), "gymcraft:test"));
+        var second = List.of(VisualGeometry.box(VisualElement.ENV_BOUNDARY_COMPONENT, true, new AABB(1, 1, 1, 9, 5, 9), "gymcraft:test"));
+        cache.begin(request, agent);
+        assertTrue(helper, cache.boundary().isEmpty(), "boundary survived subscription start");
+        cache.accept(frame(request, env, agent, VisualFrame.Kind.SUBSCRIBED, 0, 1, first), 0);
+        assertEquals(helper, first, cache.boundary(), "subscribed frame lost boundary");
+        cache.accept(frame(request, env, agent, VisualFrame.Kind.OBSERVATION, 0, 2, List.of()), 0);
+        assertEquals(helper, first, cache.boundary(), "observation replaced boundary");
+        cache.accept(frame(request, env, agent, VisualFrame.Kind.RESET, 1, 3, second), 0);
+        assertEquals(helper, second, cache.boundary(), "reset frame did not replace boundary");
+        cache.accept(frame(request, env, agent, VisualFrame.Kind.CLEAR, 1, 4, List.of()), 0);
+        assertTrue(helper, cache.boundary().isEmpty(), "clear kept boundary");
         helper.succeed();
     }
 
@@ -256,6 +283,36 @@ public final class VisualizationGameTests {
             second.setPos(mob.position().add(129, 0, 0));
             VisualizationService.subscribe(second, new VisualSubscribePayload(UUID.randomUUID(), mob.getUUID(), false));
             assertEquals(helper, VisualFrame.Kind.DENIED, second.latest().kind(), "out of range observer subscribed");
+        } finally { EnvManager.close(mob.getUUID()); mob.discard(); }
+        helper.succeed();
+    }
+
+    /**
+     * 环境边界下发：订阅占用世界区域的环境时，订阅确认与 reset 帧携带状态范围线框
+     * （闭区间方块盒转半开区间，标签为环境注册 ID）；空范围环境不携带边界。
+     *
+     * @param helper 测试场景
+     */
+    public static void boundarySubscription(GameTestHelper helper) {
+        Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(1, 1, 1));
+        EnvManager.create("gymcraft:iron_mining", mob);
+        TestObserver observer = new TestObserver(helper.getLevel(), mob.position());
+        try {
+            VisualizationService.subscribe(observer, new VisualSubscribePayload(UUID.randomUUID(), mob.getUUID(), false));
+            var subscribed = observer.latest();
+            assertEquals(helper, VisualFrame.Kind.SUBSCRIBED, subscribed.kind(), "subscribe not confirmed");
+            assertEquals(helper, 1, subscribed.elements().size(), "boundary element missing");
+            var element = subscribed.elements().getFirst();
+            assertEquals(helper, VisualElement.ENV_BOUNDARY_COMPONENT, element.component(), "unexpected boundary component");
+            assertEquals(helper, "gymcraft:iron_mining", element.label(), "boundary lost env id");
+            BlockPos origin = BlockPos.containing(mob.position());
+            assertEquals(helper, new Vec3(origin.getX() - 4, origin.getY() - 1, origin.getZ() - 4), element.from(),
+                "boundary min corner mismatch");
+            assertEquals(helper, new Vec3(origin.getX() + 5, origin.getY() + 4, origin.getZ() + 5), element.to(),
+                "boundary max corner mismatch");
+            VisualizationService.reset(mob);
+            assertEquals(helper, VisualFrame.Kind.RESET, observer.latest().kind(), "reset frame missing");
+            assertEquals(helper, subscribed.elements(), observer.latest().elements(), "reset frame lost boundary");
         } finally { EnvManager.close(mob.getUUID()); mob.discard(); }
         helper.succeed();
     }

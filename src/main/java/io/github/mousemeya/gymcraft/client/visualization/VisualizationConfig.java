@@ -32,9 +32,10 @@ public final class VisualizationConfig {
         "action/gymcraft:open_menu", "action/gymcraft:close_menu", "action/gymcraft:move_menu_item",
         "action/gymcraft:click_menu_button", "action/gymcraft:pick_up_item", "action/gymcraft:drop_item",
         "action/gymcraft:use_item", "action/gymcraft:update_interesting_blocks", "action/gymcraft:send_chat",
-        "observation/gymcraft:self", "observation/gymcraft:world", "observation/gymcraft:nearby_entities",
-        "observation/gymcraft:nearby_items", "observation/gymcraft:nearby_blocks",
-        "observation/gymcraft:interesting_blocks", "observation/gymcraft:menu", "observation/gymcraft:chat");
+        "observation/gymcraft:env_boundary", "observation/gymcraft:self", "observation/gymcraft:world",
+        "observation/gymcraft:nearby_entities", "observation/gymcraft:nearby_items",
+        "observation/gymcraft:nearby_blocks", "observation/gymcraft:interesting_blocks",
+        "observation/gymcraft:menu", "observation/gymcraft:chat");
 
     /** 禁止实例化配置目录。 */
     private VisualizationConfig() { }

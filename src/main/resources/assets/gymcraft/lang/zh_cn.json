@@ -58,6 +58,7 @@
   "layer.gymcraft.observation.interesting_blocks": "关注方块",
   "layer.gymcraft.observation.menu": "菜单",
   "layer.gymcraft.observation.chat": "聊天",
+  "layer.gymcraft.observation.env_boundary": "环境边界",
   "item.gymcraft.env_tool": "环境工具",
   "item.gymcraft.uuid_copier": "UUID 复制器",
   "entity.gymcraft.player_sim": "模拟玩家",

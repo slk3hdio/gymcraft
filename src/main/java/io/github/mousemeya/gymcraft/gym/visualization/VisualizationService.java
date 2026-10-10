@@ -4,6 +4,7 @@ import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
+import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.network.VisualFramePayload;
@@ -16,6 +17,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -24,7 +26,8 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * 服务端线程独占的可视化服务。
  *
  * <p>职责：维护「观察者玩家 → Agent 实体」的订阅表，并在动作执行、观测生成、reset、
- * 环境关闭等运行时事件上把只读调试图形编码为 {@link VisualFrame} 推送给订阅玩家。
+ * 环境关闭等运行时事件上把只读调试图形编码为 {@link VisualFrame} 推送给订阅玩家；
+ * 订阅确认与 reset 帧随带环境状态范围的边界线框。
  * 订阅与 gRPC 会话完全解耦：不占用环境、不推进 tick、不重复调用任何 creator 或
  * 动作控制器，只消费运行时已经产生的结果。</p>
  *
@@ -117,7 +120,27 @@ public final class VisualizationService {
         var subscription = new Subscription(player, request, env);
         SUBSCRIPTIONS.put(player.getUUID(), subscription);
         send(subscription, VisualFrame.Kind.SUBSCRIBED, 0, "", "",
-            "message.gymcraft.visual.subscribed_waiting", List.of(), (Mob) target);
+            "message.gymcraft.visual.subscribed_waiting", boundaryElements(env), (Mob) target);
+    }
+
+    /**
+     * 环境边界图形：把环境声明的状态范围（闭区间方块盒）转为半开区间线框，
+     * 标签携带环境注册 ID；空范围环境返回空列表。
+     *
+     * <p>范围可能在首个 reset 才随布局选项确定（如 parkour_mob），因此订阅确认与
+     * 每次 reset 帧都重新采样下发，客户端总是展示最新边界。</p>
+     *
+     * @param env 目标环境
+     * @return 边界线框图形，可能为空
+     */
+    private static List<VisualElement> boundaryElements(McEnv env) {
+        if (!(env instanceof AbstractMcEnv abstractEnv)) return List.of();
+        return abstractEnv.stateScopeView().regions().stream()
+            .map(region -> VisualGeometry.box(VisualElement.ENV_BOUNDARY_COMPONENT, true,
+                new AABB(region.minX(), region.minY(), region.minZ(),
+                    region.maxX() + 1, region.maxY() + 1, region.maxZ() + 1),
+                abstractEnv.getRegisterId()))
+            .toList();
     }
 
     /**
@@ -260,7 +283,8 @@ public final class VisualizationService {
      * reset 后的推送挂钩。
      *
      * <p>丢弃当前动作缓存并给所有相关订阅提升代次；客户端收到更高代次的帧后会
-     * 清空旧观测与反馈图形，等待 reset 观测重新建立画面。</p>
+     * 清空旧观测与反馈图形，等待 reset 观测重新建立画面。帧内随带环境边界图形：
+     * 状态范围可能在首个 reset 才确定，代次提升时客户端正好整体替换。</p>
      *
      * @param mob reset 后（可能重建的）同 UUID 实体
      */
@@ -270,7 +294,7 @@ public final class VisualizationService {
             if (subscription.agent.equals(mob.getUUID()) && validMob(subscription) == mob) {
                 subscription.generation++;
                 send(subscription, VisualFrame.Kind.RESET, 0, "", "",
-                    "message.gymcraft.visual.waiting_reset", List.of(), mob);
+                    "message.gymcraft.visual.waiting_reset", boundaryElements(subscription.env), mob);
             }
         }
     }

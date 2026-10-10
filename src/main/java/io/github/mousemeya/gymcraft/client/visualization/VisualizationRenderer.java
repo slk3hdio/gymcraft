@@ -3,6 +3,7 @@ package io.github.mousemeya.gymcraft.client.visualization;
 import io.github.mousemeya.gymcraft.gym.visualization.VisualElement;
 import io.github.mousemeya.gymcraft.gym.visualization.VisualFrame;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import net.minecraft.client.Minecraft;
 import net.minecraft.gizmos.GizmoProperties;
@@ -27,7 +28,7 @@ public final class VisualizationRenderer {
     /**
      * 每帧从缓存重建全部图形并提交给原生 Gizmo 渲染管线。
      *
-     * <p>收集顺序（后写覆盖先写）：全量观测 → 淡出中的终态反馈 → 运行中动作；
+     * <p>收集顺序（后写覆盖先写）：环境边界 → 全量观测 → 淡出中的终态反馈 → 运行中动作；
      * 标签数量与准星距离受限，避免文字过载。收集完成后观测图形按观察者距离淡出，
      * 观测方框按配置改画角框，避免大量图形淹没画面。渲染不做任何持久化，帧间无状态。</p>
      *
@@ -40,6 +41,8 @@ public final class VisualizationRenderer {
         long now = System.nanoTime();
         float partialTick = event.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         Map<GeometryKey, Drawing> drawings = new LinkedHashMap<>();
+        // 环境边界垫底：优先级最低、不参与淡出，作为全部图形的空间参照。
+        collect(drawings, state.boundary(), 1, partialTick);
         collect(drawings, state.observation(), 1, partialTick);
         // 短暂终态反馈按剩余寿命淡出。
         for (var feedback : state.feedback(now)) {
@@ -55,7 +58,7 @@ public final class VisualizationRenderer {
         // 准星附近的观测元素优先显示标签；其余观测图形只画几何不画文字。
         if (minecraft.hitResult != null) {
             for (Drawing drawing : drawings.values()) {
-                if (!drawing.element().observation() || drawing.label().isBlank()) continue;
+                if (!drawing.element().observation() || isBoundary(drawing.element()) || drawing.label().isBlank()) continue;
                 double distance = minecraft.hitResult.getLocation().distanceToSqr(drawing.from().add(drawing.to()).scale(.5));
                 if (distance < focusDistance) { focusDistance = distance; focused = drawing; }
             }
@@ -66,7 +69,7 @@ public final class VisualizationRenderer {
                 draw(drawing);
                 Vec3 center = drawing.from().add(drawing.to()).scale(.5);
                 if (VisualizationConfig.LABELS.get() && !drawing.label().isBlank() && labels < 24
-                    && (!drawing.element().observation() || drawing == focused)) {
+                    && (!drawing.element().observation() || drawing == focused || isBoundary(drawing.element()))) {
                     Vec3 position = drawing.element().shape() == VisualElement.Shape.BOX
                         ? new Vec3(center.x, Math.max(drawing.from().y, drawing.to().y) + .15, center.z)
                         : drawing.to().add(0, .2, 0);
@@ -81,10 +84,6 @@ public final class VisualizationRenderer {
     /**
      * 把一帧的全部元素收集进合并表。
      *
-     * <p>按配置跳过隐藏图层；运行中的动作元素经 UUID 校验后按实体实时位置平移
-     * （观测元素固定不动）；同形同位的图形按优先级择色并合并标签，优先级为
-     * 动作 &gt; 关注方块 &gt; 普通观测。</p>
-     *
      * @param drawings    合并表（按几何键去重）
      * @param frame       待收集帧；null 直接返回
      * @param alpha       透明度（终态反馈按寿命衰减）
@@ -92,8 +91,24 @@ public final class VisualizationRenderer {
      */
     private static void collect(Map<GeometryKey, Drawing> drawings, VisualFrame frame, float alpha, float partialTick) {
         if (frame == null) return;
+        collect(drawings, frame.elements(), alpha, partialTick);
+    }
+
+    /**
+     * 把一组元素收集进合并表。
+     *
+     * <p>按配置跳过隐藏图层；运行中的动作元素经 UUID 校验后按实体实时位置平移
+     * （观测与边界元素固定不动）；同形同位的图形按优先级择色并合并标签，优先级为
+     * 动作 &gt; 关注方块 &gt; 普通观测 &gt; 环境边界。</p>
+     *
+     * @param drawings    合并表（按几何键去重）
+     * @param elements    待收集元素
+     * @param alpha       透明度
+     * @param partialTick 帧插值参数
+     */
+    private static void collect(Map<GeometryKey, Drawing> drawings, List<VisualElement> elements, float alpha, float partialTick) {
         var level = Minecraft.getInstance().level;
-        for (VisualElement element : frame.elements()) {
+        for (VisualElement element : elements) {
             if (!VisualizationConfig.visible((element.observation() ? "observation/" : "action/") + element.component())) continue;
             Vec3 from = element.from();
             Vec3 to = element.to();
@@ -105,7 +120,8 @@ public final class VisualizationRenderer {
                     if (element.shape() == VisualElement.Shape.BOX || element.shape() == VisualElement.Shape.POINT) from = from.add(offset);
                 }
             }
-            int priority = element.observation() ? (element.component().equals("gymcraft:interesting_blocks") ? 2 : 1) : 3;
+            int priority = isBoundary(element) ? 0
+                : element.observation() ? (element.component().equals("gymcraft:interesting_blocks") ? 2 : 1) : 3;
             int color = ((int) (255 * Math.clamp(alpha, 0, 1)) << 24) | color(element);
             var key = new GeometryKey(element.shape(), from, to);
             Drawing drawing = new Drawing(element, from, to, color, priority, element.label());
@@ -125,7 +141,8 @@ public final class VisualizationRenderer {
      *
      * <p>以观察者眼睛位置为中心，淡出截止距离（配置 {@code fadeDistance}）的半程处
      * 开始线性降低透明度，超出截止距离的观测图形直接移除。动作图形与终态反馈数量
-     * 少且时效短，不参与淡出；淡出在标签选择与绘制之前完成，透明度同步作用于文字。</p>
+     * 少且时效短，不参与淡出；环境边界体量巨大且是空间参照，也不参与淡出。
+     * 淡出在标签选择与绘制之前完成，透明度同步作用于文字。</p>
      *
      * @param drawings    合并后的图形表；原地修改透明度并移除远距项
      * @param minecraft   客户端实例；用于读取观察者
@@ -139,7 +156,7 @@ public final class VisualizationRenderer {
         while (iterator.hasNext()) {
             var entry = iterator.next();
             Drawing drawing = entry.getValue();
-            if (!drawing.element().observation()) continue;
+            if (!drawing.element().observation() || isBoundary(drawing.element())) continue;
             double distance = eye.distanceTo(drawing.from().add(drawing.to()).scale(.5));
             float visibility = (float) Math.clamp((fade - distance) / (fade * .5), 0, 1);
             if (visibility <= .01F) {
@@ -153,7 +170,7 @@ public final class VisualizationRenderer {
 
     /**
      * 图形配色：动作按执行状态（绿=完成、红=失败、灰=中断、橙=运行中），
-     * 观测按组件类型区分。
+     * 观测按组件类型区分，环境边界固定琥珀色。
      *
      * @param element 图形
      * @return 不含透明度的 RGB 颜色
@@ -166,6 +183,7 @@ public final class VisualizationRenderer {
             default -> 0xFFAA33;
         };
         return switch (element.component()) {
+            case VisualElement.ENV_BOUNDARY_COMPONENT -> 0xFFC107;
             case "gymcraft:interesting_blocks" -> 0xCC77FF;
             case "gymcraft:nearby_entities" -> 0x55DDDD;
             case "gymcraft:nearby_items" -> 0xFFFF77;
@@ -175,14 +193,20 @@ public final class VisualizationRenderer {
         };
     }
 
+    /** @param element 图形 @return 是否为环境边界（专属配色，不参与淡出、角框化与准星聚焦） */
+    private static boolean isBoundary(VisualElement element) {
+        return element.component().equals(VisualElement.ENV_BOUNDARY_COMPONENT);
+    }
+
     /** @param drawing 已合并图形；退化线段不提交以防原生箭头归一化产生 NaN */
     private static void draw(Drawing drawing) {
         Vec3 from = drawing.from();
         Vec3 to = drawing.to();
         switch (drawing.element().shape()) {
-            // 观测方框数量大，默认改画角框降低视觉密度；动作图形保持完整线框。
+            // 观测方框数量大，默认改画角框降低视觉密度；边界与动作图形保持完整线框。
             case BOX -> {
-                if (drawing.element().observation() && VisualizationConfig.COMPACT_BOXES.get()) {
+                if (drawing.element().observation() && !isBoundary(drawing.element())
+                    && VisualizationConfig.COMPACT_BOXES.get()) {
                     cornerFrame(from, to, drawing.color());
                 } else {
                     top(Gizmos.cuboid(new AABB(from, to).inflate(.002), GizmoStyle.stroke(drawing.color())));
