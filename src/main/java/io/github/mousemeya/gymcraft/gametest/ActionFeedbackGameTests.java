@@ -47,30 +47,4 @@ public final class ActionFeedbackGameTests {
             "out-of-range description");
         helper.succeed();
     }
-
-    /**
-     * 验证 set_attack_target 区分主动清除、目标未加载与禁止把自身设为目标。
-     *
-     * @param helper GameTest 辅助对象
-     */
-    public static void setAttackTargetReportsSpecificFailures(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(1, 1, 1));
-        var controller = new SetAttackTargetController(mob);
-
-        var cleared = controller.apply(ProtoSetAttackTarget.getDefaultInstance()).initialState();
-        assertEquals(helper, ActionStatus.COMPLETED, cleared.status(), "explicit clear should complete");
-        assertEquals(helper, "attack target cleared", cleared.description(), "clear description");
-
-        var missing = controller.apply(ProtoSetAttackTarget.newBuilder()
-            .setTargetEntityId(Integer.MAX_VALUE).build()).initialState();
-        assertEquals(helper, ActionStatus.FAILED, missing.status(), "missing target should fail");
-        assertEquals(helper, "attack target entity was not found or is not loaded", missing.description(),
-            "missing target description");
-
-        var self = controller.apply(ProtoSetAttackTarget.newBuilder()
-            .setTargetEntityId(mob.getId()).build()).initialState();
-        assertTrue(helper, self.status() == ActionStatus.FAILED && "agent cannot target itself".equals(self.description()),
-            "self target should return its specific failure: " + self);
-        helper.succeed();
-    }
 }

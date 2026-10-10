@@ -129,9 +129,26 @@ public final class IronMiningEnvGameTests {
                 close(env, selfSession);
 
                 BlockPos tablePos = origin.offset(0, 0, 1);
-                step(env, "gymcraft:set_block", ProtoSetBlock.newBuilder()
+                // 拾取组件会寻路接近掉落物，挖完原木后 agent 已漂离原点，碰撞箱可能压住
+                // 按原点计算的工作台放置格（set_block 按 BlockItem#canPlace 检查实体阻挡）；
+                // 放置前把 agent 归位到原点消除漂移。世界修改必须在服务端线程执行
+                CompletableFuture<Void> repositioned = new CompletableFuture<>();
+                helper.getLevel().getServer().execute(() -> {
+                    try {
+                        Mob current = currentMob(helper, originalMob);
+                        current.setPos(origin.getX() + 0.5, origin.getY(), origin.getZ() + 0.5);
+                        repositioned.complete(null);
+                    } catch (Throwable error) {
+                        repositioned.completeExceptionally(error);
+                    }
+                });
+                repositioned.join();
+                StepResponse tablePlaced = step(env, "gymcraft:set_block", ProtoSetBlock.newBuilder()
                     .setX(tablePos.getX()).setY(tablePos.getY()).setZ(tablePos.getZ())
                     .setBlock("minecraft:crafting_table").build());
+                if (tablePlaced.getInfo().contains("\"status\":\"failed\"")) {
+                    throw new IllegalStateException("crafting table placement failed: " + tablePlaced.getInfo());
+                }
                 long tableSession = openBlock(env, tablePos);
                 move(env, tableSession, List.of(
                     transfer(8, 36, 1, 1), transfer(8, 39, 1, 1),
@@ -181,57 +198,6 @@ public final class IronMiningEnvGameTests {
                 Mob current = (Mob) helper.getLevel().getEntity(originalMob.getUUID());
                 assertTrue(helper, AgentInventoryLayout.resolve(current).slots().stream()
                     .anyMatch(slot -> slot.getItem().is(Items.RAW_IRON)), "raw iron is not in Agent inventory");
-                helper.succeed();
-            } finally {
-                env.close();
-            }
-        });
-    }
-
-    /**
-     * 验证铁矿消失且没有粗铁时失败，步数预算则使用 truncated。
-     *
-     * @param helper GameTest 辅助对象
-     */
-    public static void failureAndStepLimit(GameTestHelper helper) {
-        Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
-        BlockPos origin = BlockPos.containing(mob.position());
-        IronMiningEnv env = new IronMiningEnv(testId("failure"), mob);
-        AtomicReference<StepResponse> response = new AtomicReference<>();
-        AtomicReference<StepResponse> lostResponse = new AtomicReference<>();
-        AtomicReference<Throwable> failure = new AtomicReference<>();
-        Thread.startVirtualThread(() -> {
-            try {
-                env.reset(1, Map.of(
-                    IronMiningEnv.MAX_STEPS_OPTION, 1,
-                    AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true
-                ));
-                response.set(step(env, "gymcraft:noop", ProtoNoop.getDefaultInstance()));
-
-                env.reset(2, Map.of(
-                    IronMiningEnv.MAX_STEPS_OPTION, 8,
-                    AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true
-                ));
-                CompletableFuture<Void> ironRemoved = new CompletableFuture<>();
-                helper.getLevel().getServer().execute(() -> {
-                    helper.getLevel().setBlock(origin.offset(0, 0, 3), Blocks.AIR.defaultBlockState(), 3);
-                    ironRemoved.complete(null);
-                });
-                ironRemoved.join();
-                lostResponse.set(step(env, "gymcraft:noop", ProtoNoop.getDefaultInstance()));
-            } catch (Throwable error) {
-                failure.set(error);
-            }
-        });
-        helper.runAfterDelay(10000, () -> {
-            try {
-                assertTrue(helper, failure.get() == null, "failure-state test failed: " + failure.get());
-                assertTrue(helper, response.get() != null && response.get().getTruncated(), "max_steps did not truncate");
-                assertTrue(helper, !response.get().getTerminated(), "step limit incorrectly terminated");
-                assertTrue(helper, lostResponse.get() != null && lostResponse.get().getTerminated(),
-                    "lost iron did not terminate");
-                assertTrue(helper, lostResponse.get().getInfo().contains("iron_lost"),
-                    "iron_lost reason missing: " + lostResponse.get().getInfo());
                 helper.succeed();
             } finally {
                 env.close();

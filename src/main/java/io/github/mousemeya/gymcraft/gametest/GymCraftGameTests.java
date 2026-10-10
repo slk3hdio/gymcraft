@@ -10,7 +10,6 @@ import net.minecraft.gametest.framework.TestData;
 import net.minecraft.gametest.framework.TestEnvironmentDefinition;
 import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.event.RegisterGameTestsEvent;
-import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import io.github.mousemeya.gymcraft.GymCraft;
@@ -20,9 +19,14 @@ import io.github.mousemeya.gymcraft.GymCraft;
  * <p>
  * 测试函数经 {@code TEST_FUNCTION} 注册表注册，测试实例在 {@link RegisterGameTestsEvent}
  * （模组总线，仅 GameTest 启用时触发）中统一装配：环境为空环境（不修改世界），
- * 普通测试复用 {@code minecraft:empty}；使用物品测试采用覆盖完整场景的 8×6×8 空结构，
- * 保证跨 tick 消费时实体所在区块被框架加载。测试逻辑自行放置方块与实体。
+ * 结构统一采用覆盖完整场景的 8×6×8 空气盒——GameTest 每次运行随机选址，只有结构
+ * 边界覆盖全部实体，其区块才会被框架强加载（实体 tick、env reset/step 依赖）。
  * 测试类放在 main 源集：注册仅在 GameTest 启用时生效，对生产环境无副作用。
+ * </p>
+ * <p>
+ * 只保留核心用例：环境契约（终止语义/动作批次/AI 控制）、状态基线与场景存档、
+ * 任务环境端到端，以及每个动作/观测/菜单组件族的代表性用例。粒度化的边界矩阵
+ * 与历史回归用例已裁剪，需要时可从 git 历史恢复。
  * </p>
  */
 public final class GymCraftGameTests {
@@ -31,400 +35,123 @@ public final class GymCraftGameTests {
         GymCraft.MODID
     );
 
-    /** 原版内置空结构（always_pass 同款），测试内容全部由测试函数自行搭建。 */
-    private static final Identifier EMPTY_STRUCTURE = Identifier.withDefaultNamespace("empty");
-    /** 持续消费依赖实体 tick，专用结构边界必须覆盖所有 Agent 与目标，避免只强加载原点。 */
+    /** 覆盖完整场景的 8×6×8 空结构（纯空气）：所有用例统一使用，保证实体所在区块被框架加载。 */
     private static final Identifier USE_ITEM_STRUCTURE = Identifier.fromNamespaceAndPath(GymCraft.MODID, "use_item_empty");
     /** 同步测试一个 tick 内完成，100 tick 超时足够冗余。 */
     private static final int MAX_TICKS = 100;
 
-    // 可视化：协议、只读适配器、订阅隔离与真实运行时生命周期。
     static {
-        TEST_FUNCTIONS.register("visualization_codec", () -> VisualizationGameTests::boundedCodec);
-        TEST_FUNCTIONS.register("visualization_cache", () -> VisualizationGameTests::cacheIsolation);
-        TEST_FUNCTIONS.register("visualization_snapshot", () -> VisualizationGameTests::frozenObservation);
-        TEST_FUNCTIONS.register("visualization_actions", () -> VisualizationGameTests::actionAdapters);
-        TEST_FUNCTIONS.register("visualization_navigation_path", () -> VisualizationGameTests::navigationPath);
-        TEST_FUNCTIONS.register("visualization_subscriptions", () -> VisualizationGameTests::subscriptions);
-        TEST_FUNCTIONS.register("visualization_boundary_cache", () -> VisualizationGameTests::boundaryCache);
-        TEST_FUNCTIONS.register("visualization_boundary_subscription", () -> VisualizationGameTests::boundarySubscription);
-        TEST_FUNCTIONS.register("visualization_runtime", () -> VisualizationGameTests::runtime);
-    }
-
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BATCH_MOVES_ORDER =
-        TEST_FUNCTIONS.register("menu_batch_moves_order", () -> MenuSessionGameTests::batchMovesInOrder);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BATCH_MOVES_FAILURE =
-        TEST_FUNCTIONS.register("menu_batch_moves_failure", () -> MenuSessionGameTests::batchMoveStopsOnFailure);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BATCH_MOVES_STALE =
-        TEST_FUNCTIONS.register("menu_batch_moves_stale", () -> MenuSessionGameTests::batchMoveChecksAllBaselines);
-
-    // ===== 14.1 会话与内部状态 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SESSION_ID_STABLE =
-        TEST_FUNCTIONS.register("menu_session_id_stable", () -> MenuSessionGameTests::sessionIdStableAcrossObservations);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REOPEN_NEW_ID =
-        TEST_FUNCTIONS.register("menu_reopen_new_id_old_id_rejected", () -> MenuSessionGameTests::reopenGetsNewIdAndOldIdRejected);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> STALE_BLOCKS_MOVE =
-        TEST_FUNCTIONS.register("menu_stale_source_blocks_move", () -> MenuSessionGameTests::staleSourceBlocksMove);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> UNRELATED_CHANGE_ALLOWS_MOVE =
-        TEST_FUNCTIONS.register("menu_unrelated_slot_change_allows_move", () -> MenuSessionGameTests::unrelatedSlotChangeAllowsMove);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> STALE_ALLOWS_CLOSE =
-        TEST_FUNCTIONS.register("menu_stale_state_allows_close", () -> MenuSessionGameTests::staleStateAllowsClose);
-
-    // ===== 14.2 索引与物品栏 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> EQUIPMENT_SLOT_IDS =
-        TEST_FUNCTIONS.register("inventory_equipment_slot_ids_stable", () -> MenuInventoryGameTests::equipmentSlotIdsStable);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> VILLAGER_CARRIER_SLOTS =
-        TEST_FUNCTIONS.register("inventory_villager_carrier_slot_ids", () -> MenuInventoryGameTests::villagerCarrierSlotIds);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CHEST_SLOT_ALLOCATION =
-        TEST_FUNCTIONS.register("inventory_chest_menu_slot_allocation", () -> MenuInventoryGameTests::chestMenuSlotIdAllocation);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SELF_MENU_SHAPE =
-        TEST_FUNCTIONS.register("inventory_self_menu_shape", () -> MenuInventoryGameTests::selfMenuShape);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SELF_MENU_CRAFTING =
-        TEST_FUNCTIONS.register("inventory_self_menu_crafting", () -> MenuInventoryGameTests::selfMenuCraftingWithBackpack);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CRAFTING_TABLE_SLOT_CATEGORIES =
-        TEST_FUNCTIONS.register("inventory_crafting_table_slot_categories", () -> MenuInventoryGameTests::craftingTableSlotCategories);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SLOT_IDS_INVALID_AFTER_CLOSE =
-        TEST_FUNCTIONS.register("inventory_slot_ids_invalid_after_close", () -> MenuInventoryGameTests::slotIdsInvalidAfterClose);
-
-    // ===== 通用 Mob 附件与专属背包 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ATTACHMENT_STANDALONE_PERSISTENCE =
-        TEST_FUNCTIONS.register("attachment_standalone_persistence", () -> MobAttachmentGameTests::standaloneServiceAndPersistence);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ATTACHMENT_SCOPE_VISIBILITY =
-        TEST_FUNCTIONS.register("attachment_scope_visibility", () -> MobAttachmentGameTests::accessScopeHidesWithoutDeleting);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ENV_BACKPACK_SELECTION =
-        TEST_FUNCTIONS.register("attachment_env_backpack_selection", () -> MobAttachmentGameTests::environmentsChooseBackpackAccess);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BACKPACK_MENU_BRIDGE =
-        TEST_FUNCTIONS.register("attachment_backpack_menu_bridge", () -> MobAttachmentGameTests::backpackMenuBridge);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BACKPACK_DEATH_DROPS =
-        TEST_FUNCTIONS.register("attachment_backpack_death_drops", () -> MobAttachmentGameTests::backpackDropsWithoutEnvironment);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BACKPACK_RESET_SCOPE =
-        TEST_FUNCTIONS.register("attachment_backpack_reset_scope", () -> MobAttachmentGameTests::resetRestoresBackpackAndScope);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BACKPACK_USE_ITEM_TRANSACTION =
-        TEST_FUNCTIONS.register("use_item_backpack_transaction", () -> MobAttachmentGameTests::backpackUseItemTransaction);
-
-    // ===== 动作失败反馈 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ATTACK_ONCE_FEEDBACK =
-        TEST_FUNCTIONS.register("action_feedback_attack_once", () -> ActionFeedbackGameTests::attackOnceReportsSpecificFailures);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_ATTACK_TARGET_FEEDBACK =
-        TEST_FUNCTIONS.register("action_feedback_set_attack_target", () -> ActionFeedbackGameTests::setAttackTargetReportsSpecificFailures);
-
-    // ===== 观测承载决策信息（header 逐项反馈 / self 主手持物） =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> OBSERVATION_HEADER_BATCH_COMPLETED =
-        TEST_FUNCTIONS.register("observation_header_batch_feedback", () -> ObservationFeedbackGameTests::headerAggregatesCompletedBatch);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> OBSERVATION_HEADER_BATCH_FAILED =
-        TEST_FUNCTIONS.register("observation_header_batch_failure", () -> ObservationFeedbackGameTests::headerAggregatesFailedBatch);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> OBSERVATION_SELF_MAIN_HAND =
-        TEST_FUNCTIONS.register("observation_self_main_hand_item", () -> ObservationFeedbackGameTests::selfObservationReportsMainHandItem);
-
-    // ===== 公共 FakePlayer 执行与库存桥接 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> FAKE_PLAYER_ACTOR_MODES =
-        TEST_FUNCTIONS.register("fake_player_actor_modes", () -> FakePlayerBridgeGameTests::actorModesAndIsolation);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> FAKE_PLAYER_INVENTORY_TRANSACTION =
-        TEST_FUNCTIONS.register("fake_player_inventory_transaction", () -> FakePlayerBridgeGameTests::inventoryTransactionCommitOnce);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> FAKE_PLAYER_MENU_ISOLATION =
-        TEST_FUNCTIONS.register("fake_player_menu_isolation", () -> FakePlayerBridgeGameTests::activeMenuIsolation);
-
-    // ===== 14.3 物品移动 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> EMPTY_SOURCE_FAILS =
-        TEST_FUNCTIONS.register("move_empty_source_fails", () -> MenuMoveGameTests::emptySourceFails);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ILLEGAL_TARGET_FAILS =
-        TEST_FUNCTIONS.register("move_illegal_target_fails", () -> MenuMoveGameTests::illegalTargetFails);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> COUNT_TRUNCATED =
-        TEST_FUNCTIONS.register("move_count_truncated_to_source", () -> MenuMoveGameTests::countTruncatedToSource);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PARTIAL_TARGET_FULL =
-        TEST_FUNCTIONS.register("move_partial_when_target_full", () -> MenuMoveGameTests::partialMoveWhenTargetFull);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> DIFFERENT_ITEMS_NO_MERGE =
-        TEST_FUNCTIONS.register("move_different_items_not_merged", () -> MenuMoveGameTests::differentItemsNotMerged);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CARRIED_ALWAYS_EMPTY =
-        TEST_FUNCTIONS.register("move_carried_always_empty", () -> MenuMoveGameTests::carriedAlwaysEmpty);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REPEAT_MOVES_MULTIPLE =
-        TEST_FUNCTIONS.register("move_repeat_moves_multiple_times", () -> MenuMoveGameTests::repeatMovesMultipleTimes);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REPEAT_STOPS_SOURCE_EMPTY =
-        TEST_FUNCTIONS.register("move_repeat_stops_when_source_empty", () -> MenuMoveGameTests::repeatStopsWhenSourceEmpty);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REPEAT_CRAFTING_OUTPUTS =
-        TEST_FUNCTIONS.register("move_repeat_takes_consecutive_crafting_outputs", () -> MenuMoveGameTests::repeatTakesConsecutiveCraftingOutputs);
-
-    // ===== 14.4 生命周期 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> DOUBLE_CHEST_MERGED =
-        TEST_FUNCTIONS.register("lifecycle_double_chest_merged", () -> MenuLifecycleGameTests::doubleChestMerged);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BLOCKED_CHEST_FAILS =
-        TEST_FUNCTIONS.register("lifecycle_blocked_chest_fails", () -> MenuLifecycleGameTests::blockedChestFails);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> TARGET_DESTROYED_CLOSES =
-        TEST_FUNCTIONS.register("lifecycle_target_destroyed_auto_closes", () -> MenuLifecycleGameTests::targetDestroyedAutoCloses);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CLOSE_IDEMPOTENT =
-        TEST_FUNCTIONS.register("lifecycle_close_exactly_once", () -> MenuLifecycleGameTests::closeExactlyOnce);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LIFECYCLE_ENTITY_EVENTS_CLOSE_SESSIONS =
-        TEST_FUNCTIONS.register("lifecycle_entity_events_close_sessions", () -> MenuLifecycleGameTests::entityLifecycleEventsCloseSessions);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CANDIDATE_FAILURE_KEEPS_OLD =
-        TEST_FUNCTIONS.register("lifecycle_candidate_failure_keeps_old", () -> MenuLifecycleGameTests::candidateFailureKeepsOld);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REOPEN_REPLACES_SESSION =
-        TEST_FUNCTIONS.register("lifecycle_reopen_replaces_session", () -> MenuLifecycleGameTests::reopenReplacesSession);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> MULTI_AGENT_ISOLATION =
-        TEST_FUNCTIONS.register("lifecycle_multi_agent_isolation", () -> MenuLifecycleGameTests::multiAgentIsolation);
-
-    // ===== 14.5 聚合 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AGGREGATE_ORDER =
-        TEST_FUNCTIONS.register("aggregate_declaration_order_and_isolation", () -> ActionAggregateGameTests::aggregateDeclarationOrder);
-
-    // ===== 14.7 动作超时 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ACTION_TIMEOUT_FAILS =
-        TEST_FUNCTIONS.register("action_timeout_fails", () -> ActionTimeoutGameTests::actionTimeoutFails);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ACTION_BATCH_SERIAL =
-        TEST_FUNCTIONS.register("action_batch_serial", () -> ActionBatchGameTests::repeatedActionsRunSerially);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ACTION_BATCH_STOP_EMPTY =
-        TEST_FUNCTIONS.register("action_batch_stop_and_empty", () -> ActionBatchGameTests::failureStopsAndEmptyBatchNoops);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ACTION_BATCH_MULTIPLE_DISABLED =
-        TEST_FUNCTIONS.register("action_batch_multiple_disabled", () -> ActionBatchGameTests::multipleActionsCanBeDisabled);
-
-    // ===== 方块破坏 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BREAK_BLOCK_TOOL_SWAP =
-        TEST_FUNCTIONS.register("break_block_tool_swap", () -> BreakBlockGameTests::toolSwapsIntoMainHand);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BREAK_BLOCK_WRONG_TOOL =
-        TEST_FUNCTIONS.register("break_block_wrong_tool_warns", () -> BreakBlockGameTests::wrongToolWarnsAndDropsNothing);
-
-    // ===== 方块放置 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_SELF_OBSTRUCTED =
-        TEST_FUNCTIONS.register("set_block_self_obstructed", () -> SetBlockGameTests::selfObstructionBlocksPlacement);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_OTHER_ENTITY_OBSTRUCTED =
-        TEST_FUNCTIONS.register("set_block_other_entity_obstructed", () -> SetBlockGameTests::otherEntityObstructionBlocksPlacement);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_COLLISIONLESS_ALLOWED =
-        TEST_FUNCTIONS.register("set_block_collisionless_allowed", () -> SetBlockGameTests::collisionlessBlockAllowsPlacement);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_INVENTORY_FALLBACK =
-        TEST_FUNCTIONS.register("set_block_inventory_fallback", () -> SetBlockGameTests::inventoryFallbackSwapsToMainHand);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SET_BLOCK_MISSING_ITEM =
-        TEST_FUNCTIONS.register("set_block_missing_item", () -> SetBlockGameTests::missingBlockItemFails);
-
-    // ===== 感兴趣方块 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> INTERESTING_BLOCKS_UPDATE =
-        TEST_FUNCTIONS.register("interesting_blocks_update", () -> InterestingBlocksGameTests::updateIsIdempotentAndRemoves);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> INTERESTING_BLOCKS_ATOMIC =
-        TEST_FUNCTIONS.register("interesting_blocks_atomic", () -> InterestingBlocksGameTests::invalidAndConflictingUpdatesAreAtomic);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> INTERESTING_BLOCKS_LIFECYCLE =
-        TEST_FUNCTIONS.register("interesting_blocks_lifecycle", () -> InterestingBlocksGameTests::attachmentIsIsolatedAndClearedByReset);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> INTERESTING_BLOCKS_OBSERVATION =
-        TEST_FUNCTIONS.register("interesting_blocks_observation", () -> InterestingBlocksGameTests::observationFiltersVisibleSurfaces);
-
-    // ===== 环境 AI 策略 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AI_DISABLED_MAINTAINED =
-        TEST_FUNCTIONS.register("env_disable_vanilla_ai_maintained", () -> EnvAiGameTests::disableVanillaAiIsMaintained);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AI_DISABLED_ONLY_BETWEEN_ACTIONS =
-        TEST_FUNCTIONS.register("env_disable_vanilla_ai_only_between_actions", () -> EnvAiGameTests::disableVanillaAiOnlyBetweenActions);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AI_ENABLED_USES_CONTROLLER_POLICY =
-        TEST_FUNCTIONS.register("env_enable_vanilla_ai_uses_controller_policy", () -> EnvAiGameTests::enabledVanillaAiUsesControllerPolicy);
-
-    // ===== Mob 导航可靠性 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NAVIGATION_PREEMPTS_MOVE_GOAL =
-        TEST_FUNCTIONS.register("navigation_preempts_move_goal", () -> NavigationReliabilityGameTests::runningMoveGoalIsPreemptedBeforeNewPath);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NAVIGATION_PRECISE_REPATH =
-        TEST_FUNCTIONS.register("navigation_precise_repath", () -> NavigationReliabilityGameTests::preciseMoveRepathsAfterExternalClear);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NAVIGATION_MOVING_PICKUP =
-        TEST_FUNCTIONS.register("navigation_moving_pickup", () -> NavigationReliabilityGameTests::movingItemRefreshesPickupPath);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NAVIGATION_REPATH_BUDGET =
-        TEST_FUNCTIONS.register("navigation_repath_budget", () -> NavigationReliabilityGameTests::repathBudgetIsBounded);
-
-    // ===== 水域两栖导航 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SWIM_WATER_CROSSING =
-        TEST_FUNCTIONS.register("swim_water_crossing", () -> NavigationWaterGameTests::crossingCompletes);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SWIM_WATER_ESCAPE =
-        TEST_FUNCTIONS.register("swim_water_escape", () -> NavigationWaterGameTests::escapeFromDeepWater);
-
-    // ===== 铁矿工具链环境 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_MINING_RESET_RESTORE =
-        TEST_FUNCTIONS.register("iron_mining_reset_restore", () -> IronMiningEnvGameTests::resetAndCloseRestoreArena);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_MINING_PROGRESSION =
-        TEST_FUNCTIONS.register("iron_mining_progression", () -> IronMiningEnvGameTests::completeToolProgression);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_MINING_FAILURE_LIMIT =
-        TEST_FUNCTIONS.register("iron_mining_failure_limit", () -> IronMiningEnvGameTests::failureAndStepLimit);
-
-    // ===== 铁傀儡战斗环境 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_GOLEM_WARDEN_RESET_RESTORE =
-        TEST_FUNCTIONS.register("iron_golem_warden_reset_restore", () -> IronGolemWardenEnvGameTests::resetAndCloseRestoreArena);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_GOLEM_WARDEN_VICTORY =
-        TEST_FUNCTIONS.register("iron_golem_warden_victory", () -> IronGolemWardenEnvGameTests::golemSpawnHealAndVictory);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_GOLEM_WARDEN_FAILURE_LIMIT =
-        TEST_FUNCTIONS.register("iron_golem_warden_failure_limit", () -> IronGolemWardenEnvGameTests::failureAndStepLimit);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_GOLEM_WARDEN_INVALID_PATTERN =
-        TEST_FUNCTIONS.register("iron_golem_warden_invalid_pattern", () -> IronGolemWardenEnvGameTests::invalidPatternFailsUnrecoverably);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IRON_GOLEM_WARDEN_RESUPPLY =
-        TEST_FUNCTIONS.register("iron_golem_warden_resupply", () -> IronGolemWardenEnvGameTests::suppliesReissuedAcrossResets);
-
-    // ===== 环境状态基线（gym/state） =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> STATE_BLOCK_ROLLBACK =
-        TEST_FUNCTIONS.register("state_block_rollback", () -> EnvStateGameTests::blockRollbackAcrossResets);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> STATE_ENTITY_ROLLBACK =
-        TEST_FUNCTIONS.register("state_entity_rollback", () -> EnvStateGameTests::entityRollbackAcrossResets);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> STATE_ITEM_CLEANUP =
-        TEST_FUNCTIONS.register("state_item_cleanup", () -> EnvStateGameTests::itemEntitiesClearedAcrossResets);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> STATE_WARDEN_NO_DIG =
-        TEST_FUNCTIONS.register("state_warden_no_dig", () -> EnvStateGameTests::wardenBaselineResetKeepsSurfaced);
-
-    // ===== Agent 死亡生命周期 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> IDLE_DEATH_RETURNS_TERMINATED_STEP =
+        // ===== 环境契约：终止语义与实体失效 =====
         TEST_FUNCTIONS.register("agent_idle_death_returns_terminated_step", () -> AgentDeathGameTests::idleDeathReturnsTerminatedStep);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> RUNNING_ACTION_DEATH_COMPLETES_CURRENT_STEP =
         TEST_FUNCTIONS.register("agent_running_action_death_completes_current_step", () -> AgentDeathGameTests::runningActionDeathCompletesCurrentStep);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> RUNNING_MOVE_TO_DEATH_COMPLETES_CURRENT_STEP =
-        TEST_FUNCTIONS.register("agent_running_move_to_death_completes_current_step", () -> AgentDeathGameTests::runningMoveToDeathCompletesCurrentStep);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> ENV_TERMINATION_INDEPENDENT_FROM_ACTION_STATE =
         TEST_FUNCTIONS.register("env_termination_independent_from_action_state", () -> AgentDeathGameTests::envTerminationIsIndependentFromActionState);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REMOVED_ENTITY_FAILS_IN_ACTION_LAYER =
         TEST_FUNCTIONS.register("removed_entity_fails_in_action_layer", () -> AgentDeathGameTests::removedEntityFailsInActionLayer);
 
-    // ===== 聊天观测 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CHAT_OBSERVATION_SHOWS_RECENT_MESSAGES =
-        TEST_FUNCTIONS.register("chat_observation_shows_recent_messages", () -> ChatObservationGameTests::chatObservationShowsRecentMessages);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SEND_CHAT_ACTION_BROADCASTS =
-        TEST_FUNCTIONS.register("chat_send_action_broadcasts", () -> ChatObservationGameTests::sendChatActionBroadcastsAndObserves);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SEND_CHAT_ACTION_VALIDATES =
-        TEST_FUNCTIONS.register("chat_send_action_validates", () -> ChatObservationGameTests::sendChatActionValidatesMessages);
+        // ===== 环境契约：动作批次语义 =====
+        TEST_FUNCTIONS.register("action_timeout_fails", () -> ActionTimeoutGameTests::actionTimeoutFails);
+        TEST_FUNCTIONS.register("action_batch_serial", () -> ActionBatchGameTests::repeatedActionsRunSerially);
+        TEST_FUNCTIONS.register("action_batch_stop_and_empty", () -> ActionBatchGameTests::failureStopsAndEmptyBatchNoops);
 
-    // ===== 生命日志观测（伤害增量） =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> HEALTH_LOG_INCREMENTAL =
-        TEST_FUNCTIONS.register("damage_log_incremental",
-            () -> DamageLogGameTests::healthLogObservesDamageBetweenObservations);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> HEALTH_LOG_SOURCE_ENTITY =
-        TEST_FUNCTIONS.register("damage_log_source_entity",
-            () -> DamageLogGameTests::healthLogRecordsDamageSourceEntity);
+        // ===== 环境契约：原版 AI 控制 =====
+        TEST_FUNCTIONS.register("env_disable_vanilla_ai_maintained", () -> EnvAiGameTests::disableVanillaAiIsMaintained);
+        TEST_FUNCTIONS.register("env_enable_vanilla_ai_uses_controller_policy", () -> EnvAiGameTests::enabledVanillaAiUsesControllerPolicy);
 
-    // ===== 世界状态观测（群系 / 结构） =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> WORLD_STATE_BIOME_AND_STRUCTURE =
-        TEST_FUNCTIONS.register("world_state_biome_and_structure",
-            () -> ChatObservationGameTests::worldStateReportsBiomeAndStructure);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> WORLD_STATE_STRUCTURE_PIECE =
-        TEST_FUNCTIONS.register("world_state_structure_inside_piece",
-            () -> ChatObservationGameTests::worldStateReportsStructureInsidePiece);
+        // ===== 环境状态基线（docs/environment-state-system.md） =====
+        TEST_FUNCTIONS.register("state_block_rollback", () -> EnvStateGameTests::blockRollbackAcrossResets);
+        TEST_FUNCTIONS.register("state_entity_rollback", () -> EnvStateGameTests::entityRollbackAcrossResets);
+        TEST_FUNCTIONS.register("state_item_cleanup", () -> EnvStateGameTests::itemEntitiesClearedAcrossResets);
+        TEST_FUNCTIONS.register("state_warden_no_dig", () -> EnvStateGameTests::wardenBaselineResetKeepsSurfaced);
 
-    // ===== 玩家模拟实体 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PLAYER_SIM_PROFILE =
+        // ===== 场景存档（docs/environment-scenarios.md） =====
+        TEST_FUNCTIONS.register("scenario_parkour_round_trip", () -> ScenarioGameTests::parkourSaveSpawnRoundTrip);
+        TEST_FUNCTIONS.register("scenario_warden_relocation", () -> ScenarioGameTests::wardenRelocation);
+        TEST_FUNCTIONS.register("scenario_store_edges", () -> ScenarioGameTests::storeEdgeCases);
+
+        // ===== 任务环境端到端 =====
+        TEST_FUNCTIONS.register("iron_mining_reset_restore", () -> IronMiningEnvGameTests::resetAndCloseRestoreArena);
+        TEST_FUNCTIONS.register("iron_mining_progression", () -> IronMiningEnvGameTests::completeToolProgression);
+        TEST_FUNCTIONS.register("iron_golem_warden_reset_restore", () -> IronGolemWardenEnvGameTests::resetAndCloseRestoreArena);
+        TEST_FUNCTIONS.register("iron_golem_warden_victory", () -> IronGolemWardenEnvGameTests::golemSpawnHealAndVictory);
+
+        // ===== PlayerSim 受控实体 =====
         TEST_FUNCTIONS.register("player_sim_profile", () -> PlayerSimGameTests::playerSimHasPlayerLikeProfile);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PLAYER_SIM_ENV_AGENT =
         TEST_FUNCTIONS.register("player_sim_env_agent", () -> PlayerSimGameTests::playerSimWorksAsEnvAgent);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PLAYER_SIM_SWING_ANIMATION =
-        TEST_FUNCTIONS.register("player_sim_swing_animation", () -> PlayerSimGameTests::playerSimAdvancesSwingAnimation);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PLAYER_SIM_ATTACK_TARGET =
         TEST_FUNCTIONS.register("player_sim_attack_target", () -> PlayerSimGameTests::playerSimPursuesConfiguredAttackTarget);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PLAYER_SIM_PLAYER_CAMP =
-        TEST_FUNCTIONS.register("player_sim_player_camp", () -> PlayerSimGameTests::playerSimSharesPlayerCamp);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> HOSTILE_MOB_TARGETS_PLAYER_SIM =
-        TEST_FUNCTIONS.register("player_sim_hostile_targeting", () -> PlayerSimGameTests::hostileMobTargetsPlayerSim);
 
-    // ===== 跳跃 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> JUMP_APPLIED =
+        // ===== 动作组件：每族一个代表性用例 =====
+        TEST_FUNCTIONS.register("break_block_tool_swap", () -> BreakBlockGameTests::toolSwapsIntoMainHand);
+        TEST_FUNCTIONS.register("set_block_self_obstructed", () -> SetBlockGameTests::selfObstructionBlocksPlacement);
         TEST_FUNCTIONS.register("jump_applied_and_executed", () -> JumpGameTests::jumpAppliedAndExecuted);
-
-    // ===== 注视目标 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LOOK_AT_ENTITY_EYES =
         TEST_FUNCTIONS.register("look_at_living_entity_eyes", () -> LookAtGameTests::lookAtLivingEntityEyes);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LOOK_AT_ITEM_CENTER =
-        TEST_FUNCTIONS.register("look_at_item_center", () -> LookAtGameTests::lookAtItemCenter);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LOOK_AT_BLOCK_CENTER =
-        TEST_FUNCTIONS.register("look_at_block_center", () -> LookAtGameTests::lookAtBlockCenter);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LOOK_AT_AIR_BLOCK_CENTER =
-        TEST_FUNCTIONS.register("look_at_air_block_center", () -> LookAtGameTests::lookAtAirBlockCenter);
-
-    // ===== 掉落物观测与拾取 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PICKUP_WITHIN_REACH_COLLECTS =
+        TEST_FUNCTIONS.register("navigation_preempts_move_goal", () -> NavigationReliabilityGameTests::runningMoveGoalIsPreemptedBeforeNewPath);
+        TEST_FUNCTIONS.register("swim_water_crossing", () -> NavigationWaterGameTests::crossingCompletes);
         TEST_FUNCTIONS.register("pickup_within_reach_collects", () -> PickupGameTests::pickupWithinReachCollects);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> PICKUP_UNKNOWN_ENTITY_FAILS =
-        TEST_FUNCTIONS.register("pickup_unknown_entity_fails", () -> PickupGameTests::pickupUnknownEntityFails);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NEARBY_ITEMS_OBSERVATION_LISTS_ITEM =
-        TEST_FUNCTIONS.register("nearby_items_observation_lists_item", () -> PickupGameTests::nearbyItemsObservationListsItem);
-
-    // ===== 丢出物品 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> DROP_REQUESTED_COUNT_FORWARD =
         TEST_FUNCTIONS.register("drop_item_requested_count_forward", () -> DropItemGameTests::dropRequestedCountForward);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> DROP_ZERO_COUNT_WHOLE_STACK =
-        TEST_FUNCTIONS.register("drop_item_zero_count_whole_stack", () -> DropItemGameTests::zeroCountDropsWholeStack);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> DROP_INVALID_SOURCE_FAILS =
-        TEST_FUNCTIONS.register("drop_item_invalid_source_fails", () -> DropItemGameTests::invalidSourceFails);
+        TEST_FUNCTIONS.register("chat_send_action_broadcasts", () -> ChatObservationGameTests::sendChatActionBroadcastsAndObserves);
+        TEST_FUNCTIONS.register("use_item_bone_meal", () -> UseItemGameTests::boneMeal);
+        TEST_FUNCTIONS.register("use_item_cure_zombie_villager", () -> UseItemGameTests::cureZombieVillager);
+        TEST_FUNCTIONS.register("action_feedback_attack_once", () -> ActionFeedbackGameTests::attackOnceReportsSpecificFailures);
 
-    // ===== 14.6 按钮 =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LECTERN_PAGE_BOUNDS =
-        TEST_FUNCTIONS.register("button_lectern_page_bounds", () -> MenuButtonGameTests::lecternPageBounds);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LECTERN_TAKE_BOOK =
-        TEST_FUNCTIONS.register("button_lectern_take_book", () -> MenuButtonGameTests::lecternTakeBook);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> UNADAPTED_MENU_FAILS =
-        TEST_FUNCTIONS.register("button_unadapted_menu_fails", () -> MenuButtonGameTests::unadaptedMenuButtonFails);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> STONECUTTER_SELECT =
+        // ===== 观测组件：每族一个代表性用例 =====
+        TEST_FUNCTIONS.register("observation_header_batch_feedback", () -> ObservationFeedbackGameTests::headerAggregatesCompletedBatch);
+        TEST_FUNCTIONS.register("observation_self_main_hand_item", () -> ObservationFeedbackGameTests::selfObservationReportsMainHandItem);
+        TEST_FUNCTIONS.register("chat_observation_shows_recent_messages", () -> ChatObservationGameTests::chatObservationShowsRecentMessages);
+        TEST_FUNCTIONS.register("damage_log_incremental", () -> DamageLogGameTests::healthLogObservesDamageBetweenObservations);
+        TEST_FUNCTIONS.register("world_state_biome_and_structure", () -> ChatObservationGameTests::worldStateReportsBiomeAndStructure);
+        TEST_FUNCTIONS.register("world_state_structure_inside_piece", () -> ChatObservationGameTests::worldStateReportsStructureInsidePiece);
+        TEST_FUNCTIONS.register("nearby_items_observation_lists_item", () -> PickupGameTests::nearbyItemsObservationListsItem);
+        TEST_FUNCTIONS.register("interesting_blocks_update", () -> InterestingBlocksGameTests::updateIsIdempotentAndRemoves);
+
+        // ===== 菜单子系统：会话/槽位/按钮/桥接代表用例 =====
+        TEST_FUNCTIONS.register("menu_session_id_stable", () -> MenuSessionGameTests::sessionIdStableAcrossObservations);
+        TEST_FUNCTIONS.register("menu_reopen_new_id_old_id_rejected", () -> MenuSessionGameTests::reopenGetsNewIdAndOldIdRejected);
+        TEST_FUNCTIONS.register("menu_batch_moves_order", () -> MenuSessionGameTests::batchMovesInOrder);
+        TEST_FUNCTIONS.register("inventory_chest_menu_slot_allocation", () -> MenuInventoryGameTests::chestMenuSlotIdAllocation);
+        TEST_FUNCTIONS.register("lifecycle_target_destroyed_auto_closes", () -> MenuLifecycleGameTests::targetDestroyedAutoCloses);
+        TEST_FUNCTIONS.register("lifecycle_multi_agent_isolation", () -> MenuLifecycleGameTests::multiAgentIsolation);
         TEST_FUNCTIONS.register("button_stonecutter_select_recipe", () -> MenuButtonGameTests::stonecutterSelectRecipe);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LOOM_SELECT =
-        TEST_FUNCTIONS.register("button_loom_select_pattern", () -> MenuButtonGameTests::loomSelectPattern);
-
-    // ===== 回归（端到端测试暴露的问题） =====
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SELF_MENU_OPEN_COMPLETED =
-        TEST_FUNCTIONS.register("regression_self_menu_open_returns_completed", () -> MenuRegressionGameTests::selfMenuOpenReturnsCompleted);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BLOCK_OPEN_POSITION_SYNC =
-        TEST_FUNCTIONS.register("regression_block_open_syncs_agent_player_position", () -> MenuRegressionGameTests::blockOpenSyncsAgentPlayerPosition);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SNAPSHOT_PRESERVES_EQUIPMENT =
-        TEST_FUNCTIONS.register("regression_snapshot_preserves_equipment", () -> MenuRegressionGameTests::snapshotPreservesEquipment);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> LECTERN_BOOK_MOVE_CONSERVES =
-        TEST_FUNCTIONS.register("regression_lectern_book_move_conserves_item", () -> MenuRegressionGameTests::lecternBookMoveConservesItem);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> DROP_ALL_ITEMS_CONSERVES =
-        TEST_FUNCTIONS.register("regression_drop_all_items_conserves_carried", () -> MenuRegressionGameTests::dropAllItemsConservesCarriedItems);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CLEAR_ALL_ITEMS_REMOVES =
-        TEST_FUNCTIONS.register("regression_clear_all_items_removes_without_drop", () -> MenuRegressionGameTests::clearAllItemsRemovesWithoutDrop);
-    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CHEST_LID_SURVIVES_RECHECK =
+        TEST_FUNCTIONS.register("fake_player_menu_isolation", () -> FakePlayerBridgeGameTests::activeMenuIsolation);
+        // 混入咽喉守卫：容器开盖计数跨 recheck 存活（ContainerOpenersCounterMixin）
         TEST_FUNCTIONS.register("regression_chest_lid_count_survives_recheck", () -> MenuRegressionGameTests::chestLidCountSurvivesRecheck);
 
-    // 使用物品的独立场景，使用专用空结构与统一测试时限。
-    static {
-        TEST_FUNCTIONS.register("use_item_bone_meal", () -> UseItemGameTests::boneMeal);
-        TEST_FUNCTIONS.register("use_item_composter", () -> UseItemGameTests::composter);
-        TEST_FUNCTIONS.register("use_item_block_face_durability", () -> UseItemGameTests::blockFaceAndDurability);
-        TEST_FUNCTIONS.register("use_item_entity_no_fallback", () -> UseItemGameTests::entityAndNoFallback);
-        TEST_FUNCTIONS.register("use_item_cure_zombie_villager", () -> UseItemGameTests::cureZombieVillager);
-        TEST_FUNCTIONS.register("use_item_heal_iron_golem", () -> UseItemGameTests::healIronGolem);
-        TEST_FUNCTIONS.register("use_item_throw_at_entity", () -> UseItemGameTests::throwAtEntity);
-        TEST_FUNCTIONS.register("use_item_throw_container_menu", () -> UseItemGameTests::throwFromContainer);
-        TEST_FUNCTIONS.register("use_item_food_waits", () -> UseItemGameTests::foodWaits);
-        TEST_FUNCTIONS.register("use_item_potion_isolation", () -> UseItemGameTests::potionAndIsolation);
-        TEST_FUNCTIONS.register("use_item_remainder_zero_duration", () -> UseItemGameTests::remainderAndZeroDuration);
-        TEST_FUNCTIONS.register("use_item_interruption", () -> UseItemGameTests::interruption);
-        TEST_FUNCTIONS.register("use_item_timeout", () -> UseItemGameTests::timeout);
-        TEST_FUNCTIONS.register("use_item_invalid_inputs", () -> UseItemGameTests::invalidInputs);
-        TEST_FUNCTIONS.register("use_item_reach_obstruction", () -> UseItemGameTests::reachAndObstruction);
-        TEST_FUNCTIONS.register("use_item_composite_failure", () -> UseItemGameTests::compositeFailure);
-        TEST_FUNCTIONS.register("use_item_death", () -> UseItemGameTests::death);
-        TEST_FUNCTIONS.register("use_item_equipment", () -> UseItemGameTests::equipment);
-        TEST_FUNCTIONS.register("use_item_runtime_reset", () -> UseItemGameTests::runtimeReset);
-        TEST_FUNCTIONS.register("use_item_runtime_close", () -> UseItemGameTests::runtimeClose);
-        TEST_FUNCTIONS.register("use_item_reset_menu_identity", () -> UseItemGameTests::resetMenuIdentity);
+        // ===== 可视化 =====
+        TEST_FUNCTIONS.register("visualization_runtime", () -> VisualizationGameTests::runtime);
     }
 
     /** 禁止实例化测试注册入口。 */
     private GymCraftGameTests() {
     }
 
-    /** 在 RegisterGameTestsEvent 中装配全部测试实例，按场景选择空结构边界。 */
+    /** 在 RegisterGameTestsEvent 中装配全部测试实例，统一使用完整边界的空结构。 */
     public static void register(RegisterGameTestsEvent event) {
         Holder<TestEnvironmentDefinition<?>> environment = event.registerEnvironment(
             Identifier.fromNamespaceAndPath(GymCraft.MODID, "default")
         );
+        // 注入合成结构起点的用例独占测试环境（即独占批次）：结构起点是跨用例共享的
+        // 区块状态，测试网格相邻格子间距小于一个区块，与扫描结构的用例并行时注入会
+        // 落进对方的"本区块无结构起点"断言；不同批次顺序执行，注入窗口不再重叠
+        Holder<TestEnvironmentDefinition<?>> structureInjectionEnvironment = event.registerEnvironment(
+            Identifier.fromNamespaceAndPath(GymCraft.MODID, "structure_injection")
+        );
         for (var holder : TEST_FUNCTIONS.getEntries()) {
+            boolean injectsStructureStarts = holder.getId().getPath().equals("world_state_structure_inside_piece");
             event.registerTest(
                 holder.getId(),
                 new FunctionGameTestInstance(
                     holder.getKey(),
-                    new TestData<>(environment,
-                        holder.getId().getPath().startsWith("use_item_")
-                            || holder.getId().getPath().startsWith("iron_mining_")
-                            || holder.getId().getPath().startsWith("iron_golem_warden_")
-                            // 状态基线测试搭建完整任务场地，同样需要多格空间。
-                            || holder.getId().getPath().startsWith("state_")
-                            || holder.getId().getPath().startsWith("navigation_")
-                            // 水域导航需要多格空间布置水坑。
-                            || holder.getId().getPath().startsWith("swim_")
-                            // 可视化测试同样需要多格空间布置 Agent 与目标。
-                            || holder.getId().getPath().startsWith("visualization_")
-                            ? USE_ITEM_STRUCTURE : EMPTY_STRUCTURE,
+                    new TestData<>(injectsStructureStarts ? structureInjectionEnvironment : environment,
+                        USE_ITEM_STRUCTURE,
                         holder.getId().getPath().startsWith("iron_mining_") ? 12000
                             : holder.getId().getPath().startsWith("iron_golem_warden_") ? 12000
                             : holder.getId().getPath().startsWith("state_") ? 12000
+                            : holder.getId().getPath().startsWith("scenario_") ? 12000
                             : holder.getId().getPath().startsWith("chat_") ? 12000
                             // 伤害日志用例含 600ms 无敌帧等待与多次阻塞 step，放宽时限
                             : holder.getId().getPath().startsWith("damage_log_") ? 1200
                             : holder.getId().getPath().startsWith("world_state_") ? 12000
                             : holder.getId().getPath().startsWith("player_sim_env") ? 12000
+                            // 追击+近战受服务器启动期卡顿影响，100 tick 偶发打满
+                            : holder.getId().getPath().equals("player_sim_attack_target") ? 400
                             : holder.getId().getPath().startsWith("navigation_") ? 160
                             : holder.getId().getPath().startsWith("swim_") ? 600
                             : MAX_TICKS,

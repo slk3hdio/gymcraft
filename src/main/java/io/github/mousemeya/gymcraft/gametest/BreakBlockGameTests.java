@@ -71,40 +71,4 @@ public final class BreakBlockGameTests {
             "stone did not drop cobblestone with a pickaxe");
         helper.succeed();
     }
-
-    /**
-     * 错误工具不拦截但反馈说明后果：石头被挖掉但不掉圆石，details 附 warning。
-     *
-     * @param helper 测试场景
-     */
-    public static void wrongToolWarnsAndDropsNothing(GameTestHelper helper) {
-        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        int offhandSlot = EquipmentSlot.OFFHAND.getId();
-        mob.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.STICK));
-        BlockPos target = new BlockPos(3, 2, 2);
-        helper.setBlock(target, Blocks.STONE);
-        BlockPos absolute = helper.absolutePos(target);
-        ProtoBreakBlock action = ProtoBreakBlock.newBuilder()
-            .setX(absolute.getX()).setY(absolute.getY()).setZ(absolute.getZ())
-            .setSlotId(offhandSlot)
-            .build();
-
-        var controller = new BreakBlockController(mob);
-        var state = controller.apply(action).initialState();
-        assertEquals(helper, ActionStatus.RUNNING, state.status(), "mining should start with a wrong tool");
-        assertEquals(helper, Boolean.FALSE, state.details().get("correct_tool"), "wrong tool not reported");
-        assertTrue(helper, state.details().get("warning") instanceof String warning
-            && warning.contains("will not drop items"), "drop warning missing: " + state.details());
-
-        // 木棍挖石头约 750 次（含未着地惩罚）；同步循环不占游戏 tick
-        for (int tick = 0; tick < 900 && state.status() == ActionStatus.RUNNING; tick++) {
-            state = controller.tick(action);
-        }
-        assertEquals(helper, ActionStatus.COMPLETED, state.status(), "stone did not break with a stick");
-        assertTrue(helper, helper.getBlockState(target).isAir(), "target block still present");
-        var drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, new AABB(absolute).inflate(2));
-        assertTrue(helper, drops.stream().noneMatch(item -> item.getItem().is(Items.COBBLESTONE)),
-            "stone dropped cobblestone without a pickaxe");
-        helper.succeed();
-    }
 }

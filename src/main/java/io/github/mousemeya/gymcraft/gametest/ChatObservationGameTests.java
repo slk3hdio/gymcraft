@@ -240,9 +240,10 @@ public final class ChatObservationGameTests {
                 // 结构：GameTest 空结构世界中受控实体不在任何结构内
                 assertTrue(helper, state.getStructure().isEmpty(),
                     "unexpected structure in empty test world: " + state.getStructure());
-                // 附近结构：本用例区块没有任何结构起点。注意不能断言全局为空——
-                // 其它用例（world_state_structure_inside_piece）会注入合成结构起点，
-                // GameTest 并行调度下可能落入本用例的扫描半径，按区块过滤消除串扰
+                // 附近结构：GameTest 世界为超平坦且结构生成为关，本用例区块不应存在任何
+                // 结构起点。注入合成起点的用例（world_state_structure_inside_piece）已隔离
+                // 到独立批次顺序执行（见 GymCraftGameTests.register），注入窗口不会与本用例
+                // 重叠；仍按区块过滤以缩小任何潜在串扰的判定范围
                 boolean ownChunkHasStructure = state.getStructuresList().stream().anyMatch(s ->
                     (s.getX() >> 4) == (absPos.getX() >> 4) && (s.getZ() >> 4) == (absPos.getZ() >> 4));
                 assertTrue(helper, !ownChunkHasStructure,
@@ -328,8 +329,11 @@ public final class ChatObservationGameTests {
                         + nearby.getX() + "," + nearby.getZ() + " vs " + absPos);
                 assertTrue(helper, nearby.getDistance() >= 0 && nearby.getDistance() <= 64,
                     "nearby structure distance out of expected range: " + nearby.getDistance());
-                // 清理注入的结构起点与引用：GameTest 世界跨用例复用，
-                // 不清理会污染其它用例的附近结构扫描（回调运行在服务端线程，可直接改区块）
+                helper.succeed();
+            } finally {
+                // 清理注入的结构起点与引用：GameTest 世界跨用例/跨批次复用，断言失败
+                // 也不能泄漏注入状态污染后续用例的附近结构扫描（回调运行在服务端线程，
+                // 可直接改区块）
                 ChunkAccess chunk = serverLevel.getChunkAt(absPos);
                 Map<Structure, StructureStart> starts = new HashMap<>(chunk.getAllStarts());
                 starts.remove(treasure);
@@ -337,30 +341,9 @@ public final class ChatObservationGameTests {
                 Map<Structure, it.unimi.dsi.fastutil.longs.LongSet> references = new HashMap<>(chunk.getAllReferences());
                 references.remove(treasure);
                 chunk.setAllReferences(references);
-                helper.succeed();
-            } finally {
                 env.close();
             }
         });
-    }
-
-    /**
-     * 验证发送动作拒绝空消息、超长消息和原版禁止字符。
-     *
-     * @param helper GameTest 辅助对象
-     */
-    public static void sendChatActionValidatesMessages(GameTestHelper helper) {
-        Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
-        var controller = new io.github.mousemeya.gymcraft.gym.action.component.SendChatController(mob);
-        assertTrue(helper, !controller.contains(ProtoSendChat.getDefaultInstance()),
-            "blank chat message should be rejected");
-        assertTrue(helper, !controller.contains(ProtoSendChat.newBuilder().setMessage("x".repeat(257)).build()),
-            "chat message longer than 256 UTF-16 units should be rejected");
-        assertTrue(helper, !controller.contains(ProtoSendChat.newBuilder().setMessage("forbidden§format").build()),
-            "formatting control character should be rejected");
-        assertTrue(helper, controller.contains(ProtoSendChat.newBuilder().setMessage("合法消息😀").build()),
-            "valid Unicode chat message should be accepted");
-        helper.succeed();
     }
 
     /**

@@ -26,7 +26,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 - **自定义实体**: `gymcraft:player_sim`（`gym/entity/PlayerSimEntity`，注册入口 `registry/ModEntities`）——玩家外观/体型/属性的受控 Agent 载体，无自主 Goal、永不自然消失；渲染器 `client/PlayerSimRenderer`（Steve 皮肤，经 `GymCraftClient` 注册）；刷怪蛋 `player_sim_spawn_egg`。任意环境可直接挂载（EnvToolItem/指令均接受任意 Mob）
 - **组件默认值覆盖**: 环境构造函数里经 `AbstractMcEnv.actionComponent(factory)`/`observationComponent(factory)` 取实例再调组件 setter（`setRadius`/`setSpeed`/`setReachDistance` 等，见各组件类）；观测组件 setter 会同步重建观测空间
 - **gRPC 桥接** (`gym/rpc/`): `GymCraftRpcServer` 随 `ServerStartedEvent` 启动；`Connect` **只连接已存在的环境** (`EnvManager.get(uuid)`)，不创建环境
-- **GameTest** (`gametest/` 包, main 源集): `GymCraftGameTests` 注册全部测试（空环境 + `minecraft:empty` 结构）；`MenuGameTestSupport` 提供断言辅助
+- **GameTest** (`gametest/` 包, main 源集): `GymCraftGameTests` 注册核心测试套件（约 50 个：环境契约/状态基线/场景存档/任务环境端到端 + 各组件族代表用例，粒度矩阵与历史回归用例已裁剪、可从 git 历史恢复）；`MenuGameTestSupport` 提供断言辅助。结构统一用 `gymcraft:use_item_empty`（8×6×8 纯空气盒）——GameTest 每次运行随机选址，实体必须落在结构边界内其区块才被框架强加载；注入合成结构起点的用例独占 `gymcraft:structure_injection` 环境（批次间顺序执行，避免串扰他人"本区块无结构起点"断言）
 - **组件会话状态**挂 Mob 的 NeoForge attachment（注册入口 `registry/ModAttachments`）；菜单按钮经 `gym/menu/adapter/MenuAdapters` 按菜单类查适配器；reset/close 时组件经 `ActionComponentController.release(reason)` 自清跨动作会话（菜单会话由 `OpenMenuController`、use_item 消费由 `UseItemController`），`AgentRuntime` 只经 `ActionDispatcher.releaseComponents` 转发，不硬编码具体组件
 - **menu 包结构**: `gym/menu/` 分 `session/`（会话生命周期与槽位映射）与 `adapter/`（按钮适配器）两个子包；`MenuTypeUtil` 在根包
 - 菜单交互设计文档: `docs/menu-interaction-implementation-plan.md`

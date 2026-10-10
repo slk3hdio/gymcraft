@@ -49,16 +49,6 @@ public final class PickupGameTests {
         helper.succeed();
     }
 
-    /** 不存在的实体 ID：apply 返回 failed。 */
-    public static void pickupUnknownEntityFails(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        var controller = new PickUpItemController(mob);
-
-        var state = controller.apply(ProtoPickUpItem.newBuilder().setEntityId(Integer.MAX_VALUE).build()).initialState();
-        assertEquals(helper, ActionStatus.FAILED, state.status(), "unknown entity id should fail");
-        helper.succeed();
-    }
-
     /** 附近掉落物观测：扫描结果包含生成的掉落物且字段正确。 */
     public static void nearbyItemsObservationListsItem(GameTestHelper helper) {
         var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));

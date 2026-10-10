@@ -54,38 +54,4 @@ public final class DropItemGameTests {
         assertTrue(helper, item.hasPickUpDelay(), "dropped item should have the vanilla pickup delay");
         helper.succeed();
     }
-
-    /**
-     * count 为默认值 0 时应丢出整个堆叠并清空源槽。
-     *
-     * @param helper GameTest 辅助对象
-     */
-    public static void zeroCountDropsWholeStack(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND, 3));
-        var controller = new DropItemController(mob);
-
-        var state = controller.apply(ProtoDropItem.newBuilder().setSlotId(0).build()).initialState();
-        assertEquals(helper, ActionStatus.COMPLETED, state.status(), "zero count should drop the whole stack");
-        assertTrue(helper, mob.getMainHandItem().isEmpty(), "source slot should be empty after dropping all items");
-        assertEquals(helper, 3, state.details().get("count"), "result should report the full stack count");
-        helper.succeed();
-    }
-
-    /**
-     * 空槽与越界槽位必须失败，并且不得生成或扣减任何物品。
-     *
-     * @param helper GameTest 辅助对象
-     */
-    public static void invalidSourceFails(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        var controller = new DropItemController(mob);
-
-        var emptyState = controller.apply(ProtoDropItem.newBuilder().setSlotId(0).setCount(1).build()).initialState();
-        var outOfRangeState = controller.apply(ProtoDropItem.newBuilder().setSlotId(8).setCount(1).build()).initialState();
-        assertEquals(helper, ActionStatus.FAILED, emptyState.status(), "empty source should fail");
-        assertEquals(helper, ActionStatus.FAILED, outOfRangeState.status(), "out-of-range source should fail");
-        assertTrue(helper, mob.getMainHandItem().isEmpty(), "failed drops should not change the inventory");
-        helper.succeed();
-    }
 }

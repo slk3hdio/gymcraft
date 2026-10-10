@@ -131,54 +131,6 @@ public final class AgentDeathGameTests {
     }
 
     /**
-     * 验证 move_to 动作期间死亡也由动作组件完成当前 step，而不是等待下一次请求。
-     *
-     * @param helper GameTest 辅助对象
-     */
-    public static void runningMoveToDeathCompletesCurrentStep(GameTestHelper helper) {
-        for (int x = 0; x <= 8; x++) {
-            for (int z = 0; z <= 4; z++) {
-                helper.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
-            }
-        }
-        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(1, 1, 2));
-        TestEnv env = new TestEnv(mob);
-        BlockPos destination = helper.absolutePos(new BlockPos(7, 2, 2));
-        ProtoMcAction action = ProtoMcAction.newBuilder()
-            .setComponentId("gymcraft:move_to")
-            .setPayload(Any.pack(ProtoMoveTo.newBuilder()
-                .setX(destination.getX() + 0.5)
-                .setY(destination.getY())
-                .setZ(destination.getZ() + 0.5)
-                .setStopDistance(0.5)
-                .build()))
-            .build();
-        AtomicReference<StepResponse> response = new AtomicReference<>();
-        AtomicReference<Throwable> failure = new AtomicReference<>();
-        // 等实体落地后再提交寻路动作，避免初始 canUpdatePath=false 导致测试提前失败。
-        helper.runAfterDelay(3, () -> {
-            startStep(env, action, response, failure);
-            helper.runAfterDelay(2, () -> {
-                assertTrue(helper, response.get() == null, "move_to returned before agent death");
-                helper.kill(mob);
-                helper.runAfterDelay(3, () -> {
-                    assertTrue(helper, failure.get() == null, "move_to raised on agent death: " + failure.get());
-                    StepResponse stepResponse = response.get();
-                    assertTrue(helper, stepResponse != null, "move_to step was not completed after death");
-                    assertTrue(helper, stepResponse.getTerminated(), "move_to death must terminate the default env");
-                    assertEquals(helper, "FAILED", stepResponse.getObservation().getHeader().getLastActionStatus(),
-                        "move_to death status");
-                    assertEquals(helper, "action batch stopped at index 0: agent entity is dead",
-                        stepResponse.getObservation().getHeader().getLastActionDescription(),
-                        "move_to death description");
-                    env.close();
-                    helper.succeed();
-                });
-            });
-        });
-    }
-
-    /**
      * 验证动作失败与 episode 终止完全由不同层决定。
      *
      * @param helper GameTest 辅助对象

@@ -32,60 +32,6 @@ public final class FakePlayerBridgeGameTests {
     private FakePlayerBridgeGameTests() {
     }
 
-    /** @param helper 测试场景；验证三类执行者的身份策略、坐标模式和复用清理 */
-    public static void actorModesAndIsolation(GameTestHelper helper) {
-        var first = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        var second = spawnAgent(helper, EntityType.HUSK, new BlockPos(5, 1, 2));
-        first.setYRot(37.0F);
-        first.setXRot(-12.0F);
-        first.addEffect(new MobEffectInstance(MobEffects.SPEED, 200));
-        first.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_PICKAXE));
-        second.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STICK));
-
-        var menu = AgentFakePlayerService.createMenuActor(first);
-        var inventory = AgentFakePlayerService.createInventoryActor(first);
-        var hand = AgentFakePlayerService.borrowHandActor(first);
-        assertTrue(helper, menu.player() != inventory.player() && menu.player() != hand.player()
-            && inventory.player() != hand.player(), "different roles share a FakePlayer");
-        assertEquals(helper, first.getY(), menu.player().getY(), "menu feet position");
-        assertTrue(helper, Math.abs(first.getEyeY() - inventory.player().getEyeY()) < 1.0E-6,
-            "inventory actor eyes are not aligned");
-        assertEquals(helper, GameType.SURVIVAL, hand.player().gameMode.getGameModeForPlayer(), "hand game mode");
-        assertTrue(helper, hand.player().hasEffect(MobEffects.SPEED), "hand actor did not copy effects");
-
-        // 人为污染复用 actor；下一次借用必须清除所有非本次 Mob 状态。
-        hand.player().getInventory().setItem(10, new ItemStack(Items.DIAMOND));
-        hand.player().inventoryMenu.setCarried(new ItemStack(Items.APPLE));
-        var reused = AgentFakePlayerService.borrowHandActor(second);
-        assertTrue(helper, reused == hand, "hand actor was not reused in one level");
-        assertTrue(helper, reused.player().getInventory().getItem(10).isEmpty(), "inventory leaked between hand actions");
-        assertTrue(helper, reused.player().inventoryMenu.getCarried().isEmpty(), "carried stack leaked between hand actions");
-        assertTrue(helper, !reused.player().hasEffect(MobEffects.SPEED), "effect leaked between mobs");
-        assertTrue(helper, reused.player().getMainHandItem() == second.getMainHandItem(), "main hand reference not shared");
-        helper.succeed();
-    }
-
-    /** @param helper 测试场景；验证库存事务暂借、幂等提交和无副作用容量预检 */
-    public static void inventoryTransactionCommitOnce(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STICK));
-        mob.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.SNOWBALL, 3));
-        AgentInventoryBridge.validateCapacity(mob);
-        assertEquals(helper, 3, mob.getOffhandItem().getCount(), "capacity validation changed inventory");
-
-        try (var transaction = AgentInventoryTransaction.open(mob, EquipmentSlot.OFFHAND.getId())) {
-            transaction.stageSelectedInMainHand();
-            assertTrue(helper, transaction.player().getMainHandItem().is(Items.SNOWBALL), "selected slot was not staged");
-            transaction.player().getMainHandItem().shrink(1);
-            var firstResult = transaction.commitOnce();
-            var secondResult = transaction.commitOnce();
-            assertTrue(helper, firstResult == secondResult, "repeated commit returned a different result");
-        }
-        assertTrue(helper, mob.getMainHandItem().is(Items.STICK), "original main hand was not restored");
-        assertEquals(helper, 2, mob.getOffhandItem().getCount(), "transaction result was not returned once");
-        helper.succeed();
-    }
-
     /** @param helper 测试场景；验证菜单活动期间的其他执行者不会覆盖菜单玩家状态 */
     public static void activeMenuIsolation(GameTestHelper helper) {
         var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));

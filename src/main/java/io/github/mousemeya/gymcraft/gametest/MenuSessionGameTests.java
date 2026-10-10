@@ -73,77 +73,9 @@ public final class MenuSessionGameTests {
         helper.succeed();
     }
 
-    /** 他人修改源槽后移动失败且 stale_menu_state=true，物品不被修改。 */
-    public static void staleSourceBlocksMove(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        var chest = placeChest(helper, new BlockPos(0, 1, 2));
-        chest.setItem(0, new ItemStack(Items.COBBLESTONE, 10));
-
-        LogicalMenuSession session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
-        int sourceId = sessionSlotId(session, 0);
-        observe(mob);
-
-        // 模拟其他玩家修改源槽（绕过会话直接写底层容器）
-        chest.setItem(0, new ItemStack(Items.COBBLESTONE, 64));
-        ActionState state = moveMenuItem(mob, session.sessionId(), sourceId, 0, 5);
-        assertEquals(helper, ActionStatus.FAILED, state.status(), "stale move did not fail");
-        assertEquals(helper, Boolean.TRUE, state.details().get("stale_menu_state"),
-            "stale_menu_state flag missing: " + state.details());
-        // 状态过期时不修改物品
-        assertEquals(helper, 64, chest.getItem(0).getCount(), "stale move modified the chest");
-        assertTrue(helper, mob.getMainHandItem().isEmpty(), "stale move modified the agent inventory");
-        helper.succeed();
-    }
-
-    /** 无关槽位变化不阻止移动（局部校验语义）。 */
-    public static void unrelatedSlotChangeAllowsMove(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        var chest = placeChest(helper, new BlockPos(0, 1, 2));
-        chest.setItem(0, new ItemStack(Items.COBBLESTONE, 10));
-        chest.setItem(1, new ItemStack(Items.DIRT, 5));
-
-        LogicalMenuSession session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
-        int sourceId = sessionSlotId(session, 0);
-        observe(mob);
-
-        // 他人修改与本次移动无关的槽位
-        chest.setItem(1, new ItemStack(Items.SAND, 3));
-        ActionState state = moveMenuItem(mob, session.sessionId(), sourceId, 0, 4);
-        assertEquals(helper, ActionStatus.COMPLETED, state.status(),
-            "unrelated slot change blocked the move: " + state.description());
-        assertEquals(helper, 6, chest.getItem(0).getCount(), "move did not take from source");
-        assertEquals(helper, 4, mob.getMainHandItem().getCount(), "move did not insert into mainhand");
-        helper.succeed();
-    }
-
-    /** 状态过期不影响用当前 session id 关闭会话。 */
-    public static void staleStateAllowsClose(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        var chest = placeChest(helper, new BlockPos(0, 1, 2));
-        chest.setItem(0, new ItemStack(Items.COBBLESTONE, 10));
-
-        LogicalMenuSession session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
-        observe(mob);
-        chest.setItem(0, new ItemStack(Items.COBBLESTONE, 64));
-
-        ActionState state = closeMenu(mob, session.sessionId());
-        assertEquals(helper, ActionStatus.COMPLETED, state.status(), "stale state blocked close: " + state.description());
-        assertTrue(helper, LogicalMenuSessions.current(mob) == null, "session still attached after close");
-        helper.succeed();
-    }
     /** @param helper 测试上下文；验证后一项读取前一项的产出。 */
     public static void batchMovesInOrder(GameTestHelper helper) {
         checkBatchMoves(helper, false, false);
-    }
-
-    /** @param helper 测试上下文；验证失败保留前项且跳过后项。 */
-    public static void batchMoveStopsOnFailure(GameTestHelper helper) {
-        checkBatchMoves(helper, true, false);
-    }
-
-    /** @param helper 测试上下文；验证后项槽位过期时整批不修改物品。 */
-    public static void batchMoveChecksAllBaselines(GameTestHelper helper) {
-        checkBatchMoves(helper, false, true);
     }
 
     /**

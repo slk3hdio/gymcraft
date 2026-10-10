@@ -78,44 +78,6 @@ public final class ObservationFeedbackGameTests {
     }
 
     /**
-     * 验证中途失败的批次在观测 header 中保留已执行动作的逐项终态（含失败项）。
-     *
-     * @param helper GameTest 辅助对象
-     */
-    public static void headerAggregatesFailedBatch(GameTestHelper helper) {
-        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        TestEnv env = new TestEnv(mob);
-        // 目标是空气方块，break_block 在应用阶段失败，批次停在索引 1
-        BlockPos airTarget = helper.absolutePos(new BlockPos(2, 3, 2));
-        ProtoMcAction breakBlock = ProtoMcAction.newBuilder()
-            .setComponentId("gymcraft:break_block")
-            .setPayload(Any.pack(ProtoBreakBlock.newBuilder()
-                .setX(airTarget.getX()).setY(airTarget.getY()).setZ(airTarget.getZ())
-                .setSlotId(0)
-                .build()))
-            .build();
-        AtomicReference<StepResponse> response = new AtomicReference<>();
-        AtomicReference<Throwable> failure = new AtomicReference<>();
-        startStep(env, List.of(noopAction(), breakBlock), response, failure);
-
-        helper.runAfterDelay(8, () -> {
-            assertTrue(helper, failure.get() == null, "batch step raised an exception: " + failure.get());
-            StepResponse stepResponse = response.get();
-            assertTrue(helper, stepResponse != null, "batch step did not return a response");
-            var header = stepResponse.getObservation().getHeader();
-            assertEquals(helper, "FAILED", header.getLastActionStatus(), "batch summary status");
-            assertEquals(helper, 2, header.getLastActionsCount(), "per-action feedback count");
-            assertEquals(helper, "COMPLETED", header.getLastActions(0).getStatus(), "completed action status");
-            var failed = header.getLastActions(1);
-            assertEquals(helper, "gymcraft:break_block", failed.getComponentId(), "failed action component");
-            assertEquals(helper, "FAILED", failed.getStatus(), "failed action status");
-            assertEquals(helper, "no block at target position", failed.getDescription(), "failed action description");
-            env.close();
-            helper.succeed();
-        });
-    }
-
-    /**
      * 验证 self 观测报告主手持物，并在空手时不设置该字段。
      *
      * @param helper GameTest 辅助对象

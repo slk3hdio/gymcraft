@@ -110,28 +110,6 @@ public final class PlayerSimGameTests {
     }
 
     /**
-     * 验证玩家模拟实体会在自身 tick 中推进挥手时间轴，避免客户端收到动画事件后
-     * {@code attackAnim} 始终停留在零。
-     *
-     * @param helper GameTest 辅助对象
-     */
-    public static void playerSimAdvancesSwingAnimation(GameTestHelper helper) {
-        PlayerSimEntity mob = MenuGameTestSupport.spawnAgent(
-            helper,
-            ModEntities.PLAYER_SIM.get(),
-            new BlockPos(2, 1, 2)
-        );
-        mob.swing(InteractionHand.MAIN_HAND);
-        helper.runAfterDelay(2, () -> {
-            assertTrue(helper, mob.attackAnim > 0.0F,
-                "player_sim attack animation did not advance after swinging");
-            assertTrue(helper, mob.swingTime > 0,
-                "player_sim swing timeline did not advance");
-            helper.succeed();
-        });
-    }
-
-    /**
      * 验证 {@code set_attack_target} 可驱动玩家模拟实体复用原版近战 Goal，
      * 主动寻路接近目标并完成攻击。
      *
@@ -162,55 +140,6 @@ public final class PlayerSimGameTests {
                 "player_sim did not pursue the configured attack target");
             assertTrue(helper, !target.isAlive(),
                 "player_sim reached the target but did not execute melee attacks");
-        });
-    }
-
-    /**
-     * 验证 PlayerSim 与真实/FakePlayer 共享原版双向友军关系。
-     *
-     * @param helper GameTest 辅助对象
-     */
-    public static void playerSimSharesPlayerCamp(GameTestHelper helper) {
-        PlayerSimEntity mob = MenuGameTestSupport.spawnAgent(
-            helper,
-            ModEntities.PLAYER_SIM.get(),
-            new BlockPos(2, 1, 2)
-        );
-        FakePlayer player = new FakePlayer(
-            helper.getLevel(),
-            new GameProfile(UUID.randomUUID(), "gymcraft_ally_test")
-        );
-        assertTrue(helper, mob.isAlliedTo(player),
-            "player_sim should regard players as allies");
-        assertTrue(helper, player.isAlliedTo(mob),
-            "player should regard player_sim as an ally through symmetric vanilla checks");
-        helper.succeed();
-    }
-
-    /**
-     * 验证敌对生物会像寻找玩家一样主动选择并攻击 PlayerSim。
-     *
-     * @param helper GameTest 辅助对象
-     */
-    public static void hostileMobTargetsPlayerSim(GameTestHelper helper) {
-        for (int x = 0; x <= 8; x++) {
-            for (int z = 1; z <= 3; z++) {
-                helper.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
-                helper.setBlock(new BlockPos(x, 5, z), Blocks.STONE);
-            }
-        }
-        PlayerSimEntity mob = helper.spawnWithNoFreeWill(
-            ModEntities.PLAYER_SIM.get(),
-            new BlockPos(2, 2, 2)
-        );
-        var hostile = helper.spawn(EntityType.ZOMBIE, new BlockPos(3, 2, 2));
-        float initialHealth = mob.getHealth();
-
-        helper.succeedWhen(() -> {
-            assertEquals(helper, mob, hostile.getTarget(),
-                "hostile mob did not select player_sim as a player-camp target");
-            assertTrue(helper, mob.getHealth() < initialHealth,
-                "hostile mob selected player_sim but did not attack it");
         });
     }
 

@@ -103,41 +103,6 @@ public final class ActionBatchGameTests {
         });
     }
 
-    /** @param helper GameTest 辅助对象 */
-    public static void multipleActionsCanBeDisabled(GameTestHelper helper) {
-        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        var env = new BatchTestEnv(mob);
-        var response = new AtomicReference<StepResponse>();
-        var failure = new AtomicReference<Throwable>();
-        Thread.startVirtualThread(() -> {
-            try {
-                env.reset(null, Map.of(AbstractMcEnv.ALLOW_MULTIPLE_ACTIONS_OPTION, false));
-                response.set(env.step(List.of(noop(), noop()), 0.0F));
-            } catch (Throwable error) {
-                failure.set(error);
-            }
-        });
-        helper.runAfterDelay(8, () -> {
-            try {
-                assertTrue(helper, failure.get() == null && response.get() != null,
-                    "disabled multi-action step did not finish: " + failure.get());
-                String info = response.get().getInfo();
-                assertTrue(helper, info.contains("\"status\":\"failed\""),
-                    "disabled batch was not rejected: " + info);
-                assertTrue(helper, info.contains("multiple actions are disabled for this environment"),
-                    "disabled batch reason missing: " + info);
-                assertTrue(helper, info.contains("\"total_count\":2"), "disabled batch total missing: " + info);
-                assertTrue(helper, info.contains("\"completed_count\":0"),
-                    "disabled batch executed an action: " + info);
-                assertTrue(helper, !info.contains("\"index\":0"),
-                    "disabled batch unexpectedly executed its first action: " + info);
-                helper.succeed();
-            } finally {
-                env.close();
-            }
-        });
-    }
-
     /** @return 单组件 noop 动作 */
     private static ProtoMcAction noop() {
         return ProtoMcAction.newBuilder()

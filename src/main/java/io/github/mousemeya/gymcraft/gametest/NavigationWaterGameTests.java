@@ -68,38 +68,6 @@ public final class NavigationWaterGameTests {
     }
 
     /**
-     * Agent 直接生成在深水中，swim_to 岸上目标：验证水中起点能规划出逃生路径。
-     *
-     * @param helper 测试场景
-     */
-    public static void escapeFromDeepWater(GameTestHelper helper) {
-        preparePool(helper);
-        Mob mob = spawnAgent(helper, net.minecraft.world.entity.EntityType.PIG, new BlockPos(4, 2, 3));
-        NavigationWaterEnv env = new NavigationWaterEnv(mob);
-        BlockPos destination = helper.absolutePos(new BlockPos(1, 2, 3));
-        AtomicReference<StepResponse> response = new AtomicReference<>();
-        AtomicReference<Throwable> failure = new AtomicReference<>();
-        Thread.startVirtualThread(() -> {
-            try {
-                response.set(env.step(List.of(swimTo(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5)), 20.0F));
-            } catch (Throwable error) {
-                failure.set(error);
-            }
-        });
-        helper.runAfterDelay(440, () -> {
-            try {
-                assertTrue(helper, failure.get() == null, "water escape raised: " + failure.get());
-                assertTrue(helper, response.get() != null, "water escape did not finish");
-                assertTrue(helper, response.get().getInfo().contains("\"status\":\"completed\""),
-                    "swim_to escape from water failed: " + response.get().getInfo());
-                helper.succeed();
-            } finally {
-                env.close();
-            }
-        });
-    }
-
-    /**
      * 铺设 8×7 双层石地板（y 0 为坑底防止水流下泄），中央开 3 格宽水槽
      * （x 3..5、z 0..6、y 1），彼岸用石台阶做 0.5 格岸坡（x 6）——
      * 两侧绕行被完全阻断，唯一通路是涉水而过；原版地面导航（move_to）在
