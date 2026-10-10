@@ -3,16 +3,10 @@ package io.github.mousemeya.gymcraft.gym.runtime;
 import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentSpec;
-import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
-import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
-import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
+import io.github.mousemeya.gymcraft.gym.visualization.VisualizationService;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.profiling.Profiler;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -22,50 +16,55 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import javax.annotation.Nullable;
 
 /**
  * Agent 运行时，负责在 Minecraft tick 循环中串行执行一个 step 的动作批次。
  * <p>
- * gRPC 线程只投递批次并等待 future；动作 apply/tick/state、实体重置和观测生成
+ * gRPC 线程只投递批次并等待 future；动作 apply/tick/state 和观测生成
  * 都在服务端 tick 线程中执行。批次内每个动作至少占用一个 tick，且仅在前一项
  * COMPLETED 后才会在下一个 Pre 阶段启动后一项。
+ * </p>
+ * <p>
+ * reset 只负责动作管线清理、组件释放转发（{@link ActionDispatcher#releaseComponents}）
+ * 与实体重绑定；环境状态恢复、实体重建与场景逻辑由环境每次经 {@link ResetHandler}
+ * 参数传入（实现见 {@code AbstractMcEnv}），运行时不保存任何环境状态。
  * </p>
  */
 public class AgentRuntime {
     private static final Logger LOGGER = LoggerFactory.getLogger(AgentRuntime.class);
 
     private Mob mob;
+    private final ActionDispatcher actionController;
     private final ObservationComposer observationCreator;
     private final ActionBatchExecutor actionExecutor;
-    private final EntitySnapshot initialSnapshot;
-    private final ResetHandler resetHandler;
-    private final List<MobAttachmentSpec<?>> attachmentSpecs;
-    private MobAttachmentAccessScope attachmentScope;
-    /**
-     * 环境完整状态基线（方块 + 区域实体 + agent），首个 reset 搭建场景后由环境冻结；
-     * 冻结后每次 reset 恢复基线，替代 {@link #initialSnapshot} 的纯实体回退路径。
-     */
-    @Nullable private EnvStateSnapshot stateSnapshot;
     private final ArrayBlockingQueue<ActionBatchExecutor.Request> actionBuf = new ArrayBlockingQueue<>(1);
     private final ArrayBlockingQueue<ResetRequest> resetBuf = new ArrayBlockingQueue<>(1);
     private boolean entityPostObserved;
 
-    /** 环境重置回调，由具体环境还原自定义状态。 */
+    /** 环境重置回调：在服务端 tick 线程执行环境侧重置并返回重建后的实体。 */
     @FunctionalInterface
     public interface ResetHandler {
-        /** @param mob 重建后的实体 @param seed 可选种子 @param options 重置选项 */
-        void reset(Mob mob, Integer seed, Map<String, Object> options);
+        /**
+         * @param currentMob 当前（待替换）实体
+         * @param seed 可选种子
+         * @param options 重置选项
+         * @return 重建后已加入世界的实体
+         */
+        Mob reset(Mob currentMob, Integer seed, Map<String, Object> options);
     }
 
     /** 待执行的 reset 请求。 */
-    private record ResetRequest(Integer seed, Map<String, Object> options, CompletableFuture<RuntimeStepResult> future) {
+    private record ResetRequest(
+        Integer seed,
+        Map<String, Object> options,
+        ResetHandler handler,
+        CompletableFuture<RuntimeStepResult> future
+    ) {
     }
 
     /** 一次 reset/step 完成后的观测与状态。 */
@@ -73,47 +72,26 @@ public class AgentRuntime {
     }
 
     /**
-     * 创建 Agent 运行时并捕获实体初始快照。
+     * 创建 Agent 运行时。
      *
      * @param actionController 动作分发器
      * @param observationCreator 观测生成器
      * @param mob 受控实体
-     * @param resetHandler 重置回调
-     * @param attachmentSpecs 允许访问的附件
      */
     public AgentRuntime(
         ActionDispatcher actionController,
         ObservationComposer observationCreator,
-        Mob mob,
-        ResetHandler resetHandler,
-        Collection<? extends MobAttachmentSpec<?>> attachmentSpecs
+        Mob mob
     ) {
+        this.actionController = actionController;
         this.observationCreator = observationCreator;
         this.mob = mob;
         this.actionExecutor = new ActionBatchExecutor(actionController, observationCreator, mob);
-        this.attachmentSpecs = List.copyOf(attachmentSpecs);
-        this.attachmentScope = MobAttachmentAccessScope.activate(mob, this.attachmentSpecs);
-        this.initialSnapshot = EntitySnapshot.capture(mob);
-        this.resetHandler = resetHandler;
     }
 
     /** @return 当前受控 Mob，reset 后可能是新实例 */
     public Mob mob() {
         return this.mob;
-    }
-
-    /**
-     * 冻结环境状态基线；冻结后每次 reset 恢复完整环境状态而不仅是 agent 实体。
-     *
-     * @param snapshot 场景搭建完成后捕获的完整环境快照
-     */
-    public void setStateSnapshot(EnvStateSnapshot snapshot) {
-        this.stateSnapshot = snapshot;
-    }
-
-    /** @return 环境状态基线是否已冻结 */
-    public boolean hasStateSnapshot() {
-        return this.stateSnapshot != null;
     }
 
     /** @param disableVanillaAi 是否在批次之间禁用原版 AI */
@@ -131,10 +109,12 @@ public class AgentRuntime {
      *
      * @param seed 可选随机种子
      * @param options 重置选项
+     * @param handler 环境侧重置回调（状态恢复、实体重建、场景与选项）
      * @return 重置结果
      */
-    public RuntimeStepResult reset(Integer seed, Map<String, Object> options) {
-        ResetRequest request = new ResetRequest(seed, options == null ? Map.of() : options, new CompletableFuture<>());
+    public RuntimeStepResult reset(Integer seed, Map<String, Object> options, ResetHandler handler) {
+        ResetRequest request = new ResetRequest(
+            seed, options == null ? Map.of() : options, handler, new CompletableFuture<>());
         try {
             this.resetBuf.put(request);
             return request.future().get();
@@ -183,7 +163,7 @@ public class AgentRuntime {
         ResetRequest reset = this.resetBuf.poll();
         if (reset != null) {
             try {
-                reset.future().complete(this.resetOnServerTick(reset.seed(), reset.options()));
+                reset.future().complete(this.resetOnServerTick(reset));
             } catch (RuntimeException e) {
                 reset.future().completeExceptionally(e);
             }
@@ -197,44 +177,22 @@ public class AgentRuntime {
         this.entityPostObserved = false;
     }
 
-    /** 在 tick 线程中打断批次、重建实体并生成 reset 观测。 */
-    private RuntimeStepResult resetOnServerTick(Integer seed, Map<String, Object> options) {
+    /** 在 tick 线程中清理动作管线、转发组件释放，执行环境侧重置并重绑定实体。 */
+    private RuntimeStepResult resetOnServerTick(ResetRequest request) {
         this.actionExecutor.interrupt("interrupted by reset");
         this.completeQueuedActions("interrupted by reset");
         this.actionExecutor.clearState();
-        this.closeMenuSession(this.mob, "reset");
+        // 组件自我释放跨动作会话状态（菜单会话、消费会话），作用于待替换的旧实体
+        this.actionController.releaseComponents("reset");
 
-        Mob restoredMob;
-        if (this.stateSnapshot != null) {
-            // 先恢复环境范围内的方块与区域实体，保证 agent 落脚的方块已就位
-            if (!(this.mob.level() instanceof ServerLevel worldLevel)) {
-                throw new IllegalStateException("Cannot restore environment state outside a server level: "
-                    + this.mob.getUUID());
-            }
-            this.stateSnapshot.restoreWorldAndEntities(worldLevel);
-            restoredMob = this.stateSnapshot.restoreAgent();
-        } else {
-            restoredMob = this.initialSnapshot.restore();
-        }
-        LOGGER.info("GymCraft runtime reset restore entity old={} new={}", this.mob.getUUID(), restoredMob.getUUID());
-        AgentInventoryLayout.clearAllItems(this.mob);
-        this.attachmentScope.deactivate(this.mob);
-        if (!this.mob.isRemoved()) {
-            this.mob.discard();
-        }
-        if (!(restoredMob.level() instanceof ServerLevel level)) {
-            throw new IllegalStateException("Restored entity is not in a server level: " + restoredMob.getUUID());
-        }
-        if (!level.addWithUUID(restoredMob)) {
-            throw new IllegalStateException("Failed to add restored entity to level: " + restoredMob.getUUID());
-        }
+        Mob oldMob = this.mob;
+        Mob restoredMob = request.handler().reset(oldMob, request.seed(), request.options());
+        LOGGER.info("GymCraft runtime reset restore entity old={} new={}", oldMob.getUUID(), restoredMob.getUUID());
 
         this.mob = restoredMob;
-        this.attachmentScope = MobAttachmentAccessScope.activate(restoredMob, this.attachmentSpecs);
         this.actionExecutor.setMob(restoredMob);
-        this.resetHandler.reset(restoredMob, seed, options);
         // 通知可视化代次提升：客户端收到后丢弃旧观测与反馈图形，等待 reset 快照。
-        io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.reset(restoredMob);
+        VisualizationService.reset(restoredMob);
         ActionState state = ActionState.completed("reset");
         return new RuntimeStepResult(this.observationCreator.create(restoredMob, state), state);
     }
@@ -288,32 +246,17 @@ public class AgentRuntime {
         this.failQueuedResets(closed);
         this.actionExecutor.failPending(closed);
         this.actionExecutor.clearState();
-        this.closeMenuSession(this.mob, "clear");
-        this.deactivateAttachmentScope(this.mob);
+        this.releaseComponents("clear");
     }
 
-    /** 关闭 Mob 的菜单会话与使用物品临时状态。 */
-    private void closeMenuSession(Mob mob, String reason) {
+    /** 在服务端线程逐组件转发释放回调（reset/环境关闭）。 */
+    private void releaseComponents(String reason) {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server != null && !server.isSameThread()) {
-            server.execute(() -> {
-                io.github.mousemeya.gymcraft.gym.action.component.UseItemConsumption.closeFor(mob);
-                MenuSessionHooks.closeFor(mob, reason);
-            });
+            server.execute(() -> this.actionController.releaseComponents(reason));
             return;
         }
-        io.github.mousemeya.gymcraft.gym.action.component.UseItemConsumption.closeFor(mob);
-        MenuSessionHooks.closeFor(mob, reason);
-    }
-
-    /** 在服务端线程撤销当前实体的附件访问权。 */
-    private void deactivateAttachmentScope(Mob mob) {
-        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server != null && !server.isSameThread()) {
-            server.execute(() -> this.attachmentScope.deactivate(mob));
-            return;
-        }
-        this.attachmentScope.deactivate(mob);
+        this.actionController.releaseComponents(reason);
     }
 
     /** 以批次中断状态完成所有尚未开始的排队请求。 */

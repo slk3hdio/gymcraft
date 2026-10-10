@@ -15,6 +15,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoOpenMenu;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
+import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
 import io.github.mousemeya.gymcraft.gym.menu.MenuTypeUtil;
 import io.github.mousemeya.gymcraft.gym.menu.session.OpenMenuTarget;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
@@ -123,6 +124,15 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
     @Override
     public ActionState tick(ProtoOpenMenu component) {
         return ActionState.completed("open menu applied");
+    }
+
+    /**
+     * reset/关闭时关闭当前菜单会话；生产路径中会话只能由本组件创建，
+     * 故此处单点释放（底层 {@code closeOnce} 幂等）。
+     */
+    @Override
+    public void release(String reason) {
+        MenuSessionHooks.closeFor(this.mob(), reason);
     }
 
     /** proto oneof → 菜单目标模型；oneof 未设置时返回 null（contains 已拦截，此处为防御）。 */

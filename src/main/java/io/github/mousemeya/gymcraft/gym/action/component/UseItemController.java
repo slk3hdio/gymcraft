@@ -403,6 +403,12 @@ public final class UseItemController extends AbstractActionComponentController<P
         }
     }
 
+    /** reset/关闭时清算未完成的消费会话（归还借用主手并结算）。 */
+    @Override public void release(String reason) {
+        this.consumption = null;
+        UseItemConsumption.closeFor(this.mob());
+    }
+
     /** 为每个环境创建独立控制器的注册工厂。 */
     public static final class Factory implements ActionComponentFactory<ProtoUseItem, UseItemController> {
         /**

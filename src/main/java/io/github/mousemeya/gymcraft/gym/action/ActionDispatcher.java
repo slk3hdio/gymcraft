@@ -198,6 +198,22 @@ public class ActionDispatcher {
         return dispatchTick(controller, action.getPayload(), componentId);
     }
 
+    /**
+     * 逐组件转发释放回调（reset/环境关闭时由运行时调用）；
+     * 单个组件释放异常只记录日志，不阻断其余组件。
+     *
+     * @param reason 释放原因（reset / clear，用于日志）
+     */
+    public void releaseComponents(String reason) {
+        for (var controller : this.components.values()) {
+            try {
+                controller.release(reason);
+            } catch (Exception e) {
+                LOGGER.warn("Error in release callback of action component: {}", e.getMessage());
+            }
+        }
+    }
+
     /** @param action 需要中断的当前动作 */
     public void onInterrupt(ProtoMcAction action) {
         if (action == null || !action.hasPayload()) {
