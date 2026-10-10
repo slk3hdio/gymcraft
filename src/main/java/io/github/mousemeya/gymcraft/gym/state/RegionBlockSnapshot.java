@@ -124,6 +124,57 @@ public final class RegionBlockSnapshot {
     }
 
     /**
+     * @return 快照覆盖的闭区间区域（场景存档序列化用）
+     */
+    public BoundingBox region() {
+        return this.region;
+    }
+
+    /**
+     * @return 区域内方块实体的完整 NBT 稀疏表（键为 {@link BlockPos#asLong}，只读视图）
+     */
+    public Map<Long, CompoundTag> blockEntities() {
+        return this.blockEntities;
+    }
+
+    /**
+     * 按区域逐格遍历快照中的方块状态（含裁剪——区域边界外的同段格子不产出）。
+     * 坐标以世界绝对坐标产出；读自区块段深拷贝，不触碰世界。
+     *
+     * @param action 消费绝对坐标与基线方块状态
+     */
+    public void forEachCapturedBlock(java.util.function.BiConsumer<BlockPos, BlockState> action) {
+        int minSectionY = this.region.minY() >> 4;
+        int maxSectionY = this.region.maxY() >> 4;
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int chunkX = this.region.minX() >> 4; chunkX <= this.region.maxX() >> 4; chunkX++) {
+            for (int chunkZ = this.region.minZ() >> 4; chunkZ <= this.region.maxZ() >> 4; chunkZ++) {
+                for (int sectionY = minSectionY; sectionY <= maxSectionY; sectionY++) {
+                    LevelChunkSection section = this.sections.get(SectionPos.asLong(chunkX, sectionY, chunkZ));
+                    if (section == null) {
+                        throw new IllegalStateException(
+                            "environment state region " + this.region
+                                + " missed captured section " + SectionPos.of(chunkX, sectionY, chunkZ));
+                    }
+                    int minX = Math.max(this.region.minX(), chunkX << 4);
+                    int maxX = Math.min(this.region.maxX(), (chunkX << 4) + 15);
+                    int minY = Math.max(this.region.minY(), sectionY << 4);
+                    int maxY = Math.min(this.region.maxY(), (sectionY << 4) + 15);
+                    int minZ = Math.max(this.region.minZ(), chunkZ << 4);
+                    int maxZ = Math.min(this.region.maxZ(), (chunkZ << 4) + 15);
+                    for (int y = minY; y <= maxY; y++) {
+                        for (int z = minZ; z <= maxZ; z++) {
+                            for (int x = minX; x <= maxX; x++) {
+                                action.accept(cursor.set(x, y, z), section.getBlockState(x & 15, y & 15, z & 15));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * 在替换方块前清空容器，防止原版移除回调把容器内容物作为掉落物撒出。
      *
      * @param level 服务端世界

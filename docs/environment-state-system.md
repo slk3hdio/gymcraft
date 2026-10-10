@@ -72,7 +72,7 @@ close             runtime 组件 release → AgentMobLifecycle 撤销附件作�
 - 计划刻（scheduled ticks）、流体流动、游戏时间、脑记忆等不随 NBT 序列化的运行时状态不进快照
 - 区域内真实玩家不被快照/清除；骑乘关系中的乘客不随恢复重建（环境区域不应包含骑乘实体）
 - 范围外发生的世界修改不回滚（环境应把动作空间收紧到范围内，参考 `IronGolemWardenEnv.restrictActionSpacesToArena`）
-- 快照仅内存，环境 close 即丢弃
+- 快照仅内存，环境 close 即丢弃；跨世界/跨位置的持久化复现走场景存档（`gym/scenario`，见 `docs/environment-scenarios.md`）
 
 ## 测试
 

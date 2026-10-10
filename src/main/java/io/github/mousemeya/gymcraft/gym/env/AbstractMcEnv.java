@@ -1,10 +1,14 @@
 package io.github.mousemeya.gymcraft.gym.env;
 
 import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
+import javax.annotation.Nullable;
 
 import com.google.protobuf.Message;
 
@@ -32,6 +36,7 @@ import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime.RuntimeStepResult;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.StateRestoreMode;
 
 
@@ -64,6 +69,12 @@ public abstract class AbstractMcEnv implements McEnv {
     private boolean disableVanillaAi;
     private boolean allowMultipleActions = true;
     private boolean closed;
+    /** 场景存档注入的 preset options：仅合并进首个 reset（当次 options 覆盖 preset），随后清空。 */
+    private Map<String, Object> scenarioPresetOptions = Map.of();
+    /** 冻结基线那次 reset 的生效 options（空范围环境无基线可冻结，记录最近一次 reset 的），场景存档用。 */
+    private Map<String, Object> frozenOptions = Map.of();
+    /** 场景内容已由场景存档放置（首个 reset 跳过硬编码场景搭建）。 */
+    private boolean scenarioScenePlaced;
     /** 环境状态管理器：状态系统（原世界快照、完整基线、初始实体快照）的全部持有状态与操作。 */
     private final EnvStateManager stateManager;
     /** 受控实体生命周期：附件访问作用域与 reset 实体替换。 */
@@ -358,16 +369,73 @@ public abstract class AbstractMcEnv implements McEnv {
         return newMob;
     }
 
-    /** 应用通用 reset 行为：场景分支、冻结状态基线，最后提交动作间空闲期 AI 选项。 */
+    /** 应用通用 reset 行为：合并场景 preset options、场景分支、冻结状态基线，最后提交动作间空闲期 AI 选项。 */
     protected final void resetAgent(Mob mob, Integer seed, Map<String, Object> options) {
-        boolean requestedDisableVanillaAi = parseDisableVanillaAi(options);
-        boolean requestedAllowMultipleActions = parseAllowMultipleActions(options);
-        this.resetMob(mob, seed, options);
+        Map<String, Object> effective = options;
+        if (!this.scenarioPresetOptions.isEmpty()) {
+            // 场景存档的 preset options 只合并进首个 reset；当次 reset options 覆盖 preset
+            effective = new LinkedHashMap<>(this.scenarioPresetOptions);
+            effective.putAll(options);
+            this.scenarioPresetOptions = Map.of();
+        }
+        if (!this.isStateBaselineFrozen()) {
+            // 本次 reset 将冻结基线：记录生效 options 供场景存档复现布局
+            this.frozenOptions = Collections.unmodifiableMap(new LinkedHashMap<>(effective));
+        }
+        boolean requestedDisableVanillaAi = parseDisableVanillaAi(effective);
+        boolean requestedAllowMultipleActions = parseAllowMultipleActions(effective);
+        this.resetMob(mob, seed, effective);
         this.stateManager.freezeBaseline(mob);
         this.agentRuntime.setDisableVanillaAi(requestedDisableVanillaAi);
         this.agentRuntime.setAllowMultipleActions(requestedAllowMultipleActions);
         this.disableVanillaAi = requestedDisableVanillaAi;
         this.allowMultipleActions = requestedAllowMultipleActions;
+    }
+
+    /**
+     * 注入场景存档的 preset options：合并进首个 reset（当次 reset options 按键覆盖 preset）。
+     *
+     * @param options 场景存档中保存的生效 options
+     * @throws IllegalStateException 基线已冻结（首个 reset 已完成）时抛出
+     */
+    public void setScenarioPresetOptions(Map<String, Object> options) {
+        if (this.isStateBaselineFrozen()) {
+            throw new IllegalStateException("Scenario preset options must be applied before the first reset: " + this.envId);
+        }
+        this.scenarioPresetOptions = Collections.unmodifiableMap(new LinkedHashMap<>(options));
+    }
+
+    /**
+     * @return 冻结基线那次 reset 的生效 options（场景存档用）；未 reset 过为空 Map
+     */
+    public Map<String, Object> frozenOptionsView() {
+        return this.frozenOptions;
+    }
+
+    /**
+     * @return 已冻结的状态基线（场景存档序列化入口）；未冻结时为 null
+     */
+    @Nullable public EnvStateSnapshot baselineSnapshot() {
+        return this.stateManager.baseline();
+    }
+
+    /** 标记场景内容已由场景存档放置：首个 reset 跳过硬编码场景搭建，直接冻结已放置内容为基线。 */
+    public void markScenarioScenePlaced() {
+        this.scenarioScenePlaced = true;
+    }
+
+    /**
+     * @return 首个 reset 是否需要执行硬编码场景搭建（场景存档加载后为 false）
+     */
+    protected final boolean shouldBuildScene() {
+        return !this.scenarioScenePlaced;
+    }
+
+    /**
+     * 场景存档加载完成后的补丁钩子：场景内容放置与环境创建完成后立即在服务端线程调用。
+     * 默认空实现；需要重建运行时引用（如按 UUID 追踪的区域实体）的环境应覆盖。
+     */
+    public void onScenarioLoaded() {
     }
 
     protected double computeReward(ProtoMcObservation observation) {

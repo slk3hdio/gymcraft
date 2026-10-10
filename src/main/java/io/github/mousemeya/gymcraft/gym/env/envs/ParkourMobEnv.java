@@ -30,6 +30,8 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
  * 平台并发放资源，随后冻结状态基线（含平台层与训练柱区域的原世界捕获，close 时恢复）；
  * 此后 reset 由 {@code gym/state} 状态基线恢复训练柱——布局选项只在首个 reset 生效，
  * 更换布局需重建环境。区域内其他实体不进入基线（blocksOnly）。
+ * 经场景存档（{@code /gymcraft env save/load}）加载的环境首个 reset 跳过硬编码搭建，
+ * 直接把已放置内容冻结为基线；硬编码搭建路径（{@link #buildScene}）已废弃。
  * </p>
  */
 public class ParkourMobEnv extends AbstractMcEnv {
@@ -83,7 +85,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
             this.origin.getZ() + MOVE_RADIUS));
     }
 
-    /** 首个 reset 搭建平台并发放资源（冻结基线），每回合重置计数器。 */
+    /** 首个 reset 确定布局并冻结基线（场景存档路径跳过硬编码搭建），每回合重置计数器。 */
     @Override
     protected void resetMob(Mob mob, Integer seed, Map<String, Object> options) {
         super.resetMob(mob, seed, options);
@@ -102,23 +104,34 @@ public class ParkourMobEnv extends AbstractMcEnv {
             this.baseY = this.origin.getY();
             ServerLevel level = (ServerLevel) mob.level();
             this.captureOriginalWorld(level);
-            clearTrainingColumn(level);
-            for (int dx = -MOVE_RADIUS; dx <= MOVE_RADIUS; dx++) {
-                for (int dz = -MOVE_RADIUS; dz <= MOVE_RADIUS; dz++) {
-                    RegionBlockSnapshot.replaceWithoutDrops(
-                        level, this.origin.offset(dx, -1, dz), Blocks.STONE.defaultBlockState());
-                }
+            if (this.shouldBuildScene()) {
+                this.buildScene(level, mob, block, count);
             }
-            mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(block.asItem(), count));
-            this.previousCount = count;
-        } else {
-            this.previousCount = mob.getMainHandItem().getCount();
         }
+        this.previousCount = mob.getMainHandItem().getCount();
         this.steps = 0;
         this.previousY = mob.getY();
         this.success = false;
         this.outOfBounds = false;
         this.resourceExhausted = false;
+    }
+
+    /**
+     * 硬编码场景搭建：清空训练柱、铺设起点平台并向主手发放方块（仅旧用法首个 reset 调用一次）。
+     *
+     * @deprecated 由场景存档（{@code /gymcraft env save/load}，{@code gym/scenario} 包）取代；
+     * 仅为未使用场景存档的用法保留，将在未来版本移除。
+     */
+    @Deprecated
+    private void buildScene(ServerLevel level, Mob mob, Block block, int count) {
+        clearTrainingColumn(level);
+        for (int dx = -MOVE_RADIUS; dx <= MOVE_RADIUS; dx++) {
+            for (int dz = -MOVE_RADIUS; dz <= MOVE_RADIUS; dz++) {
+                RegionBlockSnapshot.replaceWithoutDrops(
+                    level, this.origin.offset(dx, -1, dz), Blocks.STONE.defaultBlockState());
+            }
+        }
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(block.asItem(), count));
     }
 
     /** 计算高度增量、放置奖励、成功奖励及失败惩罚。 */
@@ -176,10 +189,12 @@ public class ParkourMobEnv extends AbstractMcEnv {
     }
 
     /**
-     * 清空移动范围内从起始脚底到目标上方的训练柱体（仅首个 reset 的场景搭建分支调用）。
+     * 清空移动范围内从起始脚底到目标上方的训练柱体（仅 {@link #buildScene} 调用）。
      *
+     * @deprecated 硬编码场景搭建的一部分，随 {@link #buildScene} 一并废弃。
      * @param level 训练环境所在的服务端世界
      */
+    @Deprecated
     private void clearTrainingColumn(ServerLevel level) {
         int topY = this.origin.getY() + this.targetHeight + 2;
         for (int dx = -MOVE_RADIUS; dx <= MOVE_RADIUS; dx++) {

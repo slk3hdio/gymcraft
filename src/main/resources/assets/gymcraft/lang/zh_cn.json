@@ -69,5 +69,16 @@
   "message.gymcraft.environment_missing": "%s 尚未绑定环境",
   "message.gymcraft.target_not_mob": "目标不是 Mob：%s",
   "message.gymcraft.uuid_copied": "UUID：%s",
+  "message.gymcraft.scenario_saved": "已保存场景 %1$s（环境类型 %2$s）",
+  "message.gymcraft.scenario_save_failed": "保存场景 %1$s 失败：%2$s",
+  "message.gymcraft.scenario_load_failed": "加载场景 %1$s 失败：%2$s",
+  "message.gymcraft.scenario_delete_failed": "删除场景 %1$s 失败：%2$s",
+  "message.gymcraft.scenario_loaded_mob": "已将场景 %1$s 加载到 %2$s",
+  "message.gymcraft.scenario_spawned": "已生成场景 %1$s 的 agent 并创建环境：%2$s",
+  "message.gymcraft.scenario_type_mismatch": "警告：目标实体类型 %1$s 与场景 agent 类型 %2$s 不一致",
+  "message.gymcraft.scenario_list_empty": "没有已保存的场景",
+  "message.gymcraft.scenario_list_entry": "%1$s（%2$s）",
+  "message.gymcraft.scenario_deleted": "已删除场景 %s",
+  "message.gymcraft.scenario_not_found": "场景不存在：%s",
   "message.gymcraft.error": "错误：%s"
 }

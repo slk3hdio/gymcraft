@@ -92,4 +92,25 @@ public final class EnvStateSnapshot {
     public int entityCount() {
         return this.entities == null ? 0 : this.entities.size();
     }
+
+    /**
+     * @return 基线 agent 实体快照（场景存档序列化用）
+     */
+    public EntitySnapshot agent() {
+        return this.agent;
+    }
+
+    /**
+     * @return 各区域的方块快照列表（场景存档序列化用）
+     */
+    public List<RegionBlockSnapshot> blocks() {
+        return this.blocks;
+    }
+
+    /**
+     * @return 区域实体快照；范围不捕获实体时为 null
+     */
+    @Nullable public RegionEntitySnapshot entities() {
+        return this.entities;
+    }
 }

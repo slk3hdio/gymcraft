@@ -39,6 +39,8 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
  * 环境在创建位置周围占用固定 9x9 训练区域：构造时捕获原世界（close 时经基类恢复），
  * 首个 reset 搭建确定性资源布局并冻结状态基线，此后 reset 由 {@code gym/state}
  * 状态基线恢复（方块差异写回 + 区域实体清除），close 恢复原世界。
+ * 经场景存档（{@code /gymcraft env save/load}）加载的环境首个 reset 跳过硬编码搭建，
+ * 直接冻结已放置内容为基线；硬编码搭建路径（{@link #buildScene}）已废弃。
  * 任务状态只从真实世界与 Agent 统一物品栏推导，不依赖 Python 客户端自行判分。
  * </p>
  */
@@ -139,7 +141,8 @@ public final class IronMiningEnv extends AbstractMcEnv {
     }
 
     /**
-     * 首个 reset 清场并搭建训练场（此后由状态基线恢复），每回合重置计数器与里程碑。
+     * 首个 reset 确定训练场并冻结基线（场景存档路径跳过硬编码搭建，直接冻结已放置内容），
+     * 每回合重置计数器与里程碑。
      *
      * @param mob reset 后的新 Mob 实体
      * @param seed 未用于固定布局的可选种子
@@ -150,10 +153,9 @@ public final class IronMiningEnv extends AbstractMcEnv {
         int requestedMaxSteps = positiveInt(options, MAX_STEPS_OPTION, DEFAULT_MAX_STEPS);
         super.resetMob(mob, seed, options);
         if (!this.isStateBaselineFrozen()) {
-            RegionEntitySnapshot.discardRegionEntities(
-                this.level, this.stateScope().entityRegions(), mob.getUUID());
-            AgentInventoryLayout.clearAllItems(mob);
-            this.buildArenaTemplate();
+            if (this.shouldBuildScene()) {
+                this.buildScene(mob);
+            }
             mob.snapTo(
                 this.origin.getX() + 0.5,
                 this.origin.getY(),
@@ -167,6 +169,21 @@ public final class IronMiningEnv extends AbstractMcEnv {
         this.steps = 0;
         this.evaluation = StepEvaluation.initial();
         this.resetMilestones();
+    }
+
+    /**
+     * 硬编码场景搭建：清场、清空物品栏并写入固定资源布局（仅旧用法首个 reset 调用一次）。
+     *
+     * @deprecated 由场景存档（{@code /gymcraft env save/load}，{@code gym/scenario} 包）取代；
+     * 仅为未使用场景存档的用法保留，将在未来版本移除。
+     * @param mob 当前受控 Mob
+     */
+    @Deprecated
+    private void buildScene(Mob mob) {
+        RegionEntitySnapshot.discardRegionEntities(
+            this.level, this.stateScope().entityRegions(), mob.getUUID());
+        AgentInventoryLayout.clearAllItems(mob);
+        this.buildArenaTemplate();
     }
 
     /**
@@ -335,8 +352,11 @@ public final class IronMiningEnv extends AbstractMcEnv {
     }
 
     /**
-     * 将固定模板写入训练区域（仅首个 reset 的场景搭建分支调用一次）。
+     * 将固定模板写入训练区域（仅 {@link #buildScene} 调用一次）。
+     *
+     * @deprecated 硬编码场景搭建的一部分，随 {@link #buildScene} 一并废弃。
      */
+    @Deprecated
     private void buildArenaTemplate() {
         for (int x = -ARENA_RADIUS; x <= ARENA_RADIUS; x++) {
             for (int z = -ARENA_RADIUS; z <= ARENA_RADIUS; z++) {

@@ -85,6 +85,13 @@ final class EnvStateManager {
     }
 
     /**
+     * @return 已冻结的完整环境基线；未冻结时为 null（场景存档序列化入口）
+     */
+    @Nullable EnvStateSnapshot baseline() {
+        return this.baseline;
+    }
+
+    /**
      * 首个 reset 的场景搭建完成后冻结完整环境基线（方块 + 区域实体 + agent）。
      *
      * @param mob 场景搭建完成后的受控 Mob

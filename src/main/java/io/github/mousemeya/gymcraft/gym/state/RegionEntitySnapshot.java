@@ -108,6 +108,18 @@ public final class RegionEntitySnapshot {
     }
 
     /**
+     * 遍历基线实体（场景存档序列化用）：产出实体类型与 {@code saveWithoutId} NBT
+     * （不含类型 id 键，调用方需要时自行补写）。
+     *
+     * @param action 消费实体类型与 NBT
+     */
+    public void forEachEntity(java.util.function.BiConsumer<EntityType<?>, CompoundTag> action) {
+        for (SavedEntity saved : this.entities) {
+            action.accept(saved.type(), saved.data());
+        }
+    }
+
+    /**
      * 按过滤器清除区域内现存实体（真实玩家与受控 agent 除外）。
      * <p>
      * 供场景搭建前清场、基线恢复前清场与 close 清场共用。

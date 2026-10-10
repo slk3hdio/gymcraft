@@ -50,7 +50,11 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
  * 环境在创建位置周围占用固定 13x13 战斗场（玻璃围墙，可观战外部）：构造时捕获原世界
  * （close 时经基类恢复），首个 reset 搭建场地、发放建材（4 铁块主手 + 1 雕刻南瓜 +
  * 64 铁锭）并在固定角落生成 Warden，同时冻结状态基线；此后 reset 由 {@code gym/state}
- * 状态基线恢复（方块差异写回 + 区域实体重建，Warden 保留原 UUID）。Agent 本体没有
+ * 状态基线恢复（方块差异写回 + 区域实体重建，Warden 保留原 UUID）。
+ * 经场景存档（{@code /gymcraft env save/load}）加载的环境首个 reset 跳过硬编码搭建，
+ * 直接冻结已放置内容为基线，{@link #onScenarioLoaded()} 负责按战斗场重定位 Warden
+ * （模板放置分配了新 UUID）；硬编码搭建路径（{@link #buildScene}）已废弃。
+ * Agent 本体没有
  * 攻击能力：需要按原版图案摆放铁块并在最后放置雕刻南瓜生成铁傀儡，战斗期间用
  * 铁锭治疗铁傀儡（原版交互，+25 生命/锭）耗死 Warden。Warden 生成时附带虚弱效果，
  * 近战无法秒杀 Agent。Warden 死亡即成功；
@@ -171,7 +175,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     }
 
     /**
-     * 首个 reset 清场、搭建战斗场、发放建材并生成 Warden（此后由状态基线恢复），
+     * 首个 reset 确定战斗场并冻结基线（场景存档路径跳过硬编码搭建，直接冻结已放置内容），
      * 每回合重置计数器、里程碑并重注入 Warden 的防钻地记忆。
      *
      * @param mob reset 后的新 Mob 实体
@@ -183,12 +187,9 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
         int requestedMaxSteps = positiveInt(options, MAX_STEPS_OPTION, DEFAULT_MAX_STEPS);
         super.resetMob(mob, seed, options);
         if (!this.isStateBaselineFrozen()) {
-            RegionEntitySnapshot.discardRegionEntities(
-                this.level, this.stateScope().entityRegions(), mob.getUUID());
-            AgentInventoryLayout.clearAllItems(mob);
-            this.buildArenaTemplate();
-            this.issueSupplies(mob);
-            this.spawnWarden();
+            if (this.shouldBuildScene()) {
+                this.buildScene(mob);
+            }
             mob.snapTo(
                 this.origin.getX() + 0.5,
                 this.origin.getY(),
@@ -207,6 +208,35 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
         this.golemWasDamaged = false;
         this.lastGolemHealth = 0.0F;
         this.resetMilestones();
+    }
+
+    /**
+     * 硬编码场景搭建：清场、清空物品栏、写入战斗场模板、发放建材并生成 Warden
+     * （仅旧用法首个 reset 调用一次）。
+     *
+     * @deprecated 由场景存档（{@code /gymcraft env save/load}，{@code gym/scenario} 包）取代；
+     * 仅为未使用场景存档的用法保留，将在未来版本移除。
+     * @param mob 当前受控 Mob
+     */
+    @Deprecated
+    private void buildScene(Mob mob) {
+        RegionEntitySnapshot.discardRegionEntities(
+            this.level, this.stateScope().entityRegions(), mob.getUUID());
+        AgentInventoryLayout.clearAllItems(mob);
+        this.buildArenaTemplate();
+        this.issueSupplies(mob);
+        this.spawnWarden();
+    }
+
+    /**
+     * 场景存档加载后重新定位 Warden：模板放置会为实体分配新 UUID，按战斗场扫描找回并
+     * 立即钉住防钻地记忆（消除加载到首个 reset 之间 Warden 钻地的窗口）。
+     */
+    @Override
+    public void onScenarioLoaded() {
+        List<Warden> wardens = this.level.getEntitiesOfClass(Warden.class, this.arenaBounds);
+        this.wardenUuid = wardens.isEmpty() ? null : wardens.getFirst().getUUID();
+        this.repinWarden();
     }
 
     /**
@@ -477,10 +507,13 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     }
 
     /**
-     * 将战斗场模板写入世界：基岩地板与顶盖、玻璃围墙，内部清空（仅首个 reset 的场景
-     * 搭建分支调用一次，此后由状态基线恢复）。
+     * 将战斗场模板写入世界：基岩地板与顶盖、玻璃围墙，内部清空（仅 {@link #buildScene}
+     * 调用一次，此后由状态基线恢复）。
      * 围墙用玻璃是为了让场外观察者看清战斗；Agent 无破坏动作，玻璃同样不可逾越。
+     *
+     * @deprecated 硬编码场景搭建的一部分，随 {@link #buildScene} 一并废弃。
      */
+    @Deprecated
     private void buildArenaTemplate() {
         for (int x = -ARENA_RADIUS; x <= ARENA_RADIUS; x++) {
             for (int z = -ARENA_RADIUS; z <= ARENA_RADIUS; z++) {
@@ -496,10 +529,12 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     }
 
     /**
-     * 发放本回合建材：主手 4 个铁块，背包 1 个雕刻南瓜与铁锭。
+     * 发放本回合建材：主手 4 个铁块，背包 1 个雕刻南瓜与铁锭（仅 {@link #buildScene} 调用）。
      *
+     * @deprecated 硬编码场景搭建的一部分，随 {@link #buildScene} 一并废弃。
      * @param mob 当前受控 Mob
      */
+    @Deprecated
     private void issueSupplies(Mob mob) {
         AgentInventoryLayout layout = AgentInventoryLayout.resolve(mob);
         if (layout.storageSlotCount() < 2) {
@@ -511,8 +546,12 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     }
 
     /**
-     * 在战斗场角落生成持久化的 Warden 并记录其 UUID 供终止判定。
+     * 在战斗场角落生成持久化的 Warden 并记录其 UUID 供终止判定（仅 {@link #buildScene} 调用）。
+     *
+     * @deprecated 硬编码场景搭建的一部分，随 {@link #buildScene} 一并废弃；场景存档路径由
+     * {@link #onScenarioLoaded()} 重新定位 Warden。
      */
+    @Deprecated
     private void spawnWarden() {
         Warden warden = EntityType.WARDEN.create(this.level, EntitySpawnReason.COMMAND);
         if (warden == null) {
