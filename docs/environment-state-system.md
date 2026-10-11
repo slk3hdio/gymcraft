@@ -6,7 +6,7 @@
 
 设计边界（与需求方确认）：
 
-- reset 基线恒存在：场景环境在构造期从场景文件（内置资产或手动 `env load`）解码出完整基线，非场景环境在首次 reset 现场捕获——不存在"基线未冻结"分支；任意时点快照由场景存档系统按需捕获（`captureCurrentState`）
+- reset 基线恒存在：场景环境在构造期从场景文件（内置资产或手动 `env load`）解码出完整基线，非场景环境在构造期对当前世界现场捕获——不存在"基线未冻结"分支；任意时点快照由场景存档系统按需捕获（`captureCurrentState`）
 - 内存保存：快照以 NBT/注册表引用组织，不落盘，环境 close 即丢弃
 - 任务环境的场景搭建代码全部删除，场景布局以模组内置场景资产为唯一权威
 
@@ -43,16 +43,17 @@ EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateS
 ## 生命周期（恒基线模型）
 
 ```
-环境构造（initState，子类构造器尾部调用，彼时范围已定）
+环境构造（initState，子类构造器尾部调用，彼时范围与场景声明已定）
     有场景源（手动 env load 传入 > 内置资产 bundledScenarioName()）
-        → EnvStateManager.loadScenario：ScenarioWorldCodec.decode 把文件解码为基线（锚定当前 Mob 的位置与 UUID，
+        → ScenarioWorldCodec.decode 把文件解码为基线（锚定当前 Mob 的位置与 UUID，
           区域实体重分配 UUID）+ 注入 preset options + onScenarioLoaded() 补丁钩子
         → 不触碰世界：场景内容延迟到首个 reset 随基线恢复物化
     无场景源
-        → 基线留待首次 reset 现场捕获（EnvStateSnapshot.capture）
+        → 以环境声明范围对当前世界与 agent 当场捕获基线（EnvStateSnapshot.capture）
+    两条路径都经 EnvStateManager.create 一次性构建完成，此后管理器不可变
 reset            runtime 清理动作管线 → 组件 release 自清会话（菜单/消费）→
                   AbstractMcEnv.resetEnvironment 编排：EnvStateManager 恢复基线
-                  （基线缺席时先现场捕获）→ 区域方块 DIFF 写回 → 清除并重建区域实体
+                  → 区域方块 DIFF 写回 → 清除并重建区域实体
                   → 基线重建 agent（场景环境的 agent 来自文件 NBT，同 UUID 替换，
                   EnvManager 映射不破）→ AgentMobLifecycle 替换实体（清背包/迁移附件
                   作用域）→ resetMob 只做计数器/选项/实体补丁（如 Warden DIG_COOLDOWN
@@ -66,9 +67,11 @@ close             runtime 组件 release → AgentMobLifecycle 撤销附件作�
 
 - `AbstractMcEnv.stateScope()`：非场景环境的范围声明回退（模板方法，默认空范围）——
   场景环境的状态范围来自场景文件（world.nbt 区域几何 + scenario.json 的
-  `manage_entities`），由 `EnvStateManager` 在 `loadScenario` 时推导并优先使用
+  `manage_entities`），由 `EnvStateManager.create` 构造期一次性推导并生效
 - `AbstractMcEnv.bundledScenarioName()`：内置场景资产名（`data/gymcraft/scenario/<name>/`），默认 null
-- `AbstractMcEnv.initState(ServerLevel, Mob)`：子类构造器尾部调用，按上面的优先级解析场景源并构建完整状态
+- `AbstractMcEnv.initState(ServerLevel, Mob)`：子类构造器尾部调用（所有具体环境的
+  义务），按上面的优先级解析场景源并一次性构建完整状态管理器；此前访问状态会得到
+  明确的编程错误
 - 完整基线与场景推导的范围由 `EnvStateManager`（gym/env，包私有）持有，附件作用域与实体替换由 `AgentMobLifecycle` 持有；`AgentRuntime` 不保存环境状态，reset 逻辑由 env 每次经 `AgentRuntime.reset(seed, options, ResetHandler)` 传入（`resetEnvironment`）
 
 ## 环境迁移要点

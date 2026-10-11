@@ -5,6 +5,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
@@ -74,6 +75,7 @@ public class SimpleMobEnv extends AbstractMcEnv {
             List.of(MobAttachments.AGENT_BACKPACK, MobAttachments.DAMAGE_LOG),
             scenario
         );
+        this.initState((ServerLevel) mob.level(), mob);
     }
 
     /**

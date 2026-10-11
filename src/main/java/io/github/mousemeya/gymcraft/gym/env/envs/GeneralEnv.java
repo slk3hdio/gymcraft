@@ -7,6 +7,7 @@ import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
 import java.util.List;
@@ -68,6 +69,7 @@ public class GeneralEnv extends AbstractMcEnv {
             scenario
         );
         this.observationComponent(ObservationCreators.NEARBY_BLOCKS.get()).setMaxBlocks(32);
+        this.initState((ServerLevel) mob.level(), mob);
     }
 
     /**

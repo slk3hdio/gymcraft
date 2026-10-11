@@ -79,8 +79,8 @@ public abstract class AbstractMcEnv implements McEnv {
     private Map<String, Object> lastResetOptions = Map.of();
     /** 外部传入的场景源（手动 env load）；内置资产场景在 initState 中按需读取。 */
     @Nullable private final ScenarioStore.LoadedScenario scenarioSource;
-    /** 环境状态管理器：原世界快照与完整状态基线（场景环境来自文件，其余首次 reset 现场捕获）。 */
-    private final EnvStateManager stateManager;
+    /** 环境状态管理器：{@link #initState} 中一次性构建完成（构造期之外恒非空）。 */
+    @Nullable private EnvStateManager stateManager;
     /** 受控实体生命周期：附件访问作用域与 reset 实体替换。 */
     private final AgentMobLifecycle mobLifecycle;
 
@@ -122,9 +122,9 @@ public abstract class AbstractMcEnv implements McEnv {
         this.actionController = new ActionDispatcher(mob, actionComponentFactories);
         this.observationCreator = new ObservationComposer(mob, observationComponents);
         this.scenarioSource = scenarioSource;
-        // 协作类创建顺序等价原内联顺序：激活附件作用域 → 建状态管理器 → 建运行时。
+        // 协作类创建顺序等价原内联顺序：激活附件作用域 → 建运行时；状态管理器因需读取
+        // 子类的范围/场景声明（虚拟方法，须待子类构造完成），由子类构造器尾部经 initState 构建。
         this.mobLifecycle = new AgentMobLifecycle(mob, List.copyOf(attachmentSpecs));
-        this.stateManager = new EnvStateManager(this.envId, this::stateScope, this::stateRestoreMode);
         this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
         NeoForge.EVENT_BUS.register(this.agentRuntime);
     }
@@ -283,12 +283,27 @@ public abstract class AbstractMcEnv implements McEnv {
     /**
      * 生效状态范围的只读视图，供可视化等环境外消费者读取：场景环境来自文件
      * （world.nbt 区域几何 + manage_entities），非场景环境用 {@link #stateScope()}
-     * 声明。调用方不应缓存结果。
+     * 声明，在 {@link #initState} 时一次性解析，此后不变。
      *
      * @return 当前生效的环境状态范围
      */
     public final EnvStateScope stateScopeView() {
-        return this.stateManager.effectiveScope();
+        return this.stateManager().scope();
+    }
+
+    /**
+     * 状态管理器访问守卫：环境状态由子类构造器尾部的 {@link #initState} 一次性构建，
+     * 之前的构造窗口内访问属于编程错误。
+     *
+     * @return 已构建的状态管理器
+     */
+    private EnvStateManager stateManager() {
+        EnvStateManager manager = this.stateManager;
+        if (manager == null) {
+            throw new IllegalStateException(
+                "Environment state is not initialized; subclass constructors must call initState: " + this.envId);
+        }
+        return manager;
     }
 
     /**
@@ -340,10 +355,10 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     /**
-     * 初始化环境状态源（在子类构造器尾部调用，彼时状态范围已确定）：
-     * 外部场景（手动 env load）优先，其次内置资产，都无则基线留待首次 reset 现场捕获。
-     * 场景路径从文件解码基线、注入 preset options 并调用 {@link #onScenarioLoaded()}；
-     * 本方法不触碰世界，场景内容由首个 reset 物化。
+     * 一次性构建环境状态管理器（在子类构造器尾部调用，彼时状态范围声明与内置场景名
+     * 已就绪）：外部场景（手动 env load）优先，其次内置资产，都无则以当前世界与
+     * agent 现场捕获基线。场景路径从文件解码基线、注入 preset options 并调用
+     * {@link #onScenarioLoaded()}；文件路径不触碰世界，场景内容由首个 reset 物化。
      *
      * @param level 服务端世界
      * @param mob 受控 Mob（场景锚点）
@@ -357,8 +372,9 @@ public abstract class AbstractMcEnv implements McEnv {
                     .orElseThrow(() -> new IllegalStateException("Missing bundled scenario asset: gymcraft:scenario/" + name));
             }
         }
+        this.stateManager = EnvStateManager.create(
+            level, mob, this.stateScope(), this.stateRestoreMode(), source);
         if (source != null) {
-            this.stateManager.loadScenario(level, mob, source);
             if (!source.scenario().options().isEmpty()) {
                 this.scenarioPresetOptions = Collections.unmodifiableMap(new LinkedHashMap<>(source.scenario().options()));
             }
@@ -395,7 +411,7 @@ public abstract class AbstractMcEnv implements McEnv {
      * @return 重建后已加入世界的实体
      */
     private Mob resetEnvironment(Mob currentMob, Integer seed, Map<String, Object> options) {
-        Mob newMob = this.mobLifecycle.replace(currentMob, this.stateManager.restoreForReset(currentMob));
+        Mob newMob = this.mobLifecycle.replace(currentMob, this.stateManager().restoreForReset(currentMob));
         this.resetAgent(newMob, seed, options);
         return newMob;
     }
@@ -436,10 +452,10 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     /**
-     * @return 状态基线（场景序列化与场景钩子用）；场景环境构造期即非空，非场景环境在首次 reset 前为 null
+     * @return 状态基线（场景序列化与场景钩子用）；{@link #initState} 构建后即非空
      */
-    @Nullable public EnvStateSnapshot baselineSnapshot() {
-        return this.stateManager.baseline();
+    public EnvStateSnapshot baselineSnapshot() {
+        return this.stateManager().baseline();
     }
 
     /**
@@ -452,7 +468,7 @@ public abstract class AbstractMcEnv implements McEnv {
         if (!(mob.level() instanceof ServerLevel level)) {
             throw new IllegalStateException("Cannot capture environment state outside a server level: " + this.envId);
         }
-        return this.stateManager.captureCurrent(level, mob);
+        return this.stateManager().captureCurrent(level, mob);
     }
 
     /**

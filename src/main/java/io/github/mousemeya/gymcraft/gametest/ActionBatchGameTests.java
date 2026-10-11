@@ -9,6 +9,7 @@ import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 
@@ -128,6 +129,7 @@ public final class ActionBatchGameTests {
         private BatchTestEnv(Mob mob) {
             super(Identifier.fromNamespaceAndPath("gymcraft", "action_batch_test"), mob,
                 List.of(ActionComponents.NOOP.get()), List.of());
+            this.initState((ServerLevel) mob.level(), mob);
         }
     }
 }

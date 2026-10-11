@@ -1,9 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.env;
 
-import java.util.List;
-import java.util.UUID;
-import java.util.function.Supplier;
-
 import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
@@ -14,75 +10,77 @@ import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
-import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
-import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.state.StateRestoreMode;
 
 /**
- * 环境状态管理器：持有环境状态系统的全部状态——完整状态基线（reset 恢复）与
- * 场景推导的状态范围，不区分"基线是否冻结"；close 不做世界恢复，场景残留由
- * 外部负责清理。
+ * 环境状态管理器：环境创建时经 {@link #create} 一次性构建完成，此后不可变——持有
+ * 生效状态范围与完整状态基线（reset 恢复用）；close 不做世界恢复，场景残留由外部
+ * 负责清理。
  * <p>
- * 基线来源：场景环境（手动 {@code env load} 或内置资产）在 {@link #loadScenario}
- * 中直接从场景文件解码（锚定当前 Mob，内容延迟到首个 reset 物化）；非场景环境在
- * 首次 reset 时按需现场捕获。状态范围同样以场景为权威：场景环境的范围来自文件
- * （world.nbt 区域几何 + scenario.json 的 {@code manage_entities}），非场景环境
- * 才使用环境经 {@code AbstractMcEnv.stateScope()} 声明的范围。方块恢复模式仍由
- * 环境经 {@code stateRestoreMode()} 声明。所有方法只能在服务端线程调用。
+ * 基线来源在创建时一次确定：场景环境（手动 {@code env load} 或内置资产）从场景文件
+ * 解码（锚定当前 Mob，不触碰世界——场景内容延迟到首个 reset 物化）；非场景环境当场
+ * 对世界与 agent 现场捕获（要求范围区块已加载）。状态范围同样以场景为权威：场景环境
+ * 的范围来自文件（world.nbt 区域几何 + scenario.json 的 {@code manage_entities}），
+ * 非场景环境才使用环境经 {@code AbstractMcEnv.stateScope()} 声明的范围。方块恢复模式
+ * 由环境经 {@code stateRestoreMode()} 声明。所有方法只能在服务端线程调用。
  * </p>
  */
 final class EnvStateManager {
-    /** 环境 ID，仅用于异常消息上下文。 */
-    private final UUID envId;
-    /** 状态范围声明回调（环境的 {@code stateScope} 模板方法，非场景环境使用）。 */
-    private final Supplier<EnvStateScope> scope;
-    /** 方块恢复模式声明回调（环境的 {@code stateRestoreMode} 模板方法）。 */
-    private final Supplier<StateRestoreMode> mode;
-    /** 场景文件推导的状态范围（区域几何 + 实体管理开关）；非场景环境为 null。 */
-    @Nullable private EnvStateScope scenarioScope;
-    /** 完整状态基线：场景环境来自文件（构造期），非场景环境首次 reset 现场捕获。 */
-    @Nullable private EnvStateSnapshot baseline;
+    /** 生效状态范围：场景文件推导或环境声明，创建后不变。 */
+    private final EnvStateScope scope;
+    /** 方块恢复模式（环境的 {@code stateRestoreMode} 声明，创建时解析）。 */
+    private final StateRestoreMode mode;
+    /** 完整状态基线：场景环境来自文件解码，非场景环境创建时现场捕获。 */
+    private final EnvStateSnapshot baseline;
 
-    /**
-     * 创建状态管理器。
-     *
-     * @param envId 环境 ID（异常消息上下文）
-     * @param scope 状态范围声明回调（非场景环境的回退来源）
-     * @param mode 方块恢复模式声明回调
-     */
-    EnvStateManager(UUID envId, Supplier<EnvStateScope> scope, Supplier<StateRestoreMode> mode) {
-        this.envId = envId;
+    private EnvStateManager(EnvStateScope scope, StateRestoreMode mode, EnvStateSnapshot baseline) {
         this.scope = scope;
         this.mode = mode;
+        this.baseline = baseline;
     }
 
     /**
-     * 以场景文件为状态源：把文件内容解码为基线（锚定当前 Mob 的位置与 UUID），
-     * 状态范围以本文件为权威（区域几何 + manage_entities）。本方法不触碰世界——
-     * 场景内容由 reset 恢复物化。
+     * 一次性构建状态管理器：有场景文件时以其为权威——推导状态范围（区域几何 +
+     * {@code manage_entities}）并把文件内容解码为基线（锚定当前 Mob 的位置与 UUID，
+     * 不触碰世界，场景内容由 reset 物化）；无场景时用环境声明的范围对当前世界与
+     * agent 当场捕获基线。
      *
      * @param level 服务端世界
      * @param mob 锚定 Mob（提供基线 agent 的 UUID 与位置）
-     * @param loaded 场景文件内容
+     * @param declaredScope 环境经 {@code stateScope()} 声明的范围（非场景环境生效）
+     * @param mode 方块恢复模式
+     * @param loaded 场景文件内容；null 表示非场景环境
+     * @return 构建完成的状态管理器
      */
-    void loadScenario(ServerLevel level, Mob mob, ScenarioStore.LoadedScenario loaded) {
+    static EnvStateManager create(
+        ServerLevel level,
+        Mob mob,
+        EnvStateScope declaredScope,
+        StateRestoreMode mode,
+        @Nullable ScenarioStore.LoadedScenario loaded
+    ) {
+        if (loaded == null) {
+            return new EnvStateManager(declaredScope, mode,
+                EnvStateSnapshot.capture(level, mob, declaredScope, mode));
+        }
         boolean manageEntities = loaded.scenario().manageEntities();
         BlockPos anchor = BlockPos.containing(mob.position());
-        this.scenarioScope = new EnvStateScope(
+        EnvStateScope scope = new EnvStateScope(
             ScenarioWorldCodec.regions(loaded.world(), anchor), manageEntities);
-        this.baseline = ScenarioWorldCodec.decode(
-            level, loaded.world(), loaded.scenario().agentSnapshot(level, mob),
-            this.mode.get(), manageEntities);
+        return new EnvStateManager(scope, mode, ScenarioWorldCodec.decode(
+            level, loaded.world(), loaded.scenario().agentSnapshot(level, mob), mode, manageEntities));
     }
 
-    /** 生效状态范围：场景文件推导优先，非场景环境用环境声明。 */
-    EnvStateScope effectiveScope() {
-        return this.scenarioScope != null ? this.scenarioScope : this.scope.get();
+    /**
+     * @return 生效状态范围（创建时已解析，不再区分场景/声明来源）
+     */
+    EnvStateScope scope() {
+        return this.scope;
     }
 
     /**
      * reset 恢复路径：恢复基线范围内的方块与区域实体（保证 agent 落脚的方块已就位）
-     * 再重建 agent 实体。基线不存在（非场景环境首次 reset）时先现场捕获。
+     * 再重建 agent 实体。
      *
      * @param currentMob 当前（待替换）实体（提供世界上下文）
      * @return 重建出的实体（尚未加入世界）
@@ -92,12 +90,8 @@ final class EnvStateManager {
             throw new IllegalStateException("Cannot restore environment state outside a server level: "
                 + currentMob.getUUID());
         }
-        EnvStateSnapshot baseline = this.baseline;
-        if (baseline == null) {
-            baseline = this.captureCurrent(worldLevel, currentMob);
-        }
-        baseline.restoreWorldAndEntities(worldLevel);
-        return baseline.restoreAgent();
+        this.baseline.restoreWorldAndEntities(worldLevel);
+        return this.baseline.restoreAgent();
     }
 
     /**
@@ -108,13 +102,13 @@ final class EnvStateManager {
      * @return 当前时刻的完整状态快照
      */
     EnvStateSnapshot captureCurrent(ServerLevel level, Mob agent) {
-        return EnvStateSnapshot.capture(level, agent, this.effectiveScope(), this.mode.get());
+        return EnvStateSnapshot.capture(level, agent, this.scope, this.mode);
     }
 
     /**
-     * @return 状态基线；场景环境构造期即非空，非场景环境在首次 reset 前为 null
+     * @return 状态基线（创建时即非空）
      */
-    @Nullable EnvStateSnapshot baseline() {
+    EnvStateSnapshot baseline() {
         return this.baseline;
     }
 }

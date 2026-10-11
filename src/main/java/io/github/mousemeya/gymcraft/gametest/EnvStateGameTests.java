@@ -33,8 +33,9 @@ import io.github.mousemeya.gymcraft.gym.env.envs.IronMiningEnv;
 /**
  * 环境状态基线（{@code gym/state}）的跨 reset 恢复测试。
  * <p>
- * 首个 reset 搭建场景并冻结基线，第二个 reset 起走快照恢复路径；测试在两次 reset
- * 之间注入世界破坏（挖方块、放方块、杀实体、丢掉落物），断言基线恢复把它们全部回滚。
+ * 基线在环境构造期从场景文件解码，首个 reset 物化场景，第二个 reset 起走快照
+ * 恢复路径；测试在两次 reset 之间注入世界破坏（挖方块、放方块、杀实体、丢掉落物），
+ * 断言基线恢复把它们全部回滚。
  * </p>
  */
 public final class EnvStateGameTests {
