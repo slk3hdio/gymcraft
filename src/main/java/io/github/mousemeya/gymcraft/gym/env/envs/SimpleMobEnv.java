@@ -5,13 +5,13 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateProfile;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
@@ -73,9 +73,9 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ObservationCreators.HEALTH_LOG.get()
             ),
             List.of(MobAttachments.AGENT_BACKPACK, MobAttachments.DAMAGE_LOG),
+            EnvStateProfile.empty(),
             scenario
         );
-        this.initState((ServerLevel) mob.level(), mob);
     }
 
     /**

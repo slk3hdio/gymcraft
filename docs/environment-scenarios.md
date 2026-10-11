@@ -20,8 +20,8 @@
   取自**保存时刻的即时快照**（所见即所得）
 
 不保存：原世界快照（加载目标的原始地形不在场景职责内）；计划刻/脑记忆等不随 NBT 序列化的
-运行时状态（沿用状态系统既有限制，需补丁的环境覆盖 `AbstractMcEnv.onScenarioLoaded()`，
-如 `IronGolemWardenEnv` 从基线读回 Warden 的重分配 UUID）。
+运行时状态（沿用状态系统既有限制，需补丁的环境从 `baselineSnapshot()` 按需懒解析，
+如 `IronGolemWardenEnv` 的 Warden 重分配 UUID）。
 
 ## 目录与文件格式
 
@@ -97,11 +97,11 @@
   合并进首个 reset（preset 一次性）。
 - **状态范围随场景持久化**：加载侧的环境状态范围来自场景文件——区域几何取自
   world.nbt 的 regions（锚定当前 Mob），实体管理开关取自 scenario.json 的
-  `manage_entities`；环境不再硬编码声明范围（`AbstractMcEnv.stateScope()` 仅为
+  `manage_entities`；环境不再硬编码声明范围（`EnvStateProfile.scope` 仅为
   非场景环境的回退）。
 - **区域实体重分配 UUID**：解码时经 `RegionEntitySnapshot.of` 分配新 UUID（同一场景可
-  多次加载而不与现存实体冲突）；按 UUID 追踪区域实体的环境在 `onScenarioLoaded()`（构造期
-  调用，实体尚未物化）从基线实体快照读回新 UUID（`IronGolemWardenEnv` 已实现）。
+  多次加载而不与现存实体冲突）；按 UUID 追踪区域实体的环境从基线实体快照懒解析新 UUID
+  （基线不可变，首读后缓存——`IronGolemWardenEnv` 已实现）。
 - **物化要求目标区域区块已加载**：区块校验发生在首个 reset 的基线恢复时（不是加载时）；
   无头服务器请先 `forceload` 目标区域。
 
@@ -116,7 +116,7 @@ src/main/resources/data/gymcraft/scenario/
 └── parkour_mob/{scenario.json, world.nbt}          # 石平台 + 训练柱 + 主手 32 石头
 ```
 
-- 环境经 `AbstractMcEnv.bundledScenarioName()` 声明资产名，构造期 `initState` 经
+- 环境经 `EnvStateProfile.bundled` 声明资产名，`EnvStateManager.create` 构造期经
   `BundledScenarios`（服务端 ResourceManager 读取，按名全局缓存）加载并解码为基线。
 - 场景源优先级：手动 `env load` 传入的场景 > 内置资产 > 现场快照（非场景环境）。
 - 修改内置场景的流程：`/gymcraft env save` 保存调整后的环境 → 用产物目录替换

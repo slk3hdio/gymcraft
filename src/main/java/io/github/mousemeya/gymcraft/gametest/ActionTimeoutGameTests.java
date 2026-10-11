@@ -9,7 +9,6 @@ import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 
@@ -72,7 +71,6 @@ public final class ActionTimeoutGameTests {
         private TimeoutTestEnv(Mob mob) {
             super(Identifier.fromNamespaceAndPath("gymcraft", "timeout_test"), mob,
                 List.of(ActionComponents.SET_ATTACK_TARGET.get()), List.of());
-            this.initState((ServerLevel) mob.level(), mob);
         }
     }
 }

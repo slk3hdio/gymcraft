@@ -16,8 +16,9 @@ import io.github.mousemeya.gymcraft.GymCraft;
 
 /**
  * 模组内置场景资产：打包在 jar 内 {@code data/gymcraft/scenario/<name>/} 的场景
- * （scenario.json + world.nbt），任务环境经 {@code AbstractMcEnv.bundledScenarioName()}
- * 声明后在构造期自动加载为状态基线（场景内容延迟到首个 reset 物化）。
+ * （scenario.json + world.nbt），任务环境经 {@code EnvStateProfile.bundledScenarioName()}
+ * 声明后由 {@code EnvStateManager.create} 在构造期自动加载为状态基线（场景内容延迟到
+ * 首个 reset 物化）。
  * <p>
  * 经服务端 ResourceManager 读取（模组 jar 即内置数据包，dedicated server 与
  * GameTest 均可解析）；jar 资产运行期不可变，按场景名全局缓存（含缺失负缓存）。

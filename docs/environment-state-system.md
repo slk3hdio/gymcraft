@@ -43,14 +43,14 @@ EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateS
 ## 生命周期（恒基线模型）
 
 ```
-环境构造（initState，子类构造器尾部调用，彼时范围与场景声明已定）
-    有场景源（手动 env load 传入 > 内置资产 bundledScenarioName()）
+环境构造（AbstractMcEnv 主构造器，状态声明 EnvStateProfile 与外部场景源都是构造数据）
+    有场景源（手动 env load 传入 > 内置资产 EnvStateProfile.bundledScenarioName()）
         → ScenarioWorldCodec.decode 把文件解码为基线（锚定当前 Mob 的位置与 UUID，
-          区域实体重分配 UUID）+ 注入 preset options + onScenarioLoaded() 补丁钩子
+          区域实体重分配 UUID）+ 携带 preset options
         → 不触碰世界：场景内容延迟到首个 reset 随基线恢复物化
     无场景源
-        → 以环境声明范围对当前世界与 agent 当场捕获基线（EnvStateSnapshot.capture）
-    两条路径都经 EnvStateManager.create 一次性构建完成，此后管理器不可变
+        → 以声明范围对当前世界与 agent 当场捕获基线（EnvStateSnapshot.capture）
+    两条路径都经 EnvStateManager.create 一次性构建完成，此后管理器不可变、不依赖环境回调
 reset            runtime 清理动作管线 → 组件 release 自清会话（菜单/消费）→
                   AbstractMcEnv.resetEnvironment 编排：EnvStateManager 恢复基线
                   → 区域方块 DIFF 写回 → 清除并重建区域实体
@@ -65,19 +65,18 @@ close             runtime 组件 release → AgentMobLifecycle 撤销附件作�
 
 接入点：
 
-- `AbstractMcEnv.stateScope()`：非场景环境的范围声明回退（模板方法，默认空范围）——
+- `EnvStateProfile`（gym/state）：环境状态声明的构造数据——非场景范围回退（默认空）、
+  方块恢复模式（默认 DIFF）与内置场景资产名（默认 null），经环境构造器传入；
   场景环境的状态范围来自场景文件（world.nbt 区域几何 + scenario.json 的
   `manage_entities`），由 `EnvStateManager.create` 构造期一次性推导并生效
-- `AbstractMcEnv.bundledScenarioName()`：内置场景资产名（`data/gymcraft/scenario/<name>/`），默认 null
-- `AbstractMcEnv.initState(ServerLevel, Mob)`：子类构造器尾部调用（所有具体环境的
-  义务），按上面的优先级解析场景源并一次性构建完整状态管理器；此前访问状态会得到
-  明确的编程错误
+- `EnvStateManager.create(ServerLevel, Mob, EnvStateProfile, LoadedScenario)`：管理器
+  唯一入口，按上面的优先级解析场景源并一次性构建完整状态（范围、基线、preset options）
 - 完整基线与场景推导的范围由 `EnvStateManager`（gym/env，包私有）持有，附件作用域与实体替换由 `AgentMobLifecycle` 持有；`AgentRuntime` 不保存环境状态，reset 逻辑由 env 每次经 `AgentRuntime.reset(seed, options, ResetHandler)` 传入（`resetEnvironment`）
 
 ## 环境迁移要点
 
 - `iron_mining` / `iron_golem_warden` / `parkour_mob`：硬编码场景搭建（`buildScene`/模板/补给/Warden 生成/训练柱清空）与全部位置常量（arenaBounds/资源坐标/warden_spawn 等）已删除：场景、初始物资与状态范围均来自内置场景资产（`gym/scenario/BundledScenarios`），越界/查询几何经 `AbstractMcEnv.scopeAabb()` 从生效范围现算；parkour 仅保留 agent 初始锚点与从范围推导的目标高度
-- `iron_golem_warden`：Warden 来自资产实体（含虚弱效果，随 NBT 往返），UUID 由 `RegionEntitySnapshot.of` 解码时重分配、`onScenarioLoaded` 构造期从基线读回；`DIG_COOLDOWN` 脑记忆不随 NBT 序列化，每次 reset 由 `repinWarden` 重新注入
+- `iron_golem_warden`：Warden 来自资产实体（含虚弱效果，随 NBT 往返），UUID 由 `RegionEntitySnapshot.of` 解码时重分配、运行期经 `wardenUuid()` 从基线懒解析；`DIG_COOLDOWN` 脑记忆不随 NBT 序列化，每次 reset 由 `repinWarden` 重新注入
 - `parkour_mob`：`blocksOnly` 范围（平台层 + 训练柱，高度与资产一致）；布局选项（`block`/`block_count`/`target_height`）随硬编码场景一并删除——需要不同布局时经 `env save/load` 自制场景
 
 ## 已知限制

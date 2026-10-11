@@ -8,7 +8,6 @@ import com.google.protobuf.Any;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.Blocks;
@@ -255,7 +254,6 @@ public final class AgentDeathGameTests {
                 List.of()
             );
             this.terminationRule = terminationRule;
-            this.initState((ServerLevel) mob.level(), mob);
         }
 
         /**

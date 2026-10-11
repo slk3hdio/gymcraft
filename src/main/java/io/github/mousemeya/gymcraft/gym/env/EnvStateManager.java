@@ -1,74 +1,97 @@
 package io.github.mousemeya.gymcraft.gym.env;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
+import io.github.mousemeya.gymcraft.gym.scenario.BundledScenarios;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateProfile;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.StateRestoreMode;
 
 /**
  * 环境状态管理器：环境创建时经 {@link #create} 一次性构建完成，此后不可变——持有
- * 生效状态范围与完整状态基线（reset 恢复用）；close 不做世界恢复，场景残留由外部
- * 负责清理。
+ * 生效状态范围与完整状态基线（reset 恢复用），以及场景源的 preset options 视图；
+ * close 不做世界恢复，场景残留由外部负责清理。
  * <p>
- * 基线来源在创建时一次确定：场景环境（手动 {@code env load} 或内置资产）从场景文件
- * 解码（锚定当前 Mob，不触碰世界——场景内容延迟到首个 reset 物化）；非场景环境当场
- * 对世界与 agent 现场捕获（要求范围区块已加载）。状态范围同样以场景为权威：场景环境
- * 的范围来自文件（world.nbt 区域几何 + scenario.json 的 {@code manage_entities}），
- * 非场景环境才使用环境经 {@code AbstractMcEnv.stateScope()} 声明的范围。方块恢复模式
- * 由环境经 {@code stateRestoreMode()} 声明。所有方法只能在服务端线程调用。
+ * 状态声明（{@link EnvStateProfile}）与外部场景源都是创建入参，管理器不依赖环境的
+ * 任何回调。基线来源在创建时一次确定：外部场景（手动 {@code env load}）优先，其次
+ * 声明的内置资产，都无则以声明范围对当前世界与 agent 现场捕获（要求范围区块已加载）。
+ * 场景路径不触碰世界——场景内容延迟到首个 reset 随基线恢复物化；状态范围同样以场景
+ * 文件为权威（world.nbt 区域几何 + scenario.json 的 {@code manage_entities}），声明
+ * 范围仅在非场景环境生效。所有方法只能在服务端线程调用。
  * </p>
  */
 final class EnvStateManager {
     /** 生效状态范围：场景文件推导或环境声明，创建后不变。 */
     private final EnvStateScope scope;
-    /** 方块恢复模式（环境的 {@code stateRestoreMode} 声明，创建时解析）。 */
+    /** 方块恢复模式（环境声明，创建时解析）。 */
     private final StateRestoreMode mode;
     /** 完整状态基线：场景环境来自文件解码，非场景环境创建时现场捕获。 */
     private final EnvStateSnapshot baseline;
+    /** 场景源携带的 preset options（reset 合并用）；非场景环境为空 Map。 */
+    private final Map<String, Object> presetOptions;
 
-    private EnvStateManager(EnvStateScope scope, StateRestoreMode mode, EnvStateSnapshot baseline) {
+    private EnvStateManager(
+        EnvStateScope scope,
+        StateRestoreMode mode,
+        EnvStateSnapshot baseline,
+        Map<String, Object> presetOptions
+    ) {
         this.scope = scope;
         this.mode = mode;
         this.baseline = baseline;
+        this.presetOptions = presetOptions;
     }
 
     /**
-     * 一次性构建状态管理器：有场景文件时以其为权威——推导状态范围（区域几何 +
-     * {@code manage_entities}）并把文件内容解码为基线（锚定当前 Mob 的位置与 UUID，
-     * 不触碰世界，场景内容由 reset 物化）；无场景时用环境声明的范围对当前世界与
-     * agent 当场捕获基线。
+     * 一次性构建状态管理器：场景源优先级为外部传入（手动 {@code env load}）&gt; 声明的
+     * 内置资产（{@code EnvStateProfile.bundledScenarioName}）&gt; 无场景。有场景时以文件
+     * 为权威——推导状态范围（区域几何 + {@code manage_entities}）并把内容解码为基线
+     * （锚定当前 Mob 的位置与 UUID，不触碰世界，场景内容由 reset 物化）；无场景时用
+     * 声明范围对当前世界与 agent 当场捕获基线。
      *
      * @param level 服务端世界
      * @param mob 锚定 Mob（提供基线 agent 的 UUID 与位置）
-     * @param declaredScope 环境经 {@code stateScope()} 声明的范围（非场景环境生效）
-     * @param mode 方块恢复模式
-     * @param loaded 场景文件内容；null 表示非场景环境
+     * @param profile 环境状态声明（非场景环境的范围与恢复模式来源）
+     * @param external 外部场景源（手动 env load）；null 表示未外部指定
      * @return 构建完成的状态管理器
      */
     static EnvStateManager create(
         ServerLevel level,
         Mob mob,
-        EnvStateScope declaredScope,
-        StateRestoreMode mode,
-        @Nullable ScenarioStore.LoadedScenario loaded
+        EnvStateProfile profile,
+        @Nullable ScenarioStore.LoadedScenario external
     ) {
-        if (loaded == null) {
-            return new EnvStateManager(declaredScope, mode,
-                EnvStateSnapshot.capture(level, mob, declaredScope, mode));
+        ScenarioStore.LoadedScenario source = external;
+        if (source == null && profile.bundledScenarioName() != null) {
+            source = BundledScenarios.load(level, profile.bundledScenarioName())
+                .orElseThrow(() -> new IllegalStateException(
+                    "Missing bundled scenario asset: gymcraft:scenario/" + profile.bundledScenarioName()));
         }
-        boolean manageEntities = loaded.scenario().manageEntities();
+        if (source == null) {
+            return new EnvStateManager(profile.scope(), profile.mode(),
+                EnvStateSnapshot.capture(level, mob, profile.scope(), profile.mode()), Map.of());
+        }
+        Map<String, Object> presetOptions = source.scenario().options().isEmpty()
+            ? Map.of()
+            : Collections.unmodifiableMap(new LinkedHashMap<>(source.scenario().options()));
+        boolean manageEntities = source.scenario().manageEntities();
         BlockPos anchor = BlockPos.containing(mob.position());
         EnvStateScope scope = new EnvStateScope(
-            ScenarioWorldCodec.regions(loaded.world(), anchor), manageEntities);
-        return new EnvStateManager(scope, mode, ScenarioWorldCodec.decode(
-            level, loaded.world(), loaded.scenario().agentSnapshot(level, mob), mode, manageEntities));
+            ScenarioWorldCodec.regions(source.world(), anchor), manageEntities);
+        return new EnvStateManager(scope, profile.mode(), ScenarioWorldCodec.decode(
+            level, source.world(), source.scenario().agentSnapshot(level, mob), profile.mode(), manageEntities),
+            presetOptions);
     }
 
     /**
@@ -76,6 +99,13 @@ final class EnvStateManager {
      */
     EnvStateScope scope() {
         return this.scope;
+    }
+
+    /**
+     * @return 场景源携带的 preset options（不可变；非场景环境为空 Map）
+     */
+    Map<String, Object> scenarioPresetOptions() {
+        return this.presetOptions;
     }
 
     /**

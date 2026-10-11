@@ -10,6 +10,7 @@ import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateProfile;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -88,24 +89,18 @@ public final class IronMiningEnv extends AbstractMcEnv {
                 ObservationCreators.WORLD.get()
             ),
             List.of(MobAttachments.AGENT_BACKPACK),
+            EnvStateProfile.bundled("iron_mining"),
             scenario
         );
         if (!(mob.level() instanceof ServerLevel serverLevel)) {
             throw new IllegalArgumentException("iron_mining requires a server-level Mob");
         }
         this.level = serverLevel;
-        this.initState(serverLevel, mob);
         this.resetMilestones();
 
         // 紧凑训练场中的方块掉落常停在方块边缘；略微放宽距离可避免寻路在邻格中心提前结束。
         PickUpItemController pickUp = this.actionComponent(ActionComponents.PICK_UP_ITEM.get());
         pickUp.setPickupReach(2.0);
-    }
-
-    /** 内置场景资产名。 */
-    @Override
-    protected String bundledScenarioName() {
-        return "iron_mining";
     }
 
     /**

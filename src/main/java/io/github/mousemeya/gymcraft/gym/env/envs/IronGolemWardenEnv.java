@@ -39,6 +39,7 @@ import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateProfile;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
 import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
@@ -51,8 +52,8 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
  * 环境在创建位置周围占用固定 13x13 战斗场（玻璃围墙，可观战外部）：场景来自内置资产
  * {@code gymcraft:scenario/iron_golem_warden}（场地 + 建材 4 铁块主手 / 1 雕刻南瓜 /
  * 64 铁锭 + 角落 Warden 含虚弱效果），构造期解码为状态基线，首个 reset 物化（agent
- * 替换为场景 player_sim、Warden 重分配 UUID 由 {@link #onScenarioLoaded()} 从基线
- * 读回），此后 reset 由基线恢复（方块差异写回 + 区域实体重建，Warden 保留 UUID）。
+ * 替换为场景 player_sim、Warden 重分配 UUID 从基线按需懒解析），此后 reset 由基线
+ * 恢复（方块差异写回 + 区域实体重建，Warden 保留 UUID）。
  * Agent 本体没有攻击能力：需要按原版图案摆放铁块并在最后放置雕刻南瓜生成铁傀儡，
  * 战斗期间用铁锭治疗铁傀儡（原版交互，+25 生命/锭）耗死 Warden。Warden 死亡即成功；
  * 任务状态只从真实世界推导，不依赖 Python 客户端自行判分。
@@ -108,21 +109,15 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
                 ObservationCreators.WORLD.get()
             ),
             List.of(MobAttachments.AGENT_BACKPACK),
+            EnvStateProfile.bundled("iron_golem_warden"),
             scenario
         );
         if (!(mob.level() instanceof ServerLevel serverLevel)) {
             throw new IllegalArgumentException("iron_golem_warden requires a server-level Mob");
         }
         this.level = serverLevel;
-        this.initState(serverLevel, mob);
         this.resetMilestones();
         this.restrictActionSpacesToArena();
-    }
-
-    /** 内置场景资产名。 */
-    @Override
-    protected String bundledScenarioName() {
-        return "iron_golem_warden";
     }
 
     /**
@@ -173,23 +168,27 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     }
 
     /**
-     * 场景状态源就绪（构造期）后从基线实体快照读回 Warden 的重分配 UUID——实体尚未
-     * 物化进世界，不做世界扫描；防钻地记忆由每次 reset 的 {@code repinWarden} 注入。
+     * 从基线实体快照解析 Warden 的重分配 UUID（场景实体尚未物化进世界，不做世界
+     * 扫描）。基线不可变，首次读取后缓存；防钻地记忆由每次 reset 的
+     * {@code repinWarden} 注入。
+     *
+     * @return 基线 Warden 的 UUID；基线无 Warden 时为 null
      */
-    @Override
-    public void onScenarioLoaded() {
-        var baseline = this.baselineSnapshot();
-        if (baseline == null || baseline.entities() == null) {
-            this.wardenUuid = null;
-            return;
-        }
-        final UUID[] foundUuid = {null};
-        baseline.entities().forEachEntity((type, data) -> {
-            if (type == EntityType.WARDEN && foundUuid[0] == null) {
-                foundUuid[0] = RegionEntitySnapshot.getEntityUuid(data, "UUID");
+    @Nullable
+    private UUID wardenUuid() {
+        if (this.wardenUuid == null) {
+            var entities = this.baselineSnapshot().entities();
+            if (entities != null) {
+                final UUID[] foundUuid = {null};
+                entities.forEachEntity((type, data) -> {
+                    if (type == EntityType.WARDEN && foundUuid[0] == null) {
+                        foundUuid[0] = RegionEntitySnapshot.getEntityUuid(data, "UUID");
+                    }
+                });
+                this.wardenUuid = foundUuid[0];
             }
-        });
-        this.wardenUuid = foundUuid[0];
+        }
+        return this.wardenUuid;
     }
 
     /**
@@ -197,8 +196,9 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      * 基线恢复保留 UUID，直接按 UUID 查回实体。
      */
     private void repinWarden() {
-        if (this.wardenUuid != null
-            && this.level.getEntity(this.wardenUuid) instanceof Warden warden && warden.isAlive()) {
+        UUID wardenUuid = this.wardenUuid();
+        if (wardenUuid != null
+            && this.level.getEntity(wardenUuid) instanceof Warden warden && warden.isAlive()) {
             warden.getBrain().setMemoryWithExpiry(MemoryModuleType.DIG_COOLDOWN, Unit.INSTANCE, Integer.MAX_VALUE);
         }
     }
@@ -292,8 +292,9 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
             }
             this.lastGolemHealth = health;
         }
-        boolean success = this.wardenUuid != null
-            && !(this.level.getEntity(this.wardenUuid) instanceof Warden warden && warden.isAlive());
+        UUID wardenUuid = this.wardenUuid();
+        boolean success = wardenUuid != null
+            && !(this.level.getEntity(wardenUuid) instanceof Warden warden && warden.isAlive());
         reward += this.completeIfPresent(Milestone.WARDEN_SLAIN, success);
 
         // 结构性失败与级联失败先于回合失败原因推导，供终止判断与终态快照共用

@@ -8,7 +8,6 @@ import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -17,7 +16,7 @@ import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateProfile;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 
@@ -60,21 +59,15 @@ public class ParkourMobEnv extends AbstractMcEnv {
             List.of(ObservationCreators.SELF.get(), ObservationCreators.NEARBY_BLOCKS.get(),
                 ObservationCreators.WORLD.get()),
             List.of(),
+            EnvStateProfile.bundled("parkour_mob"),
             scenario);
 
         observationComponent(ObservationCreators.NEARBY_BLOCKS.get()).setMaxBlocks(64);
         this.origin = BlockPos.containing(mob.position());
         this.baseY = this.origin.getY();
-        this.initState((ServerLevel) mob.level(), mob);
         // 场景是布局的唯一权威：训练柱目标高度从场景区域推导（y 覆盖 -1..targetHeight+2，
         // 修改资产即可改变任务难度）
         this.targetHeight = this.stateScopeView().regions().getFirst().getYSpan() - 4;
-    }
-
-    /** 内置场景资产名。 */
-    @Override
-    protected String bundledScenarioName() {
-        return "parkour_mob";
     }
 
     /** 每回合重置计数器（场景内容与 agent 由状态基线恢复）。 */

@@ -9,7 +9,6 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
@@ -189,7 +188,6 @@ public final class ObservationFeedbackGameTests {
                 ),
                 List.of(ObservationCreators.SELF.get())
             );
-            this.initState((ServerLevel) mob.level(), mob);
         }
     }
 }

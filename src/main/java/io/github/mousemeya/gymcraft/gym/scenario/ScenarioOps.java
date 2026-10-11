@@ -34,8 +34,8 @@ import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
  * <p>
  * 所有方法必须在服务端线程调用（指令执行天然满足）。保存是对当前世界与 agent 的
  * 即时快照（不要求环境 reset 过，所见即所得）；加载只有完整路径（{@link #spawn}）：
- * 生成场景 agent、以其为锚创建环境（构造期解码为基线、preset options 注入、
- * {@link AbstractMcEnv#onScenarioLoaded()} 补丁），挂载即在后台线程自动完成首个
+ * 生成场景 agent、以其为锚创建环境（构造期一次性创建状态管理器：解码基线、推导
+ * 范围、携带 preset options），挂载即在后台线程自动完成首个
  * reset（物化场景内容、使 preset options 生效），挂载完成即可 step、可再次 env save。
  * 普通环境 close 不恢复世界，场景残留由外部清理。
  * </p>

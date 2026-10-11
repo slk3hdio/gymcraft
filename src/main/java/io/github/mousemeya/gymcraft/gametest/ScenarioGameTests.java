@@ -145,7 +145,7 @@ public final class ScenarioGameTests {
 
     /**
      * 验证含区域实体的场景（iron_golem_warden 内置资产战斗场 + Warden）跨位置 spawn 加载：
-     * 解码为 Warden 重分配 UUID（{@code onScenarioLoaded} 构造期从基线读回并钉住防钻地记忆），
+     * 解码出 Warden 重分配 UUID（环境从基线按需懒解析并钉住防钻地记忆），
      * 建材（主手铁块 + 背包南瓜）随 agent NBT 与可序列化背包附件一同迁移；场景内容延迟到
      * 加载侧首个 reset 物化，NoAi 状态随实体 NBT 迁移（无需放置后补丁）。
      *
