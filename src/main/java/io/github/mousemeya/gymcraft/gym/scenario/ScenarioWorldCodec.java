@@ -89,6 +89,20 @@ public final class ScenarioWorldCodec {
     }
 
     /**
+     * 读取世界内容声明的区域几何（平移到目标锚点），供环境状态范围推导——场景加载侧
+     * 的 scope 不再依赖环境硬编码声明。
+     *
+     * @param world 世界内容 NBT（{@link #encode}/{@link #empty} 产物）
+     * @param anchor 场景原点在目标世界的方块坐标
+     * @return 区域闭区间方块盒列表（与文件 regions 一一对应；空世界为空列表）
+     */
+    public static List<BoundingBox> regions(CompoundTag world, BlockPos anchor) {
+        return world.getListOrEmpty("regions").compoundStream()
+            .map(regionTag -> targetBox(regionTag, anchor))
+            .toList();
+    }
+
+    /**
      * 把世界内容 NBT 解码为完整状态基线（{@link #encode} 的反向）：所有坐标平移到
      * 目标锚点（agent 快照的方块坐标），场景原点取自文件 {@code origin}。
      * <p>
@@ -101,7 +115,7 @@ public final class ScenarioWorldCodec {
      * @param world 世界内容 NBT（{@link #encode}/{@link #empty} 产物）
      * @param agent agent 快照（调用方已把 UUID 与 Pos 覆写为当前 Mob，锚点取其方块坐标）
      * @param restoreMode 方块恢复模式
-     * @param manageEntities 是否管理区域实体（环境 scope 的 captureEntities）——为 true 时
+     * @param manageEntities 是否管理区域实体（场景的 manage_entities）——为 true 时
      *                       即使文件无实体也构造空实体快照，保证 reset 清场语义
      * @return 完整环境状态基线
      */

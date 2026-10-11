@@ -8,5 +8,6 @@
   "agent": {
     "type": "gymcraft:player_sim",
     "nbt": "{AbsorptionAmount:0.0f,Air:300s,Brain:{memories:{}},CanPickUpLoot:0b,DeathTime:0s,FallFlying:0b,Fire:0s,Health:20.0f,HurtByTimestamp:0,HurtTime:0s,Invulnerable:0b,LeftHanded:0b,Motion:[0.0d,0.0d,0.0d],OnGround:1b,PersistenceRequired:0b,PortalCooldown:0,Pos:[-76.5d,63.0d,104.5d],Rotation:[99.325935f,0.0f],UUID:[I;29713968,-1035382881,-1584265272,-405531225],attributes:[{base:0.1d,id:\"minecraft:movement_speed\"},{base:0.0d,id:\"minecraft:oxygen_bonus\"},{base:16.0d,id:\"minecraft:follow_range\",modifiers:[{amount:-0.0782643881045282d,id:\"minecraft:random_spawn_bonus\",operation:\"add_multiplied_base\"}]}],current_impulse_context_reset_grace_time:0,fall_distance:0.0d,\"neoforge:attachments\":{\"gymcraft:agent_backpack\":{stacks:[{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}]}},\"neoforge:spawn_type\":\"SPAWN_ITEM_USE\"}"
-  }
+  },
+  "manage_entities": true
 }

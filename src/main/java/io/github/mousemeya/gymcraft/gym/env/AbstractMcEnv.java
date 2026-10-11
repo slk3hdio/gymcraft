@@ -264,26 +264,28 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     /**
-     * 环境状态范围：环境占用的世界区域与是否捕获区域内实体。
+     * 环境状态范围声明：环境占用的世界区域与是否捕获区域内实体。
      * <p>
-     * 默认空范围——不做世界快照，reset 只重建 agent 实体（等价引入状态系统前的行为）。
-     * 占用世界的任务环境应覆盖此方法；范围在 {@link #initState} 调用时确定后必须保持稳定。
+     * 仅为非场景环境的回退来源——场景环境（手动 env load 或内置资产）的范围来自
+     * 场景文件，不读取本声明。默认空范围——不做世界快照，reset 只重建 agent 实体
+     * （等价引入状态系统前的行为）。
      * </p>
      *
-     * @return 环境状态范围
+     * @return 环境声明的状态范围
      */
     protected EnvStateScope stateScope() {
         return EnvStateScope.empty();
     }
 
     /**
-     * 环境状态范围的只读视图，供可视化等环境外消费者读取；子类仍经
-     * {@link #stateScope()} 覆盖声明。调用方不应缓存结果。
+     * 生效状态范围的只读视图，供可视化等环境外消费者读取：场景环境来自文件
+     * （world.nbt 区域几何 + manage_entities），非场景环境用 {@link #stateScope()}
+     * 声明。调用方不应缓存结果。
      *
-     * @return 当前环境状态范围
+     * @return 当前生效的环境状态范围
      */
     public final EnvStateScope stateScopeView() {
-        return this.stateScope();
+        return this.stateManager.effectiveScope();
     }
 
     /**

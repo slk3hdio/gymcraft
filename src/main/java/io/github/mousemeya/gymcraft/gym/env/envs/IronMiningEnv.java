@@ -142,14 +142,6 @@ public final class IronMiningEnv extends AbstractMcEnv {
         return "iron_mining";
     }
 
-    /** 环境状态范围：整个训练区域（方块 + 区域实体进入基线）。 */
-    @Override
-    protected EnvStateScope stateScope() {
-        return EnvStateScope.of(new BoundingBox(
-            (int) this.arenaBounds.minX, (int) this.arenaBounds.minY, (int) this.arenaBounds.minZ,
-            (int) this.arenaBounds.maxX - 1, (int) this.arenaBounds.maxY - 1, (int) this.arenaBounds.maxZ - 1));
-    }
-
     /**
      * 每回合重置计数器与里程碑（场景内容与 agent 由状态基线恢复）。
      *

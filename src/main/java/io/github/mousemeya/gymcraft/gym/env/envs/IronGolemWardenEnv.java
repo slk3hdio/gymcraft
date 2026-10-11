@@ -143,14 +143,6 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
         return "iron_golem_warden";
     }
 
-    /** 环境状态范围：整个战斗场（方块 + 区域实体进入基线，Warden 保留原 UUID 恢复）。 */
-    @Override
-    protected EnvStateScope stateScope() {
-        return EnvStateScope.of(new BoundingBox(
-            (int) this.arenaBounds.minX, (int) this.arenaBounds.minY, (int) this.arenaBounds.minZ,
-            (int) this.arenaBounds.maxX - 1, (int) this.arenaBounds.maxY - 1, (int) this.arenaBounds.maxZ - 1));
-    }
-
     /**
      * 将坐标类动作组件的参数空间收紧到战斗场内部，使场外目标在空间校验阶段即被拒绝。
      * <p>

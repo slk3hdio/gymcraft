@@ -65,7 +65,9 @@ close             runtime 组件 release → AgentMobLifecycle 撤销附件作�
 
 接入点：
 
-- `AbstractMcEnv.stateScope()`：模板方法，默认空范围
+- `AbstractMcEnv.stateScope()`：非场景环境的范围声明回退（模板方法，默认空范围）——
+  场景环境的状态范围来自场景文件（world.nbt 区域几何 + scenario.json 的
+  `manage_entities`），由 `EnvStateManager` 在 `loadScenario` 时推导并优先使用
 - `AbstractMcEnv.bundledScenarioName()`：内置场景资产名（`data/gymcraft/scenario/<name>/`），默认 null
 - `AbstractMcEnv.initState(ServerLevel, Mob)`：子类构造器尾部调用，按上面的优先级解析场景源并构建完整状态
 - 原世界快照与完整基线由 `EnvStateManager`（gym/env，包私有）持有，附件作用域与实体替换由 `AgentMobLifecycle` 持有；`AgentRuntime` 不保存环境状态，reset 逻辑由 env 每次经 `AgentRuntime.reset(seed, options, ResetHandler)` 传入（`resetEnvironment`）

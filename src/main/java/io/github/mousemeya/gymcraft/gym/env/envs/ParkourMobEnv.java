@@ -74,18 +74,6 @@ public class ParkourMobEnv extends AbstractMcEnv {
         return "parkour_mob";
     }
 
-    /** 环境状态范围：平台层与训练柱（7×7，脚底下一格到目标高度上方两格）。 */
-    @Override
-    protected EnvStateScope stateScope() {
-        return EnvStateScope.blocksOnly(new BoundingBox(
-            this.origin.getX() - MOVE_RADIUS,
-            this.origin.getY() - 1,
-            this.origin.getZ() - MOVE_RADIUS,
-            this.origin.getX() + MOVE_RADIUS,
-            this.origin.getY() + TARGET_HEIGHT + 2,
-            this.origin.getZ() + MOVE_RADIUS));
-    }
-
     /** 每回合重置计数器（场景内容与 agent 由状态基线恢复）。 */
     @Override
     protected void resetMob(Mob mob, Integer seed, Map<String, Object> options) {

@@ -24,11 +24,13 @@ import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 
 /**
- * 环境场景元数据（scenario.json）：环境类型 + 保存时最近一次 reset 的生效 options + agent 定义。
+ * 环境场景元数据（scenario.json）：环境类型 + 保存时最近一次 reset 的生效 options + agent 定义
+ * + 状态范围实体管理开关。
  * <p>
  * 世界内容（区域方块/区域实体）单独存放在场景目录的 world.nbt（见
  * {@link ScenarioWorldCodec}），本记录只承载文本元数据。options 加载时作为 preset
- * 注入重建环境的 reset（当次显式 options 覆盖 preset）。
+ * 注入重建环境的 reset（当次显式 options 覆盖 preset）；{@code manageEntities} 与
+ * world.nbt 的区域几何共同构成环境状态范围——加载侧不再依赖环境硬编码声明。
  * </p>
  *
  * @param name 场景名（目录名，合法性由 {@link ScenarioStore#validateName} 校验）
@@ -36,18 +38,25 @@ import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
  * @param options 保存时最近一次 reset 的生效 options；环境未 reset 过为空 Map
  * @param agentType agent 实体类型注册 ID
  * @param agentNbt agent 的 {@code saveWithoutId} SNBT（含装备与可序列化附件）
+ * @param manageEntities 是否管理状态范围内的实体（reset 清除重建、close 清场）
  */
 public record EnvScenario(
     String name,
     String envTypeId,
     Map<String, Object> options,
     String agentType,
-    String agentNbt
+    String agentNbt,
+    boolean manageEntities
 ) {
     /** 场景元数据格式版本；不匹配的版本拒绝加载。 */
     public static final int FORMAT_VERSION = 1;
 
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
+
+    /** 兼容构造：实体管理缺省为 true（历史场景文件与纯元数据场景）。 */
+    public EnvScenario(String name, String envTypeId, Map<String, Object> options, String agentType, String agentNbt) {
+        this(name, envTypeId, options, agentType, agentNbt, true);
+    }
 
     /** 创建场景元数据；options 做防御性不可变拷贝。 */
     public EnvScenario {
@@ -65,6 +74,7 @@ public record EnvScenario(
         file.name = this.name;
         file.env_type = this.envTypeId;
         file.options = this.options;
+        file.manage_entities = this.manageEntities;
         file.agent = new AgentFile();
         file.agent.type = this.agentType;
         file.agent.nbt = this.agentNbt;
@@ -93,7 +103,7 @@ public record EnvScenario(
             throw new IllegalArgumentException("Unsupported scenario format version: " + file.version);
         }
         Map<String, Object> options = file.options == null ? Map.of() : file.options;
-        return new EnvScenario(file.name, file.env_type, options, file.agent.type, file.agent.nbt);
+        return new EnvScenario(file.name, file.env_type, options, file.agent.type, file.agent.nbt, file.manage_entities);
     }
 
     /**
@@ -132,6 +142,8 @@ public record EnvScenario(
         String name;
         String env_type;
         Map<String, Object> options;
+        /** 可选：缺省 true（历史场景文件兼容）。 */
+        Boolean manage_entities;
         AgentFile agent;
     }
 
