@@ -1,6 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.scenario;
 
 import java.io.IOException;
+import java.util.Map;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
@@ -34,8 +35,10 @@ import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
  * 所有方法必须在服务端线程调用（指令执行天然满足）。保存是对当前世界与 agent 的
  * 即时快照（不要求环境 reset 过，所见即所得）；加载不放置世界——场景作为状态源
  * 随 {@link EnvManager#create} 进入环境（构造期解码为基线、preset options 注入、
- * {@link AbstractMcEnv#onScenarioLoaded()} 补丁），由首个 reset 物化，首个 reset
- * 亦会把受控实体替换为场景 agent（同 UUID，携带场景装备与附件）。
+ * {@link AbstractMcEnv#onScenarioLoaded()} 补丁），挂载即在后台线程自动完成首个
+ * reset（物化场景内容、把受控实体替换为场景 agent——同 UUID，携带场景装备与附件、
+ * 使 preset options 生效），挂载完成即可 step、可再次 env save。普通
+ * {@code env create} 挂载不自动 reset，首个 reset 的 options/seed 效果留给外部发起方。
  * </p>
  */
 public final class ScenarioOps {
@@ -78,7 +81,30 @@ public final class ScenarioOps {
      * @return 创建的环境
      */
     public static McEnv applyToMob(ScenarioStore.LoadedScenario loaded, Mob mob) {
-        return EnvManager.create(loaded.scenario().envTypeId(), mob, loaded);
+        McEnv env = EnvManager.create(loaded.scenario().envTypeId(), mob, loaded);
+        mountAutoReset(env);
+        return env;
+    }
+
+    /**
+     * 挂载即自动完成首个 reset：物化场景内容、替换 agent、使 preset options 生效，
+     * 挂载完成即可 step、可再次 save。
+     * <p>
+     * 调用方（指令/加载流程）运行在服务端线程，而阻塞式 reset 依赖服务端 tick
+     * 消费请求，必须经独立线程执行；环境在请求被消费前关闭时，运行时会以异常
+     * 完成未消费的 reset 请求（{@code AgentRuntime#clear}），不会悬挂线程。
+     * </p>
+     *
+     * @param env 挂载完成的环境
+     */
+    private static void mountAutoReset(McEnv env) {
+        Thread.ofVirtual().name("gymcraft-scenario-autoreset").start(() -> {
+            try {
+                env.reset(null, Map.of());
+            } catch (Throwable error) {
+                LOGGER.error("GymCraft scenario auto-reset failed: env type={}", env.getRegisterId(), error);
+            }
+        });
     }
 
     /**

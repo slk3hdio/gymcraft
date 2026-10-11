@@ -96,10 +96,9 @@ public final class ScenarioGameTests {
                         throw new IllegalStateException(error);
                     }
                 });
-                McEnv envB = EnvManager.get(mobBUuid.get())
+                EnvManager.get(mobBUuid.get())
                     .orElseThrow(() -> new IllegalStateException("spawned scenario env not registered"));
-                // 场景内容延迟到首个 reset 物化（加载时不放置世界）
-                envB.reset(1, Map.of());
+                // 挂载即在后台线程自动完成首个 reset（物化场景内容），无需手动 reset
             } catch (Throwable error) {
                 failure.set(error);
             }
@@ -179,10 +178,9 @@ public final class ScenarioGameTests {
                         throw new IllegalStateException(error);
                     }
                 });
-                McEnv envB = EnvManager.get(mobBUuid.get())
+                EnvManager.get(mobBUuid.get())
                     .orElseThrow(() -> new IllegalStateException("spawned scenario env not registered"));
-                // 场景内容（含 NoAi Warden）延迟到首个 reset 物化
-                envB.reset(1, Map.of());
+                // 挂载自动 reset 物化场景内容（含 NoAi Warden），无需手动 reset
             } catch (Throwable error) {
                 failure.set(error);
             }
@@ -265,9 +263,8 @@ public final class ScenarioGameTests {
                         throw new IllegalStateException(error);
                     }
                 });
-                McEnv envB = EnvManager.get(mobBUuid.get())
+                EnvManager.get(mobBUuid.get())
                     .orElseThrow(() -> new IllegalStateException("spawned scenario env not registered"));
-                envB.reset(1, Map.of());
             } catch (Throwable error) {
                 failure.set(error);
             }
@@ -284,6 +281,69 @@ public final class ScenarioGameTests {
                 Mob mobB = (Mob) level.getEntity(mobBUuid.get());
                 assertTrue(helper, mobB != null && mobB.isAlive() && mobB.getType() == EntityType.HUSK,
                     "scenario agent missing or wrong type after reset");
+                helper.succeed();
+            } finally {
+                if (mobBUuid.get() != null) {
+                    EnvManager.close(mobBUuid.get());
+                }
+                EnvManager.close(mobA.getUUID());
+                deleteRecursivelyQuietly(storeDir);
+            }
+        });
+    }
+
+    /**
+     * 验证场景挂载即自动完成首个 reset：spawn 后不手动调用 reset，场景内容（平台与
+     * agent 物资）应已物化、preset options 已生效——挂载完成即可 step/save。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void mountAutoResets(GameTestHelper helper) {
+        Mob mobA = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
+        ServerLevel level = helper.getLevel();
+        BlockPos absB = helper.absolutePos(new BlockPos(2, 2, 0));
+        Path storeDir = createTempStoreDir();
+        ScenarioStore store = new ScenarioStore(storeDir);
+        AtomicReference<UUID> mobBUuid = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        McEnv envA = EnvManager.create("gymcraft:parkour_mob", mobA);
+        Thread.startVirtualThread(() -> {
+            try {
+                envA.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
+                runOnServer(helper, () -> {
+                    try {
+                        ScenarioOps.capture("autoreset", envA, store);
+                        EnvManager.close(mobA.getUUID());
+                        ensureChunksLoaded(level, absB.offset(-3, 0, -3), absB.offset(3, 0, 3));
+                        // 关键差异：spawn 之后不调用 reset——挂载应自动完成首个 reset
+                        Mob mobB = ScenarioOps.spawn(store.load("autoreset"), level, Vec3.atBottomCenterOf(absB));
+                        mobBUuid.set(mobB.getUUID());
+                    } catch (Throwable error) {
+                        throw new IllegalStateException(error);
+                    }
+                });
+            } catch (Throwable error) {
+                failure.set(error);
+            }
+        });
+        helper.runAfterDelay(300, () -> {
+            try {
+                assertTrue(helper, failure.get() == null, "scenario mount auto-reset setup failed: " + failure.get());
+                McEnv envB = EnvManager.get(mobBUuid.get()).orElse(null);
+                assertTrue(helper, envB instanceof AbstractMcEnv,
+                    "spawned scenario env not registered");
+                assertTrue(helper, level.getBlockState(absB.offset(0, -1, 0)).is(Blocks.STONE),
+                    "parkour platform missing at load position (auto-reset did not materialize)");
+                assertTrue(helper, level.getBlockState(absB.offset(3, -1, -3)).is(Blocks.STONE),
+                    "parkour platform corner missing at load position");
+                Map<String, Object> effective = ((AbstractMcEnv) envB).lastResetOptionsView();
+                assertTrue(helper, Boolean.TRUE.equals(effective.get(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION)),
+                    "auto-reset did not merge the scenario preset options");
+                Mob mobB = (Mob) level.getEntity(mobBUuid.get());
+                assertTrue(helper, mobB != null && mobB.isAlive(), "scenario agent missing after auto reset");
+                assertTrue(helper, mobB.getMainHandItem().is(Items.STONE)
+                        && mobB.getMainHandItem().getCount() == 32,
+                    "scenario agent supplies were not restored by auto reset");
                 helper.succeed();
             } finally {
                 if (mobBUuid.get() != null) {

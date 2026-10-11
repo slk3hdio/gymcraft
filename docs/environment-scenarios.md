@@ -83,9 +83,12 @@
   范围内区块已加载（同状态系统 `requireChunksLoaded`）。
 - **位置无关**：一切坐标相对场景原点（保存时 agent 方块坐标），加载时以 anchor（`mob`
   模式 = 目标 Mob，`spawn` 模式 = 生成位置）重新定位。
-- **加载不放置世界，延迟物化**：`load` 只把文件解码为环境状态基线（坐标平移到锚点、
-  区域实体重分配 UUID、agent 的 UUID/Pos 覆写为锚定实体），**不修改世界**——场景内容在
-  首个 reset 随基线恢复物化（区域方块差异写回 + 区域实体清除重建）。
+- **加载不放置世界，挂载即自动 reset**：`load` 只把文件解码为环境状态基线（坐标平移
+  到锚点、区域实体重分配 UUID、agent 的 UUID/Pos 覆写为锚定实体），**不修改世界**；
+  挂载随后在后台虚拟线程自动完成首个 reset——物化场景内容（区域方块差异写回 +
+  区域实体清除重建）、替换 agent、使 preset options 生效，挂载完成即可 step、可再次
+  `env save`。普通 `env create` 挂载不自动 reset，首个 reset 的 options/seed 效果留给
+  外部发起方。
 - **首个 reset 替换 agent**：锚定实体被基线 agent（场景文件 NBT，携带装备与附件）以同
   UUID 替换，`EnvManager` 映射不破；此后 reset 与常规环境完全同构（走基线快照恢复）。
 - **close 统一恢复原世界**：场景环境构造期捕获的原世界 = 场景放置前的地形，close 时场景
