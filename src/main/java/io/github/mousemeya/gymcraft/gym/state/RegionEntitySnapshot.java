@@ -14,6 +14,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.AABB;
@@ -44,14 +45,25 @@ public final class RegionEntitySnapshot {
     private record SavedEntity(EntityType<?> type, CompoundTag data) {
     }
 
-    private final List<AABB> regions;
+    private final AABB region;
     private final UUID agentUuid;
     private final List<SavedEntity> entities;
 
-    private RegionEntitySnapshot(List<AABB> regions, UUID agentUuid, List<SavedEntity> entities) {
-        this.regions = regions;
+    private RegionEntitySnapshot(AABB region, UUID agentUuid, List<SavedEntity> entities) {
+        this.region = region;
         this.agentUuid = agentUuid;
         this.entities = entities;
+    }
+
+    /**
+     * 闭区间方块盒转半开区间实体查询 AABB（max 端 +1）。
+     *
+     * @param box 闭区间方块盒
+     * @return 等价覆盖的 AABB
+     */
+    public static AABB toAabb(BoundingBox box) {
+        return new AABB(box.minX(), box.minY(), box.minZ(),
+            box.maxX() + 1.0, box.maxY() + 1.0, box.maxZ() + 1.0);
     }
 
     /**
@@ -62,13 +74,13 @@ public final class RegionEntitySnapshot {
      * </p>
      *
      * @param level 服务端世界
-     * @param regions 实体查询区域（半开区间）
+     * @param region 实体查询区域（半开区间）
      * @param agent 受控 agent（按 UUID 排除）
      * @return 区域实体快照
      */
-    public static RegionEntitySnapshot capture(ServerLevel level, List<AABB> regions, Mob agent) {
+    public static RegionEntitySnapshot capture(ServerLevel level, AABB region, Mob agent) {
         List<SavedEntity> entities = new ArrayList<>();
-        for (Entity entity : collectRegionEntities(level, regions, agent.getUUID())) {
+        for (Entity entity : collectRegionEntities(level, region, agent.getUUID())) {
             try (ProblemReporter.ScopedCollector reporter =
                 new ProblemReporter.ScopedCollector(entity.problemPath(), LOGGER)) {
                 TagValueOutput output = TagValueOutput.createWithContext(reporter, level.registryAccess());
@@ -76,7 +88,7 @@ public final class RegionEntitySnapshot {
                 entities.add(new SavedEntity(entity.getType(), output.buildResult().copy()));
             }
         }
-        return new RegionEntitySnapshot(regions, agent.getUUID(), List.copyOf(entities));
+        return new RegionEntitySnapshot(region, agent.getUUID(), List.copyOf(entities));
     }
 
     /**
@@ -94,19 +106,19 @@ public final class RegionEntitySnapshot {
      * 钩子中重建按 UUID 追踪的运行时引用（如 Warden）。
      * </p>
      *
-     * @param regions 实体管理区域（半开区间）
+     * @param region 实体管理区域（半开区间）
      * @param agentUuid 受控 agent 的 UUID（恢复清场时豁免）
      * @param entities 文件实体条目列表
      * @return 区域实体快照
      */
-    public static RegionEntitySnapshot of(List<AABB> regions, UUID agentUuid, List<EntityEntry> entities) {
+    public static RegionEntitySnapshot of(AABB region, UUID agentUuid, List<EntityEntry> entities) {
         List<SavedEntity> saved = new ArrayList<>(entities.size());
         for (EntityEntry entry : entities) {
             CompoundTag data = entry.data().copy();
             putEntityUuid(data, "UUID", UUID.randomUUID());
             saved.add(new SavedEntity(entry.type(), data));
         }
-        return new RegionEntitySnapshot(List.copyOf(regions), agentUuid, List.copyOf(saved));
+        return new RegionEntitySnapshot(region, agentUuid, List.copyOf(saved));
     }
 
     /**
@@ -137,7 +149,7 @@ public final class RegionEntitySnapshot {
      * @param level 服务端世界
      */
     public void restore(ServerLevel level) {
-        discardRegionEntities(level, this.regions, this.agentUuid);
+        discardRegionEntities(level, this.region, this.agentUuid);
         for (SavedEntity saved : this.entities) {
             Entity entity;
             try (ProblemReporter.ScopedCollector reporter = new ProblemReporter.ScopedCollector(LOGGER)) {
@@ -180,11 +192,11 @@ public final class RegionEntitySnapshot {
      * </p>
      *
      * @param level 服务端世界
-     * @param regions 实体查询区域（半开区间）
+     * @param region 实体查询区域（半开区间）
      * @param agentUuid 受控 agent 的 UUID（豁免清除）
      */
-    public static void discardRegionEntities(ServerLevel level, List<AABB> regions, UUID agentUuid) {
-        for (Entity entity : collectRegionEntities(level, regions, agentUuid)) {
+    public static void discardRegionEntities(ServerLevel level, AABB region, UUID agentUuid) {
+        for (Entity entity : collectRegionEntities(level, region, agentUuid)) {
             entity.discard();
         }
     }
@@ -193,17 +205,15 @@ public final class RegionEntitySnapshot {
      * 收集区域内符合过滤器的实体：排除真实玩家、受控 agent 与乘客实体。
      *
      * @param level 服务端世界
-     * @param regions 实体查询区域（半开区间）
+     * @param region 实体查询区域（半开区间）
      * @param agentUuid 受控 agent 的 UUID
      * @return 区域内待处理的实体列表
      */
-    private static List<Entity> collectRegionEntities(ServerLevel level, List<AABB> regions, UUID agentUuid) {
+    private static List<Entity> collectRegionEntities(ServerLevel level, AABB region, UUID agentUuid) {
         List<Entity> result = new ArrayList<>();
-        for (AABB region : regions) {
-            for (Entity entity : level.getEntities((Entity) null, region, RegionEntitySnapshot::isManaged)) {
-                if (!entity.getUUID().equals(agentUuid) && !result.contains(entity)) {
-                    result.add(entity);
-                }
+        for (Entity entity : level.getEntities((Entity) null, region, RegionEntitySnapshot::isManaged)) {
+            if (!entity.getUUID().equals(agentUuid)) {
+                result.add(entity);
             }
         }
         return result;

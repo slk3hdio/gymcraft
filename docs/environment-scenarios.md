@@ -13,10 +13,10 @@
 
 - 环境类型（注册 ID）
 - 保存时**最近一次 reset 的生效 options**（未 reset 过为空；加载侧经 preset 合并回放）
-- **状态范围的实体管理开关**（`manage_entities`，缺省 true）——与 world.nbt 的区域
-  几何共同构成环境状态范围，加载侧不再依赖环境硬编码声明
+- **实体管理开关**（`manage_entities`，缺省 true）——与 world.nbt 的区域共同构成
+  环境状态占用，加载侧不再依赖环境硬编码声明
 - agent 完整 NBT（`saveWithoutId`，含装备与可序列化附件如专属背包）
-- 环境状态范围（`stateScope`）内的**完整世界内容**：区域方块（含方块实体）与区域实体，
+- 环境占用区域内的**完整世界内容**：区域方块（含方块实体）与区域实体，
   取自**保存时刻的即时快照**（所见即所得）
 
 不保存：原世界快照（加载目标的原始地形不在场景职责内）；计划刻/脑记忆等不随 NBT 序列化的
@@ -47,7 +47,7 @@
 }
 ```
 
-**world.nbt**（每个状态区域一个原版结构模板格式块；当前全部环境都是单区域）：
+**world.nbt**（原版结构模板格式块；状态模型为单区域——regions 列表至多一项，多区域文件解码时被拒绝）：
 
 ```
 {
@@ -95,9 +95,9 @@
   由外部负责清理（原世界快照机制已删除）。
 - **options 优先级**：当次 reset options > 场景 preset options > 默认值。场景 options
   合并进首个 reset（preset 一次性）。
-- **状态范围随场景持久化**：加载侧的环境状态范围来自场景文件——区域几何取自
-  world.nbt 的 regions（锚定当前 Mob），实体管理开关取自 scenario.json 的
-  `manage_entities`；环境不再硬编码声明范围（`EnvStateProfile.scope` 仅为
+- **状态区域随场景持久化**：加载侧的环境占用区域来自场景文件——取自 world.nbt
+  的唯一区域块（锚定当前 Mob），实体管理开关取自 scenario.json 的
+  `manage_entities`；环境不再硬编码声明区域（`EnvStateProfile.region` 仅为
   非场景环境的回退）。
 - **区域实体重分配 UUID**：解码时经 `RegionEntitySnapshot.of` 分配新 UUID（同一场景可
   多次加载而不与现存实体冲突）；按 UUID 追踪区域实体的环境从基线实体快照懒解析新 UUID

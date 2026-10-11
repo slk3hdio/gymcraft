@@ -40,7 +40,6 @@ import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateProfile;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
 import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;

@@ -37,7 +37,6 @@ import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.scenario.EnvScenario;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioOps;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
 
 /**
@@ -122,13 +121,13 @@ public final class ScenarioGameTests {
                     "parkour platform corner missing at load position");
                 assertTrue(helper, level.getBlockState(absB.offset(1, 2, 1)).isAir(),
                     "parkour training column was not cleared at load position");
-                // 状态范围来自场景文件：训练柱 7×7×12，不管理区域实体
-                EnvStateScope scope = ((AbstractMcEnv) envB).stateScopeView();
-                assertEquals(helper, 1, scope.regions().size(), "scenario env scope region count");
-                BoundingBox scopeRegion = scope.regions().getFirst();
+                // 状态区域来自场景文件：训练柱 7×7×12，不管理区域实体
+                BoundingBox scopeRegion = ((AbstractMcEnv) envB).stateRegion();
+                assertTrue(helper, scopeRegion != null, "scenario env scope region missing");
                 assertEquals(helper, 7, scopeRegion.getXSpan(), "scenario scope x span");
                 assertEquals(helper, 12, scopeRegion.getYSpan(), "scenario scope y span");
-                assertTrue(helper, !scope.captureEntities(), "parkour scenario should not manage entities");
+                assertTrue(helper, ((AbstractMcEnv) envB).baselineSnapshot().entities() == null,
+                    "parkour scenario should not manage entities");
                 Map<String, Object> effective = ((AbstractMcEnv) envB).lastResetOptionsView();
                 assertTrue(helper, Boolean.TRUE.equals(effective.get(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION)),
                     "loaded env did not merge the scenario preset options");
@@ -276,10 +275,11 @@ public final class ScenarioGameTests {
                 assertTrue(helper, !level.getBlockState(absB.offset(2, 0, 0)).is(Blocks.OAK_LOG),
                     "bundled asset leaked into a manually loaded scenario env");
                 // 保存侧记录的 manage_entities=true，scope 区域随文件迁移（9×9×5）
-                EnvStateScope scope = ((AbstractMcEnv) envB).stateScopeView();
-                assertEquals(helper, 1, scope.regions().size(), "scenario env scope region count");
-                assertEquals(helper, 9, scope.regions().getFirst().getXSpan(), "scenario scope x span");
-                assertTrue(helper, scope.captureEntities(), "iron scenario should manage entities");
+                BoundingBox scopeRegion = ((AbstractMcEnv) envB).stateRegion();
+                assertTrue(helper, scopeRegion != null, "scenario env scope region missing");
+                assertEquals(helper, 9, scopeRegion.getXSpan(), "scenario scope x span");
+                assertTrue(helper, ((AbstractMcEnv) envB).baselineSnapshot().entities() != null,
+                    "iron scenario should manage entities");
                 Mob mobB = (Mob) level.getEntity(mobBUuid.get());
                 assertTrue(helper, mobB != null && mobB.isAlive() && mobB.getType() == EntityType.HUSK,
                     "scenario agent missing or wrong type after reset");

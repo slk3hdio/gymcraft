@@ -25,8 +25,8 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
  * <p>
  * 场景来自内置资产 {@code gymcraft:scenario/parkour_mob}（起点平台 + 训练柱 + 主手
  * 方块），构造期解码为状态基线，首个 reset 物化；布局以资产为权威——需要不同布局
- * 时经 {@code /gymcraft env save/load} 自制场景。训练柱区域内其他实体不进入基线
- * （blocksOnly），close 恢复原世界。
+ * 时经 {@code /gymcraft env save/load} 自制场景。环境不管理区域实体（训练柱区域内
+ * 其他实体不进基线）；close 不做世界恢复，场景残留由外部清理。
  * </p>
  */
 public class ParkourMobEnv extends AbstractMcEnv {
@@ -67,7 +67,9 @@ public class ParkourMobEnv extends AbstractMcEnv {
         this.baseY = this.origin.getY();
         // 场景是布局的唯一权威：训练柱目标高度从场景区域推导（y 覆盖 -1..targetHeight+2，
         // 修改资产即可改变任务难度）
-        this.targetHeight = this.stateScopeView().regions().getFirst().getYSpan() - 4;
+        BoundingBox region = java.util.Objects.requireNonNull(this.stateRegion(),
+            "parkour_mob scenario must declare a region");
+        this.targetHeight = region.getYSpan() - 4;
     }
 
     /** 每回合重置计数器（场景内容与 agent 由状态基线恢复）。 */

@@ -68,7 +68,7 @@ public final class ScenarioOps {
             absEnv.lastResetOptionsView(),
             BuiltInRegistries.ENTITY_TYPE.getKey(agent.type()).toString(),
             agent.data().toString(),
-            absEnv.stateScopeView().captureEntities());
+            current.entities() != null);
         store.save(scenario, ScenarioWorldCodec.encode(current));
     }
 

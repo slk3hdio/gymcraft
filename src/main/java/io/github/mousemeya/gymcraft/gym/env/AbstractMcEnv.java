@@ -23,6 +23,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.neoforged.neoforge.common.NeoForge;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
@@ -41,8 +42,8 @@ import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime.RuntimeStepResult;
 import io.github.mousemeya.gymcraft.gym.visualization.VisualizationService;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateProfile;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
+import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 
 
 
@@ -138,7 +139,8 @@ public abstract class AbstractMcEnv implements McEnv {
                     "Missing bundled scenario asset: gymcraft:scenario/" + stateProfile.bundledScenarioName()));
         }
         this.baseline = source == null
-            ? EnvStateSnapshot.capture(level, mob, stateProfile.scope(), stateProfile.mode())
+            ? EnvStateSnapshot.capture(
+                level, mob, stateProfile.region(), stateProfile.captureEntities(), stateProfile.mode())
             : ScenarioWorldCodec.decode(
                 level, source.world(), source.scenario().agentSnapshot(level, mob),
                 stateProfile.mode(), source.scenario().manageEntities());
@@ -288,42 +290,26 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     /**
-     * 生效状态范围的只读视图，供可视化等环境外消费者读取：场景环境来自场景文件
-     * （world.nbt 区域几何 + manage_entities），非场景环境用构造数据
-     * {@link EnvStateProfile} 声明的范围，在构造期一次性解析，此后不变。
+     * 生效状态区域的只读视图，供可视化等环境外消费者读取：场景环境来自场景文件
+     * （world.nbt 唯一区域块），非场景环境用构造数据 {@link EnvStateProfile} 声明，
+     * 构造期一次性确定，此后不变；空区域（不占用世界）为 null。
      *
-     * @return 当前生效的环境状态范围
+     * @return 当前生效的环境占用区域；空区域环境为 null
      */
-    public final EnvStateScope stateScopeView() {
-        return this.baseline.scope();
+    @Nullable
+    public final BoundingBox stateRegion() {
+        return this.baseline.region();
     }
 
     /**
-     * 生效状态范围的包络 AABB（多区域取并集包络；闭区间方块盒转半开区间，max 端 +1）。
-     * 场景环境的越界/查询几何一律经本方法从范围现算，不存布局副本；空范围为 null。
+     * 生效状态区域的 AABB（闭区间方块盒转半开区间，max 端 +1）。场景环境的越界/
+     * 查询几何一律经本方法现算，不存布局副本；空区域为 null。
      *
-     * @return 范围包络；空范围环境为 null
+     * @return 区域 AABB；空区域环境为 null
      */
     @Nullable protected final AABB scopeAabb() {
-        var regions = this.stateScopeView().regions();
-        if (regions.isEmpty()) {
-            return null;
-        }
-        int minX = Integer.MAX_VALUE;
-        int minY = Integer.MAX_VALUE;
-        int minZ = Integer.MAX_VALUE;
-        int maxX = Integer.MIN_VALUE;
-        int maxY = Integer.MIN_VALUE;
-        int maxZ = Integer.MIN_VALUE;
-        for (var box : regions) {
-            minX = Math.min(minX, box.minX());
-            minY = Math.min(minY, box.minY());
-            minZ = Math.min(minZ, box.minZ());
-            maxX = Math.max(maxX, box.maxX());
-            maxY = Math.max(maxY, box.maxY());
-            maxZ = Math.max(maxZ, box.maxZ());
-        }
-        return new AABB(minX, minY, minZ, maxX + 1.0, maxY + 1.0, maxZ + 1.0);
+        BoundingBox region = this.stateRegion();
+        return region == null ? null : RegionEntitySnapshot.toAabb(region);
     }
 
     /**

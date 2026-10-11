@@ -5,6 +5,7 @@ import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
+import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.network.VisualFramePayload;
@@ -135,12 +136,10 @@ public final class VisualizationService {
      */
     private static List<VisualElement> boundaryElements(McEnv env) {
         if (!(env instanceof AbstractMcEnv abstractEnv)) return List.of();
-        return abstractEnv.stateScopeView().regions().stream()
-            .map(region -> VisualGeometry.box(VisualElement.ENV_BOUNDARY_COMPONENT, true,
-                new AABB(region.minX(), region.minY(), region.minZ(),
-                    region.maxX() + 1, region.maxY() + 1, region.maxZ() + 1),
-                abstractEnv.getRegisterId()))
-            .toList();
+        var region = abstractEnv.stateRegion();
+        if (region == null) return List.of();
+        return List.of(VisualGeometry.box(VisualElement.ENV_BOUNDARY_COMPONENT, true,
+            RegionEntitySnapshot.toAabb(region), abstractEnv.getRegisterId()));
     }
 
     /**

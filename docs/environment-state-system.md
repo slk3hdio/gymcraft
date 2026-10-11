@@ -31,11 +31,11 @@
 ```
 EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateSnapshot）
 ├── EntitySnapshot agent             // 复用既有实体 NBT 快照（gym/env/EntitySnapshot）
-├── List<RegionBlockSnapshot> blocks // 每区域：区块段深拷贝（PalettedContainer 调色板压缩）+ 稀疏 BE-NBT
-└── RegionEntitySnapshot entities    // 实体 NBT 列表（UUID 保留），可选
+├── RegionBlockSnapshot blocks       // 单区域：区块段深拷贝（PalettedContainer 调色板压缩）+ 稀疏 BE-NBT；null = 空范围
+└── RegionEntitySnapshot entities    // 实体 NBT 列表（UUID 保留）；null = 不管理实体
 ```
 
-- `EnvStateScope`：环境范围声明，`List<BoundingBox>`（闭区间方块盒）+ `captureEntities` 开关；`empty()` 表示不占用世界（reset 仅重建 agent，等价旧行为）；`blocksOnly()` 不做实体捕获（parkour 用）
+- 单区域模型：`EnvStateSnapshot.region()` 从方块快照读取环境占用区域（null = 不占用世界，reset 仅重建 agent，等价旧行为）；`entities != null` 即实体管理开关。非场景环境经 `EnvStateProfile`（region/captureEntities/mode/bundledScenarioName）声明。历史上 `EnvStateScope` 的多区域支持从未被使用，已收敛删除
 - `RegionBlockSnapshot`：按整段深拷贝区域覆盖的 `LevelChunkSection`（内含调色板压缩的方块容器，空气段近零成本；必须含空气格——恢复时靠基线空气记录擦除 agent 放置的方块），方块实体从区块稀疏表收集完整 NBT；`restore(level, DIFF|FULL)` 按区域逐格裁剪段数据（DIFF 下基线与现状同为全空气的段整段跳过）；共享 `replaceWithoutDrops`（先清容器防掉落）；`requireChunksLoaded` 守卫，区块未加载直接抛错
 - `RegionEntitySnapshot`：排除真实玩家、受控 agent、乘客实体（乘客由载具根实体代表）；恢复 = 同过滤器清除现存 → `EntityType.create(ValueInput, level, LOAD)` 重建 → `addWithUUID` 保留原 UUID
 - `StateRestoreMode`：`DIFF`（默认）/ `FULL`，环境可经 `AbstractMcEnv.stateRestoreMode()` 覆盖
@@ -77,7 +77,7 @@ close             runtime 组件 release → AgentMobLifecycle 撤销附件作�
 
 - `iron_mining` / `iron_golem_warden` / `parkour_mob`：硬编码场景搭建（`buildScene`/模板/补给/Warden 生成/训练柱清空）与全部位置常量（arenaBounds/资源坐标/warden_spawn 等）已删除：场景、初始物资与状态范围均来自内置场景资产（`gym/scenario/BundledScenarios`），越界/查询几何经 `AbstractMcEnv.scopeAabb()` 从生效范围现算；parkour 仅保留 agent 初始锚点与从范围推导的目标高度
 - `iron_golem_warden`：Warden 来自资产实体（含虚弱效果，随 NBT 往返），UUID 由 `RegionEntitySnapshot.of` 解码时重分配、运行期经 `wardenUuid()` 从基线懒解析；`DIG_COOLDOWN` 脑记忆不随 NBT 序列化，每次 reset 由 `repinWarden` 重新注入
-- `parkour_mob`：`blocksOnly` 范围（平台层 + 训练柱，高度与资产一致）；布局选项（`block`/`block_count`/`target_height`）随硬编码场景一并删除——需要不同布局时经 `env save/load` 自制场景
+- `parkour_mob`：单区域、不管理实体（平台层 + 训练柱，高度与资产一致）；布局选项（`block`/`block_count`/`target_height`）随硬编码场景一并删除——需要不同布局时经 `env save/load` 自制场景
 
 ## 已知限制
 
