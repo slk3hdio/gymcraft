@@ -20,7 +20,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
 
-import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
+import io.github.mousemeya.gymcraft.gym.state.EntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 
 /**

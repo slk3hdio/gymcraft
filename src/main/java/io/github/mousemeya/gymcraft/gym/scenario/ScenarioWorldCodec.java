@@ -31,7 +31,7 @@ import net.minecraft.world.phys.AABB;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
+import io.github.mousemeya.gymcraft.gym.state.EntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;

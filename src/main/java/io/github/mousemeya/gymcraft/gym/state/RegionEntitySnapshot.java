@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
  * 区域实体快照：基线时刻区域内全部可序列化实体的 NBT 列表。
  * <p>
  * 排除规则（捕获与清除共用同一过滤器）：真实玩家（{@link ServerPlayer}）绝不进入
- * 快照也不会被清除；受控 agent 本体由 {@code gym/env/EntitySnapshot} 单独处理；
+ * 快照也不会被清除；受控 agent 本体由 {@code gym/state/EntitySnapshot} 单独处理；
  * 乘客实体跳过——原版把乘客递归存进载具 NBT，只存根实体避免恢复时双重生成。
  * 恢复时先按同过滤器清除区域内现存实体，再从 NBT 重建并经
  * {@link ServerLevel#addWithUUID} 保留原 UUID（环境里 {@code wardenUuid} 之类的
@@ -58,7 +58,7 @@ public final class RegionEntitySnapshot {
      * 捕获区域内全部符合过滤器的实体。
      * <p>
      * {@code saveWithoutId} 不写实体类型 {@code id} 键，类型必须与 NBT 分开保存
-     * （与 {@code gym/env/EntitySnapshot} 同一处理）。
+     * （与 {@code gym/state/EntitySnapshot} 同一处理）。
      * </p>
      *
      * @param level 服务端世界

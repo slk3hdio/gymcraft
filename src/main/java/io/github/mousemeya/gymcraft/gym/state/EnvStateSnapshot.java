@@ -8,7 +8,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 
-import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
 
 /**
  * 环境完整状态基线：受控 agent 实体快照 + 环境范围内全部区域方块快照 + 区域实体快照。
