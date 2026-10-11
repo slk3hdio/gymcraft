@@ -1,5 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.attachment;
 
+import io.github.mousemeya.gymcraft.registry.ModAttachments;
+
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -37,8 +39,8 @@ public final class MobAttachmentHooks {
                 backpack.set(index, ItemResource.EMPTY, 0);
             }
         });
-        if (mob.hasData(io.github.mousemeya.gymcraft.registry.ModAttachments.ENV_ATTACHMENT_SCOPE)) {
-            mob.removeData(io.github.mousemeya.gymcraft.registry.ModAttachments.ENV_ATTACHMENT_SCOPE);
+        if (mob.hasData(ModAttachments.ENV_ATTACHMENT_SCOPE)) {
+            mob.removeData(ModAttachments.ENV_ATTACHMENT_SCOPE);
         }
     }
 }

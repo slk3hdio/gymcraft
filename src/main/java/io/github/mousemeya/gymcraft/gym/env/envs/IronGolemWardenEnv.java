@@ -211,7 +211,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
         final UUID[] found = {null};
         baseline.entities().forEachEntity((type, data) -> {
             if (type == EntityType.WARDEN && found[0] == null) {
-                found[0] = io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot.getEntityUuid(data, "UUID");
+                found[0] = RegionEntitySnapshot.getEntityUuid(data, "UUID");
             }
         });
         this.wardenUuid = found[0];

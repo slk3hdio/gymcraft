@@ -21,6 +21,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
 
 import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
+import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 
 /**
  * 环境场景元数据（scenario.json）：环境类型 + 保存时最近一次 reset 的生效 options + agent 定义。
@@ -115,7 +116,7 @@ public record EnvScenario(
         } catch (CommandSyntaxException e) {
             throw new IllegalArgumentException("Failed to parse scenario agent NBT: " + e.getMessage(), e);
         }
-        io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot.putEntityUuid(nbt, "UUID", anchorMob.getUUID());
+        RegionEntitySnapshot.putEntityUuid(nbt, "UUID", anchorMob.getUUID());
         Vec3 pos = anchorMob.position();
         ListTag posTag = new ListTag();
         posTag.add(DoubleTag.valueOf(pos.x));

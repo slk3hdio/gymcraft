@@ -13,6 +13,8 @@ import javax.annotation.Nullable;
 import com.google.protobuf.Message;
 
 import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
+import io.github.mousemeya.gymcraft.gym.scenario.BundledScenarios;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -34,6 +36,7 @@ import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime.RuntimeStepResult;
+import io.github.mousemeya.gymcraft.gym.visualization.VisualizationService;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
@@ -74,7 +77,7 @@ public abstract class AbstractMcEnv implements McEnv {
     /** 最近一次 reset 的生效 options（场景保存回放用）；未 reset 过为空 Map。 */
     private Map<String, Object> lastResetOptions = Map.of();
     /** 外部传入的场景源（手动 env load）；内置资产场景在 initState 中按需读取。 */
-    @Nullable private final io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore.LoadedScenario scenarioSource;
+    @Nullable private final ScenarioStore.LoadedScenario scenarioSource;
     /** 环境状态管理器：原世界快照与完整状态基线（场景环境来自文件，其余首次 reset 现场捕获）。 */
     private final EnvStateManager stateManager;
     /** 受控实体生命周期：附件访问作用域与 reset 实体替换。 */
@@ -85,57 +88,44 @@ public abstract class AbstractMcEnv implements McEnv {
         return this.envTypeId.toString();
     }
 
+    /** 仅装配动作/观测组件的最小环境（无附件声明与外部场景源，测试内嵌环境用）。 */
     protected AbstractMcEnv(
         Identifier envTypeId,
         Mob mob,
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents
     ) {
-        this(envTypeId, mob, actionComponentFactories, observationComponents, java.util.List.of());
+        this(envTypeId, mob, actionComponentFactories, observationComponents, List.of(), null);
     }
 
     /**
-     * 创建带显式 Mob 附件访问声明的环境。
+     * 创建环境的主构造器。
      *
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob
      * @param actionComponentFactories 动作组件工厂
      * @param observationComponents 观测组件工厂
      * @param attachmentSpecs 当前环境允许访问的附件描述器
+     * @param scenarioSource 外部场景源（手动 env load）；null = 内置资产或现场快照
      */
     protected AbstractMcEnv(
         Identifier envTypeId,
         Mob mob,
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents,
-        Collection<? extends MobAttachmentSpec<?>> attachmentSpecs
-    ) {
-        this(
-            envTypeId,
-            mob,
-            new ActionDispatcher(mob, actionComponentFactories),
-            new ObservationComposer(mob, observationComponents),
-            attachmentSpecs
-        );
-    }
-
-    /** 在普通集合构造之上携带外部场景源（手动 env load 路径）。 */
-    protected AbstractMcEnv(
-        Identifier envTypeId,
-        Mob mob,
-        Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
-        Collection<? extends ObservationComponentFactory<?, ?>> observationComponents,
         Collection<? extends MobAttachmentSpec<?>> attachmentSpecs,
-        @Nullable io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore.LoadedScenario scenarioSource
+        @Nullable ScenarioStore.LoadedScenario scenarioSource
     ) {
-        this(
-            envTypeId,
-            mob,
-            new ActionDispatcher(mob, actionComponentFactories),
-            new ObservationComposer(mob, observationComponents),
-            attachmentSpecs,
-            scenarioSource
-        );
+        this.envTypeId = envTypeId;
+        this.envId = UUID.randomUUID();
+        this.actionController = new ActionDispatcher(mob, actionComponentFactories);
+        this.observationCreator = new ObservationComposer(mob, observationComponents);
+        this.scenarioSource = scenarioSource;
+        // 协作类创建顺序等价原内联顺序：激活附件作用域 → 建状态管理器 → 建运行时。
+        this.mobLifecycle = new AgentMobLifecycle(mob, List.copyOf(attachmentSpecs));
+        this.stateManager = new EnvStateManager(this.envId, this::stateScope, this::stateRestoreMode);
+        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
+        NeoForge.EVENT_BUS.register(this.agentRuntime);
     }
 
     /**
@@ -181,42 +171,6 @@ public abstract class AbstractMcEnv implements McEnv {
         return this.observationCreator.getComponent(factory);
     }
 
-    protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionDispatcher actionController, ObservationComposer observationCreator) {
-        this(envTypeId, mob, actionController, observationCreator, java.util.List.of(), null);
-    }
-
-    /** 使用已构建组件与显式附件声明初始化环境。 */
-    protected AbstractMcEnv(
-        Identifier envTypeId,
-        Mob mob,
-        ActionDispatcher actionController,
-        ObservationComposer observationCreator,
-        Collection<? extends MobAttachmentSpec<?>> attachmentSpecs
-    ) {
-        this(envTypeId, mob, actionController, observationCreator, attachmentSpecs, null);
-    }
-
-    /** 在普通构造之上携带外部场景源（手动 env load 路径）；内置资产场景仍按 {@link #bundledScenarioName()} 解析。 */
-    protected AbstractMcEnv(
-        Identifier envTypeId,
-        Mob mob,
-        ActionDispatcher actionController,
-        ObservationComposer observationCreator,
-        Collection<? extends MobAttachmentSpec<?>> attachmentSpecs,
-        @Nullable io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore.LoadedScenario scenarioSource
-    ) {
-        this.envTypeId = envTypeId;
-        this.envId = UUID.randomUUID();
-        this.actionController = actionController;
-        this.observationCreator = observationCreator;
-        this.scenarioSource = scenarioSource;
-        // 协作类创建顺序等价原内联顺序：激活附件作用域 → 建状态管理器 → 建运行时。
-        this.mobLifecycle = new AgentMobLifecycle(mob, List.copyOf(attachmentSpecs));
-        this.stateManager = new EnvStateManager(this.envId, this::stateScope, this::stateRestoreMode);
-        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
-        NeoForge.EVENT_BUS.register(this.agentRuntime);
-    }
-
     @Override
     public ResetResponse reset(Integer seed, Map<String, Object> options) {
         this.ensureOpen();
@@ -232,7 +186,7 @@ public abstract class AbstractMcEnv implements McEnv {
     public StepResponse step(List<ProtoMcAction> actions, float timeoutSeconds) {
         this.ensureReady();
         RuntimeStepResult result = this.agentRuntime.step(actions, timeoutSeconds);
-        Map<String, Object> info = new java.util.LinkedHashMap<>(this.createStepInfo(result.observation()));
+        Map<String, Object> info = new LinkedHashMap<>(this.createStepInfo(result.observation()));
         info.put("action_state", Map.of(
             "status", result.actionState().status().name().toLowerCase(),
             "description", result.actionState().description(),
@@ -300,7 +254,7 @@ public abstract class AbstractMcEnv implements McEnv {
             return;
         }
         // 先撤销本环境的可视化订阅（内部转交服务端线程，捕获实例防止误删同 UUID 新环境的订阅）。
-        io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.close(this.mob(), this);
+        VisualizationService.close(this.mob(), this);
         this.agentRuntime.clear();
         // 附件访问权必须在组件释放清算完成后撤销（清算经物品栏布局读取背包附件）。
         this.mobLifecycle.deactivate(this.mob());
@@ -362,11 +316,11 @@ public abstract class AbstractMcEnv implements McEnv {
      * @param mob 受控 Mob（场景锚点）
      */
     protected final void initState(ServerLevel level, Mob mob) {
-        io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore.LoadedScenario source = this.scenarioSource;
+        ScenarioStore.LoadedScenario source = this.scenarioSource;
         if (source == null) {
             String name = this.bundledScenarioName();
             if (name != null) {
-                source = io.github.mousemeya.gymcraft.gym.scenario.BundledScenarios.load(level, name)
+                source = BundledScenarios.load(level, name)
                     .orElseThrow(() -> new IllegalStateException("Missing bundled scenario asset: gymcraft:scenario/" + name));
             }
         }

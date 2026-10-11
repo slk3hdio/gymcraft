@@ -71,7 +71,8 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ObservationCreators.CHAT.get(),
                 ObservationCreators.HEALTH_LOG.get()
             ),
-            List.of(MobAttachments.AGENT_BACKPACK, MobAttachments.DAMAGE_LOG)
+            List.of(MobAttachments.AGENT_BACKPACK, MobAttachments.DAMAGE_LOG),
+            scenario
         );
     }
 
