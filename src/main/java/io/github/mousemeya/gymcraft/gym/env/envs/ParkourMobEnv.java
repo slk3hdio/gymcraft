@@ -10,6 +10,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
@@ -31,14 +32,13 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
  */
 public class ParkourMobEnv extends AbstractMcEnv {
     private static final String MAX_STEPS_OPTION = "max_steps";
-    /** 内置资产固定的训练柱目标高度（与 world.nbt 区域高度一致）。 */
-    private static final int TARGET_HEIGHT = 8;
     private static final int DEFAULT_MAX_STEPS = 256;
-    private static final int MOVE_RADIUS = 3;
 
     /** 构造期锚定的场景原点（Mob 创建环境时的方块坐标）。 */
     private final BlockPos origin;
     private final double baseY;
+    /** 训练柱目标高度（从场景区域高度推导：范围 y 覆盖 -1..targetHeight+2）。 */
+    private final int targetHeight;
     private int maxSteps = DEFAULT_MAX_STEPS;
     private int steps;
     private int previousCount;
@@ -66,6 +66,9 @@ public class ParkourMobEnv extends AbstractMcEnv {
         this.origin = BlockPos.containing(mob.position());
         this.baseY = this.origin.getY();
         this.initState((ServerLevel) mob.level(), mob);
+        // 场景是布局的唯一权威：训练柱目标高度从场景区域推导（y 覆盖 -1..targetHeight+2，
+        // 修改资产即可改变任务难度）
+        this.targetHeight = this.stateScopeView().regions().getFirst().getYSpan() - 4;
     }
 
     /** 内置场景资产名。 */
@@ -93,7 +96,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
         Mob mob = mob();
         double currentY = mob.getY();
         double reward = currentY - this.previousY;
-        if (currentY - this.baseY >= TARGET_HEIGHT) {
+        if (currentY - this.baseY >= this.targetHeight) {
             reward += 0.2 * Math.max(0, Math.floor(currentY - this.previousY));
             if (!this.success) {
                 reward += 10.0;
@@ -120,8 +123,9 @@ public class ParkourMobEnv extends AbstractMcEnv {
     protected boolean isTruncated(ProtoMcObservation observation) {
         Mob mob = mob();
         this.steps++;
-        this.outOfBounds = Math.abs(mob.getX() - (this.origin.getX() + 0.5)) > MOVE_RADIUS
-            || Math.abs(mob.getZ() - (this.origin.getZ() + 0.5)) > MOVE_RADIUS;
+        AABB arena = this.scopeAabb();
+        this.outOfBounds = mob.getX() < arena.minX || mob.getX() >= arena.maxX
+            || mob.getZ() < arena.minZ || mob.getZ() >= arena.maxZ;
         this.resourceExhausted = mob.getMainHandItem().isEmpty();
         return !this.success && (this.outOfBounds || this.resourceExhausted || this.steps >= this.maxSteps);
     }
@@ -131,7 +135,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
     protected Map<String, Object> createStepInfo(ProtoMcObservation observation) {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("height", mob().getY() - this.baseY);
-        info.put("target_height", TARGET_HEIGHT);
+        info.put("target_height", this.targetHeight);
         info.put("remaining_blocks", mob().getMainHandItem().getCount());
         info.put("steps", this.steps);
         info.put("success", this.success);

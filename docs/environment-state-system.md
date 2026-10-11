@@ -74,7 +74,7 @@ close             runtime 组件 release → AgentMobLifecycle 撤销附件作�
 
 ## 环境迁移要点
 
-- `iron_mining` / `iron_golem_warden` / `parkour_mob`：硬编码场景搭建（`buildScene`/模板/补给/Warden 生成/训练柱清空）全部删除，场景与初始物资来自内置场景资产（`gym/scenario/BundledScenarios`）；游戏逻辑常量（arenaBounds、资源坐标、`warden_spawn` info）保留
+- `iron_mining` / `iron_golem_warden` / `parkour_mob`：硬编码场景搭建（`buildScene`/模板/补给/Warden 生成/训练柱清空）与全部位置常量（arenaBounds/资源坐标/warden_spawn 等）已删除：场景、初始物资与状态范围均来自内置场景资产（`gym/scenario/BundledScenarios`），越界/查询几何经 `AbstractMcEnv.scopeAabb()` 从生效范围现算；parkour 仅保留 agent 初始锚点与从范围推导的目标高度
 - `iron_golem_warden`：Warden 来自资产实体（含虚弱效果，随 NBT 往返），UUID 由 `RegionEntitySnapshot.of` 解码时重分配、`onScenarioLoaded` 构造期从基线读回；`DIG_COOLDOWN` 脑记忆不随 NBT 序列化，每次 reset 由 `repinWarden` 重新注入
 - `parkour_mob`：`blocksOnly` 范围（平台层 + 训练柱，高度与资产一致）；布局选项（`block`/`block_count`/`target_height`）随硬编码场景一并删除——需要不同布局时经 `env save/load` 自制场景
 

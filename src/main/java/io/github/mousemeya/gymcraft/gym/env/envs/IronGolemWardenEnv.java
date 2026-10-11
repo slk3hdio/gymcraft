@@ -64,15 +64,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     /** 默认决策步数上限。 */
     public static final int DEFAULT_MAX_STEPS = 256;
 
-    private static final int ARENA_RADIUS = 6;
-    private static final int ARENA_BOTTOM_OFFSET = -1;
-    /** 内部净高 5 格（y0..y4），容纳 2.9 格高的 Warden 与三层傀儡图案。 */
-    private static final int ARENA_TOP_OFFSET = 5;
-
     private final ServerLevel level;
-    private final BlockPos origin;
-    private final AABB arenaBounds;
-    private final BlockPos wardenSpawn;
     private final EnumMap<Milestone, MilestoneStatus> milestones = new EnumMap<>(Milestone.class);
     private final EnumMap<Milestone, String> milestoneFailures = new EnumMap<>(Milestone.class);
 
@@ -122,16 +114,6 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
             throw new IllegalArgumentException("iron_golem_warden requires a server-level Mob");
         }
         this.level = serverLevel;
-        this.origin = BlockPos.containing(mob.position());
-        this.arenaBounds = new AABB(
-            this.origin.getX() - ARENA_RADIUS,
-            this.origin.getY() + ARENA_BOTTOM_OFFSET,
-            this.origin.getZ() - ARENA_RADIUS,
-            this.origin.getX() + ARENA_RADIUS + 1,
-            this.origin.getY() + ARENA_TOP_OFFSET + 1,
-            this.origin.getZ() + ARENA_RADIUS + 1
-        );
-        this.wardenSpawn = this.origin.offset(-4, 0, -4);
         this.initState(serverLevel, mob);
         this.resetMilestones();
         this.restrictActionSpacesToArena();
@@ -153,16 +135,17 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      * </p>
      */
     private void restrictActionSpacesToArena() {
+        AABB arena = this.scopeAabb();
         this.actionComponent(ActionComponents.MOVE_TO.get()).setSpace(new DictSpace(Map.of(
-            "x", new BoxSpace(this.arenaBounds.minX, this.arenaBounds.maxX, 1),
-            "y", new BoxSpace(this.arenaBounds.minY, this.arenaBounds.maxY, 1),
-            "z", new BoxSpace(this.arenaBounds.minZ, this.arenaBounds.maxZ, 1),
+            "x", new BoxSpace(arena.minX, arena.maxX, 1),
+            "y", new BoxSpace(arena.minY, arena.maxY, 1),
+            "z", new BoxSpace(arena.minZ, arena.maxZ, 1),
             "stop_distance", new BoxSpace(0, 128, 1)
         )));
         this.actionComponent(ActionComponents.SET_BLOCK.get()).setSpace(new DictSpace(Map.of(
-            "x", new BoxSpace(this.arenaBounds.minX, this.arenaBounds.maxX - 1, 1),
-            "y", new BoxSpace(this.arenaBounds.minY, this.arenaBounds.maxY - 1, 1),
-            "z", new BoxSpace(this.arenaBounds.minZ, this.arenaBounds.maxZ - 1, 1),
+            "x", new BoxSpace(arena.minX, arena.maxX - 1, 1),
+            "y", new BoxSpace(arena.minY, arena.maxY - 1, 1),
+            "z", new BoxSpace(arena.minZ, arena.maxZ - 1, 1),
             "block", new TextSpace()
         )));
     }
@@ -200,13 +183,13 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
             this.wardenUuid = null;
             return;
         }
-        final UUID[] found = {null};
+        final UUID[] foundUuid = {null};
         baseline.entities().forEachEntity((type, data) -> {
-            if (type == EntityType.WARDEN && found[0] == null) {
-                found[0] = RegionEntitySnapshot.getEntityUuid(data, "UUID");
+            if (type == EntityType.WARDEN && foundUuid[0] == null) {
+                foundUuid[0] = RegionEntitySnapshot.getEntityUuid(data, "UUID");
             }
         });
-        this.wardenUuid = found[0];
+        this.wardenUuid = foundUuid[0];
     }
 
     /**
@@ -471,8 +454,6 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     private Map<String, Object> baseTaskInfo() {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("max_steps", this.maxSteps);
-        info.put("origin", serializePos(this.origin));
-        info.put("warden_spawn", serializePos(this.wardenSpawn));
         return info;
     }
 
@@ -495,7 +476,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      */
     @Nullable
     private IronGolem findGolem() {
-        List<IronGolem> golems = this.level.getEntitiesOfClass(IronGolem.class, this.arenaBounds);
+        List<IronGolem> golems = this.level.getEntitiesOfClass(IronGolem.class, this.scopeAabb());
         return golems.isEmpty() ? null : golems.getFirst();
     }
 
@@ -506,8 +487,9 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      * @return 位于边界内时为 true
      */
     private boolean isInsideArena(Vec3 position) {
-        return position.x >= this.arenaBounds.minX && position.x < this.arenaBounds.maxX
-            && position.z >= this.arenaBounds.minZ && position.z < this.arenaBounds.maxZ;
+        AABB arena = this.scopeAabb();
+        return position.x >= arena.minX && position.x < arena.maxX
+            && position.z >= arena.minZ && position.z < arena.maxZ;
     }
 
     /**
@@ -527,16 +509,6 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
             throw new IllegalArgumentException("Reset option '" + key + "' must be a positive integer");
         }
         return number.intValue();
-    }
-
-    /**
-     * 将方块坐标转为 JSON 友好的对象。
-     *
-     * @param pos 方块坐标
-     * @return x/y/z 字段映射
-     */
-    private static Map<String, Object> serializePos(BlockPos pos) {
-        return Map.of("x", pos.getX(), "y", pos.getY(), "z", pos.getZ());
     }
 
     /**

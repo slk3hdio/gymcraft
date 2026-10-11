@@ -17,7 +17,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -28,7 +27,6 @@ import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 
@@ -48,16 +46,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
     /** 默认决策步数上限。 */
     public static final int DEFAULT_MAX_STEPS = 128;
 
-    private static final int ARENA_RADIUS = 4;
-    private static final int ARENA_BOTTOM_OFFSET = -1;
-    private static final int ARENA_TOP_OFFSET = 3;
-
     private final ServerLevel level;
-    private final BlockPos origin;
-    private final AABB arenaBounds;
-    private final List<BlockPos> logPositions;
-    private final List<BlockPos> stonePositions;
-    private final BlockPos ironOrePosition;
     private final EnumMap<Milestone, Boolean> milestones = new EnumMap<>(Milestone.class);
 
     private int maxSteps = DEFAULT_MAX_STEPS;
@@ -105,29 +94,6 @@ public final class IronMiningEnv extends AbstractMcEnv {
             throw new IllegalArgumentException("iron_mining requires a server-level Mob");
         }
         this.level = serverLevel;
-        this.origin = BlockPos.containing(mob.position());
-        this.arenaBounds = new AABB(
-            this.origin.getX() - ARENA_RADIUS,
-            this.origin.getY() + ARENA_BOTTOM_OFFSET,
-            this.origin.getZ() - ARENA_RADIUS,
-            this.origin.getX() + ARENA_RADIUS + 1,
-            this.origin.getY() + ARENA_TOP_OFFSET + 1,
-            this.origin.getZ() + ARENA_RADIUS + 1
-        );
-        this.logPositions = List.of(
-            this.origin.offset(2, 0, -1),
-            this.origin.offset(2, 0, 0),
-            this.origin.offset(2, 0, 1),
-            this.origin.offset(3, 0, 1)
-        );
-        this.stonePositions = List.of(
-            this.origin.offset(-2, 0, -2),
-            this.origin.offset(-2, 0, -1),
-            this.origin.offset(-2, 0, 0),
-            this.origin.offset(-2, 0, 1),
-            this.origin.offset(-2, 0, 2)
-        );
-        this.ironOrePosition = this.origin.offset(0, 0, 3);
         this.initState(serverLevel, mob);
         this.resetMilestones();
 
@@ -244,7 +210,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
             failureReason = "agent_dead";
         } else if (!this.isInsideArena(mob.position())) {
             failureReason = "out_of_bounds";
-        } else if (!success && !this.level.getBlockState(this.ironOrePosition).is(Blocks.IRON_ORE)
+        } else if (!success && !this.containsBlockInArena(Blocks.IRON_ORE)
             && !this.hasRawIronDrop()) {
             failureReason = "iron_lost";
         }
@@ -316,23 +282,20 @@ public final class IronMiningEnv extends AbstractMcEnv {
     private Map<String, Object> baseTaskInfo() {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("max_steps", this.maxSteps);
-        info.put("origin", serializePos(this.origin));
-        info.put("log_positions", serializePositions(this.logPositions));
-        info.put("stone_positions", serializePositions(this.stonePositions));
-        info.put("iron_ore_position", serializePos(this.ironOrePosition));
         return info;
     }
 
     /**
-     * 判断指定方块是否存在于训练区域。
+     * 判断指定方块是否存在于训练区域（范围取自场景 scope）。
      *
      * @param block 目标方块
      * @return 区域内至少存在一块时为 true
      */
     private boolean containsBlockInArena(Block block) {
+        AABB arena = this.scopeAabb();
         for (BlockPos pos : BlockPos.betweenClosed(
-            this.origin.offset(-ARENA_RADIUS, 0, -ARENA_RADIUS),
-            this.origin.offset(ARENA_RADIUS, ARENA_TOP_OFFSET, ARENA_RADIUS)
+            BlockPos.containing(arena.minX, arena.minY, arena.minZ),
+            BlockPos.containing(arena.maxX - 1, arena.maxY - 1, arena.maxZ - 1)
         )) {
             if (this.level.getBlockState(pos).is(block)) {
                 return true;
@@ -349,7 +312,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
     private boolean hasRawIronDrop() {
         return !this.level.getEntitiesOfClass(
             ItemEntity.class,
-            this.arenaBounds,
+            this.scopeAabb(),
             item -> item.isAlive() && item.getItem().is(Items.RAW_IRON)
         ).isEmpty();
     }
@@ -361,8 +324,9 @@ public final class IronMiningEnv extends AbstractMcEnv {
      * @return 位于边界内时为 true
      */
     private boolean isInsideArena(Vec3 position) {
-        return position.x >= this.arenaBounds.minX && position.x < this.arenaBounds.maxX
-            && position.z >= this.arenaBounds.minZ && position.z < this.arenaBounds.maxZ;
+        AABB arena = this.scopeAabb();
+        return position.x >= arena.minX && position.x < arena.maxX
+            && position.z >= arena.minZ && position.z < arena.maxZ;
     }
 
     /**
@@ -393,30 +357,6 @@ public final class IronMiningEnv extends AbstractMcEnv {
             throw new IllegalArgumentException("Reset option '" + key + "' must be a positive integer");
         }
         return number.intValue();
-    }
-
-    /**
-     * 将方块坐标转为 JSON 友好的对象。
-     *
-     * @param pos 方块坐标
-     * @return x/y/z 字段映射
-     */
-    private static Map<String, Object> serializePos(BlockPos pos) {
-        return Map.of("x", pos.getX(), "y", pos.getY(), "z", pos.getZ());
-    }
-
-    /**
-     * 将坐标列表转为 JSON 友好的对象列表。
-     *
-     * @param positions 方块坐标列表
-     * @return 序列化后的坐标列表
-     */
-    private static List<Map<String, Object>> serializePositions(List<BlockPos> positions) {
-        List<Map<String, Object>> result = new ArrayList<>(positions.size());
-        for (BlockPos pos : positions) {
-            result.add(serializePos(pos));
-        }
-        return List.copyOf(result);
     }
 
     /** 定义任务的有序里程碑、info 标识和首次完成奖励。 */

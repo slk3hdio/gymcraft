@@ -20,6 +20,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -286,6 +287,34 @@ public abstract class AbstractMcEnv implements McEnv {
      */
     public final EnvStateScope stateScopeView() {
         return this.stateManager.effectiveScope();
+    }
+
+    /**
+     * 生效状态范围的包络 AABB（多区域取并集包络；闭区间方块盒转半开区间，max 端 +1）。
+     * 场景环境的越界/查询几何一律经本方法从范围现算，不存布局副本；空范围为 null。
+     *
+     * @return 范围包络；空范围环境为 null
+     */
+    @Nullable protected final AABB scopeAabb() {
+        var regions = this.stateScopeView().regions();
+        if (regions.isEmpty()) {
+            return null;
+        }
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        int maxZ = Integer.MIN_VALUE;
+        for (var box : regions) {
+            minX = Math.min(minX, box.minX());
+            minY = Math.min(minY, box.minY());
+            minZ = Math.min(minZ, box.minZ());
+            maxX = Math.max(maxX, box.maxX());
+            maxY = Math.max(maxY, box.maxY());
+            maxZ = Math.max(maxZ, box.maxZ());
+        }
+        return new AABB(minX, minY, minZ, maxX + 1.0, maxY + 1.0, maxZ + 1.0);
     }
 
     /**
