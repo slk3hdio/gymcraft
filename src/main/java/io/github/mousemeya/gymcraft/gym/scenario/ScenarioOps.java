@@ -33,12 +33,11 @@ import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
  * 场景存档的保存/加载编排，供指令与 GameTest 复用。
  * <p>
  * 所有方法必须在服务端线程调用（指令执行天然满足）。保存是对当前世界与 agent 的
- * 即时快照（不要求环境 reset 过，所见即所得）；加载不放置世界——场景作为状态源
- * 随 {@link EnvManager#create} 进入环境（构造期解码为基线、preset options 注入、
+ * 即时快照（不要求环境 reset 过，所见即所得）；加载只有完整路径（{@link #spawn}）：
+ * 生成场景 agent、以其为锚创建环境（构造期解码为基线、preset options 注入、
  * {@link AbstractMcEnv#onScenarioLoaded()} 补丁），挂载即在后台线程自动完成首个
- * reset（物化场景内容、把受控实体替换为场景 agent——同 UUID，携带场景装备与附件、
- * 使 preset options 生效），挂载完成即可 step、可再次 env save。普通
- * {@code env create} 挂载不自动 reset，首个 reset 的 options/seed 效果留给外部发起方。
+ * reset（物化场景内容、使 preset options 生效），挂载完成即可 step、可再次 env save。
+ * 普通环境 close 不恢复世界，场景残留由外部清理。
  * </p>
  */
 public final class ScenarioOps {
@@ -74,20 +73,6 @@ public final class ScenarioOps {
     }
 
     /**
-     * 把场景套用到已有 Mob：以该 Mob 为锚创建环境，场景成为环境状态基线。
-     * 首个 reset 物化场景内容并把 Mob 替换为场景 agent（同 UUID）。
-     *
-     * @param loaded 已加载的场景
-     * @param mob 目标 Mob（锚点）
-     * @return 创建的环境
-     */
-    public static McEnv applyToMob(ScenarioStore.LoadedScenario loaded, Mob mob) {
-        McEnv env = EnvManager.create(loaded.scenario().envTypeId(), mob, loaded);
-        mountAutoReset(env);
-        return env;
-    }
-
-    /**
      * 挂载即自动完成首个 reset：物化场景内容、替换 agent、使 preset options 生效，
      * 挂载完成即可 step、可再次 save。
      * <p>
@@ -109,7 +94,9 @@ public final class ScenarioOps {
     }
 
     /**
-     * 生成场景自带的 agent（新 UUID）并以其位置为锚创建环境。
+     * 完整加载场景（唯一加载路径）：生成场景自带的 agent（新 UUID）、以其位置为锚
+     * 创建环境（场景成为状态基线）并自动完成首个 reset（物化场景内容、使 preset
+     * options 生效）。
      *
      * @param loaded 已加载的场景
      * @param level 目标服务端世界
@@ -118,7 +105,7 @@ public final class ScenarioOps {
      */
     public static Mob spawn(ScenarioStore.LoadedScenario loaded, ServerLevel level, Vec3 pos) {
         Mob mob = spawnAgent(loaded.scenario(), level, pos);
-        applyToMob(loaded, mob);
+        mountAutoReset(EnvManager.create(loaded.scenario().envTypeId(), mob, loaded));
         return mob;
     }
 

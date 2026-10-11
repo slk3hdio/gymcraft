@@ -35,7 +35,7 @@ EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateS
 └── RegionEntitySnapshot entities    // 实体 NBT 列表（UUID 保留），可选
 ```
 
-- `EnvStateScope`：环境范围声明，`List<BoundingBox>`（闭区间方块盒）+ `captureEntities` 开关；`empty()` 表示不占用世界（reset 仅重建 agent，等价旧行为）；`blocksOnly()` 不做实体捕获（parkour 用，close 时不清除区域实体）
+- `EnvStateScope`：环境范围声明，`List<BoundingBox>`（闭区间方块盒）+ `captureEntities` 开关；`empty()` 表示不占用世界（reset 仅重建 agent，等价旧行为）；`blocksOnly()` 不做实体捕获（parkour 用）
 - `RegionBlockSnapshot`：按整段深拷贝区域覆盖的 `LevelChunkSection`（内含调色板压缩的方块容器，空气段近零成本；必须含空气格——恢复时靠基线空气记录擦除 agent 放置的方块），方块实体从区块稀疏表收集完整 NBT；`restore(level, DIFF|FULL)` 按区域逐格裁剪段数据（DIFF 下基线与现状同为全空气的段整段跳过）；共享 `replaceWithoutDrops`（先清容器防掉落）；`requireChunksLoaded` 守卫，区块未加载直接抛错
 - `RegionEntitySnapshot`：排除真实玩家、受控 agent、乘客实体（乘客由载具根实体代表）；恢复 = 同过滤器清除现存 → `EntityType.create(ValueInput, level, LOAD)` 重建 → `addWithUUID` 保留原 UUID
 - `StateRestoreMode`：`DIFF`（默认）/ `FULL`，环境可经 `AbstractMcEnv.stateRestoreMode()` 覆盖
@@ -45,12 +45,11 @@ EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateS
 ```
 环境构造（initState，子类构造器尾部调用，彼时范围已定）
     有场景源（手动 env load 传入 > 内置资产 bundledScenarioName()）
-        → EnvStateManager.loadScenario：捕获原世界（close 恢复用）+
-          ScenarioWorldCodec.decode 把文件解码为基线（锚定当前 Mob 的位置与 UUID，
+        → EnvStateManager.loadScenario：ScenarioWorldCodec.decode 把文件解码为基线（锚定当前 Mob 的位置与 UUID，
           区域实体重分配 UUID）+ 注入 preset options + onScenarioLoaded() 补丁钩子
         → 不触碰世界：场景内容延迟到首个 reset 随基线恢复物化
     无场景源
-        → 捕获原世界；基线留待首次 reset 现场捕获（EnvStateSnapshot.capture）
+        → 基线留待首次 reset 现场捕获（EnvStateSnapshot.capture）
 reset            runtime 清理动作管线 → 组件 release 自清会话（菜单/消费）→
                   AbstractMcEnv.resetEnvironment 编排：EnvStateManager 恢复基线
                   （基线缺席时先现场捕获）→ 区域方块 DIFF 写回 → 清除并重建区域实体
@@ -59,8 +58,8 @@ reset            runtime 清理动作管线 → 组件 release 自清会话（�
                   作用域）→ resetMob 只做计数器/选项/实体补丁（如 Warden DIG_COOLDOWN
                   重注入）
 close             runtime 组件 release → AgentMobLifecycle 撤销附件作用域 →
-                  EnvStateManager 恢复原世界方块（DIFF）；范围含实体时清除区域实体
-                  ——场景内容随 close 一并清除（含手动 env load 的场景）
+                  反注册运行时。不做世界恢复（原世界快照机制已删除）——已物化场景
+                  与训练痕迹保留在世界，由外部清理
 ```
 
 接入点：
@@ -70,7 +69,7 @@ close             runtime 组件 release → AgentMobLifecycle 撤销附件作�
   `manage_entities`），由 `EnvStateManager` 在 `loadScenario` 时推导并优先使用
 - `AbstractMcEnv.bundledScenarioName()`：内置场景资产名（`data/gymcraft/scenario/<name>/`），默认 null
 - `AbstractMcEnv.initState(ServerLevel, Mob)`：子类构造器尾部调用，按上面的优先级解析场景源并构建完整状态
-- 原世界快照与完整基线由 `EnvStateManager`（gym/env，包私有）持有，附件作用域与实体替换由 `AgentMobLifecycle` 持有；`AgentRuntime` 不保存环境状态，reset 逻辑由 env 每次经 `AgentRuntime.reset(seed, options, ResetHandler)` 传入（`resetEnvironment`）
+- 完整基线与场景推导的范围由 `EnvStateManager`（gym/env，包私有）持有，附件作用域与实体替换由 `AgentMobLifecycle` 持有；`AgentRuntime` 不保存环境状态，reset 逻辑由 env 每次经 `AgentRuntime.reset(seed, options, ResetHandler)` 传入（`resetEnvironment`）
 
 ## 环境迁移要点
 
@@ -94,4 +93,4 @@ close             runtime 组件 release → AgentMobLifecycle 撤销附件作�
 - `state_item_cleanup`：丢入掉落物 → reset → 区域清空
 - `state_warden_no_dig`：基线路径 reset 后 Warden 存活且携带重注入的 DIG_COOLDOWN 记忆
 
-既有 `iron_mining_*`/`iron_golem_warden_*` 测试覆盖 close 恢复原世界（含箱子 NBT 内容）与跨 reset 补给重发。
+既有 `iron_mining_*`/`iron_golem_warden_*` 测试覆盖 reset 物化场景资源/建材与跨 reset 补给重发（close 不做世界恢复，场景保留）。

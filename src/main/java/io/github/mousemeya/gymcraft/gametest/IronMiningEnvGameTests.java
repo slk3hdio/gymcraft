@@ -49,11 +49,11 @@ public final class IronMiningEnvGameTests {
     }
 
     /**
-     * 验证 reset 重建固定资源、清空初始物品，并在 close 时恢复容器及其 NBT 内容。
+     * 验证 reset 物化场景资源并清空初始物品；close 不做世界恢复（场景保留在世界）。
      *
      * @param helper GameTest 辅助对象
      */
-    public static void resetAndCloseRestoreArena(GameTestHelper helper) {
+    public static void resetMaterializesScenario(GameTestHelper helper) {
         BlockPos mobFloor = new BlockPos(5, 1, 5);
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, mobFloor);
         BlockPos origin = BlockPos.containing(mob.position());
@@ -84,11 +84,8 @@ public final class IronMiningEnvGameTests {
                 "iron ore template was not created");
 
             env.close();
-            assertTrue(helper, helper.getLevel().getBlockState(originalChestPos).is(Blocks.CHEST),
-                "close did not restore original chest: " + helper.getLevel().getBlockState(originalChestPos));
-            ChestBlockEntity restoredChest = (ChestBlockEntity) helper.getLevel().getBlockEntity(originalChestPos);
-            assertTrue(helper, restoredChest != null, "restored chest block entity missing");
-            assertEquals(helper, 3, restoredChest.getItem(0).getCount(), "restored chest content mismatch");
+            assertTrue(helper, helper.getLevel().getBlockState(origin.offset(2, 0, -1)).is(Blocks.OAK_LOG),
+                "close must not restore the world (scene should remain)");
             helper.succeed();
         });
     }

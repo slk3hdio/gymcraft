@@ -248,7 +248,10 @@ public abstract class AbstractMcEnv implements McEnv {
         );
     }
 
-    /** 关闭环境与运行时，恢复原世界并撤销仅属于本环境实例的可视化订阅。 */
+    /**
+     * 关闭环境与运行时并撤销仅属于本环境实例的可视化订阅。不做世界恢复——已物化的
+     * 场景与训练痕迹保留在世界中，由外部负责清理。
+     */
     @Override
     public void close() {
         if (this.closed) {
@@ -260,7 +263,6 @@ public abstract class AbstractMcEnv implements McEnv {
         // 附件访问权必须在组件释放清算完成后撤销（清算经物品栏布局读取背包附件）。
         this.mobLifecycle.deactivate(this.mob());
         NeoForge.EVENT_BUS.unregister(this.agentRuntime);
-        this.stateManager.restoreOriginalWorld(this.mob().getUUID());
         this.closed = true;
     }
 
@@ -340,8 +342,8 @@ public abstract class AbstractMcEnv implements McEnv {
     /**
      * 初始化环境状态源（在子类构造器尾部调用，彼时状态范围已确定）：
      * 外部场景（手动 env load）优先，其次内置资产，都无则基线留待首次 reset 现场捕获。
-     * 场景路径会捕获原世界（close 恢复用）、从文件解码基线、注入 preset options 并调用
-     * {@link #onScenarioLoaded()}；本方法不触碰世界，场景内容由首个 reset 物化。
+     * 场景路径从文件解码基线、注入 preset options 并调用 {@link #onScenarioLoaded()}；
+     * 本方法不触碰世界，场景内容由首个 reset 物化。
      *
      * @param level 服务端世界
      * @param mob 受控 Mob（场景锚点）
@@ -361,8 +363,6 @@ public abstract class AbstractMcEnv implements McEnv {
                 this.scenarioPresetOptions = Collections.unmodifiableMap(new LinkedHashMap<>(source.scenario().options()));
             }
             this.onScenarioLoaded();
-        } else {
-            this.stateManager.captureOriginalWorld(level);
         }
     }
 

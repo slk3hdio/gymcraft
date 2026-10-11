@@ -37,10 +37,9 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
  * （如 {@code @e[type=zombie,limit=3]}），对每个目标逐一执行，返回成功数。</p>
  *
  * <p>另提供环境场景存档管理：{@code env save} 对目标 Mob 的环境取当前时刻的即时快照
- * （不要求 reset 过）保存为服务器全局目录下的命名场景；{@code env load} 在任意世界/位置
- * 加载——{@code spawn} 模式生成场景自带的 agent，{@code mob} 模式套用到已有 Mob（首个
- * reset 物化场景内容并把目标实体替换为场景 agent）；{@code env list/delete} 管理场景文件。
- * 场景系统见 {@code gym/scenario} 包。</p>
+ * （不要求 reset 过）保存为服务器全局目录下的命名场景；{@code env load} 是唯一加载路径
+ * ——生成场景自带的 agent 并以（缺省指令来源位置的）指定位置为锚完整加载（挂载即自动
+ * reset 物化）；{@code env list/delete} 管理场景文件。场景系统见 {@code gym/scenario} 包。</p>
  */
 public final class GymCraftCommands {
     /** load/delete 的场景名补全：来自场景存储目录。 */
@@ -82,19 +81,13 @@ public final class GymCraftCommands {
                         .then(Commands.literal("load")
                                 .then(Commands.argument("name", StringArgumentType.word())
                                         .suggests(SCENARIO_SUGGESTIONS)
-                                        .then(Commands.literal("mob")
-                                                .then(Commands.argument("target", EntityArgument.entity())
-                                                        .executes(ctx -> loadOntoMob(ctx.getSource(),
-                                                                StringArgumentType.getString(ctx, "name"),
-                                                                EntityArgument.getEntity(ctx, "target")))))
-                                        .then(Commands.literal("spawn")
+                                        .executes(ctx -> loadSpawn(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "name"),
+                                                ctx.getSource().getPosition()))
+                                        .then(Commands.argument("pos", Vec3Argument.vec3())
                                                 .executes(ctx -> loadSpawn(ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "name"),
-                                                        ctx.getSource().getPosition()))
-                                                .then(Commands.argument("pos", Vec3Argument.vec3())
-                                                        .executes(ctx -> loadSpawn(ctx.getSource(),
-                                                                StringArgumentType.getString(ctx, "name"),
-                                                                Vec3Argument.getVec3(ctx, "pos")))))))
+                                                        Vec3Argument.getVec3(ctx, "pos"))))))
                         .then(Commands.literal("list")
                                 .executes(ctx -> listScenarios(ctx.getSource())))
                         .then(Commands.literal("delete")
@@ -191,67 +184,7 @@ public final class GymCraftCommands {
         return 1;
     }
 
-    /**
-     * 把场景套用到已有 Mob：以其为锚创建环境，首个 reset 物化场景内容并把目标
-     * Mob 替换为场景 agent（同 UUID）。目标 Mob 与场景 agent 类型不一致时给出警告。
-     *
-     * @param source 指令来源
-     * @param name 场景名
-     * @param target 目标实体（必须是 Mob）
-     * @return 成功为 1，失败为 0
-     * @throws CommandSyntaxException 目标实体参数解析失败时抛出
-     */
-    private static int loadOntoMob(CommandSourceStack source, String name, Entity target) throws CommandSyntaxException {
-        if (!(target instanceof Mob mob)) {
-            source.sendFailure(Component.translatable("message.gymcraft.target_not_mob", target.getUUID().toString()));
-            return 0;
-        }
-        ScenarioStore.LoadedScenario loaded = loadScenario(source, name);
-        if (loaded == null) {
-            return 0;
-        }
-        try {
-            ScenarioOps.applyToMob(loaded, mob);
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            source.sendFailure(Component.translatable("message.gymcraft.scenario_load_failed", name, e.getMessage()));
-            return 0;
-        }
-        String scenarioAgentType = loaded.scenario().agentType();
-        String mobType = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString();
-        if (!scenarioAgentType.equals(mobType)) {
-            source.sendSuccess(() -> Component.translatable(
-                "message.gymcraft.scenario_type_mismatch", mobType, scenarioAgentType), false);
-        }
-        source.sendSuccess(() -> Component.translatable("message.gymcraft.scenario_loaded_mob", name, mob.getUUID().toString()), true);
-        return 1;
-    }
-
-    /**
-     * 生成场景自带的 agent（新 UUID）并以生成位置为锚创建环境（首个 reset 物化场景内容）。
-     *
-     * @param source 指令来源
-     * @param name 场景名
-     * @param pos 生成位置（场景原点锚）
-     * @return 成功为 1，失败为 0
-     */
-    private static int loadSpawn(CommandSourceStack source, String name, Vec3 pos) {
-        ScenarioStore.LoadedScenario loaded = loadScenario(source, name);
-        if (loaded == null) {
-            return 0;
-        }
-        ServerLevel level = source.getLevel();
-        Mob mob;
-        try {
-            mob = ScenarioOps.spawn(loaded, level, pos);
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            source.sendFailure(Component.translatable("message.gymcraft.scenario_load_failed", name, e.getMessage()));
-            return 0;
-        }
-        source.sendSuccess(() -> Component.translatable("message.gymcraft.scenario_spawned", name, mob.getUUID().toString()), true);
-        return 1;
-    }
-
-    /**
+/**
      * 列出全部已保存场景（名 + 环境类型）。
      *
      * @param source 指令来源
@@ -269,7 +202,7 @@ public final class GymCraftCommands {
         return scenarios.size();
     }
 
-    /**
+/**
      * 删除场景目录。
      *
      * @param source 指令来源
@@ -304,5 +237,31 @@ public final class GymCraftCommands {
             source.sendFailure(Component.translatable("message.gymcraft.scenario_load_failed", name, e.getMessage()));
             return null;
         }
+    }
+
+    /**
+     * 完整加载场景（唯一路径）：生成场景自带的 agent（新 UUID）并以生成位置为锚创建
+     * 环境，挂载即自动 reset 物化场景内容。
+     *
+     * @param source 指令来源
+     * @param name 场景名
+     * @param pos 生成位置（场景原点锚）
+     * @return 成功为 1，失败为 0
+     */
+    private static int loadSpawn(CommandSourceStack source, String name, Vec3 pos) {
+        ScenarioStore.LoadedScenario loaded = loadScenario(source, name);
+        if (loaded == null) {
+            return 0;
+        }
+        ServerLevel level = source.getLevel();
+        try {
+            Mob agent = ScenarioOps.spawn(loaded, level, pos);
+            source.sendSuccess(() -> Component.translatable(
+                "message.gymcraft.scenario_loaded_spawn", name, agent.getUUID().toString()), true);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            source.sendFailure(Component.translatable("message.gymcraft.scenario_load_failed", name, e.getMessage()));
+            return 0;
+        }
+        return 1;
     }
 }

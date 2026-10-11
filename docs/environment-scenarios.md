@@ -70,22 +70,19 @@
 
 ```
 /gymcraft env save <target:entity> <name:word>      — 保存目标 Mob 的环境为场景（当前时刻即时快照）
-/gymcraft env load <name:word> mob <target:entity>  — 以目标 Mob 为锚创建环境（场景成为状态基线）
-/gymcraft env load <name:word> spawn [pos:vec3]     — 生成场景自带 agent（新 UUID）并以其为锚创建环境
+/gymcraft env load <name:word> [pos:vec3]          — 完整加载（唯一路径）：生成场景自带 agent（新 UUID）
+                                                     — 并以其为锚创建环境（缺省用指令来源位置）
 /gymcraft env list                                  — 列出场景（名 + 环境类型）
 /gymcraft env delete <name:word>                    — 删除场景目录
 ```
 
-`load mob` 时目标 Mob 与场景 agent 类型不一致只警告（目标 Mob 在首个 reset 会被场景 agent
-替换，类型以场景为准）。
 
 ## 关键语义
 
 - **保存 = 即时快照（所见即所得）**：不要求环境 reset 过——保存的是调用时刻的世界与 agent。
   想保存场景本体（而非训练中途的漂移）请先 reset 物化再保存。快照动作不修改世界，但要求
   范围内区块已加载（同状态系统 `requireChunksLoaded`）。
-- **位置无关**：一切坐标相对场景原点（保存时 agent 方块坐标），加载时以 anchor（`mob`
-  模式 = 目标 Mob，`spawn` 模式 = 生成位置）重新定位。
+- **位置无关**：一切坐标相对场景原点（保存时 agent 方块坐标），加载时以生成位置重新定位。
 - **加载不放置世界，挂载即自动 reset**：`load` 只把文件解码为环境状态基线（坐标平移
   到锚点、区域实体重分配 UUID、agent 的 UUID/Pos 覆写为锚定实体），**不修改世界**；
   挂载随后在后台虚拟线程自动完成首个 reset——物化场景内容（区域方块差异写回 +
@@ -94,8 +91,8 @@
   外部发起方。
 - **首个 reset 替换 agent**：锚定实体被基线 agent（场景文件 NBT，携带装备与附件）以同
   UUID 替换，`EnvManager` 映射不破；此后 reset 与常规环境完全同构（走基线快照恢复）。
-- **close 统一恢复原世界**：场景环境构造期捕获的原世界 = 场景放置前的地形，close 时场景
-  内容随原世界恢复一并清除（手动 `env load` 与内置资产同一语义，环境不再在世界里残留场地）。
+- **close 不恢复世界**：环境关闭只做运行时清理，已物化的场景与训练痕迹保留在世界，
+  由外部负责清理（原世界快照机制已删除）。
 - **options 优先级**：当次 reset options > 场景 preset options > 默认值。场景 options
   合并进首个 reset（preset 一次性）。
 - **状态范围随场景持久化**：加载侧的环境状态范围来自场景文件——区域几何取自
@@ -132,7 +129,7 @@ src/main/resources/data/gymcraft/scenario/
 `gametest/ScenarioGameTests`（注册名前缀 `scenario_`）：
 
 - `scenario_parkour_round_trip`：parkour（内置资产）保存 → 异位置 spawn 加载 → 首个
-  reset 物化平台/主手物资/preset options，源环境 close 恢复原世界
+  reset 物化平台/主手物资/preset options（close 不恢复世界）
 - `scenario_warden_relocation`：iron_golem_warden 保存 → 异位置加载 → 首个 reset 物化
   新 UUID Warden（虚弱效果与 DIG_COOLDOWN 补丁生效）与建材
 - `scenario_immediate_capture`：未 reset 即保存（即时快照携带现场标记方块与当前 agent
