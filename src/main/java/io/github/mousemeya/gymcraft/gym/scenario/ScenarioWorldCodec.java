@@ -32,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.github.mousemeya.gymcraft.gym.state.EntitySnapshot;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
@@ -89,26 +90,13 @@ public final class ScenarioWorldCodec {
     }
 
     /**
-     * 读取世界内容声明的区域几何（平移到目标锚点），供环境状态范围推导——场景加载侧
-     * 的 scope 不再依赖环境硬编码声明。
-     *
-     * @param world 世界内容 NBT（{@link #encode}/{@link #empty} 产物）
-     * @param anchor 场景原点在目标世界的方块坐标
-     * @return 区域闭区间方块盒列表（与文件 regions 一一对应；空世界为空列表）
-     */
-    public static List<BoundingBox> regions(CompoundTag world, BlockPos anchor) {
-        return world.getListOrEmpty("regions").compoundStream()
-            .map(regionTag -> targetBox(regionTag, anchor))
-            .toList();
-    }
-
-    /**
      * 把世界内容 NBT 解码为完整状态基线（{@link #encode} 的反向）：所有坐标平移到
      * 目标锚点（agent 快照的方块坐标），场景原点取自文件 {@code origin}。
      * <p>
      * 方块实体 NBT 内嵌的 x/y/z 坐标重写为平移后的绝对位置；区域实体 UUID 经
-     * {@link RegionEntitySnapshot#of} 重分配，Pos 平移为绝对坐标。解码结果在首个
-     * reset 才随基线恢复物化进世界，本方法不触碰世界。
+     * {@link RegionEntitySnapshot#of} 重分配，Pos 平移为绝对坐标。解码结果自带状态
+     * 范围（区域几何 + {@code manageEntities}），在首个 reset 才随基线恢复物化进
+     * 世界，本方法不触碰世界。
      * </p>
      *
      * @param level 目标服务端世界（提供注册表查找）
@@ -117,7 +105,7 @@ public final class ScenarioWorldCodec {
      * @param restoreMode 方块恢复模式
      * @param manageEntities 是否管理区域实体（场景的 manage_entities）——为 true 时
      *                       即使文件无实体也构造空实体快照，保证 reset 清场语义
-     * @return 完整环境状态基线
+     * @return 完整环境状态基线（自持推导出的状态范围）
      */
     public static EnvStateSnapshot decode(
         ServerLevel level,
@@ -192,7 +180,7 @@ public final class ScenarioWorldCodec {
                 .toList(),
                 agentUuid, entityEntries)
             : null;
-        return EnvStateSnapshot.of(agent, blockSnapshots, entities, restoreMode);
+        return EnvStateSnapshot.of(new EnvStateScope(boxes, manageEntities), agent, blockSnapshots, entities, restoreMode);
     }
 
     /**

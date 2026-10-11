@@ -116,8 +116,9 @@ src/main/resources/data/gymcraft/scenario/
 └── parkour_mob/{scenario.json, world.nbt}          # 石平台 + 训练柱 + 主手 32 石头
 ```
 
-- 环境经 `EnvStateProfile.bundled` 声明资产名，`EnvStateManager.create` 构造期经
-  `BundledScenarios`（服务端 ResourceManager 读取，按名全局缓存）加载并解码为基线。
+- 环境经 `EnvStateProfile.bundled` 声明资产名，`AbstractMcEnv` 构造期经
+  `BundledScenarios`（服务端 ResourceManager 读取，按名全局缓存）加载并
+  `ScenarioWorldCodec.decode` 解码为自持范围的基线。
 - 场景源优先级：手动 `env load` 传入的场景 > 内置资产 > 现场快照（非场景环境）。
 - 修改内置场景的流程：`/gymcraft env save` 保存调整后的环境 → 用产物目录替换
   `data/gymcraft/scenario/<name>/` 重新打包。

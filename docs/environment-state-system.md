@@ -50,9 +50,9 @@ EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateS
         → 不触碰世界：场景内容延迟到首个 reset 随基线恢复物化
     无场景源
         → 以声明范围对当前世界与 agent 当场捕获基线（EnvStateSnapshot.capture）
-    两条路径都经 EnvStateManager.create 一次性构建完成，此后管理器不可变、不依赖环境回调
+    两条路径都产出不可变 EnvStateSnapshot（自持生效范围），不依赖环境任何回调
 reset            runtime 清理动作管线 → 组件 release 自清会话（菜单/消费）→
-                  AbstractMcEnv.resetEnvironment 编排：EnvStateManager 恢复基线
+                  AbstractMcEnv.resetEnvironment 编排：基线快照恢复自身
                   → 区域方块 DIFF 写回 → 清除并重建区域实体
                   → 基线重建 agent（场景环境的 agent 来自文件 NBT，同 UUID 替换，
                   EnvManager 映射不破）→ AgentMobLifecycle 替换实体（清背包/迁移附件
@@ -66,12 +66,12 @@ close             runtime 组件 release → AgentMobLifecycle 撤销附件作�
 接入点：
 
 - `EnvStateProfile`（gym/state）：环境状态声明的构造数据——非场景范围回退（默认空）、
-  方块恢复模式（默认 DIFF）与内置场景资产名（默认 null），经环境构造器传入；
-  场景环境的状态范围来自场景文件（world.nbt 区域几何 + scenario.json 的
-  `manage_entities`），由 `EnvStateManager.create` 构造期一次性推导并生效
-- `EnvStateManager.create(ServerLevel, Mob, EnvStateProfile, LoadedScenario)`：管理器
-  唯一入口，按上面的优先级解析场景源并一次性构建完整状态（范围、基线、preset options）
-- 完整基线与场景推导的范围由 `EnvStateManager`（gym/env，包私有）持有，附件作用域与实体替换由 `AgentMobLifecycle` 持有；`AgentRuntime` 不保存环境状态，reset 逻辑由 env 每次经 `AgentRuntime.reset(seed, options, ResetHandler)` 传入（`resetEnvironment`）
+  方块恢复模式（默认 DIFF）与内置场景资产名（默认 null），经环境构造器传入
+- 场景源解析（外部 env load > 内置资产 > 现场捕获）在 `AbstractMcEnv` 主构造器完成：
+  场景路径 `ScenarioWorldCodec.decode` 产出自带范围的基线，非场景路径
+  `EnvStateSnapshot.capture` 以声明范围现场捕获，场景 options 由构造器提取为 preset；
+  原 `EnvStateManager` 已并入 `EnvStateSnapshot`（范围自持 + restoreForReset/recapture）
+- 完整基线（含生效范围）由 `EnvStateSnapshot`（gym/state）自持，附件作用域与实体替换由 `AgentMobLifecycle` 持有；`AgentRuntime` 不保存环境状态，reset 逻辑由 env 每次经 `AgentRuntime.reset(seed, options, ResetHandler)` 传入（`resetEnvironment`）
 
 ## 环境迁移要点
 

@@ -13,7 +13,9 @@ import javax.annotation.Nullable;
 import com.google.protobuf.Message;
 
 import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
+import io.github.mousemeya.gymcraft.gym.scenario.BundledScenarios;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -54,9 +56,10 @@ import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
  * 工厂方法 {@link #create(String, UUID)} 根据环境类型创建对应子类实例
  * 环境实现由 NeoForge 自定义注册表中的 McEnvFactory 创建。
  * <p>
- * 内部职责委托给两个协作类：环境状态系统（快照捕获/恢复）由 {@link EnvStateManager}
- * 持有，附件访问作用域与 reset 实体替换由 {@link AgentMobLifecycle} 执行，本类只保留
- * 身份、组件装配与 RL 主流程的编排。
+ * 环境状态基线（自持生效范围，快照捕获/恢复/再捕获均在
+ * {@link EnvStateSnapshot} 上进行）是构造期创建的不可变字段；附件访问作用域与
+ * reset 实体替换由 {@link AgentMobLifecycle} 执行，本类只保留身份、组件装配与
+ * RL 主流程的编排。
  */
 public abstract class AbstractMcEnv implements McEnv {
     /** reset options：是否在 reset 后和相邻动作之间的空闲期禁用原版 AI。 */
@@ -76,10 +79,8 @@ public abstract class AbstractMcEnv implements McEnv {
     private Map<String, Object> scenarioPresetOptions = Map.of();
     /** 最近一次 reset 的生效 options（场景保存回放用）；未 reset 过为空 Map。 */
     private Map<String, Object> lastResetOptions = Map.of();
-    /** 外部传入的场景源（手动 env load）；内置资产经 {@link EnvStateProfile} 声明。 */
-    @Nullable private final ScenarioStore.LoadedScenario scenarioSource;
-    /** 环境状态管理器：构造期经状态声明一次性创建，此后不可变。 */
-    private final EnvStateManager stateManager;
+    /** 环境状态基线（自持生效范围）：构造期一次性创建，此后不可变。 */
+    private final EnvStateSnapshot baseline;
     /** 受控实体生命周期：附件访问作用域与 reset 实体替换。 */
     private final AgentMobLifecycle mobLifecycle;
 
@@ -100,8 +101,9 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     /**
-     * 创建环境的主构造器：状态声明与外部场景源都是构造数据，状态管理器在构造期
-     * 一次性创建完成。
+     * 创建环境的主构造器：状态声明与外部场景源都是构造数据，基线快照（自持生效
+     * 范围）在构造期一次性创建。场景源优先级为外部传入（手动 {@code env load}）&gt;
+     * {@code stateProfile} 声明的内置资产 &gt; 无场景（以声明范围现场捕获）。
      *
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob（须位于服务端世界）
@@ -124,16 +126,25 @@ public abstract class AbstractMcEnv implements McEnv {
         this.envId = UUID.randomUUID();
         this.actionController = new ActionDispatcher(mob, actionComponentFactories);
         this.observationCreator = new ObservationComposer(mob, observationComponents);
-        this.scenarioSource = scenarioSource;
-        // 协作类创建顺序等价原内联顺序：激活附件作用域 → 建状态管理器 → 建运行时。
+        // 协作类创建顺序等价原内联顺序：激活附件作用域 → 建状态基线 → 建运行时。
         this.mobLifecycle = new AgentMobLifecycle(mob, List.copyOf(attachmentSpecs));
         if (!(mob.level() instanceof ServerLevel level)) {
             throw new IllegalArgumentException("GymCraft environments require a server-level Mob: " + envTypeId);
         }
-        this.stateManager = EnvStateManager.create(level, mob, stateProfile, scenarioSource);
-        // 场景源的 preset options 作为首次 reset 的默认值（当次 reset options 覆盖 preset）
-        if (!this.stateManager.scenarioPresetOptions().isEmpty()) {
-            this.scenarioPresetOptions = this.stateManager.scenarioPresetOptions();
+        ScenarioStore.LoadedScenario source = scenarioSource;
+        if (source == null && stateProfile.bundledScenarioName() != null) {
+            source = BundledScenarios.load(level, stateProfile.bundledScenarioName())
+                .orElseThrow(() -> new IllegalStateException(
+                    "Missing bundled scenario asset: gymcraft:scenario/" + stateProfile.bundledScenarioName()));
+        }
+        this.baseline = source == null
+            ? EnvStateSnapshot.capture(level, mob, stateProfile.scope(), stateProfile.mode())
+            : ScenarioWorldCodec.decode(
+                level, source.world(), source.scenario().agentSnapshot(level, mob),
+                stateProfile.mode(), source.scenario().manageEntities());
+        if (source != null && !source.scenario().options().isEmpty()) {
+            // 场景源的 preset options 作为首次 reset 的默认值（当次 reset options 覆盖 preset）
+            this.scenarioPresetOptions = Collections.unmodifiableMap(new LinkedHashMap<>(source.scenario().options()));
         }
         this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
         NeoForge.EVENT_BUS.register(this.agentRuntime);
@@ -284,7 +295,7 @@ public abstract class AbstractMcEnv implements McEnv {
      * @return 当前生效的环境状态范围
      */
     public final EnvStateScope stateScopeView() {
-        return this.stateManager.scope();
+        return this.baseline.scope();
     }
 
     /**
@@ -344,7 +355,7 @@ public abstract class AbstractMcEnv implements McEnv {
      * @return 重建后已加入世界的实体
      */
     private Mob resetEnvironment(Mob currentMob, Integer seed, Map<String, Object> options) {
-        Mob newMob = this.mobLifecycle.replace(currentMob, this.stateManager.restoreForReset(currentMob));
+        Mob newMob = this.mobLifecycle.replace(currentMob, this.baseline.restoreForReset(currentMob));
         this.resetAgent(newMob, seed, options);
         return newMob;
     }
@@ -388,7 +399,7 @@ public abstract class AbstractMcEnv implements McEnv {
      * @return 状态基线（场景序列化与 UUID 追踪等运行时引用用）；构造期即非空
      */
     public EnvStateSnapshot baselineSnapshot() {
-        return this.stateManager.baseline();
+        return this.baseline;
     }
 
     /**
@@ -401,7 +412,7 @@ public abstract class AbstractMcEnv implements McEnv {
         if (!(mob.level() instanceof ServerLevel level)) {
             throw new IllegalStateException("Cannot capture environment state outside a server level: " + this.envId);
         }
-        return this.stateManager.captureCurrent(level, mob);
+        return this.baseline.recapture(level, mob);
     }
 
     protected double computeReward(ProtoMcObservation observation) {
