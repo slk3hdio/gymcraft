@@ -54,9 +54,9 @@ public final class ScenarioGameTests {
     }
 
     /**
-     * 验证 parkour 场景的保存 → 异位置 spawn 加载往返：平台方块、agent 主手物资与冻结
-     * options 随场景迁移，重建环境的首个 reset 从已放置内容重新冻结基线；源环境 close 后
-     * 原世界被恢复（场景不残留）。
+     * 验证 parkour 场景（内置资产）的保存 → 异位置 spawn 加载往返：平台方块、agent 主手
+     * 物资与最近一次 reset 的生效 options 随场景迁移；场景内容延迟到加载侧首个 reset 物化；
+     * 源环境 close 后原世界被恢复（场景不残留）。
      * <p>
      * 两个锚点都收在相对坐标 x/z ∈ [-1, 8] 的安全带内：GameTest 批次沿 x 轴间隔 13 格排布，
      * 相邻批次的 13 格宽竞技场测试（iron/state 系）可触及本批相对坐标 -2 与 +9 以外的区域，
@@ -80,42 +80,25 @@ public final class ScenarioGameTests {
         McEnv envA = EnvManager.create("gymcraft:parkour_mob", mobA);
         Thread.startVirtualThread(() -> {
             try {
-                envA.reset(1, Map.of(
-                    "block", "minecraft:oak_planks",
-                    "target_height", 3,
-                    AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
+                envA.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
                 runOnServer(helper, () -> {
                     try {
-                        ScenarioOps.capture("roundtrip", envA, mobA, store);
+                        ScenarioOps.capture("roundtrip", envA, store);
                         EnvScenario saved = store.load("roundtrip").scenario();
                         check("gymcraft:parkour_mob".equals(saved.envTypeId()), "scenario env type mismatch");
-                        check(((Number) saved.options().get("target_height")).intValue() == 3,
-                            "scenario options lost target_height");
-                        check("minecraft:oak_planks".equals(saved.options().get("block")),
-                            "scenario options lost block");
+                        check(Boolean.TRUE.equals(saved.options().get(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION)),
+                            "scenario options lost disable_vanilla_ai");
                         EnvManager.close(mobA.getUUID());
                         ensureChunksLoaded(level, absB.offset(-3, 0, -3), absB.offset(3, 0, 3));
                         Mob mobB = ScenarioOps.spawn(store.load("roundtrip"), level, Vec3.atBottomCenterOf(absB));
                         mobBUuid.set(mobB.getUUID());
-                        // 放置即时自检：定位方块缺失发生在放置时还是放置后
-                        check(level.getBlockState(absB.offset(-3, -1, -3)).is(Blocks.STONE),
-                            "corner(-3,-1,-3) missing right after place: "
-                                + level.getBlockState(absB.offset(-3, -1, -3)).getBlock());
-                        check(level.getBlockState(absB.offset(3, -1, -3)).is(Blocks.STONE),
-                            "corner(3,-1,-3) missing right after place: "
-                                + level.getBlockState(absB.offset(3, -1, -3)).getBlock());
-                        check(level.getBlockState(absB.offset(3, -1, 3)).is(Blocks.STONE),
-                            "corner(3,-1,3) missing right after place: "
-                                + level.getBlockState(absB.offset(3, -1, 3)).getBlock());
-                        check(level.getBlockState(absB.offset(-3, -1, 3)).is(Blocks.STONE),
-                            "corner(-3,-1,3) missing right after place: "
-                                + level.getBlockState(absB.offset(-3, -1, 3)).getBlock());
                     } catch (Throwable error) {
                         throw new IllegalStateException(error);
                     }
                 });
                 McEnv envB = EnvManager.get(mobBUuid.get())
                     .orElseThrow(() -> new IllegalStateException("spawned scenario env not registered"));
+                // 场景内容延迟到首个 reset 物化（加载时不放置世界）
                 envB.reset(1, Map.of());
             } catch (Throwable error) {
                 failure.set(error);
@@ -132,7 +115,7 @@ public final class ScenarioGameTests {
                         + " column=" + level.getBlockState(absB.offset(1, 2, 1)) + ")");
                 assertTrue(helper, !mobB.getUUID().equals(mobA.getUUID()),
                     "scenario agent kept the source UUID");
-                assertTrue(helper, mobB.getMainHandItem().is(Items.OAK_PLANKS)
+                assertTrue(helper, mobB.getMainHandItem().is(Items.STONE)
                         && mobB.getMainHandItem().getCount() == 32,
                     "scenario agent supplies were not restored");
                 assertTrue(helper, level.getBlockState(absB.offset(0, -1, 0)).is(Blocks.STONE),
@@ -141,9 +124,9 @@ public final class ScenarioGameTests {
                     "parkour platform corner missing at load position");
                 assertTrue(helper, level.getBlockState(absB.offset(1, 2, 1)).isAir(),
                     "parkour training column was not cleared at load position");
-                Map<String, Object> frozen = ((AbstractMcEnv) envB).frozenOptionsView();
-                assertTrue(helper, frozen.get("target_height") instanceof Number height && height.intValue() == 3,
-                    "loaded env did not freeze the scenario preset options");
+                Map<String, Object> effective = ((AbstractMcEnv) envB).lastResetOptionsView();
+                assertTrue(helper, Boolean.TRUE.equals(effective.get(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION)),
+                    "loaded env did not merge the scenario preset options");
                 assertEquals(helper, beforeEnv, level.getBlockState(platformCornerA),
                     "closing the source env did not restore the original world");
                 helper.succeed();
@@ -158,9 +141,10 @@ public final class ScenarioGameTests {
     }
 
     /**
-     * 验证含区域实体的场景（iron_golem_warden 战斗场 + Warden）跨位置 spawn 加载：
-     * 模板放置为 Warden 分配新 UUID，{@code onScenarioLoaded} 重新定位并钉住防钻地记忆，
-     * 建材（主手铁块 + 背包南瓜）随 agent NBT 与可序列化背包附件一同迁移。
+     * 验证含区域实体的场景（iron_golem_warden 内置资产战斗场 + Warden）跨位置 spawn 加载：
+     * 解码为 Warden 重分配 UUID（{@code onScenarioLoaded} 构造期从基线读回并钉住防钻地记忆），
+     * 建材（主手铁块 + 背包南瓜）随 agent NBT 与可序列化背包附件一同迁移；场景内容延迟到
+     * 加载侧首个 reset 物化，NoAi 状态随实体 NBT 迁移（无需放置后补丁）。
      *
      * @param helper GameTest 辅助对象
      */
@@ -181,26 +165,23 @@ public final class ScenarioGameTests {
                 runOnServer(helper, () -> {
                     try {
                         Warden wardenA = level.getEntitiesOfClass(Warden.class, arenaBounds(absA)).getFirst();
+                        // 冻结 AI 开启的 Warden 会游荡/索敌：NoAi 后再取即时快照，NoAi 随 NBT 迁移
                         wardenA.setNoAi(true);
                         wardenAUuid.set(wardenA.getUUID());
-                        ScenarioOps.capture("warden", envA, mobA, store);
+                        ScenarioOps.capture("warden", envA, store);
                         EnvManager.close(mobA.getUUID());
                         check(level.getEntitiesOfClass(Warden.class, arenaBounds(absA)).isEmpty(),
                             "source warden not discarded by env close");
                         ensureChunksLoaded(level, absB.offset(-6, 0, -6), absB.offset(6, 0, 6));
                         Mob mobB = ScenarioOps.spawn(store.load("warden"), level, Vec3.atBottomCenterOf(absB));
                         mobBUuid.set(mobB.getUUID());
-                        // 基线冻结的是 AI 开启的 Warden（setNoAi 晚于冻结，不进场景文件）；
-                        // 放置后立即钉住，避免 500 tick 窗口内游荡出断言区域
-                        for (Warden placed : level.getEntitiesOfClass(Warden.class, arenaBounds(absB))) {
-                            placed.setNoAi(true);
-                        }
                     } catch (Throwable error) {
                         throw new IllegalStateException(error);
                     }
                 });
                 McEnv envB = EnvManager.get(mobBUuid.get())
                     .orElseThrow(() -> new IllegalStateException("spawned scenario env not registered"));
+                // 场景内容（含 NoAi Warden）延迟到首个 reset 物化
                 envB.reset(1, Map.of());
             } catch (Throwable error) {
                 failure.set(error);
@@ -218,11 +199,11 @@ public final class ScenarioGameTests {
                 assertEquals(helper, 1, wardens.size(), "relocated arena warden count");
                 Warden wardenB = wardens.getFirst();
                 assertTrue(helper, !wardenB.getUUID().equals(wardenAUuid.get()),
-                    "template placement kept the source warden UUID");
+                    "scenario decode kept the source warden UUID");
                 assertTrue(helper, wardenB.hasEffect(MobEffects.WEAKNESS),
                     "relocated warden lost the weakness effect");
                 assertTrue(helper, wardenB.getBrain().hasMemoryValue(MemoryModuleType.DIG_COOLDOWN),
-                    "onScenarioLoaded did not repin the warden DIG_COOLDOWN memory");
+                    "reset did not repin the warden DIG_COOLDOWN memory");
                 Mob mobB = (Mob) level.getEntity(mobBUuid.get());
                 assertTrue(helper, mobB != null && mobB.isAlive(), "scenario agent missing after reset");
                 assertTrue(helper, mobB.getMainHandItem().is(Items.IRON_BLOCK)
@@ -235,6 +216,74 @@ public final class ScenarioGameTests {
                     "arena floor missing at load position");
                 assertTrue(helper, level.getBlockState(absB.offset(-6, 0, -6)).is(Blocks.GLASS),
                     "arena wall missing at load position");
+                helper.succeed();
+            } finally {
+                if (mobBUuid.get() != null) {
+                    EnvManager.close(mobBUuid.get());
+                }
+                EnvManager.close(mobA.getUUID());
+                deleteRecursivelyQuietly(storeDir);
+            }
+        });
+    }
+
+    /**
+     * 验证即时快照保存：环境未 reset 过也能保存——快照取当前世界与 agent（而非基线），
+     * 加载侧从文件构建完整状态基线，首个 reset 物化；手动场景优先于内置资产
+     * （iron_mining 的内置训练场不出现）。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void immediateCaptureRoundTrip(GameTestHelper helper) {
+        // Husk 免疫阳光：加载侧 agent 在 500 tick 断言窗口内保持无顶棚场景
+        Mob mobA = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(5, 1, 5));
+        ServerLevel level = helper.getLevel();
+        // 构造环境前在范围内放一个标记方块：即时快照应原样携带（WYSIWYG）
+        BlockPos markerRel = BlockPos.containing(mobA.position()).offset(2, 0, 2);
+        level.setBlock(markerRel, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
+        BlockPos absB = helper.absolutePos(new BlockPos(2, 2, 0));
+        Path storeDir = createTempStoreDir();
+        ScenarioStore store = new ScenarioStore(storeDir);
+        AtomicReference<UUID> mobBUuid = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        McEnv envA = EnvManager.create("gymcraft:iron_mining", mobA);
+        Thread.startVirtualThread(() -> {
+            try {
+                runOnServer(helper, () -> {
+                    try {
+                        // 未 reset 即保存：agent 应为当前实体（zombie），options 为空
+                        ScenarioOps.capture("immediate", envA, store);
+                        EnvScenario saved = store.load("immediate").scenario();
+                        check("minecraft:husk".equals(saved.agentType()),
+                            "pre-reset capture should snapshot the live agent: " + saved.agentType());
+                        check(saved.options().isEmpty(), "pre-reset capture should carry no reset options");
+                        EnvManager.close(mobA.getUUID());
+                        ensureChunksLoaded(level, absB.offset(-4, 0, -4), absB.offset(4, 0, 4));
+                        Mob mobB = ScenarioOps.spawn(store.load("immediate"), level, Vec3.atBottomCenterOf(absB));
+                        mobBUuid.set(mobB.getUUID());
+                    } catch (Throwable error) {
+                        throw new IllegalStateException(error);
+                    }
+                });
+                McEnv envB = EnvManager.get(mobBUuid.get())
+                    .orElseThrow(() -> new IllegalStateException("spawned scenario env not registered"));
+                envB.reset(1, Map.of());
+            } catch (Throwable error) {
+                failure.set(error);
+            }
+        });
+        helper.runAfterDelay(500, () -> {
+            try {
+                assertTrue(helper, failure.get() == null, "immediate capture round trip failed: " + failure.get());
+                McEnv envB = EnvManager.get(mobBUuid.get()).orElseThrow();
+                assertEquals(helper, "gymcraft:iron_mining", envB.getRegisterId(), "loaded env type mismatch");
+                assertTrue(helper, level.getBlockState(absB.offset(2, 0, 2)).is(Blocks.GOLD_BLOCK),
+                    "pre-reset marker block missing at load position");
+                assertTrue(helper, !level.getBlockState(absB.offset(2, 0, 0)).is(Blocks.OAK_LOG),
+                    "bundled asset leaked into a manually loaded scenario env");
+                Mob mobB = (Mob) level.getEntity(mobBUuid.get());
+                assertTrue(helper, mobB != null && mobB.isAlive() && mobB.getType() == EntityType.HUSK,
+                    "scenario agent missing or wrong type after reset");
                 helper.succeed();
             } finally {
                 if (mobBUuid.get() != null) {

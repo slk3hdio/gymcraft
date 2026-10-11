@@ -35,6 +35,7 @@ import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
@@ -47,17 +48,13 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 /**
  * 建造铁傀儡并击败 Warden 的任务环境。
  * <p>
- * 环境在创建位置周围占用固定 13x13 战斗场（玻璃围墙，可观战外部）：构造时捕获原世界
- * （close 时经基类恢复），首个 reset 搭建场地、发放建材（4 铁块主手 + 1 雕刻南瓜 +
- * 64 铁锭）并在固定角落生成 Warden，同时冻结状态基线；此后 reset 由 {@code gym/state}
- * 状态基线恢复（方块差异写回 + 区域实体重建，Warden 保留原 UUID）。
- * 经场景存档（{@code /gymcraft env save/load}）加载的环境首个 reset 跳过硬编码搭建，
- * 直接冻结已放置内容为基线，{@link #onScenarioLoaded()} 负责按战斗场重定位 Warden
- * （模板放置分配了新 UUID）；硬编码搭建路径（{@link #buildScene}）已废弃。
- * Agent 本体没有
- * 攻击能力：需要按原版图案摆放铁块并在最后放置雕刻南瓜生成铁傀儡，战斗期间用
- * 铁锭治疗铁傀儡（原版交互，+25 生命/锭）耗死 Warden。Warden 生成时附带虚弱效果，
- * 近战无法秒杀 Agent。Warden 死亡即成功；
+ * 环境在创建位置周围占用固定 13x13 战斗场（玻璃围墙，可观战外部）：场景来自内置资产
+ * {@code gymcraft:scenario/iron_golem_warden}（场地 + 建材 4 铁块主手 / 1 雕刻南瓜 /
+ * 64 铁锭 + 角落 Warden 含虚弱效果），构造期解码为状态基线，首个 reset 物化（agent
+ * 替换为场景 player_sim、Warden 重分配 UUID 由 {@link #onScenarioLoaded()} 从基线
+ * 读回），此后 reset 由基线恢复（方块差异写回 + 区域实体重建，Warden 保留 UUID）。
+ * Agent 本体没有攻击能力：需要按原版图案摆放铁块并在最后放置雕刻南瓜生成铁傀儡，
+ * 战斗期间用铁锭治疗铁傀儡（原版交互，+25 生命/锭）耗死 Warden。Warden 死亡即成功；
  * 任务状态只从真实世界推导，不依赖 Python 客户端自行判分。
  * </p>
  */
@@ -71,14 +68,6 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     private static final int ARENA_BOTTOM_OFFSET = -1;
     /** 内部净高 5 格（y0..y4），容纳 2.9 格高的 Warden 与三层傀儡图案。 */
     private static final int ARENA_TOP_OFFSET = 5;
-    /** 发放的铁锭数量；治疗交互 +25 生命/锭，虚弱后的 Warden 伤害有限，64 锭足够长期治疗。 */
-    private static final int IRON_INGOT_COUNT = 64;
-    /**
-     * 召唤 Warden 时附加的虚弱等级（每级 -4 近战伤害）。
-     * 取 6 级保证在最高难度（Hard 近战 45）下也无法秒杀 20 生命的 Agent：
-     * 45 - 4 * (6 + 1) = 17 &lt; 20；普通难度下近战仅剩 2 点。
-     */
-    private static final int WARDEN_WEAKNESS_AMPLIFIER = 1;
 
     private final ServerLevel level;
     private final BlockPos origin;
@@ -97,12 +86,17 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     private float lastGolemHealth;
 
     /**
-     * 创建并绑定固定战斗场、捕获原世界快照，但在首个 reset 前不修改世界。
+     * 创建并绑定固定战斗场，构造期从内置资产解码状态基线，首个 reset 前不修改世界。
      *
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob
      */
     public IronGolemWardenEnv(Identifier envTypeId, Mob mob) {
+        this(envTypeId, mob, null);
+    }
+
+    /** 在普通构造之上携带外部场景源（手动 env load）。 */
+    public IronGolemWardenEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
         super(
             envTypeId,
             mob,
@@ -121,7 +115,8 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
                 ObservationCreators.MENU.get(),
                 ObservationCreators.WORLD.get()
             ),
-            List.of(MobAttachments.AGENT_BACKPACK)
+            List.of(MobAttachments.AGENT_BACKPACK),
+            scenario
         );
         if (!(mob.level() instanceof ServerLevel serverLevel)) {
             throw new IllegalArgumentException("iron_golem_warden requires a server-level Mob");
@@ -137,9 +132,15 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
             this.origin.getZ() + ARENA_RADIUS + 1
         );
         this.wardenSpawn = this.origin.offset(-4, 0, -4);
-        this.captureOriginalWorld(serverLevel);
+        this.initState(serverLevel, mob);
         this.resetMilestones();
         this.restrictActionSpacesToArena();
+    }
+
+    /** 内置场景资产名。 */
+    @Override
+    protected String bundledScenarioName() {
+        return "iron_golem_warden";
     }
 
     /** 环境状态范围：整个战斗场（方块 + 区域实体进入基线，Warden 保留原 UUID 恢复）。 */
@@ -175,33 +176,19 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     }
 
     /**
-     * 首个 reset 确定战斗场并冻结基线（场景存档路径跳过硬编码搭建，直接冻结已放置内容），
-     * 每回合重置计数器、里程碑并重注入 Warden 的防钻地记忆。
+     * 每回合重置计数器、里程碑并重注入 Warden 的防钻地记忆（场景内容与 agent 由
+     * 状态基线恢复）。
      *
      * @param mob reset 后的新 Mob 实体
-     * @param seed 未用于固定布局的可选种子
+     * @param seed 未使用的可选种子
      * @param options reset 配置
      */
     @Override
     protected void resetMob(Mob mob, Integer seed, Map<String, Object> options) {
-        int requestedMaxSteps = positiveInt(options, MAX_STEPS_OPTION, DEFAULT_MAX_STEPS);
         super.resetMob(mob, seed, options);
-        if (!this.isStateBaselineFrozen()) {
-            if (this.shouldBuildScene()) {
-                this.buildScene(mob);
-            }
-            mob.snapTo(
-                this.origin.getX() + 0.5,
-                this.origin.getY(),
-                this.origin.getZ() + 0.5,
-                mob.getYRot(),
-                0.0F
-            );
-            mob.setDeltaMovement(Vec3.ZERO);
-        }
         // DIG_COOLDOWN 记忆不随 NBT 序列化：基线重建的 Warden 必须重新注入，否则会立即钻地消失
         this.repinWarden();
-        this.maxSteps = requestedMaxSteps;
+        this.maxSteps = positiveInt(options, MAX_STEPS_OPTION, DEFAULT_MAX_STEPS);
         this.steps = 0;
         this.evaluation = StepEvaluation.initial();
         this.golemUuid = null;
@@ -211,37 +198,28 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     }
 
     /**
-     * 硬编码场景搭建：清场、清空物品栏、写入战斗场模板、发放建材并生成 Warden
-     * （仅旧用法首个 reset 调用一次）。
-     *
-     * @deprecated 由场景存档（{@code /gymcraft env save/load}，{@code gym/scenario} 包）取代；
-     * 仅为未使用场景存档的用法保留，将在未来版本移除。
-     * @param mob 当前受控 Mob
-     */
-    @Deprecated
-    private void buildScene(Mob mob) {
-        RegionEntitySnapshot.discardRegionEntities(
-            this.level, this.stateScope().entityRegions(), mob.getUUID());
-        AgentInventoryLayout.clearAllItems(mob);
-        this.buildArenaTemplate();
-        this.issueSupplies(mob);
-        this.spawnWarden();
-    }
-
-    /**
-     * 场景存档加载后重新定位 Warden：模板放置会为实体分配新 UUID，按战斗场扫描找回并
-     * 立即钉住防钻地记忆（消除加载到首个 reset 之间 Warden 钻地的窗口）。
+     * 场景状态源就绪（构造期）后从基线实体快照读回 Warden 的重分配 UUID——实体尚未
+     * 物化进世界，不做世界扫描；防钻地记忆由每次 reset 的 {@code repinWarden} 注入。
      */
     @Override
     public void onScenarioLoaded() {
-        List<Warden> wardens = this.level.getEntitiesOfClass(Warden.class, this.arenaBounds);
-        this.wardenUuid = wardens.isEmpty() ? null : wardens.getFirst().getUUID();
-        this.repinWarden();
+        var baseline = this.baselineSnapshot();
+        if (baseline == null || baseline.entities() == null) {
+            this.wardenUuid = null;
+            return;
+        }
+        final UUID[] found = {null};
+        baseline.entities().forEachEntity((type, data) -> {
+            if (type == EntityType.WARDEN && found[0] == null) {
+                found[0] = io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot.getEntityUuid(data, "UUID");
+            }
+        });
+        this.wardenUuid = found[0];
     }
 
     /**
-     * 重新注入 Warden 的 DIG_COOLDOWN 超长冷却记忆（与 {@link #spawnWarden} 同一机制）。
-     * 基线恢复保留原 UUID，直接按 UUID 查回实体。
+     * 重新注入 Warden 的 DIG_COOLDOWN 超长冷却记忆（不随 NBT 序列化，每次 reset 后调用）。
+     * 基线恢复保留 UUID，直接按 UUID 查回实体。
      */
     private void repinWarden() {
         if (this.wardenUuid != null
@@ -507,77 +485,6 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     }
 
     /**
-     * 将战斗场模板写入世界：基岩地板与顶盖、玻璃围墙，内部清空（仅 {@link #buildScene}
-     * 调用一次，此后由状态基线恢复）。
-     * 围墙用玻璃是为了让场外观察者看清战斗；Agent 无破坏动作，玻璃同样不可逾越。
-     *
-     * @deprecated 硬编码场景搭建的一部分，随 {@link #buildScene} 一并废弃。
-     */
-    @Deprecated
-    private void buildArenaTemplate() {
-        for (int x = -ARENA_RADIUS; x <= ARENA_RADIUS; x++) {
-            for (int z = -ARENA_RADIUS; z <= ARENA_RADIUS; z++) {
-                boolean wall = Math.abs(x) == ARENA_RADIUS || Math.abs(z) == ARENA_RADIUS;
-                RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, ARENA_BOTTOM_OFFSET, z), Blocks.BEDROCK.defaultBlockState());
-                for (int y = 0; y < ARENA_TOP_OFFSET; y++) {
-                    RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, y, z),
-                        (wall ? Blocks.GLASS : Blocks.AIR).defaultBlockState());
-                }
-                RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, ARENA_TOP_OFFSET, z), Blocks.BEDROCK.defaultBlockState());
-            }
-        }
-    }
-
-    /**
-     * 发放本回合建材：主手 4 个铁块，背包 1 个雕刻南瓜与铁锭（仅 {@link #buildScene} 调用）。
-     *
-     * @deprecated 硬编码场景搭建的一部分，随 {@link #buildScene} 一并废弃。
-     * @param mob 当前受控 Mob
-     */
-    @Deprecated
-    private void issueSupplies(Mob mob) {
-        AgentInventoryLayout layout = AgentInventoryLayout.resolve(mob);
-        if (layout.storageSlotCount() < 2) {
-            throw new IllegalStateException("iron_golem_warden requires an agent backpack");
-        }
-        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_BLOCK, 4));
-        layout.slot(AgentInventoryLayout.EQUIPMENT_SLOT_COUNT).setItem(new ItemStack(Items.CARVED_PUMPKIN, 1));
-        layout.slot(AgentInventoryLayout.EQUIPMENT_SLOT_COUNT + 1).setItem(new ItemStack(Items.IRON_INGOT, IRON_INGOT_COUNT));
-    }
-
-    /**
-     * 在战斗场角落生成持久化的 Warden 并记录其 UUID 供终止判定（仅 {@link #buildScene} 调用）。
-     *
-     * @deprecated 硬编码场景搭建的一部分，随 {@link #buildScene} 一并废弃；场景存档路径由
-     * {@link #onScenarioLoaded()} 重新定位 Warden。
-     */
-    @Deprecated
-    private void spawnWarden() {
-        Warden warden = EntityType.WARDEN.create(this.level, EntitySpawnReason.COMMAND);
-        if (warden == null) {
-            throw new IllegalStateException("failed to create warden for iron_golem_warden");
-        }
-        warden.snapTo(
-            this.wardenSpawn.getX() + 0.5,
-            this.wardenSpawn.getY(),
-            this.wardenSpawn.getZ() + 0.5,
-            0.0F,
-            0.0F
-        );
-        warden.setPersistenceRequired();
-        // EntityType.create 不触发 finalizeSpawn，DIG_COOLDOWN 记忆缺失会让 Warden
-        // 立即钻地消失；注入超长冷却将其钉在地表（与原版 finalizeSpawn 同一机制）。
-        warden.getBrain().setMemoryWithExpiry(MemoryModuleType.DIG_COOLDOWN, Unit.INSTANCE, Integer.MAX_VALUE);
-        // 附加虚弱：Agent（20 生命）无法被近战秒杀，保留受击惩罚（见 WARDEN_WEAKNESS_AMPLIFIER）
-        warden.addEffect(new MobEffectInstance(
-            MobEffects.WEAKNESS, MobEffectInstance.INFINITE_DURATION, WARDEN_WEAKNESS_AMPLIFIER));
-        if (!this.level.addFreshEntity(warden)) {
-            throw new IllegalStateException("failed to spawn warden for iron_golem_warden");
-        }
-        this.wardenUuid = warden.getUUID();
-    }
-
-    /**
      * 改写傀儡的索敌目标：原版傀儡会无差别攻击敌对生物（可能包括怪物系 Agent），
      * 本环境的傀儡只锁定 Warden；保留受击反击目标。
      *
@@ -751,8 +658,8 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
          * @return 新环境实例
          */
         @Override
-        public IronGolemWardenEnv create(Identifier envTypeId, Mob mob) {
-            return new IronGolemWardenEnv(envTypeId, mob);
+        public IronGolemWardenEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
+            return new IronGolemWardenEnv(envTypeId, mob, scenario);
         }
     }
 }

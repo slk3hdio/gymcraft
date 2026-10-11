@@ -36,10 +36,11 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
  * 便于在专用服务器控制台或 RCON 下使用。create/remove 的目标参数接受多实体选择器
  * （如 {@code @e[type=zombie,limit=3]}），对每个目标逐一执行，返回成功数。</p>
  *
- * <p>另提供环境场景存档管理：{@code env save} 把目标 Mob 的环境（含冻结基线的世界内容）
- * 保存为服务器全局目录下的命名场景；{@code env load} 在任意世界/位置加载——{@code spawn}
- * 模式生成场景自带的 agent，{@code mob} 模式套用到已有 Mob；{@code env list/delete}
- * 管理场景文件。场景系统见 {@code gym/scenario} 包。</p>
+ * <p>另提供环境场景存档管理：{@code env save} 对目标 Mob 的环境取当前时刻的即时快照
+ * （不要求 reset 过）保存为服务器全局目录下的命名场景；{@code env load} 在任意世界/位置
+ * 加载——{@code spawn} 模式生成场景自带的 agent，{@code mob} 模式套用到已有 Mob（首个
+ * reset 物化场景内容并把目标实体替换为场景 agent）；{@code env list/delete} 管理场景文件。
+ * 场景系统见 {@code gym/scenario} 包。</p>
  */
 public final class GymCraftCommands {
     /** load/delete 的场景名补全：来自场景存储目录。 */
@@ -161,7 +162,7 @@ public final class GymCraftCommands {
     }
 
     /**
-     * 把目标 Mob 绑定的环境保存为命名场景（含冻结基线的世界内容）。
+     * 把目标 Mob 绑定的环境保存为命名场景（当前世界与 agent 的即时快照）。
      *
      * @param source 指令来源
      * @param target 目标实体（必须是已绑定环境的 Mob）
@@ -181,7 +182,7 @@ public final class GymCraftCommands {
         }
         String envType = env.get().getRegisterId();
         try {
-            ScenarioOps.capture(name, env.get(), mob, ScenarioStore.forServer());
+            ScenarioOps.capture(name, env.get(), ScenarioStore.forServer());
         } catch (IllegalArgumentException | IllegalStateException | IOException e) {
             source.sendFailure(Component.translatable("message.gymcraft.scenario_save_failed", name, e.getMessage()));
             return 0;
@@ -191,8 +192,8 @@ public final class GymCraftCommands {
     }
 
     /**
-     * 把场景套用到已有 Mob：以其当前位置为锚放置场景内容并创建环境。
-     * 目标 Mob 与场景 agent 类型不一致时给出警告（仍创建环境）。
+     * 把场景套用到已有 Mob：以其为锚创建环境，首个 reset 物化场景内容并把目标
+     * Mob 替换为场景 agent（同 UUID）。目标 Mob 与场景 agent 类型不一致时给出警告。
      *
      * @param source 指令来源
      * @param name 场景名
@@ -226,7 +227,7 @@ public final class GymCraftCommands {
     }
 
     /**
-     * 生成场景自带的 agent（新 UUID）并以生成位置为锚放置场景、创建环境。
+     * 生成场景自带的 agent（新 UUID）并以生成位置为锚创建环境（首个 reset 物化场景内容）。
      *
      * @param source 指令来源
      * @param name 场景名

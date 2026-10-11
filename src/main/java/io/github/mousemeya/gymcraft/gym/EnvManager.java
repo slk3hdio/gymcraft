@@ -5,7 +5,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import javax.annotation.Nullable;
+
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Mob;
@@ -21,6 +24,12 @@ public final class EnvManager {
     }
 
     public static McEnv create(String envType, Mob mob) throws IllegalArgumentException {
+        return create(envType, mob, null);
+    }
+
+    /** 创建环境，可选携带外部场景源（手动 env load；null = 内置资产或现场快照）。 */
+    public static McEnv create(String envType, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario)
+            throws IllegalArgumentException {
         var id = Identifier.parse(envType);
         var factory = RegistryKeys.ENV_FACTORIES.getValue(id);
         if (factory == null) {
@@ -30,7 +39,7 @@ public final class EnvManager {
         if (oldEnv != null) {
             oldEnv.close();
         }
-        McEnv env = factory.create(id, mob);
+        McEnv env = factory.create(id, mob, scenario);
         ENVS_BY_ENTITY.put(mob.getUUID(), env);
         return env;
     }

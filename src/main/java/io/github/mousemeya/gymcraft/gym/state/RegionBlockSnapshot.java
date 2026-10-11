@@ -1,7 +1,10 @@
 package io.github.mousemeya.gymcraft.gym.state;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+
+import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -80,6 +83,57 @@ public final class RegionBlockSnapshot {
                         }
                     }
                 }
+            }
+        }
+        return new RegionBlockSnapshot(region, Map.copyOf(sections), Map.copyOf(blockEntities));
+    }
+
+    /**
+     * 文件稀疏方块条目：绝对坐标、方块状态与可选的方块实体完整 NBT
+     * （场景存档 world.nbt 解码路径的输入单元）。
+     */
+    public record BlockEntry(BlockPos pos, BlockState state, @Nullable CompoundTag blockEntityData) {
+    }
+
+    /**
+     * 从稀疏方块条目构造区域快照（场景存档解码路径）。
+     * <p>
+     * 区域范围内的全部区块段存储先建为空气，再写入提供的方块；条目未覆盖的格子
+     * 即基线空气，与 {@link #capture} 的全量捕获在 DIFF 恢复语义上等价——世界中
+     * 多出来的方块会被恢复流程清除。
+     * </p>
+     *
+     * @param containerFactory 区块段存储工厂（{@code PalettedContainerFactory.create(registryAccess)}）
+     * @param region 闭区间方块区域
+     * @param blocks 稀疏方块条目（绝对坐标，必须落在区域内）
+     * @return 区域快照
+     * @throws IllegalArgumentException 条目坐标落在区域外时
+     */
+    public static RegionBlockSnapshot of(
+        net.minecraft.world.level.chunk.PalettedContainerFactory containerFactory,
+        BoundingBox region,
+        List<BlockEntry> blocks
+    ) {
+        Map<Long, LevelChunkSection> sections = new HashMap<>();
+        int minSectionY = region.minY() >> 4;
+        int maxSectionY = region.maxY() >> 4;
+        for (int chunkX = region.minX() >> 4; chunkX <= region.maxX() >> 4; chunkX++) {
+            for (int chunkZ = region.minZ() >> 4; chunkZ <= region.maxZ() >> 4; chunkZ++) {
+                for (int sectionY = minSectionY; sectionY <= maxSectionY; sectionY++) {
+                    sections.put(SectionPos.asLong(chunkX, sectionY, chunkZ), new LevelChunkSection(containerFactory));
+                }
+            }
+        }
+        Map<Long, CompoundTag> blockEntities = new HashMap<>();
+        for (BlockEntry entry : blocks) {
+            BlockPos pos = entry.pos();
+            if (!region.isInside(pos.getX(), pos.getY(), pos.getZ())) {
+                throw new IllegalArgumentException("Scenario block outside its region: " + pos + " not in " + region);
+            }
+            LevelChunkSection section = sections.get(SectionPos.asLong(pos.getX() >> 4, pos.getY() >> 4, pos.getZ() >> 4));
+            section.setBlockState(pos.getX() & 15, pos.getY() & 15, pos.getZ() & 15, entry.state());
+            if (entry.blockEntityData() != null) {
+                blockEntities.put(pos.asLong(), entry.blockEntityData());
             }
         }
         return new RegionBlockSnapshot(region, Map.copyOf(sections), Map.copyOf(blockEntities));

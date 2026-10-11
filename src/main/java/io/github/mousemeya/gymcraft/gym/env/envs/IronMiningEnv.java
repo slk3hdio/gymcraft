@@ -27,20 +27,18 @@ import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
-import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
-import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 
 /**
  * 从空物品栏开始完成木材、工作台、木镐、石镐与粗铁获取链路的任务环境。
  * <p>
- * 环境在创建位置周围占用固定 9x9 训练区域：构造时捕获原世界（close 时经基类恢复），
- * 首个 reset 搭建确定性资源布局并冻结状态基线，此后 reset 由 {@code gym/state}
- * 状态基线恢复（方块差异写回 + 区域实体清除），close 恢复原世界。
- * 经场景存档（{@code /gymcraft env save/load}）加载的环境首个 reset 跳过硬编码搭建，
- * 直接冻结已放置内容为基线；硬编码搭建路径（{@link #buildScene}）已废弃。
+ * 环境在创建位置周围占用固定 9x9 训练区域：场景来自内置资产
+ * {@code gymcraft:scenario/iron_mining}（基岩盒 + 固定资源布局），构造期解码为状态基线，
+ * 首个 reset 物化（agent 替换为场景 player_sim、空物品栏），此后 reset 由基线恢复
+ * （方块差异写回 + 区域实体清除），close 恢复原世界。
  * 任务状态只从真实世界与 Agent 统一物品栏推导，不依赖 Python 客户端自行判分。
  * </p>
  */
@@ -67,12 +65,17 @@ public final class IronMiningEnv extends AbstractMcEnv {
     private StepEvaluation evaluation = StepEvaluation.initial();
 
     /**
-     * 创建并绑定固定训练区域、捕获原世界快照，但在首个 reset 前不修改世界。
+     * 创建并绑定固定训练区域，构造期从内置资产解码状态基线，首个 reset 前不修改世界。
      *
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob
      */
     public IronMiningEnv(Identifier envTypeId, Mob mob) {
+        this(envTypeId, mob, null);
+    }
+
+    /** 在普通构造之上携带外部场景源（手动 env load）。 */
+    public IronMiningEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
         super(
             envTypeId,
             mob,
@@ -95,7 +98,8 @@ public final class IronMiningEnv extends AbstractMcEnv {
                 ObservationCreators.MENU.get(),
                 ObservationCreators.WORLD.get()
             ),
-            List.of(MobAttachments.AGENT_BACKPACK)
+            List.of(MobAttachments.AGENT_BACKPACK),
+            scenario
         );
         if (!(mob.level() instanceof ServerLevel serverLevel)) {
             throw new IllegalArgumentException("iron_mining requires a server-level Mob");
@@ -124,12 +128,18 @@ public final class IronMiningEnv extends AbstractMcEnv {
             this.origin.offset(-2, 0, 2)
         );
         this.ironOrePosition = this.origin.offset(0, 0, 3);
-        this.captureOriginalWorld(serverLevel);
+        this.initState(serverLevel, mob);
         this.resetMilestones();
 
         // 紧凑训练场中的方块掉落常停在方块边缘；略微放宽距离可避免寻路在邻格中心提前结束。
         PickUpItemController pickUp = this.actionComponent(ActionComponents.PICK_UP_ITEM.get());
         pickUp.setPickupReach(2.0);
+    }
+
+    /** 内置场景资产名。 */
+    @Override
+    protected String bundledScenarioName() {
+        return "iron_mining";
     }
 
     /** 环境状态范围：整个训练区域（方块 + 区域实体进入基线）。 */
@@ -141,49 +151,19 @@ public final class IronMiningEnv extends AbstractMcEnv {
     }
 
     /**
-     * 首个 reset 确定训练场并冻结基线（场景存档路径跳过硬编码搭建，直接冻结已放置内容），
-     * 每回合重置计数器与里程碑。
+     * 每回合重置计数器与里程碑（场景内容与 agent 由状态基线恢复）。
      *
      * @param mob reset 后的新 Mob 实体
-     * @param seed 未用于固定布局的可选种子
+     * @param seed 未使用的可选种子
      * @param options reset 配置
      */
     @Override
     protected void resetMob(Mob mob, Integer seed, Map<String, Object> options) {
-        int requestedMaxSteps = positiveInt(options, MAX_STEPS_OPTION, DEFAULT_MAX_STEPS);
         super.resetMob(mob, seed, options);
-        if (!this.isStateBaselineFrozen()) {
-            if (this.shouldBuildScene()) {
-                this.buildScene(mob);
-            }
-            mob.snapTo(
-                this.origin.getX() + 0.5,
-                this.origin.getY(),
-                this.origin.getZ() + 0.5,
-                mob.getYRot(),
-                0.0F
-            );
-            mob.setDeltaMovement(Vec3.ZERO);
-        }
-        this.maxSteps = requestedMaxSteps;
+        this.maxSteps = positiveInt(options, MAX_STEPS_OPTION, DEFAULT_MAX_STEPS);
         this.steps = 0;
         this.evaluation = StepEvaluation.initial();
         this.resetMilestones();
-    }
-
-    /**
-     * 硬编码场景搭建：清场、清空物品栏并写入固定资源布局（仅旧用法首个 reset 调用一次）。
-     *
-     * @deprecated 由场景存档（{@code /gymcraft env save/load}，{@code gym/scenario} 包）取代；
-     * 仅为未使用场景存档的用法保留，将在未来版本移除。
-     * @param mob 当前受控 Mob
-     */
-    @Deprecated
-    private void buildScene(Mob mob) {
-        RegionEntitySnapshot.discardRegionEntities(
-            this.level, this.stateScope().entityRegions(), mob.getUUID());
-        AgentInventoryLayout.clearAllItems(mob);
-        this.buildArenaTemplate();
     }
 
     /**
@@ -352,31 +332,6 @@ public final class IronMiningEnv extends AbstractMcEnv {
     }
 
     /**
-     * 将固定模板写入训练区域（仅 {@link #buildScene} 调用一次）。
-     *
-     * @deprecated 硬编码场景搭建的一部分，随 {@link #buildScene} 一并废弃。
-     */
-    @Deprecated
-    private void buildArenaTemplate() {
-        for (int x = -ARENA_RADIUS; x <= ARENA_RADIUS; x++) {
-            for (int z = -ARENA_RADIUS; z <= ARENA_RADIUS; z++) {
-                RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, ARENA_BOTTOM_OFFSET, z), Blocks.BEDROCK.defaultBlockState());
-                for (int y = 0; y < ARENA_TOP_OFFSET; y++) {
-                    RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, y, z), Blocks.AIR.defaultBlockState());
-                }
-                RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, ARENA_TOP_OFFSET, z), Blocks.BEDROCK.defaultBlockState());
-            }
-        }
-        for (BlockPos pos : this.logPositions) {
-            RegionBlockSnapshot.replaceWithoutDrops(this.level, pos, Blocks.OAK_LOG.defaultBlockState());
-        }
-        for (BlockPos pos : this.stonePositions) {
-            RegionBlockSnapshot.replaceWithoutDrops(this.level, pos, Blocks.STONE.defaultBlockState());
-        }
-        RegionBlockSnapshot.replaceWithoutDrops(this.level, this.ironOrePosition, Blocks.IRON_ORE.defaultBlockState());
-    }
-
-    /**
      * 判断指定方块是否存在于训练区域。
      *
      * @param block 目标方块
@@ -538,11 +493,12 @@ public final class IronMiningEnv extends AbstractMcEnv {
          *
          * @param envTypeId 环境类型注册 ID
          * @param mob 受控 Mob
+         * @param scenario 外部场景源（手动 env load；null = 内置资产）
          * @return 新环境实例
          */
         @Override
-        public IronMiningEnv create(Identifier envTypeId, Mob mob) {
-            return new IronMiningEnv(envTypeId, mob);
+        public IronMiningEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
+            return new IronMiningEnv(envTypeId, mob, scenario);
         }
     }
 }

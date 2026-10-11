@@ -18,14 +18,14 @@ import net.minecraft.nbt.DoubleTag;
 import net.minecraft.nbt.IntTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.phys.AABB;
 
 import org.slf4j.Logger;
@@ -35,9 +35,10 @@ import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
+import io.github.mousemeya.gymcraft.gym.state.StateRestoreMode;
 
 /**
- * 环境世界内容（world.nbt）与冻结基线（{@link EnvStateSnapshot}）之间的编解码。
+ * 环境世界内容（world.nbt）与完整状态基线（{@link EnvStateSnapshot}）之间的编解码。
  * <p>
  * 文件格式参考原版结构模板（{@link StructureTemplate}）：每个状态区域一个
  * {@code {size, palette, blocks, entities}} 模板块；方块逐格带相对坐标与调色板索引，
@@ -47,9 +48,9 @@ import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
  * 量级的区域。
  * </p>
  * <p>
- * 加载路径的方块与实体放置完全复用原版 {@link StructureTemplate#load} +
- * {@link StructureTemplate#placeInWorld}：实体自动剥离 UUID 重新分配、容器方块经
- * barrier 技巧抑制内容物掉落。
+ * 解码（{@link #decode}）把文件内容直接还原为状态基线：坐标平移到目标锚点（当前
+ * agent 的方块坐标），区域实体经 {@link RegionEntitySnapshot#of} 重分配 UUID——
+ * 场景内容延迟到首个 reset 才随基线恢复物化进世界。
  * </p>
  */
 public final class ScenarioWorldCodec {
@@ -70,16 +71,16 @@ public final class ScenarioWorldCodec {
     }
 
     /**
-     * 把冻结基线编码为世界内容 NBT。
+     * 把完整状态基线编码为世界内容 NBT。
      *
-     * @param baseline 已冻结的环境状态基线
+     * @param state 环境状态基线（冻结基线或即时快照）
      * @return world.nbt 内容
      */
-    public static CompoundTag encode(EnvStateSnapshot baseline) {
-        BlockPos origin = agentOrigin(baseline.agent());
+    public static CompoundTag encode(EnvStateSnapshot state) {
+        BlockPos origin = agentOrigin(state.agent());
         ListTag regions = new ListTag();
-        for (RegionBlockSnapshot region : baseline.blocks()) {
-            regions.add(encodeRegion(region, origin, baseline.entities()));
+        for (RegionBlockSnapshot region : state.blocks()) {
+            regions.add(encodeRegion(region, origin, state.entities()));
         }
         CompoundTag tag = new CompoundTag();
         putIntList(tag, "origin", origin.getX(), origin.getY(), origin.getZ());
@@ -88,41 +89,96 @@ public final class ScenarioWorldCodec {
     }
 
     /**
-     * 以锚点（场景原点在新世界的位置，= agent 方块坐标）放置世界内容。
+     * 把世界内容 NBT 解码为完整状态基线（{@link #encode} 的反向）：所有坐标平移到
+     * 目标锚点（agent 快照的方块坐标），场景原点取自文件 {@code origin}。
      * <p>
-     * 顺序约束：先整体校验目标区域区块已加载（未加载直接抛错，不产生半份场景），
-     * 再按状态系统同一过滤器清除目标区域现存实体（豁免 agent 与真实玩家），最后逐区域
-     * 走原版模板放置（含区域实体生成）。
+     * 方块实体 NBT 内嵌的 x/y/z 坐标重写为平移后的绝对位置；区域实体 UUID 经
+     * {@link RegionEntitySnapshot#of} 重分配，Pos 平移为绝对坐标。解码结果在首个
+     * reset 才随基线恢复物化进世界，本方法不触碰世界。
      * </p>
      *
-     * @param level 目标服务端世界
+     * @param level 目标服务端世界（提供注册表查找）
      * @param world 世界内容 NBT（{@link #encode}/{@link #empty} 产物）
-     * @param anchor 场景原点在新世界的方块坐标
-     * @param agentUuid 清场时豁免的受控 agent UUID
+     * @param agent agent 快照（调用方已把 UUID 与 Pos 覆写为当前 Mob，锚点取其方块坐标）
+     * @param restoreMode 方块恢复模式
+     * @param manageEntities 是否管理区域实体（环境 scope 的 captureEntities）——为 true 时
+     *                       即使文件无实体也构造空实体快照，保证 reset 清场语义
+     * @return 完整环境状态基线
      */
-    public static void place(ServerLevel level, CompoundTag world, BlockPos anchor, UUID agentUuid) {
-        List<CompoundTag> regions = world.getListOrEmpty("regions").compoundStream().toList();
-        if (regions.isEmpty()) {
-            return;
+    public static EnvStateSnapshot decode(
+        ServerLevel level,
+        CompoundTag world,
+        EntitySnapshot agent,
+        StateRestoreMode restoreMode,
+        boolean manageEntities
+    ) {
+        BlockPos anchor = agentOrigin(agent);
+        HolderGetter<Block> blockLookup = level.registryAccess().lookupOrThrow(Registries.BLOCK);
+        PalettedContainerFactory containerFactory = PalettedContainerFactory.create(level.registryAccess());
+
+        List<RegionBlockSnapshot> blockSnapshots = new ArrayList<>();
+        List<RegionEntitySnapshot.EntityEntry> entityEntries = new ArrayList<>();
+        List<BoundingBox> boxes = new ArrayList<>();
+        for (CompoundTag regionTag : world.getListOrEmpty("regions").compoundStream().toList()) {
+            BoundingBox box = targetBox(regionTag, anchor);
+            boxes.add(box);
+            BlockPos min = new BlockPos(box.minX(), box.minY(), box.minZ());
+
+            ListTag paletteTag = regionTag.getListOrEmpty("palette");
+            List<BlockState> palette = new ArrayList<>(paletteTag.size());
+            for (int i = 0; i < paletteTag.size(); i++) {
+                BlockState state = NbtUtils.readBlockState(blockLookup, paletteTag.getCompoundOrEmpty(i));
+                if (state.isAir() && !paletteTag.getCompoundOrEmpty(i).contains("Name")) {
+                    LOGGER.warn("Unknown palette entry {} in scenario region {}; falling back to air", i, box);
+                }
+                palette.add(state);
+            }
+
+            List<RegionBlockSnapshot.BlockEntry> blockEntries = new ArrayList<>();
+            for (CompoundTag blockTag : regionTag.getListOrEmpty("blocks").compoundStream().toList()) {
+                ListTag posTag = blockTag.getListOrEmpty("pos");
+                BlockPos pos = min.offset(posTag.getIntOr(0, 0), posTag.getIntOr(1, 0), posTag.getIntOr(2, 0));
+                int stateId = blockTag.getIntOr("state", 0);
+                if (stateId < 0 || stateId >= palette.size()) {
+                    throw new IllegalArgumentException("Scenario block references missing palette entry " + stateId);
+                }
+                CompoundTag blockEntityData = null;
+                if (blockTag.contains("nbt")) {
+                    blockEntityData = blockTag.getCompoundOrEmpty("nbt").copy();
+                    blockEntityData.putInt("x", pos.getX());
+                    blockEntityData.putInt("y", pos.getY());
+                    blockEntityData.putInt("z", pos.getZ());
+                }
+                blockEntries.add(new RegionBlockSnapshot.BlockEntry(pos, palette.get(stateId), blockEntityData));
+            }
+            blockSnapshots.add(RegionBlockSnapshot.of(containerFactory, box, blockEntries));
+
+            for (CompoundTag entityTag : regionTag.getListOrEmpty("entities").compoundStream().toList()) {
+                CompoundTag nbt = entityTag.getCompoundOrEmpty("nbt").copy();
+                String typeId = nbt.getStringOr("id", "");
+                nbt.remove("id");
+                EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.get(Identifier.parse(typeId))
+                    .map(reference -> reference.value())
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown entity type in scenario: " + typeId));
+                ListTag entityPos = entityTag.getListOrEmpty("pos");
+                nbt.put("Pos", newDoubleList(
+                    min.getX() + entityPos.getDoubleOr(0, 0.0),
+                    min.getY() + entityPos.getDoubleOr(1, 0.0),
+                    min.getZ() + entityPos.getDoubleOr(2, 0.0)));
+                entityEntries.add(new RegionEntitySnapshot.EntityEntry(type, nbt));
+            }
         }
-        List<BoundingBox> targetBoxes = regions.stream().map(tag -> targetBox(tag, anchor)).toList();
-        for (BoundingBox box : targetBoxes) {
-            RegionBlockSnapshot.requireChunksLoaded(level, box);
-        }
-        RegionEntitySnapshot.discardRegionEntities(level,
-            targetBoxes.stream()
+
+        UUID agentUuid = RegionEntitySnapshot.getEntityUuid(agent.data(), "UUID");
+        RegionEntitySnapshot entities = manageEntities
+            ? RegionEntitySnapshot.of(boxes.stream()
                 .map(box -> new AABB(
                     box.minX(), box.minY(), box.minZ(),
                     box.maxX() + 1.0, box.maxY() + 1.0, box.maxZ() + 1.0))
                 .toList(),
-            agentUuid);
-        HolderGetter<Block> blockLookup = level.registryAccess().lookupOrThrow(Registries.BLOCK);
-        for (CompoundTag regionTag : regions) {
-            BlockPos corner = targetCorner(regionTag, anchor);
-            StructureTemplate template = new StructureTemplate();
-            template.load(blockLookup, regionTag);
-            template.placeInWorld(level, corner, corner, new StructurePlaceSettings(), RandomSource.create(), Block.UPDATE_ALL);
-        }
+                agentUuid, entityEntries)
+            : null;
+        return EnvStateSnapshot.of(agent, blockSnapshots, entities, restoreMode);
     }
 
     /**
@@ -253,5 +309,13 @@ public final class ScenarioWorldCodec {
             list.add(DoubleTag.valueOf(value));
         }
         tag.put(key, list);
+    }
+
+    private static ListTag newDoubleList(double... values) {
+        ListTag list = new ListTag();
+        for (double value : values) {
+            list.add(DoubleTag.valueOf(value));
+        }
+        return list;
     }
 }

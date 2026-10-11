@@ -4,7 +4,6 @@ import java.io.IOException;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.DoubleTag;
@@ -32,12 +31,11 @@ import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 /**
  * 场景存档的保存/加载编排，供指令与 GameTest 复用。
  * <p>
- * 所有方法必须在服务端线程调用（指令执行天然满足）。加载流程：放置场景内容
- * （先于环境创建，使构造期捕获的"原世界"即已放置场景，close 语义为保留场景）→
- * {@link EnvManager#create} 创建环境 → 注入场景 preset options（首个 reset 生效）→
- * 标记场景已放置（首个 reset 跳过硬编码搭建）→ {@link AbstractMcEnv#onScenarioLoaded()}
- * 补丁运行时引用。重建环境的首个 reset 从已放置世界重新冻结基线，此后与常规环境
- * 完全同构。
+ * 所有方法必须在服务端线程调用（指令执行天然满足）。保存是对当前世界与 agent 的
+ * 即时快照（不要求环境 reset 过，所见即所得）；加载不放置世界——场景作为状态源
+ * 随 {@link EnvManager#create} 进入环境（构造期解码为基线、preset options 注入、
+ * {@link AbstractMcEnv#onScenarioLoaded()} 补丁），由首个 reset 物化，首个 reset
+ * 亦会把受控实体替换为场景 agent（同 UUID，携带场景装备与附件）。
  * </p>
  */
 public final class ScenarioOps {
@@ -47,62 +45,44 @@ public final class ScenarioOps {
     }
 
     /**
-     * 保存目标 Mob 绑定环境的场景。世界内容取自冻结基线（不触碰世界，无区块加载要求）。
+     * 保存目标 Mob 绑定环境的场景：对当前世界与 agent 立即取一次完整快照
+     * （所见即所得——想要场景本体请先 reset 物化）。
      *
      * @param name 场景名
      * @param env 目标 Mob 绑定的环境
-     * @param mob 目标 Mob（空范围环境的 agent 现状来源）
      * @param store 场景存储
      * @throws IOException 写盘失败时抛出
-     * @throws IllegalStateException 环境不支持场景保存，或占用世界的环境尚未完成首次 reset 时抛出
+     * @throws IllegalStateException 环境不支持场景保存时抛出
      */
-    public static void capture(String name, McEnv env, Mob mob, ScenarioStore store) throws IOException {
+    public static void capture(String name, McEnv env, ScenarioStore store) throws IOException {
         if (!(env instanceof AbstractMcEnv absEnv)) {
             throw new IllegalStateException("Environment does not support scenario save: " + env.getRegisterId());
         }
-        EnvStateSnapshot baseline = absEnv.baselineSnapshot();
-        EntitySnapshot agent;
-        CompoundTag world;
-        if (baseline != null) {
-            agent = baseline.agent();
-            world = ScenarioWorldCodec.encode(baseline);
-        } else if (absEnv.stateScopeView().isEmpty()) {
-            // 空范围环境没有世界内容：随时可保存，agent 取当前状态
-            agent = EntitySnapshot.capture(mob);
-            world = ScenarioWorldCodec.empty();
-        } else {
-            throw new IllegalStateException(
-                "Environment has not finished its first reset (state baseline not frozen), cannot save scenario: "
-                    + absEnv.getRegisterId());
-        }
+        EnvStateSnapshot current = absEnv.captureCurrentState();
+        EntitySnapshot agent = current.agent();
         EnvScenario scenario = new EnvScenario(
             name,
             absEnv.getRegisterId(),
-            absEnv.frozenOptionsView(),
+            absEnv.lastResetOptionsView(),
             BuiltInRegistries.ENTITY_TYPE.getKey(agent.type()).toString(),
             agent.data().toString());
-        store.save(scenario, world);
+        store.save(scenario, ScenarioWorldCodec.encode(current));
     }
 
     /**
-     * 把场景套用到已有 Mob：以其当前位置为锚放置场景内容并创建环境。
+     * 把场景套用到已有 Mob：以该 Mob 为锚创建环境，场景成为环境状态基线。
+     * 首个 reset 物化场景内容并把 Mob 替换为场景 agent（同 UUID）。
      *
      * @param loaded 已加载的场景
-     * @param mob 目标 Mob
+     * @param mob 目标 Mob（锚点）
      * @return 创建的环境
      */
     public static McEnv applyToMob(ScenarioStore.LoadedScenario loaded, Mob mob) {
-        if (!(mob.level() instanceof ServerLevel level)) {
-            throw new IllegalStateException("Scenario load requires a server-level Mob: " + mob.getUUID());
-        }
-        ScenarioWorldCodec.place(level, loaded.world(), BlockPos.containing(mob.position()), mob.getUUID());
-        McEnv env = EnvManager.create(loaded.scenario().envTypeId(), mob);
-        finishLoad(loaded, env);
-        return env;
+        return EnvManager.create(loaded.scenario().envTypeId(), mob, loaded);
     }
 
     /**
-     * 生成场景自带的 agent（新 UUID）并以生成位置为锚放置场景、创建环境。
+     * 生成场景自带的 agent（新 UUID）并以其位置为锚创建环境。
      *
      * @param loaded 已加载的场景
      * @param level 目标服务端世界
@@ -113,17 +93,6 @@ public final class ScenarioOps {
         Mob mob = spawnAgent(loaded.scenario(), level, pos);
         applyToMob(loaded, mob);
         return mob;
-    }
-
-    /** 环境创建后的收尾：preset options、场景已放置标记、运行时引用补丁。 */
-    private static void finishLoad(ScenarioStore.LoadedScenario loaded, McEnv env) {
-        if (env instanceof AbstractMcEnv absEnv) {
-            if (!loaded.scenario().options().isEmpty()) {
-                absEnv.setScenarioPresetOptions(loaded.scenario().options());
-            }
-            absEnv.markScenarioScenePlaced();
-            absEnv.onScenarioLoaded();
-        }
     }
 
     /** 从场景 agent NBT 重建实体：剥离 UUID（分配新 UUID）、覆写 Pos 为目标位置。 */

@@ -65,6 +65,7 @@ public final class GymCraftGameTests {
         // ===== 场景存档（docs/environment-scenarios.md） =====
         TEST_FUNCTIONS.register("scenario_parkour_round_trip", () -> ScenarioGameTests::parkourSaveSpawnRoundTrip);
         TEST_FUNCTIONS.register("scenario_warden_relocation", () -> ScenarioGameTests::wardenRelocation);
+        TEST_FUNCTIONS.register("scenario_immediate_capture", () -> ScenarioGameTests::immediateCaptureRoundTrip);
         TEST_FUNCTIONS.register("scenario_store_edges", () -> ScenarioGameTests::storeEdgeCases);
 
         // ===== 任务环境端到端 =====

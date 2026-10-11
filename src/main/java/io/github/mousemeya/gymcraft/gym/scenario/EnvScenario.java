@@ -7,18 +7,32 @@ import java.util.Map;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.DoubleTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.TagParser;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.Vec3;
+
+import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
 
 /**
- * 环境场景元数据（scenario.json）：环境类型 + 首个 reset 冻结的生效 options + agent 定义。
+ * 环境场景元数据（scenario.json）：环境类型 + 保存时最近一次 reset 的生效 options + agent 定义。
  * <p>
- * 世界内容（区域方块/区域实体）单独存放在场景目录的 world.nbt（原版结构模板格式，
- * 见 {@link ScenarioWorldCodec}），本记录只承载文本元数据。options 为冻结基线那次
- * reset 的生效 options（含布局选项），加载时作为 preset 注入重建环境的首个 reset。
+ * 世界内容（区域方块/区域实体）单独存放在场景目录的 world.nbt（见
+ * {@link ScenarioWorldCodec}），本记录只承载文本元数据。options 加载时作为 preset
+ * 注入重建环境的 reset（当次显式 options 覆盖 preset）。
  * </p>
  *
  * @param name 场景名（目录名，合法性由 {@link ScenarioStore#validateName} 校验）
  * @param envTypeId 环境类型注册 ID（如 {@code gymcraft:parkour_mob}）
- * @param options 冻结基线那次 reset 的生效 options；环境未 reset 过为空 Map
+ * @param options 保存时最近一次 reset 的生效 options；环境未 reset 过为空 Map
  * @param agentType agent 实体类型注册 ID
  * @param agentNbt agent 的 {@code saveWithoutId} SNBT（含装备与可序列化附件）
  */
@@ -79,6 +93,36 @@ public record EnvScenario(
         }
         Map<String, Object> options = file.options == null ? Map.of() : file.options;
         return new EnvScenario(file.name, file.env_type, options, file.agent.type, file.agent.nbt);
+    }
+
+    /**
+     * 从场景文件的 agent NBT 构造实体快照，UUID 与 Pos 覆写为锚定 Mob——首个 reset
+     * 由状态基线按该快照重建 agent（同 UUID，EnvManager 映射不破），场景内容随基线
+     * 恢复以该位置为锚物化。
+     *
+     * @param level 目标服务端世界
+     * @param anchorMob 锚定 Mob（提供 UUID 与位置）
+     * @return agent 实体快照
+     * @throws IllegalArgumentException agent 类型未注册或 NBT 无法解析时抛出
+     */
+    public EntitySnapshot agentSnapshot(ServerLevel level, Mob anchorMob) {
+        EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.get(Identifier.parse(this.agentType))
+            .map(reference -> reference.value())
+            .orElseThrow(() -> new IllegalArgumentException("Unknown agent entity type in scenario: " + this.agentType));
+        CompoundTag nbt;
+        try {
+            nbt = TagParser.parseCompoundFully(this.agentNbt);
+        } catch (CommandSyntaxException e) {
+            throw new IllegalArgumentException("Failed to parse scenario agent NBT: " + e.getMessage(), e);
+        }
+        io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot.putEntityUuid(nbt, "UUID", anchorMob.getUUID());
+        Vec3 pos = anchorMob.position();
+        ListTag posTag = new ListTag();
+        posTag.add(DoubleTag.valueOf(pos.x));
+        posTag.add(DoubleTag.valueOf(pos.y));
+        posTag.add(DoubleTag.valueOf(pos.z));
+        nbt.put("Pos", posTag);
+        return new EntitySnapshot(type, level.dimension(), nbt);
     }
 
     /** scenario.json 的文件结构（Gson 字段名即 JSON 键）。 */

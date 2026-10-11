@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
@@ -75,6 +77,58 @@ public final class RegionEntitySnapshot {
             }
         }
         return new RegionEntitySnapshot(regions, agent.getUUID(), List.copyOf(entities));
+    }
+
+    /**
+     * 文件实体条目：实体类型 + 完整 NBT（场景存档 world.nbt 解码路径的输入单元，
+     * NBT 中的 Pos 必须已是绝对坐标）。
+     */
+    public record EntityEntry(EntityType<?> type, CompoundTag data) {
+    }
+
+    /**
+     * 从文件条目构造区域实体快照（场景存档解码路径），并对每个实体重分配 UUID：
+     * 同一场景可能被多次加载或与现存实体共存，文件中的原 UUID 不可复用。
+     * <p>
+     * 重分配后的 UUID 可经 {@link #forEachEntity} 从 NBT 读回，供环境在场景加载
+     * 钩子中重建按 UUID 追踪的运行时引用（如 Warden）。
+     * </p>
+     *
+     * @param regions 实体管理区域（半开区间）
+     * @param agentUuid 受控 agent 的 UUID（恢复清场时豁免）
+     * @param entities 文件实体条目列表
+     * @return 区域实体快照
+     */
+    public static RegionEntitySnapshot of(List<AABB> regions, UUID agentUuid, List<EntityEntry> entities) {
+        List<SavedEntity> saved = new ArrayList<>(entities.size());
+        for (EntityEntry entry : entities) {
+            CompoundTag data = entry.data().copy();
+            putEntityUuid(data, "UUID", UUID.randomUUID());
+            saved.add(new SavedEntity(entry.type(), data));
+        }
+        return new RegionEntitySnapshot(List.copyOf(regions), agentUuid, List.copyOf(saved));
+    }
+
+    /**
+     * 按 26.1 实体 NBT 的编解码格式（int 数组）把 UUID 写入标签。
+     *
+     * @param tag 目标标签
+     * @param key 键名（通常为 {@code "UUID"}）
+     * @param uuid 要写入的 UUID
+     */
+    public static void putEntityUuid(CompoundTag tag, String key, UUID uuid) {
+        tag.put(key, UUIDUtil.CODEC.encodeStart(NbtOps.INSTANCE, uuid).getOrThrow());
+    }
+
+    /**
+     * 从标签读回实体 UUID（int 数组格式）。
+     *
+     * @param tag 来源标签
+     * @param key 键名
+     * @return 解析出的 UUID
+     */
+    public static UUID getEntityUuid(CompoundTag tag, String key) {
+        return UUIDUtil.CODEC.parse(NbtOps.INSTANCE, tag.get(key)).getOrThrow();
     }
 
     /**

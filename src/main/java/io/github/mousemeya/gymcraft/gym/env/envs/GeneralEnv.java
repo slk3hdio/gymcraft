@@ -3,12 +3,15 @@ package io.github.mousemeya.gymcraft.gym.env.envs;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Mob;
 
 import java.util.List;
+
+import javax.annotation.Nullable;
 
 
 /**
@@ -22,6 +25,11 @@ public class GeneralEnv extends AbstractMcEnv {
      * @param mob 受控 Agent
      */
     public GeneralEnv(Identifier envTypeId, Mob mob) {
+        this(envTypeId, mob, null);
+    }
+
+    /** 在普通构造之上携带外部场景源（手动 env load）。 */
+    public GeneralEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
         super(
             envTypeId,
             mob,
@@ -73,8 +81,8 @@ public class GeneralEnv extends AbstractMcEnv {
          * @return 新环境实例
          */
         @Override
-        public GeneralEnv create(Identifier envTypeId, Mob mob) {
-            return new GeneralEnv(envTypeId, mob);
+        public GeneralEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
+            return new GeneralEnv(envTypeId, mob, scenario);
         }
     }
 }

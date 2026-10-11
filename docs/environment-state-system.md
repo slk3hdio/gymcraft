@@ -6,9 +6,9 @@
 
 设计边界（与需求方确认）：
 
-- 仅服务 reset 基线：场景搭建完成后捕获一次，不做任意时点 checkpoint
+- reset 基线恒存在：场景环境在构造期从场景文件（内置资产或手动 `env load`）解码出完整基线，非场景环境在首次 reset 现场捕获——不存在"基线未冻结"分支；任意时点快照由场景存档系统按需捕获（`captureCurrentState`）
 - 内存保存：快照以 NBT/注册表引用组织，不落盘，环境 close 即丢弃
-- 迁移全部现有任务环境，删除各自重复的场景重建代码
+- 任务环境的场景搭建代码全部删除，场景布局以模组内置场景资产为唯一权威
 
 ## 方案评估
 
@@ -40,32 +40,41 @@ EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateS
 - `RegionEntitySnapshot`：排除真实玩家、受控 agent、乘客实体（乘客由载具根实体代表）；恢复 = 同过滤器清除现存 → `EntityType.create(ValueInput, level, LOAD)` 重建 → `addWithUUID` 保留原 UUID
 - `StateRestoreMode`：`DIFF`（默认）/ `FULL`，环境可经 `AbstractMcEnv.stateRestoreMode()` 覆盖
 
-## 生命周期
+## 生命周期（恒基线模型）
 
 ```
-环境构造          captureOriginalWorld（区域已知时；parkour 推迟到首个 reset）
-首个 reset        initialSnapshot 重建 agent → resetMob 搭建场景（清场/模板/补给/生成实体）
-                  → resetAgent 冻结基线（EnvStateSnapshot.capture）
-后续 reset        runtime 清理动作管线 → 组件 release 自清会话（菜单/消费）→
-                  AbstractMcEnv.resetEnvironment 编排：EnvStateManager 恢复区域方块（DIFF）→
-                  清除并重建区域实体 → 基线重建 agent → AgentMobLifecycle 替换实体
-                  （清背包/迁移附件作用域）→ resetMob 只做计数器/选项/实体补丁（如 Warden DIG_COOLDOWN 重注入）
+环境构造（initState，子类构造器尾部调用，彼时范围已定）
+    有场景源（手动 env load 传入 > 内置资产 bundledScenarioName()）
+        → EnvStateManager.loadScenario：捕获原世界（close 恢复用）+
+          ScenarioWorldCodec.decode 把文件解码为基线（锚定当前 Mob 的位置与 UUID，
+          区域实体重分配 UUID）+ 注入 preset options + onScenarioLoaded() 补丁钩子
+        → 不触碰世界：场景内容延迟到首个 reset 随基线恢复物化
+    无场景源
+        → 捕获原世界；基线留待首次 reset 现场捕获（EnvStateSnapshot.capture）
+reset            runtime 清理动作管线 → 组件 release 自清会话（菜单/消费）→
+                  AbstractMcEnv.resetEnvironment 编排：EnvStateManager 恢复基线
+                  （基线缺席时先现场捕获）→ 区域方块 DIFF 写回 → 清除并重建区域实体
+                  → 基线重建 agent（场景环境的 agent 来自文件 NBT，同 UUID 替换，
+                  EnvManager 映射不破）→ AgentMobLifecycle 替换实体（清背包/迁移附件
+                  作用域）→ resetMob 只做计数器/选项/实体补丁（如 Warden DIG_COOLDOWN
+                  重注入）
 close             runtime 组件 release → AgentMobLifecycle 撤销附件作用域 →
-                  EnvStateManager 恢复原世界方块（DIFF）；基线已冻结且范围含实体时清除区域实体
+                  EnvStateManager 恢复原世界方块（DIFF）；范围含实体时清除区域实体
+                  ——场景内容随 close 一并清除（含手动 env load 的场景）
 ```
 
 接入点：
 
 - `AbstractMcEnv.stateScope()`：模板方法，默认空范围
-- `AbstractMcEnv.captureOriginalWorld(ServerLevel)`：必须在首次修改世界前调用（幂等，委托 `EnvStateManager`）
-- `AbstractMcEnv.isStateBaselineFrozen()`：`resetMob` 的场景搭建分支守卫
-- 基线快照、初始实体快照与原世界快照由 `EnvStateManager`（gym/env，包私有）持有，附件作用域与实体替换由 `AgentMobLifecycle` 持有；`AgentRuntime` 不保存环境状态，reset 逻辑由 env 每次经 `AgentRuntime.reset(seed, options, ResetHandler)` 传入（`resetEnvironment`）
+- `AbstractMcEnv.bundledScenarioName()`：内置场景资产名（`data/gymcraft/scenario/<name>/`），默认 null
+- `AbstractMcEnv.initState(ServerLevel, Mob)`：子类构造器尾部调用，按上面的优先级解析场景源并构建完整状态
+- 原世界快照与完整基线由 `EnvStateManager`（gym/env，包私有）持有，附件作用域与实体替换由 `AgentMobLifecycle` 持有；`AgentRuntime` 不保存环境状态，reset 逻辑由 env 每次经 `AgentRuntime.reset(seed, options, ResetHandler)` 传入（`resetEnvironment`）
 
 ## 环境迁移要点
 
-- `iron_mining` / `iron_golem_warden`：构造期捕获原世界；场景搭建（模板/补给/Warden）保留在 resetMob 的基线冻结前分支；私有 `captureArena`/`restoreOriginalArena`/`replaceWithoutDrops`/`clearArena*` 全部删除
-- `iron_golem_warden`：Warden 的 `DIG_COOLDOWN` 脑记忆不随 NBT 序列化，每次 reset 由 `repinWarden` 重新注入（UUID 保留，引用不失效）；虚弱效果随 NBT 往返无需补丁
-- `parkour_mob`：`blocksOnly` 范围（平台层 + 训练柱）；布局选项（`block`/`block_count`/`target_height`）仅首个 reset 生效并冻结；`TrackedBlock` 增量追踪删除。行为改进：close 现在会连 agent 搭建的塔一起回滚（旧实现只还原平台方块，塔残留）
+- `iron_mining` / `iron_golem_warden` / `parkour_mob`：硬编码场景搭建（`buildScene`/模板/补给/Warden 生成/训练柱清空）全部删除，场景与初始物资来自内置场景资产（`gym/scenario/BundledScenarios`）；游戏逻辑常量（arenaBounds、资源坐标、`warden_spawn` info）保留
+- `iron_golem_warden`：Warden 来自资产实体（含虚弱效果，随 NBT 往返），UUID 由 `RegionEntitySnapshot.of` 解码时重分配、`onScenarioLoaded` 构造期从基线读回；`DIG_COOLDOWN` 脑记忆不随 NBT 序列化，每次 reset 由 `repinWarden` 重新注入
+- `parkour_mob`：`blocksOnly` 范围（平台层 + 训练柱，高度与资产一致）；布局选项（`block`/`block_count`/`target_height`）随硬编码场景一并删除——需要不同布局时经 `env save/load` 自制场景
 
 ## 已知限制
 
