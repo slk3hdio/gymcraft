@@ -26,8 +26,10 @@ import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
- * 寻路动作组件 —— 将实体导航到指定三维坐标。
+ * 寻路动作组件 —— 将实体导航到指定方块。
  * <p>
+ * 坐标按方块位置解释，目标统一修正为方块中心的可站立点
+ * （{@link MobNavigationTask#blockCenterTarget}），到达判定与距离诊断均使用修正后目标。
  * 参数空间包含坐标、速度修正值、停止距离和超时时间。
  * </p>
  */
@@ -173,9 +175,9 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         return this.navigationTask.currentPath();
     }
 
-    /** @return protobuf 坐标对应的原始目标，不做方块中心修正 */
+    /** @return 坐标所在方块的可站立中心；见 {@link MobNavigationTask#blockCenterTarget} */
     private static Vec3 target(ProtoMoveTo component) {
-        return new Vec3(component.getX(), component.getY(), component.getZ());
+        return MobNavigationTask.blockCenterTarget(component.getX(), component.getY(), component.getZ());
     }
 
     /** @return 当前 Mob 到目标的水平中心距离 */

@@ -4,6 +4,7 @@ import com.google.protobuf.Any;
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
+import io.github.mousemeya.gymcraft.gym.action.navigation.MobNavigationTask;
 import io.github.mousemeya.gymcraft.gym.action.navigation.NavigationPathProvider;
 import io.github.mousemeya.gymcraft.gym.action.proto.*;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
@@ -121,13 +122,14 @@ public final class VisualAdapters {
             return VisualGeometry.block(mob, "gymcraft:set_block", new Vec3(p.getX(), p.getY(), p.getZ()));
         });
         // 寻路类：目标点 + 实际规划路径（无活动路径时退回目标点 + 视线连线）。
+        // move_to/swim_to 目标点与 controller 一致修正到方块中心，避免画在边角。
         registerAction("gymcraft:move_to", (mob, payload, state) -> {
             var p = payload.unpack(ProtoMoveTo.class);
-            return navigation(mob, "gymcraft:move_to", new Vec3(p.getX(), p.getY(), p.getZ()));
+            return navigation(mob, "gymcraft:move_to", MobNavigationTask.blockCenterTarget(p.getX(), p.getY(), p.getZ()));
         });
         registerAction("gymcraft:swim_to", (mob, payload, state) -> {
             var p = payload.unpack(ProtoSwimTo.class);
-            return navigation(mob, "gymcraft:swim_to", new Vec3(p.getX(), p.getY(), p.getZ()));
+            return navigation(mob, "gymcraft:swim_to", MobNavigationTask.blockCenterTarget(p.getX(), p.getY(), p.getZ()));
         });
         registerAction("gymcraft:jump", (mob, payload, state) -> {
             payload.unpack(ProtoJump.class);
