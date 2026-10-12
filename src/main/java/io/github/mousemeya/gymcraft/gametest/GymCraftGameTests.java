@@ -74,6 +74,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("scenario_attach_existing_mob", () -> ScenarioGameTests::attachExistingMob);
         TEST_FUNCTIONS.register("scenario_attach_scope_full", () -> ScenarioGameTests::attachScopeRestoresBlocksAndEntities);
         TEST_FUNCTIONS.register("scenario_attach_scope_entities_only", () -> ScenarioGameTests::attachScopeEntitiesOnlyLeavesBlocks);
+        TEST_FUNCTIONS.register("scenario_attach_scope_full_height", () -> ScenarioGameTests::attachScopeVerticalClampsToWorldHeight);
         TEST_FUNCTIONS.register("scenario_entities_only_codec", () -> ScenarioGameTests::entitiesOnlyCodecRoundTrip);
 
         // ===== 任务环境端到端 =====

@@ -40,7 +40,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 - Python 所有代码必须通过 mypy 类型检查；python 库版本（pyproject.toml）与 mod 版本保持一致
 - **Mod metadata 模板**: 编辑 `src/main/templates/META-INF/neoforge.mods.toml`（不编辑构建产物）
 - Java 编译编码 UTF-8, gym 相关代码使用中文 Javadoc/注释
-- EnvToolItem: 右键 Mob 打开环境管理界面（选择环境类型、按六方向延伸距离设定范围与方块/实体快照开关、挂载、保存场景、移除；`client/EnvToolScreen` + `network/EnvTool*Payload`），Shift+右键快速移除环境；`/gymcraft env create <target> [type] [west east down up north south] [captureBlocks] [captureEntities]` 与 `remove` 指令与之等价（供专用服务器控制台/RCON）
+- EnvToolItem: 右键 Mob 打开环境管理界面（选择环境类型、按六方向延伸距离设定范围——水平 0–32 格、垂直默认完整世界高度——与方块/实体快照开关、挂载、保存场景、移除；`client/EnvToolScreen` + `network/EnvTool*Payload`），Shift+右键快速移除环境；`/gymcraft env create <target> [type] [west east north south [down up] [captureBlocks] [captureEntities]]`（垂直省略或 -1 = 完整世界高度）与 `remove` 指令与之等价（供专用服务器控制台/RCON）
 - 无头服务器测试 (runServer + RCON): `server.properties` 必须设 `pause-when-empty-seconds=-1`（否则空服 60 秒后暂停 tick，gRPC step 永久挂起）；受控生物所在区块必须 `forceload`
 - **端到端测试方式**: 先启动服务器，通过 RCON 执行指令布置场景，然后运行 Python 脚本（`src/main/python/debug/` 下）交互
 - **断连会话自动清理**: 客户端 TCP 终止 → `ServerTransportFilter` 把该连接上的会话标记为孤儿；瞬断重连由 `RpcEnvSessions.rebindIfOrphaned` 透明恢复，新进程 `Connect` 直接接管孤儿会话，真死会话按 `rpcSessionReconnectGraceSeconds`（默认 60s）宽限期由清扫线程清理；`rpcKeepAliveTimeSeconds`/`rpcKeepAliveTimeoutSeconds`（默认 30/10）探测死连接。实体被**活跃**会话占用时 `Connect` 仍返回 `ALREADY_EXISTS`

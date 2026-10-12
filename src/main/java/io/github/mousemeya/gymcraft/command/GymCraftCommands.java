@@ -77,6 +77,31 @@ public final class GymCraftCommands {
     public static void register(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         String defaultType = EnvFactories.SIMPLE_MOB.getId().toString();
+        // create 的范围参数链自底向上构建：西/东/北/南 [下 [上]] [captureBlocks [captureEntities]]；
+        // 下/上接受 -1 = 完整世界高度，只给水平四向时垂直默认完整世界高度。
+        var captureEntities = Commands.argument("captureEntities", BoolArgumentType.bool())
+                .executes(ctx -> create(ctx, IntegerArgumentType.getInteger(ctx, "down"),
+                        IntegerArgumentType.getInteger(ctx, "up"),
+                        BoolArgumentType.getBool(ctx, "captureBlocks"), BoolArgumentType.getBool(ctx, "captureEntities")));
+        var captureBlocks = Commands.argument("captureBlocks", BoolArgumentType.bool())
+                .executes(ctx -> create(ctx, IntegerArgumentType.getInteger(ctx, "down"),
+                        IntegerArgumentType.getInteger(ctx, "up"), BoolArgumentType.getBool(ctx, "captureBlocks"), true))
+                .then(captureEntities);
+        var up = Commands.argument("up", IntegerArgumentType.integer(-1, AttachScope.MAX_HEIGHT))
+                .executes(ctx -> create(ctx, IntegerArgumentType.getInteger(ctx, "down"),
+                        IntegerArgumentType.getInteger(ctx, "up"), true, true))
+                .then(captureBlocks);
+        var down = Commands.argument("down", IntegerArgumentType.integer(-1, AttachScope.MAX_HEIGHT))
+                .then(up);
+        var south = Commands.argument("south", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
+                .executes(ctx -> create(ctx, -1, -1, true, true))
+                .then(down);
+        var north = Commands.argument("north", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
+                .then(south);
+        var east = Commands.argument("east", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
+                .then(north);
+        var west = Commands.argument("west", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
+                .then(east);
         dispatcher.register(Commands.literal("gymcraft")
                 .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .then(Commands.literal("env")
@@ -88,18 +113,7 @@ public final class GymCraftCommands {
                                                 .suggests(ENV_TYPE_SUGGESTIONS)
                                                 .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
                                                         IdentifierArgument.getId(ctx, "type").toString(), 0, 0, 0, 0, 0, 0, true, true))
-                                                .then(Commands.argument("west", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
-                                                        .then(Commands.argument("east", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
-                                                                .then(Commands.argument("down", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
-                                                                        .then(Commands.argument("up", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
-                                                                                .then(Commands.argument("north", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
-                                                                                        .then(Commands.argument("south", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
-                                                                                                .executes(ctx -> create(ctx, true, true))
-                                                                                                .then(Commands.argument("captureBlocks", BoolArgumentType.bool())
-                                                                                                        .executes(ctx -> create(ctx, BoolArgumentType.getBool(ctx, "captureBlocks"), true))
-                                                                                                        .then(Commands.argument("captureEntities", BoolArgumentType.bool())
-                                                                                                                .executes(ctx -> create(ctx, BoolArgumentType.getBool(ctx, "captureBlocks"),
-                                                                                                                        BoolArgumentType.getBool(ctx, "captureEntities"))))))))))))))
+                                                .then(west))))
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("target", EntityArgument.entities())
                                         .executes(ctx -> remove(ctx.getSource(), EntityArgument.getEntities(ctx, "target")))))
@@ -129,22 +143,23 @@ public final class GymCraftCommands {
     }
 
     /**
-     * 从指令上下文提取目标、环境类型与六方向距离后的便捷入口（距离参数集齐才可执行）。
+     * 从指令上下文提取目标、环境类型与水平四向距离后的便捷入口。
      *
      * @param ctx 指令上下文
+     * @param down 向下(-Y)延伸距离；-1 = 完整世界高度
+     * @param up 向上(+Y)延伸距离；-1 = 完整世界高度
      * @param captureBlocks 是否保存区域方块快照
      * @param captureEntities 是否保存区域实体快照
      * @return 成功创建环境的目标数（0 表示全部失败）
      * @throws CommandSyntaxException 目标实体参数解析失败时抛出
      */
-    private static int create(CommandContext<CommandSourceStack> ctx, boolean captureBlocks, boolean captureEntities)
-            throws CommandSyntaxException {
+    private static int create(CommandContext<CommandSourceStack> ctx, int down, int up,
+            boolean captureBlocks, boolean captureEntities) throws CommandSyntaxException {
         return create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
             IdentifierArgument.getId(ctx, "type").toString(),
             IntegerArgumentType.getInteger(ctx, "west"), IntegerArgumentType.getInteger(ctx, "east"),
-            IntegerArgumentType.getInteger(ctx, "down"), IntegerArgumentType.getInteger(ctx, "up"),
             IntegerArgumentType.getInteger(ctx, "north"), IntegerArgumentType.getInteger(ctx, "south"),
-            captureBlocks, captureEntities);
+            down, up, captureBlocks, captureEntities);
     }
 
     /**
@@ -157,17 +172,17 @@ public final class GymCraftCommands {
      * @param envType 环境注册表 ID
      * @param west 向西(-X)延伸距离（0 = 该方向不延伸）
      * @param east 向东(+X)延伸距离
-     * @param down 向下(-Y)延伸距离
-     * @param up 向上(+Y)延伸距离
      * @param north 向北(-Z)延伸距离
      * @param south 向南(+Z)延伸距离
+     * @param down 向下(-Y)延伸距离；-1 = 完整世界高度
+     * @param up 向上(+Y)延伸距离；-1 = 完整世界高度
      * @param captureBlocks 是否保存区域方块快照
      * @param captureEntities 是否保存区域实体快照
      * @return 成功创建环境的目标数（0 表示全部失败）
      * @throws CommandSyntaxException 目标实体参数解析失败时抛出
      */
     private static int create(CommandSourceStack source, Collection<? extends Entity> targets, String envType,
-            int west, int east, int down, int up, int north, int south,
+            int west, int east, int north, int south, int down, int up,
             boolean captureBlocks, boolean captureEntities) throws CommandSyntaxException {
         int created = 0;
         for (Entity target : targets) {
@@ -177,8 +192,11 @@ public final class GymCraftCommands {
                 continue;
             }
             try {
+                // -1 = 完整世界高度：按该 Mob 当前位置换算为到世界边界的距离
+                int downDist = down < 0 ? mob.blockPosition().getY() - mob.level().getMinY() : down;
+                int upDist = up < 0 ? mob.level().getMaxY() - 1 - mob.blockPosition().getY() : up;
                 EnvManager.attach(envType, mob,
-                    AttachScope.around(mob, west, east, down, up, north, south, captureBlocks, captureEntities));
+                    AttachScope.around(mob, west, east, downDist, upDist, north, south, captureBlocks, captureEntities));
             } catch (IllegalArgumentException | IllegalStateException e) {
                 source.sendFailure(Component.translatable("message.gymcraft.error", e.getMessage()));
                 continue;
