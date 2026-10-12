@@ -10,11 +10,17 @@ import net.minecraft.resources.Identifier;
 
 /**
  * 客户端 → 服务端：按界面设定向目标 Mob 挂载（或重新挂载）环境。
+ * 范围以目标方块位置为锚、六个方向各自独立延伸（西/东/下/上/北/南）。
  */
 public record EnvToolAttachPayload(
     UUID target,
     String envType,
-    int radius,
+    int west,
+    int east,
+    int down,
+    int up,
+    int north,
+    int south,
     boolean captureBlocks,
     boolean captureEntities
 ) implements CustomPacketPayload {
@@ -27,7 +33,12 @@ public record EnvToolAttachPayload(
     private static void write(RegistryFriendlyByteBuf buffer, EnvToolAttachPayload value) {
         buffer.writeUUID(value.target());
         buffer.writeUtf(value.envType());
-        buffer.writeVarInt(value.radius());
+        buffer.writeVarInt(value.west());
+        buffer.writeVarInt(value.east());
+        buffer.writeVarInt(value.down());
+        buffer.writeVarInt(value.up());
+        buffer.writeVarInt(value.north());
+        buffer.writeVarInt(value.south());
         buffer.writeBoolean(value.captureBlocks());
         buffer.writeBoolean(value.captureEntities());
     }
@@ -35,7 +46,9 @@ public record EnvToolAttachPayload(
     /** @param buffer 网络缓冲 @return 挂载请求 */
     private static EnvToolAttachPayload read(RegistryFriendlyByteBuf buffer) {
         return new EnvToolAttachPayload(buffer.readUUID(), buffer.readUtf(),
-            buffer.readVarInt(), buffer.readBoolean(), buffer.readBoolean());
+            buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
+            buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
+            buffer.readBoolean(), buffer.readBoolean());
     }
 
     /** @return 协议类型 */

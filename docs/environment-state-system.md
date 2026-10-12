@@ -49,7 +49,8 @@ EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateS
           区域实体重分配 UUID）+ 携带 preset options
         → 不触碰世界：场景内容延迟到首个 reset 随基线恢复物化
     attach（指定环境 ID 与已有 Mob，不读取场景）
-        → 按挂载作用域当场捕获基线（AttachScope：区域 + 方块/实体捕获开关；
+        → 按挂载作用域当场捕获基线（AttachScope：区域（以 Mob 方块位置为锚、
+          六方向各自延伸）+ 方块/实体捕获开关；
           AGENT_ONLY = 空区域仅捕获 agent）（EnvStateSnapshot.capture）
     两条路径都产出不可变 EnvStateSnapshot（自持生效范围），不依赖环境任何回调
 reset            runtime 清理动作管线 → 组件 release 自清会话（菜单/消费）→

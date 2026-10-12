@@ -14,12 +14,18 @@ import net.minecraft.resources.Identifier;
 /**
  * 服务端 → 客户端：打开或刷新环境工具管理界面。
  * 携带目标实体、全部已注册环境类型与目标当前绑定的环境状态（未绑定时字段为空）。
+ * 范围以目标方块位置为锚、六个方向各自独立延伸（西/东/下/上/北/南）。
  */
 public record EnvToolScreenPayload(
     UUID target,
     List<String> envTypes,
     @Nullable String currentEnvType,
-    int regionRadius,
+    int west,
+    int east,
+    int down,
+    int up,
+    int north,
+    int south,
     boolean captureBlocks,
     boolean captureEntities
 ) implements CustomPacketPayload {
@@ -36,7 +42,12 @@ public record EnvToolScreenPayload(
         if (value.currentEnvType() != null) {
             buffer.writeUtf(value.currentEnvType());
         }
-        buffer.writeVarInt(value.regionRadius());
+        buffer.writeVarInt(value.west());
+        buffer.writeVarInt(value.east());
+        buffer.writeVarInt(value.down());
+        buffer.writeVarInt(value.up());
+        buffer.writeVarInt(value.north());
+        buffer.writeVarInt(value.south());
         buffer.writeBoolean(value.captureBlocks());
         buffer.writeBoolean(value.captureEntities());
     }
@@ -47,7 +58,9 @@ public record EnvToolScreenPayload(
         List<String> envTypes = buffer.readList(buf -> buf.readUtf());
         String currentEnvType = buffer.readBoolean() ? buffer.readUtf() : null;
         return new EnvToolScreenPayload(target, envTypes, currentEnvType,
-            buffer.readVarInt(), buffer.readBoolean(), buffer.readBoolean());
+            buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
+            buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
+            buffer.readBoolean(), buffer.readBoolean());
     }
 
     /** @return 协议类型 */

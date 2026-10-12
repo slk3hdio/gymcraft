@@ -18,14 +18,24 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 /**
- * 环境工具管理界面：绑定到单个目标 Mob，支持选择环境类型、设定状态范围半径与
- * 方块/实体快照开关、挂载/重新挂载、保存场景与移除环境。
+ * 环境工具管理界面：绑定到单个目标 Mob，支持选择环境类型、以六方向（西/东/下/上/
+ * 北/南）独立延伸距离设定状态范围、方块/实体快照开关、挂载/重新挂载、保存场景与
+ * 移除环境。
  * <p>
  * 界面状态由服务端载荷驱动：每次操作后服务端重发 {@link EnvToolScreenPayload}，
  * 界面经 {@link #refresh} 就地更新；按钮动作只发请求，不在本地假设成功。
  * </p>
  */
 public final class EnvToolScreen extends Screen {
+    /** 范围方向数（西/东/下/上/北/南）。 */
+    private static final int DIRECTIONS = 6;
+    /** 方向标签翻译键，下标与距离数组一致（西/东/下/上/北/南）。 */
+    private static final String[] DIRECTION_KEYS = {
+        "screen.gymcraft.env_tool.dir_west", "screen.gymcraft.env_tool.dir_east",
+        "screen.gymcraft.env_tool.dir_down", "screen.gymcraft.env_tool.dir_up",
+        "screen.gymcraft.env_tool.dir_north", "screen.gymcraft.env_tool.dir_south"
+    };
+
     private final UUID target;
     private final List<String> envTypes;
     private int selectedIndex;
@@ -33,11 +43,11 @@ public final class EnvToolScreen extends Screen {
     @Nullable private String currentEnvType;
     private boolean captureBlocks;
     private boolean captureEntities;
-    /** 半径输入暂存：EditBox 重建（界面刷新）时恢复用户输入。 */
-    private int radiusValue;
+    /** 六方向延伸距离暂存（西/东/下/上/北/南）：EditBox 重建（界面刷新）时恢复用户输入。 */
+    private final int[] extents = new int[DIRECTIONS];
     /** 场景名输入暂存：EditBox 重建（界面刷新）时恢复用户输入。 */
     private String scenarioName = "";
-    private EditBox radiusBox;
+    private final EditBox[] extentBoxes = new EditBox[DIRECTIONS];
     private EditBox nameBox;
     private Button saveButton;
     private Button removeButton;
@@ -55,7 +65,7 @@ public final class EnvToolScreen extends Screen {
         this.selectedIndex = Math.max(0, this.envTypes.indexOf(state.currentEnvType()));
         this.captureBlocks = state.captureBlocks();
         this.captureEntities = state.captureEntities();
-        this.radiusValue = state.regionRadius();
+        this.setExtents(state.west(), state.east(), state.down(), state.up(), state.north(), state.south());
     }
 
     /**
@@ -81,8 +91,11 @@ public final class EnvToolScreen extends Screen {
             this.envTypes.addAll(state.envTypes());
             this.selectedIndex = Math.max(0, this.envTypes.indexOf(state.currentEnvType()));
         }
-        if (this.radiusBox == null || !this.radiusBox.isFocused()) {
-            this.radiusValue = state.regionRadius();
+        int[] latest = {state.west(), state.east(), state.down(), state.up(), state.north(), state.south()};
+        for (int i = 0; i < DIRECTIONS; i++) {
+            if (this.extentBoxes[i] == null || !this.extentBoxes[i].isFocused()) {
+                this.extents[i] = latest[i];
+            }
         }
         if (this.nameBox != null && this.nameBox.isFocused()) {
             this.scenarioName = this.nameBox.getValue();
@@ -95,8 +108,8 @@ public final class EnvToolScreen extends Screen {
     }
 
     /**
-     * 构建界面：环境类型循环按钮、范围半径输入、方块/实体快照开关、场景名输入与
-     * 保存按钮，底部挂载/移除/完成；目标与当前环境信息只读绘制。
+     * 构建界面：环境类型循环按钮、六方向范围输入（3 行 × 2 列）、方块/实体快照开关、
+     * 场景名输入与保存按钮，底部挂载/移除/完成；目标与当前环境信息只读绘制。
      */
     @Override protected void init() {
         int left = this.width / 2 - 150;
@@ -106,29 +119,35 @@ public final class EnvToolScreen extends Screen {
             button.setMessage(envTypeLabel());
         }).bounds(left, 46, 300, 20).build());
 
-        this.radiusBox = new EditBox(this.font, left + 200, 70, 100, 20,
-            Component.translatable("screen.gymcraft.env_tool.radius"));
-        this.radiusBox.setFilter(text -> text.isEmpty() || text.matches("\\d{1,2}"));
-        this.radiusBox.setMaxLength(2);
-        this.radiusBox.setResponder(text -> {
-            // 过滤已保证非空即 1–2 位数字；清空按 0（仅捕获 agent）处理。
-            this.radiusValue = text.isEmpty() ? 0 : Integer.parseInt(text);
-        });
-        this.radiusBox.setValue(Integer.toString(this.radiusValue));
-        this.addRenderableWidget(this.radiusBox);
+        // 六方向范围输入：每行两个方向，方向标签绘制在输入框左侧（见 extractRenderState）。
+        for (int row = 0; row < DIRECTIONS / 2; row++) {
+            for (int column = 0; column < 2; column++) {
+                int index = row * 2 + column;
+                EditBox box = new EditBox(this.font, left + 16 + column * 150, 76 + row * 24, 122, 20,
+                    Component.translatable(DIRECTION_KEYS[index]));
+                box.setFilter(text -> text.isEmpty() || text.matches("\\d{1,2}"));
+                box.setMaxLength(2);
+                box.setResponder(text -> {
+                    // 过滤已保证非空即 1–2 位数字；清空按 0（该方向不延伸）处理。
+                    this.extents[index] = text.isEmpty() ? 0 : Integer.parseInt(text);
+                });
+                box.setValue(Integer.toString(this.extents[index]));
+                this.extentBoxes[index] = this.addRenderableWidget(box);
+            }
+        }
 
         this.addRenderableWidget(Button.builder(captureLabel(
                 "screen.gymcraft.env_tool.capture_blocks", this.captureBlocks), button -> {
             this.captureBlocks = !this.captureBlocks;
             button.setMessage(captureLabel("screen.gymcraft.env_tool.capture_blocks", this.captureBlocks));
-        }).bounds(left, 94, 148, 20).build());
+        }).bounds(left, 148, 148, 20).build());
         this.addRenderableWidget(Button.builder(captureLabel(
                 "screen.gymcraft.env_tool.capture_entities", this.captureEntities), button -> {
             this.captureEntities = !this.captureEntities;
             button.setMessage(captureLabel("screen.gymcraft.env_tool.capture_entities", this.captureEntities));
-        }).bounds(left + 152, 94, 148, 20).build());
+        }).bounds(left + 152, 148, 148, 20).build());
 
-        this.nameBox = new EditBox(this.font, left, 118, 194, 20,
+        this.nameBox = new EditBox(this.font, left, 172, 194, 20,
             Component.translatable("screen.gymcraft.env_tool.scenario_name"));
         this.nameBox.setSuggestion(Component.translatable("screen.gymcraft.env_tool.scenario_name").getString());
         this.nameBox.setMaxLength(64);
@@ -140,17 +159,17 @@ public final class EnvToolScreen extends Screen {
         this.nameBox.setValue(this.scenarioName);
         this.saveButton = this.addRenderableWidget(Button.builder(
             Component.translatable("screen.gymcraft.env_tool.save"), button -> this.saveScenario()
-        ).bounds(left + 198, 118, 102, 20).build());
+        ).bounds(left + 198, 172, 102, 20).build());
 
         this.addRenderableWidget(Button.builder(
             Component.translatable("screen.gymcraft.env_tool.attach"), button -> this.attach()
-        ).bounds(left, 146, 98, 20).build());
+        ).bounds(left, 200, 98, 20).build());
         this.removeButton = this.addRenderableWidget(Button.builder(
             Component.translatable("screen.gymcraft.env_tool.remove"), button -> this.removeEnv()
-        ).bounds(left + 101, 146, 98, 20).build());
+        ).bounds(left + 101, 200, 98, 20).build());
         this.addRenderableWidget(Button.builder(
             Component.translatable("screen.gymcraft.env_tool.done"), button -> this.onClose()
-        ).bounds(left + 202, 146, 98, 20).build());
+        ).bounds(left + 202, 200, 98, 20).build());
         this.updateActionStates();
     }
 
@@ -160,7 +179,9 @@ public final class EnvToolScreen extends Screen {
             return;
         }
         ClientPacketDistributor.sendToServer(new EnvToolAttachPayload(
-            this.target, this.envTypes.get(this.selectedIndex), Math.min(this.radiusValue, AttachScope.MAX_RADIUS),
+            this.target, this.envTypes.get(this.selectedIndex),
+            clamped(this.extents[0]), clamped(this.extents[1]), clamped(this.extents[2]),
+            clamped(this.extents[3]), clamped(this.extents[4]), clamped(this.extents[5]),
             this.captureBlocks, this.captureEntities));
     }
 
@@ -176,6 +197,21 @@ public final class EnvToolScreen extends Screen {
     /** 发送移除环境请求。 */
     private void removeEnv() {
         ClientPacketDistributor.sendToServer(new EnvToolRemovePayload(this.target));
+    }
+
+    /** 写入六方向延伸距离暂存（顺序：西/东/下/上/北/南）。 */
+    private void setExtents(int west, int east, int down, int up, int north, int south) {
+        this.extents[0] = west;
+        this.extents[1] = east;
+        this.extents[2] = down;
+        this.extents[3] = up;
+        this.extents[4] = north;
+        this.extents[5] = south;
+    }
+
+    /** @param distance 原始距离 @return 钳制到单方向上限内的距离 */
+    private static int clamped(int distance) {
+        return Math.min(distance, AttachScope.MAX_RADIUS);
     }
 
     /** 按当前环境绑定状态与输入内容刷新保存/移除按钮可用态。 */
@@ -213,7 +249,14 @@ public final class EnvToolScreen extends Screen {
             : Component.literal(this.currentEnvType);
         graphics.text(this.font, Component.translatable("screen.gymcraft.env_tool.current_env", current),
             left, 33, 0xFFAAAAAA);
-        graphics.text(this.font, Component.translatable("screen.gymcraft.env_tool.radius"), left, 76, 0xFFFFFFFF);
+        graphics.text(this.font, Component.translatable("screen.gymcraft.env_tool.range"), left, 68, 0xFFAAAAAA);
+        // 方向标签画在对应输入框左侧，垂直居中对齐 20 高的输入框。
+        for (int row = 0; row < DIRECTIONS / 2; row++) {
+            for (int column = 0; column < 2; column++) {
+                graphics.text(this.font, Component.translatable(DIRECTION_KEYS[row * 2 + column]),
+                    left + column * 150, 82 + row * 24, 0xFFFFFFFF);
+            }
+        }
     }
 
     /** @return false，管理时环境继续执行 */

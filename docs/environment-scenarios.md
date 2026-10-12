@@ -90,7 +90,7 @@ MCA 容器、扇区分配、压缩和大条目 `.mcc` 溢出由原版 `RegionFil
 ## 指令与生命周期
 
 ```text
-/gymcraft env create <target:entity> [type:id] [radius:int] [captureBlocks:bool] [captureEntities:bool]  # 挂载现有 Mob
+/gymcraft env create <target:entity> [type:id] [west:int east:int down:int up:int north:int south:int] [captureBlocks:bool] [captureEntities:bool]  # 挂载现有 Mob
 /gymcraft env save <target:entity> <name:word>
 /gymcraft env load <name:word> [pos:vec3]
 /gymcraft env list
@@ -103,7 +103,7 @@ MCA 容器、扇区分配、压缩和大条目 `.mcc` 溢出由原版 `RegionFil
   允许负坐标与非 16 格对齐位置，恢复时严格裁剪到区域边界。
 - 首次 reset 物化世界并以同 UUID 替换 agent；区域实体在解码时重新分配 UUID，之后跨 reset 保持基线 UUID。
 - `env create` 与工具物品仅挂载现有 Mob，不隐式加载内置资产；`env load` 明确读取场景后创建新 agent。
-  `radius` 为正且至少一个捕获开关打开时以 Mob 为中心捕获半径立方体基线（上限 32 格），否则只捕获 agent。
+  六方向延伸距离（西/东/下/上/北/南，各 0–32 格）任一为正且至少一个捕获开关打开时，以 Mob 方块位置为锚按各方向距离捕获区域基线，否则只捕获 agent。
 - 空作用域挂载的 save 只保存 agent 与 options，reset 不恢复周围方块或实体。
 - 首次 reset 的 options 优先级：当次显式 options > 场景 preset > 默认值。
 - 物化要求目标区域区块已经加载；无头服务器先 `forceload`。Codec 本身不加载区块。
