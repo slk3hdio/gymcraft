@@ -5,7 +5,6 @@ import java.util.UUID;
 
 import javax.annotation.Nullable;
 
-import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.network.EnvToolAttachPayload;
 import io.github.mousemeya.gymcraft.network.EnvToolRemovePayload;
 import io.github.mousemeya.gymcraft.network.EnvToolSavePayload;
@@ -36,8 +35,6 @@ public final class EnvToolScreen extends Screen {
         "screen.gymcraft.env_tool.dir_down", "screen.gymcraft.env_tool.dir_up",
         "screen.gymcraft.env_tool.dir_north", "screen.gymcraft.env_tool.dir_south"
     };
-    /** 四周水平方向（西/东/北/南）在距离数组中的下标。 */
-    private static final int[] HORIZONTAL_INDICES = {0, 1, 4, 5};
 
     private final UUID target;
     private final List<String> envTypes;
@@ -48,6 +45,8 @@ public final class EnvToolScreen extends Screen {
     private boolean captureEntities;
     /** 六方向延伸距离暂存（西/东/下/上/北/南）：EditBox 重建（界面刷新）时恢复用户输入。 */
     private final int[] extents = new int[DIRECTIONS];
+    /** 六方向延伸距离上限（西/东/下/上/北/南），由服务端按钳制规则与目标位置下发。 */
+    private final int[] maxima = new int[DIRECTIONS];
     /** 场景名输入暂存：EditBox 重建（界面刷新）时恢复用户输入。 */
     private String scenarioName = "";
     private final EditBox[] extentBoxes = new EditBox[DIRECTIONS];
@@ -69,6 +68,8 @@ public final class EnvToolScreen extends Screen {
         this.captureBlocks = state.captureBlocks();
         this.captureEntities = state.captureEntities();
         this.setExtents(state.west(), state.east(), state.down(), state.up(), state.north(), state.south());
+        this.setMaxima(state.maxWest(), state.maxEast(), state.maxDown(), state.maxUp(),
+            state.maxNorth(), state.maxSouth());
     }
 
     /**
@@ -100,6 +101,9 @@ public final class EnvToolScreen extends Screen {
                 this.extents[i] = latest[i];
             }
         }
+        int[] latestMaxima = {state.maxWest(), state.maxEast(), state.maxDown(), state.maxUp(),
+            state.maxNorth(), state.maxSouth()};
+        System.arraycopy(latestMaxima, 0, this.maxima, 0, DIRECTIONS);
         if (this.nameBox != null && this.nameBox.isFocused()) {
             this.scenarioName = this.nameBox.getValue();
         }
@@ -122,13 +126,14 @@ public final class EnvToolScreen extends Screen {
             button.setMessage(envTypeLabel());
         }).bounds(left, 46, 300, 20).build());
 
-        // 六方向范围输入：每行两个方向，方向标签绘制在输入框左侧（见 extractRenderState）。
+        // 六方向范围输入：每行两个方向，方向标签绘制在输入框左侧（见 extractRenderState），
+        // 每个输入框右侧一个"最大"按钮（上限取服务端下发的各方向 maxima）。
         // 水平方向最多 2 位（上限 32），垂直方向最多 4 位（可为完整世界高度）。
         for (int row = 0; row < DIRECTIONS / 2; row++) {
             for (int column = 0; column < 2; column++) {
                 int index = row * 2 + column;
                 boolean vertical = index == 2 || index == 3;
-                EditBox box = new EditBox(this.font, left + 16 + column * 136, 76 + row * 24, 100, 20,
+                EditBox box = new EditBox(this.font, left + 16 + column * 150, 76 + row * 24, 100, 20,
                     Component.translatable(DIRECTION_KEYS[index]));
                 box.setFilter(text -> text.isEmpty() || text.matches(vertical ? "\\d{1,4}" : "\\d{1,2}"));
                 box.setMaxLength(vertical ? 4 : 2);
@@ -138,19 +143,17 @@ public final class EnvToolScreen extends Screen {
                 });
                 box.setValue(Integer.toString(this.extents[index]));
                 this.extentBoxes[index] = this.addRenderableWidget(box);
+                this.addRenderableWidget(Button.builder(
+                    Component.translatable("screen.gymcraft.env_tool.max"), button -> {
+                        this.extents[index] = this.maxima[index];
+                        box.setValue(Integer.toString(this.maxima[index]));
+                    }).bounds(left + 118 + column * 150, 76 + row * 24, 28, 20)
+                    .tooltip(Tooltip.create(Component.translatable(
+                        "screen.gymcraft.env_tool.max_hint",
+                        Component.translatable(DIRECTION_KEYS[index]), this.maxima[index])))
+                    .build());
             }
         }
-        // 四周最大：西/东/北/南四个水平方向一键设为延伸上限（垂直方向不变）。
-        this.addRenderableWidget(Button.builder(
-            Component.translatable("screen.gymcraft.env_tool.max_horizontal"), button -> {
-                for (int index : HORIZONTAL_INDICES) {
-                    this.extents[index] = AttachScope.MAX_RADIUS;
-                    this.extentBoxes[index].setValue(Integer.toString(AttachScope.MAX_RADIUS));
-                }
-            }).bounds(left + 256, 76, 44, 20)
-            .tooltip(Tooltip.create(Component.translatable(
-                "screen.gymcraft.env_tool.max_horizontal_hint", AttachScope.MAX_RADIUS)))
-            .build());
 
         this.addRenderableWidget(Button.builder(captureLabel(
                 "screen.gymcraft.env_tool.capture_blocks", this.captureBlocks), button -> {
@@ -225,6 +228,16 @@ public final class EnvToolScreen extends Screen {
         this.extents[5] = south;
     }
 
+    /** 写入六方向延伸距离上限（顺序：西/东/下/上/北/南）。 */
+    private void setMaxima(int west, int east, int down, int up, int north, int south) {
+        this.maxima[0] = west;
+        this.maxima[1] = east;
+        this.maxima[2] = down;
+        this.maxima[3] = up;
+        this.maxima[4] = north;
+        this.maxima[5] = south;
+    }
+
     /** 按当前环境绑定状态与输入内容刷新保存/移除按钮可用态。 */
     private void updateActionStates() {
         if (this.saveButton == null || this.removeButton == null) {
@@ -265,7 +278,7 @@ public final class EnvToolScreen extends Screen {
         for (int row = 0; row < DIRECTIONS / 2; row++) {
             for (int column = 0; column < 2; column++) {
                 graphics.text(this.font, Component.translatable(DIRECTION_KEYS[row * 2 + column]),
-                    left + column * 136, 82 + row * 24, 0xFFFFFFFF);
+                    left + column * 150, 82 + row * 24, 0xFFFFFFFF);
             }
         }
     }
