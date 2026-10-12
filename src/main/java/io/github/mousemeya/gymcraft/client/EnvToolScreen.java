@@ -5,7 +5,6 @@ import java.util.UUID;
 
 import javax.annotation.Nullable;
 
-import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.network.EnvToolAttachPayload;
 import io.github.mousemeya.gymcraft.network.EnvToolRemovePayload;
 import io.github.mousemeya.gymcraft.network.EnvToolSavePayload;
@@ -120,13 +119,15 @@ public final class EnvToolScreen extends Screen {
         }).bounds(left, 46, 300, 20).build());
 
         // 六方向范围输入：每行两个方向，方向标签绘制在输入框左侧（见 extractRenderState）。
+        // 水平方向最多 2 位（上限 32），垂直方向最多 4 位（可为完整世界高度）。
         for (int row = 0; row < DIRECTIONS / 2; row++) {
             for (int column = 0; column < 2; column++) {
                 int index = row * 2 + column;
+                boolean vertical = index == 2 || index == 3;
                 EditBox box = new EditBox(this.font, left + 16 + column * 150, 76 + row * 24, 122, 20,
                     Component.translatable(DIRECTION_KEYS[index]));
-                box.setFilter(text -> text.isEmpty() || text.matches("\\d{1,2}"));
-                box.setMaxLength(2);
+                box.setFilter(text -> text.isEmpty() || text.matches(vertical ? "\\d{1,4}" : "\\d{1,2}"));
+                box.setMaxLength(vertical ? 4 : 2);
                 box.setResponder(text -> {
                     // 过滤已保证非空即 1–2 位数字；清空按 0（该方向不延伸）处理。
                     this.extents[index] = text.isEmpty() ? 0 : Integer.parseInt(text);
@@ -173,15 +174,15 @@ public final class EnvToolScreen extends Screen {
         this.updateActionStates();
     }
 
-    /** 发送挂载请求。 */
+    /** 发送挂载请求（距离钳制由服务端 AttachScope 执行）。 */
     private void attach() {
         if (this.envTypes.isEmpty()) {
             return;
         }
         ClientPacketDistributor.sendToServer(new EnvToolAttachPayload(
             this.target, this.envTypes.get(this.selectedIndex),
-            clamped(this.extents[0]), clamped(this.extents[1]), clamped(this.extents[2]),
-            clamped(this.extents[3]), clamped(this.extents[4]), clamped(this.extents[5]),
+            this.extents[0], this.extents[1], this.extents[2],
+            this.extents[3], this.extents[4], this.extents[5],
             this.captureBlocks, this.captureEntities));
     }
 
@@ -207,11 +208,6 @@ public final class EnvToolScreen extends Screen {
         this.extents[3] = up;
         this.extents[4] = north;
         this.extents[5] = south;
-    }
-
-    /** @param distance 原始距离 @return 钳制到单方向上限内的距离 */
-    private static int clamped(int distance) {
-        return Math.min(distance, AttachScope.MAX_RADIUS);
     }
 
     /** 按当前环境绑定状态与输入内容刷新保存/移除按钮可用态。 */

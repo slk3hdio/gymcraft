@@ -772,6 +772,55 @@ public final class ScenarioGameTests {
     }
 
     /**
+     * 验证垂直方向延伸距离超出世界高度时按建筑高度精确钳制：区域 Y 覆盖完整世界
+     * （默认全高行为的基础），水平方向仍按给定距离。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void attachScopeVerticalClampsToWorldHeight(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Mob agent = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(4, 1, 4));
+        UUID agentUuid = agent.getUUID();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        AtomicReference<Boolean> done = new AtomicReference<>(false);
+        Thread.startVirtualThread(() -> {
+            try {
+                AtomicReference<McEnv> ref = new AtomicReference<>();
+                AtomicReference<BlockPos> anchorRef = new AtomicReference<>();
+                runOnServer(helper, () -> {
+                    Mob mob = (Mob) level.getEntity(agentUuid);
+                    anchorRef.set(mob.blockPosition());
+                    ref.set(EnvManager.attach("gymcraft:simple_mob", mob,
+                        AttachScope.around(mob, 2, 3, AttachScope.MAX_HEIGHT, AttachScope.MAX_HEIGHT, 1, 3, true, true)));
+                });
+                AbstractMcEnv env = (AbstractMcEnv) ref.get();
+                runOnServer(helper, () -> {
+                    BoundingBox region = env.stateRegion();
+                    check(region != null, "full-height scope attach did not capture a region");
+                    BlockPos anchor = anchorRef.get();
+                    check(region.minY() == level.getMinY() && region.maxY() == level.getMaxY() - 1,
+                        "vertical extents were not clamped to the world height");
+                    check(region.minX() == anchor.getX() - 2 && region.maxX() == anchor.getX() + 3
+                        && region.minZ() == anchor.getZ() - 1 && region.maxZ() == anchor.getZ() + 3,
+                        "horizontal extents changed");
+                });
+            } catch (Throwable error) {
+                failure.set(error);
+            } finally {
+                done.set(true);
+            }
+        });
+        helper.succeedWhen(() -> {
+            assertTrue(helper, done.get(), "waiting for full-height scope checks");
+            try {
+                assertTrue(helper, failure.get() == null, "full-height scope failed: " + failure.get());
+            } finally {
+                EnvManager.close(agentUuid);
+            }
+        });
+    }
+
+    /**
      * 验证仅实体快照场景的编解码往返：区域随定义保留（capture_blocks 落盘为 false）、
      * 区块不携带方块段、区域实体按新锚点平移重建，恢复不触碰世界方块。
      *

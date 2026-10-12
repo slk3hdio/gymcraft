@@ -20,17 +20,20 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * @param captureEntities 是否捕获区域实体快照
  */
 public record AttachScope(@Nullable BoundingBox region, boolean captureBlocks, boolean captureEntities) {
-    /** 单方向延伸距离上限：防止误操作捕获过大区域。 */
+    /** 水平方向延伸距离上限：防止误操作捕获过大区域。 */
     public static final int MAX_RADIUS = 32;
+    /** 垂直方向延伸距离参数上限；实际按世界建筑高度精确钳制。 */
+    public static final int MAX_HEIGHT = 4096;
     /** 空作用域：只捕获 agent，不管理世界方块与周围实体。 */
     public static final AttachScope AGENT_ONLY = new AttachScope(null, false, false);
 
     /**
      * 以 Mob 当前方块位置为锚构造六方向独立延伸的作用域。距离按轴分组、先负后正：
-     * 西(-X)/东(+X)、下(-Y)/上(+Y)、北(-Z)/南(+Z)；负值按 0 处理，超过
-     * {@link #MAX_RADIUS} 钳制。
+     * 西(-X)/东(+X)、下(-Y)/上(+Y)、北(-Z)/南(+Z)；负值按 0 处理，水平方向超过
+     * {@link #MAX_RADIUS} 钳制，垂直方向钳制到世界建筑高度（完整世界高度用
+     * {@link #MAX_HEIGHT} 之类的足够大值即可）。
      *
-     * @param mob 受控 Mob（提供锚点坐标）
+     * @param mob 受控 Mob（提供锚点坐标与世界）
      * @param west 向西(-X)延伸距离（格）
      * @param east 向东(+X)延伸距离（格）
      * @param down 向下(-Y)延伸距离（格）
@@ -48,10 +51,13 @@ public record AttachScope(@Nullable BoundingBox region, boolean captureBlocks, b
             return AGENT_ONLY;
         }
         BlockPos anchor = mob.blockPosition();
+        // 垂直方向钳到建筑高度内的可达距离，区域天然不越出世界。
+        int downClamped = Math.min(Math.max(down, 0), anchor.getY() - mob.level().getMinY());
+        int upClamped = Math.min(Math.max(up, 0), mob.level().getMaxY() - 1 - anchor.getY());
         return new AttachScope(
             new BoundingBox(
-                anchor.getX() - clamp(west), anchor.getY() - clamp(down), anchor.getZ() - clamp(north),
-                anchor.getX() + clamp(east), anchor.getY() + clamp(up), anchor.getZ() + clamp(south)),
+                anchor.getX() - clamp(west), anchor.getY() - downClamped, anchor.getZ() - clamp(north),
+                anchor.getX() + clamp(east), anchor.getY() + upClamped, anchor.getZ() + clamp(south)),
             captureBlocks,
             captureEntities
         );
@@ -71,7 +77,7 @@ public record AttachScope(@Nullable BoundingBox region, boolean captureBlocks, b
     }
 
     /**
-     * 钳制单方向延伸距离到 [0, {@link #MAX_RADIUS}]。
+     * 钳制水平方向延伸距离到 [0, {@link #MAX_RADIUS}]。
      *
      * @param distance 原始距离
      * @return 钳制后的距离

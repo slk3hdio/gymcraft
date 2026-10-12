@@ -114,11 +114,13 @@ public class EnvToolItem extends Item {
      */
     public static void openScreen(ServerPlayer player, Mob mob) {
         String currentEnvType = null;
-        // 六方向延伸距离预填值：西/东/下/上/北/南；未绑定或无区域时全 0。
+        // 六方向延伸距离预填值：西/东/下/上/北/南；水平默认 0（不延伸），
+        // 垂直默认完整世界高度。
+        BlockPos anchor = mob.blockPosition();
         int west = 0;
         int east = 0;
-        int down = 0;
-        int up = 0;
+        int down = anchor.getY() - mob.level().getMinY();
+        int up = mob.level().getMaxY() - 1 - anchor.getY();
         int north = 0;
         int south = 0;
         boolean captureBlocks = false;
@@ -128,7 +130,6 @@ public class EnvToolItem extends Item {
             BoundingBox region = env.stateRegion();
             if (region != null) {
                 // 区域相对目标当前方块位置的各方向距离；agent 移出区域时为负，按 0 显示。
-                BlockPos anchor = mob.blockPosition();
                 west = Math.max(0, anchor.getX() - region.minX());
                 east = Math.max(0, region.maxX() - anchor.getX());
                 down = Math.max(0, anchor.getY() - region.minY());
