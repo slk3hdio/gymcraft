@@ -47,6 +47,7 @@ EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateS
     createFromScenario（调用方显式读取文件或内置资源）
         → ScenarioWorldCodec.decode 把文件解码为基线（锚定当前 Mob 的位置与 UUID，
           区域实体重分配 UUID）+ 携带 preset options
+        → 目标区域裁剪到建筑高度与水平世界边界，丢弃超界内容；无交集时仅保留 agent
         → 不触碰世界：场景内容延迟到首个 reset 随基线恢复物化
     attach（指定环境 ID 与已有 Mob，不读取场景）
         → 按挂载作用域当场捕获基线（AttachScope：区域（以 Mob 方块位置为锚、

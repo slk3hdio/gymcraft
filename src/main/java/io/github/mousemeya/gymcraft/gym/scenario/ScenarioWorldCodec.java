@@ -22,6 +22,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.PalettedContainer;
@@ -134,7 +135,8 @@ public final class ScenarioWorldCodec {
     }
 
     /**
-     * 解码场景为基线；不加载区块、不放置世界。
+     * 解码场景为基线；目标区域裁剪到建筑高度及水平世界边界，不加载区块、不放置世界。
+     * 超界内容舍弃而不挤到边缘；完整区域无交集时仅保留 agent，加载锚点不移动。
      * @param level 目标世界
      * @param loaded 完整场景
      * @param anchorMob 提供目标 UUID 和位置的 Mob
@@ -155,8 +157,10 @@ public final class ScenarioWorldCodec {
         int[] size = vector(definition.getCompoundOrEmpty("region"), "size");
         int[] offset = vector(definition.getCompoundOrEmpty("region"), "min_offset");
         BlockPos min = anchorMob.blockPosition().offset(offset[0], offset[1], offset[2]);
-        BoundingBox box = new BoundingBox(min.getX(), min.getY(), min.getZ(),
-            Math.addExact(min.getX(), size[0] - 1), Math.addExact(min.getY(), size[1] - 1), Math.addExact(min.getZ(), size[2] - 1));
+        BoundingBox box = clipRegion(level, min, size);
+        if (box == null) {
+            return EnvStateSnapshot.of(agent, null, null, null);
+        }
         PalettedContainerFactory factory = PalettedContainerFactory.create(level.registryAccess());
         List<RegionBlockSnapshot.BlockEntry> blocks = new ArrayList<>();
         List<RegionEntitySnapshot.EntityEntry> entities = new ArrayList<>();
@@ -177,9 +181,12 @@ public final class ScenarioWorldCodec {
                     for (int y = 0; y < 16 && (sy << 4) + y < size[1]; y++) {
                         for (int z = 0; z < 16 && (cp.z() << 4) + z < size[2]; z++) {
                             for (int x = 0; x < 16 && (cp.x() << 4) + x < size[0]; x++) {
+                                // 始终按原始区域最小角平移，裁剪不改变保留内容的相对布局。
+                                BlockPos target = min.offset((cp.x() << 4) + x, (sy << 4) + y, (cp.z() << 4) + z);
+                                if (!box.isInside(target)) { continue; }
                                 BlockState block = container.get(x, y, z);
                                 if (block != Blocks.AIR.defaultBlockState()) {
-                                    blocks.add(new RegionBlockSnapshot.BlockEntry(min.offset((cp.x() << 4) + x, (sy << 4) + y, (cp.z() << 4) + z), block, null));
+                                    blocks.add(new RegionBlockSnapshot.BlockEntry(target, block, null));
                                 }
                             }
                         }
@@ -195,6 +202,7 @@ public final class ScenarioWorldCodec {
                         throw invalid("Block entity without matching block at " + local);
                     }
                     BlockPos target = local.offset(min);
+                    if (!box.isInside(target)) { continue; }
                     putBlockPos(nbt, target);
                     blocks.add(new RegionBlockSnapshot.BlockEntry(target, block, nbt));
                 }
@@ -205,6 +213,11 @@ public final class ScenarioWorldCodec {
                 EntityType<?> entityType = entityType(nbt);
                 nbt.remove("id");
                 translateEntity(nbt, min.getX(), min.getY(), min.getZ());
+                ListTag pos = list(nbt, "Pos");
+                if (!box.isInside(entityBlockPos(nbt))
+                    || !level.getWorldBorder().isWithinBounds(pos.getDoubleOr(0, 0), pos.getDoubleOr(2, 0))) {
+                    continue;
+                }
                 entities.add(new RegionEntitySnapshot.EntityEntry(entityType, nbt));
             }
         }
@@ -212,6 +225,30 @@ public final class ScenarioWorldCodec {
             captureBlocks ? RegionBlockSnapshot.of(factory, box, blocks) : null,
             definition.getBooleanOr("manage_entities", false)
                 ? RegionEntitySnapshot.of(RegionEntitySnapshot.toAabb(box), anchorMob.getUUID(), entities) : null);
+    }
+
+    /**
+     * 将平移后的声明区域与目标世界有效方块范围求交，不改变源局部原点。
+     * 使用长整数计算终点，避免尺寸与锚点相加溢出；无交集必须先返回 null，
+     * 防止 BoundingBox 自动交换上下界后重新产生越界区域。
+     * @param level 提供建筑高度和当前 WorldBorder 的世界
+     * @param min 原始平移区域最小角
+     * @param size 源场景三个方向的正尺寸
+     * @return 裁剪后的闭区间方块盒；无交集时为 null
+     */
+    @javax.annotation.Nullable
+    private static BoundingBox clipRegion(ServerLevel level, BlockPos min, int[] size) {
+        var border = level.getWorldBorder();
+        long minX = Math.max(min.getX(), Math.max(-Level.MAX_LEVEL_SIZE, (long) Math.ceil(border.getMinX())));
+        long minY = Math.max(min.getY(), level.getMinY());
+        long minZ = Math.max(min.getZ(), Math.max(-Level.MAX_LEVEL_SIZE, (long) Math.ceil(border.getMinZ())));
+        long maxX = Math.min((long) min.getX() + size[0] - 1,
+            Math.min(Level.MAX_LEVEL_SIZE - 1, (long) Math.ceil(border.getMaxX()) - 1));
+        long maxY = Math.min((long) min.getY() + size[1] - 1, level.getMaxY() - 1);
+        long maxZ = Math.min((long) min.getZ() + size[2] - 1,
+            Math.min(Level.MAX_LEVEL_SIZE - 1, (long) Math.ceil(border.getMaxZ()) - 1));
+        if (minX > maxX || minY > maxY || minZ > maxZ) { return null; }
+        return new BoundingBox((int) minX, (int) minY, (int) minZ, (int) maxX, (int) maxY, (int) maxZ);
     }
 
     /** 校验定义和区块完整性；参数为待加载或待保存场景。 */

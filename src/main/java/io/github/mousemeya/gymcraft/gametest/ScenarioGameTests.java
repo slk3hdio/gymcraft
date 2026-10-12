@@ -542,6 +542,125 @@ public final class ScenarioGameTests {
         helper.succeed();
     }
 
+    /**
+     * 验证场景平移后的建筑高度及水平世界边界裁剪，保留原局部原点与容器坐标。
+     * @param helper GameTest 辅助对象
+     */
+    public static void worldBoundsClipping(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ScenarioStore.LoadedScenario source = clippingScenario(level);
+        Mob anchor = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
+        BlockPos center = helper.absolutePos(new BlockPos(3, 2, 3));
+        // 在上下边界各舍弃两层；剩余内容不可随裁剪发生额外平移。
+        for (int y : new int[]{level.getMinY(), level.getMaxY() - 1}) {
+            anchor.snapTo(center.getX() + 0.5, y, center.getZ() + 0.5, 0, 0);
+            EnvStateSnapshot decoded = ScenarioWorldCodec.decode(level, source, anchor);
+            BoundingBox box = decoded.region();
+            int minY = Math.max(y - 2, level.getMinY());
+            assertEquals(helper, minY, box.minY(), "clipped region min Y");
+            assertEquals(helper, Math.min(y + 2, level.getMaxY() - 1), box.maxY(), "clipped region max Y");
+            assertEquals(helper, 27, decoded.blockCount(), "clipped block volume");
+            assertEquals(helper, 3, decoded.entityCount(), "out-of-height entities not removed");
+            assertEquals(helper, 1, decoded.blocks().blockEntities().size(), "out-of-height container not removed");
+            decoded.blocks().forEachCapturedBlock((pos, block) -> {
+                check(level.isInWorldBounds(pos), "decoded block outside world");
+                if (block.is(Blocks.DIAMOND_BLOCK)) {
+                    check(pos.equals(new BlockPos(center.getX(), y, center.getZ())), "clipping shifted retained layout");
+                }
+            });
+            decoded.entities().forEachEntity((type, data) -> {
+                double entityY = data.getListOrEmpty("Pos").getDoubleOr(1, 0);
+                check(entityY >= box.minY() && entityY < box.maxY() + 1.0, "clipped entity still outside region");
+                check(entityY - Math.floor(entityY) == 0.25, "entity fractional coordinate changed");
+            });
+            CompoundTag chest = decoded.blocks().blockEntities().values().iterator().next();
+            int chestY = y == level.getMinY() ? y + 2 : y - 2;
+            assertEquals(helper, chestY, chest.getIntOr("y", 0), "retained container shifted");
+            assertEquals(helper, 7, chest.getListOrEmpty("Items").getCompoundOrEmpty(0).getIntOr("count", 0), "clipping lost container contents");
+            // 实际恢复触及最高或最低区块段，验证不越界索引且空气恢复只影响裁剪范围。
+            ensureChunksLoaded(level, new BlockPos(box.minX(), minY, box.minZ()),
+                new BlockPos(box.maxX(), box.maxY(), box.maxZ()));
+            BlockPos air = new BlockPos(center.getX(), minY + 1, center.getZ() + 1);
+            BlockPos outside = new BlockPos(center.getX(), y == level.getMinY() ? y + 3 : y - 3, center.getZ());
+            level.setBlock(air, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
+            level.setBlock(outside, Blocks.EMERALD_BLOCK.defaultBlockState(), 3);
+            decoded.blocks().restore(level);
+            assertTrue(helper, level.getBlockState(air).isAir(), "clipped baseline air not restored");
+            assertTrue(helper, level.getBlockState(outside).is(Blocks.EMERALD_BLOCK), "clipped restore touched outside region");
+            ChestBlockEntity restoredChest = (ChestBlockEntity) level.getBlockEntity(
+                new BlockPos(chest.getIntOr("x", 0), chestY, chest.getIntOr("z", 0)));
+            assertTrue(helper, restoredChest != null && restoredChest.getItem(0).getCount() == 7,
+                "world-height container restore failed");
+            // 裁剪结果再编码、解码必须仍是相同范围，而非恢复原始超界尺寸。
+            ScenarioStore.LoadedScenario saved = ScenarioWorldCodec.encode(level, "gymcraft:general", Map.of(), decoded);
+            EnvStateSnapshot reloaded = ScenarioWorldCodec.decode(level, saved, anchor);
+            assertEquals(helper, box.minY(), reloaded.region().minY(), "clipped save changed min Y");
+            assertEquals(helper, box.maxY(), reloaded.region().maxY(), "clipped save changed max Y");
+            assertEquals(helper, 3, reloaded.entityCount(), "clipped save changed entities");
+        }
+        // 不修改共享 WorldBorder：在当前边界的四侧解码，不加载遥远区块。
+        var border = level.getWorldBorder();
+        int west = (int) Math.ceil(border.getMinX());
+        int east = (int) Math.ceil(border.getMaxX()) - 1;
+        int north = (int) Math.ceil(border.getMinZ());
+        int south = (int) Math.ceil(border.getMaxZ()) - 1;
+        for (BlockPos pos : List.of(new BlockPos(west, 80, 0), new BlockPos(east, 80, 0),
+                new BlockPos(0, 80, north), new BlockPos(0, 80, south))) {
+            anchor.snapTo(Vec3.atBottomCenterOf(pos));
+            EnvStateSnapshot decoded = ScenarioWorldCodec.decode(level, source, anchor);
+            assertEquals(helper, 30, decoded.blockCount(), "horizontal clipping volume");
+            decoded.blocks().forEachCapturedBlock((target, block) ->
+                check(level.isInWorldBounds(target) && border.isWithinBounds(target), "block outside horizontal boundary"));
+            decoded.entities().forEachEntity((type, data) -> {
+                ListTag entityPos = data.getListOrEmpty("Pos");
+                check(border.isWithinBounds(entityPos.getDoubleOr(0, 0), entityPos.getDoubleOr(2, 0)),
+                    "entity outside horizontal boundary");
+            });
+        }
+        // 无交集时不得被 BoundingBox 自动交换上下界，产生假的可恢复范围。
+        for (Vec3 pos : List.of(new Vec3(0.5, level.getMaxY() + 5, 0.5),
+                new Vec3(0.5, level.getMinY() - 5, 0.5), new Vec3(east + 5.5, 80, 0.5))) {
+            anchor.snapTo(pos);
+            EnvStateSnapshot decoded = ScenarioWorldCodec.decode(level, source, anchor);
+            assertTrue(helper, decoded.region() == null && decoded.blocks() == null && decoded.entities() == null,
+                "fully out-of-world region did not become empty");
+            assertEquals(helper, pos.y, decoded.agent().data().getListOrEmpty("Pos").getDoubleOr(1, 0), "agent anchor moved");
+        }
+        // 方块和实体捕获相互独立；仅实体场景同样必须裁剪区域与实体。
+        anchor.snapTo(9.5, 40, 9.5, 0, 0);
+        EnvStateSnapshot original = ScenarioWorldCodec.decode(level, source, anchor);
+        ScenarioStore.LoadedScenario entitiesOnly = ScenarioWorldCodec.encode(level, "gymcraft:general", Map.of(),
+            EnvStateSnapshot.of(original.agent(), original.region(), null, original.entities()));
+        anchor.snapTo(center.getX() + 0.5, level.getMinY(), center.getZ() + 0.5, 0, 0);
+        EnvStateSnapshot clippedEntities = ScenarioWorldCodec.decode(level, entitiesOnly, anchor);
+        assertTrue(helper, clippedEntities.blocks() == null, "entity-only clipping introduced blocks");
+        assertEquals(helper, 3, clippedEntities.region().getYSpan(), "entity-only region was not clipped");
+        assertEquals(helper, 3, clippedEntities.entityCount(), "entity-only clipping kept outside entities");
+        helper.succeed();
+    }
+
+    /** 构造 3×5×3 场景，含上下两只箱子、中间标记方块和每层一个实体；返回正式编码载荷。 */
+    private static ScenarioStore.LoadedScenario clippingScenario(ServerLevel level) {
+        BlockPos min = new BlockPos(8, 38, 8);
+        BoundingBox box = new BoundingBox(8, 38, 8, 10, 42, 10);
+        RegionBlockSnapshot blocks = RegionBlockSnapshot.of(PalettedContainerFactory.create(level.registryAccess()), box,
+            List.of(new RegionBlockSnapshot.BlockEntry(min, Blocks.CHEST.defaultBlockState(), chestData(min)),
+                new RegionBlockSnapshot.BlockEntry(min.offset(2, 4, 2), Blocks.CHEST.defaultBlockState(), chestData(min.offset(2, 4, 2))),
+                new RegionBlockSnapshot.BlockEntry(min.offset(1, 2, 1), Blocks.DIAMOND_BLOCK.defaultBlockState(), null)));
+        CompoundTag agent = new CompoundTag();
+        agent.put("Pos", positionTag(9.5, 40, 9.5));
+        UUID uuid = UUID.randomUUID();
+        List<RegionEntitySnapshot.EntityEntry> entities = new java.util.ArrayList<>();
+        for (int y = 0; y < 5; y++) {
+            CompoundTag entity = new CompoundTag();
+            entity.put("Pos", positionTag(8.5, 38.25 + y, 9.5));
+            entities.add(new RegionEntitySnapshot.EntityEntry(EntityType.ARMOR_STAND, entity));
+        }
+        return ScenarioWorldCodec.encode(level, "gymcraft:general", Map.of(), EnvStateSnapshot.of(
+            new EntitySnapshot(EntityType.HUSK, level.dimension(), agent), box, blocks,
+            RegionEntitySnapshot.of(RegionEntitySnapshot.toAabb(box), uuid, entities)));
+    }
+
     /** 验证三份内置资源均可加载，重复读取及 UUID 分配互不污染。 */
     public static void bundledIsolation(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();

@@ -70,6 +70,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("scenario_store_edges", () -> ScenarioGameTests::storeEdgeCases);
         TEST_FUNCTIONS.register("scenario_codec_mca", () -> ScenarioGameTests::codecMcaRoundTrip);
         TEST_FUNCTIONS.register("scenario_region_restore", () -> ScenarioGameTests::regionRestore);
+        TEST_FUNCTIONS.register("scenario_world_bounds", () -> ScenarioGameTests::worldBoundsClipping);
         TEST_FUNCTIONS.register("scenario_bundled_isolation", () -> ScenarioGameTests::bundledIsolation);
         TEST_FUNCTIONS.register("scenario_attach_existing_mob", () -> ScenarioGameTests::attachExistingMob);
         TEST_FUNCTIONS.register("scenario_attach_scope_full", () -> ScenarioGameTests::attachScopeRestoresBlocksAndEntities);
