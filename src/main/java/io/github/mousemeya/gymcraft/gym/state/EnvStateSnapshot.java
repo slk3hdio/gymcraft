@@ -15,7 +15,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * <p>
  * 每次 reset 把世界与 agent 恢复到基线：先恢复方块与区域实体（保证 agent 落脚的方块
  * 已就位），再重建 agent 实体——场景文件的基线因此延迟到首个 reset 才物化进世界。
- * 方块默认差异恢复（{@link StateRestoreMode#DIFF}），只写回实际变更，避免全量
+ * 方块始终按差异恢复，只写回实际变更，避免全量
  * setBlock 引发的方块更新风暴。
  * </p>
  */
@@ -25,18 +25,20 @@ public final class EnvStateSnapshot {
     @Nullable private final RegionBlockSnapshot blocks;
     /** 区域实体快照；null = 不管理区域实体。 */
     @Nullable private final RegionEntitySnapshot entities;
-    private final StateRestoreMode restoreMode;
-
+    /**
+     * 组装状态基线，区域范围和实体管理开关由对应快照部件决定。
+     * @param agent 受控 agent 的完整实体快照
+     * @param blocks 区域方块快照；null 表示空范围
+     * @param entities 区域实体快照；null 表示不管理区域实体
+     */
     private EnvStateSnapshot(
         EntitySnapshot agent,
         @Nullable RegionBlockSnapshot blocks,
-        @Nullable RegionEntitySnapshot entities,
-        StateRestoreMode restoreMode
+        @Nullable RegionEntitySnapshot entities
     ) {
         this.agent = agent;
         this.blocks = blocks;
         this.entities = entities;
-        this.restoreMode = restoreMode;
     }
 
     /**
@@ -46,21 +48,19 @@ public final class EnvStateSnapshot {
      * @param agent 受控 agent（当前时刻即基线位姿与物品状态）
      * @param region 环境占用区域（闭区间方块盒）；null = 空范围
      * @param captureEntities 是否捕获区域实体
-     * @param restoreMode 方块恢复模式
      * @return 完整环境状态快照
      */
     public static EnvStateSnapshot capture(
         ServerLevel level,
         Mob agent,
         @Nullable BoundingBox region,
-        boolean captureEntities,
-        StateRestoreMode restoreMode
+        boolean captureEntities
     ) {
         RegionBlockSnapshot blocks = region == null ? null : RegionBlockSnapshot.capture(level, region);
         RegionEntitySnapshot entities = region != null && captureEntities
             ? RegionEntitySnapshot.capture(level, RegionEntitySnapshot.toAabb(region), agent)
             : null;
-        return new EnvStateSnapshot(EntitySnapshot.capture(agent), blocks, entities, restoreMode);
+        return new EnvStateSnapshot(EntitySnapshot.capture(agent), blocks, entities);
     }
 
     /**
@@ -69,16 +69,14 @@ public final class EnvStateSnapshot {
      * @param agent agent 快照
      * @param blocks 区域方块快照；null = 空范围
      * @param entities 区域实体快照；null = 不管理实体
-     * @param restoreMode 方块恢复模式
      * @return 完整环境状态快照
      */
     public static EnvStateSnapshot of(
         EntitySnapshot agent,
         @Nullable RegionBlockSnapshot blocks,
-        @Nullable RegionEntitySnapshot entities,
-        StateRestoreMode restoreMode
+        @Nullable RegionEntitySnapshot entities
     ) {
-        return new EnvStateSnapshot(agent, blocks, entities, restoreMode);
+        return new EnvStateSnapshot(agent, blocks, entities);
     }
 
     /**
@@ -106,14 +104,14 @@ public final class EnvStateSnapshot {
 
     /**
      * 对当前世界与 agent 立即再取一次快照（场景保存用，不要求环境 reset 过），
-     * 沿用本快照的区域、实体管理开关与恢复模式。
+     * 沿用本快照的区域与实体管理开关。
      *
      * @param level 服务端世界
      * @param agent 受控 agent
      * @return 当前时刻的完整状态快照
      */
     public EnvStateSnapshot recapture(ServerLevel level, Mob agent) {
-        return capture(level, agent, this.region(), this.entities != null, this.restoreMode);
+        return capture(level, agent, this.region(), this.entities != null);
     }
 
     /**
@@ -123,7 +121,7 @@ public final class EnvStateSnapshot {
      */
     public void restoreWorldAndEntities(ServerLevel level) {
         if (this.blocks != null) {
-            this.blocks.restore(level, this.restoreMode);
+            this.blocks.restore(level);
         }
         if (this.entities != null) {
             this.entities.restore(level);

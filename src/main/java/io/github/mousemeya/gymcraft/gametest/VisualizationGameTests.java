@@ -56,7 +56,7 @@ public final class VisualizationGameTests {
      */
     public static void runtime(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
-        var env = EnvManager.create("gymcraft:general", mob);
+        var env = EnvManager.attach("gymcraft:general", mob);
         TestObserver observer = new TestObserver(helper.getLevel(), mob.position());
         VisualizationService.subscribe(observer, new VisualSubscribePayload(UUID.randomUUID(), mob.getUUID(), false));
         var failure = new AtomicReference<Throwable>();

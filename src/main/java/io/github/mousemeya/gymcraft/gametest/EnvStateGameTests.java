@@ -29,6 +29,7 @@ import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.IronGolemWardenEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.IronMiningEnv;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 
 /**
  * 环境状态基线（{@code gym/state}）的跨 reset 恢复测试。
@@ -51,7 +52,8 @@ public final class EnvStateGameTests {
     public static void blockRollbackAcrossResets(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         BlockPos origin = BlockPos.containing(mob.position());
-        IronMiningEnv env = new IronMiningEnv(testId("block_rollback"), mob);
+        IronMiningEnv env = new IronMiningEnv(testId("block_rollback"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_mining").orElseThrow());
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
@@ -88,7 +90,8 @@ public final class EnvStateGameTests {
     public static void entityRollbackAcrossResets(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         BlockPos origin = BlockPos.containing(mob.position());
-        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("entity_rollback"), mob);
+        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("entity_rollback"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_golem_warden").orElseThrow());
         AtomicReference<UUID> baselineWarden = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
@@ -143,7 +146,8 @@ public final class EnvStateGameTests {
     public static void itemEntitiesClearedAcrossResets(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         BlockPos origin = BlockPos.containing(mob.position());
-        IronMiningEnv env = new IronMiningEnv(testId("item_cleanup"), mob);
+        IronMiningEnv env = new IronMiningEnv(testId("item_cleanup"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_mining").orElseThrow());
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
@@ -181,7 +185,8 @@ public final class EnvStateGameTests {
     public static void wardenBaselineResetKeepsSurfaced(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         BlockPos origin = BlockPos.containing(mob.position());
-        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("warden_no_dig"), mob);
+        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("warden_no_dig"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_golem_warden").orElseThrow());
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {

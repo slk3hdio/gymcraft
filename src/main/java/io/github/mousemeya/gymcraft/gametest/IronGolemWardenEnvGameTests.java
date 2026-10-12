@@ -32,6 +32,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItem;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItemEntityTarget;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.IronGolemWardenEnv;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyEntities;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
@@ -63,7 +64,8 @@ public final class IronGolemWardenEnvGameTests {
         ChestBlockEntity chest = (ChestBlockEntity) helper.getLevel().getBlockEntity(originalChestPos);
         chest.setItem(0, new ItemStack(Items.DIAMOND, 3));
 
-        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("restore"), mob);
+        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("restore"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_golem_warden").orElseThrow());
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
@@ -121,7 +123,8 @@ public final class IronGolemWardenEnvGameTests {
     public static void golemSpawnHealAndVictory(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         BlockPos origin = BlockPos.containing(mob.position());
-        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("victory"), mob);
+        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("victory"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_golem_warden").orElseThrow());
         AtomicReference<Throwable> failure = new AtomicReference<>();
         AtomicReference<StepResponse> golemStep = new AtomicReference<>();
         AtomicReference<StepResponse> healStep = new AtomicReference<>();

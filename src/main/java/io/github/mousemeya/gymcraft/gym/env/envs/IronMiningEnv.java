@@ -10,7 +10,6 @@ import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateProfile;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -34,10 +33,9 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 /**
  * 从空物品栏开始完成木材、工作台、木镐、石镐与粗铁获取链路的任务环境。
  * <p>
- * 环境在创建位置周围占用固定 9x9 训练区域：场景来自内置资产
- * {@code gymcraft:scenario/iron_mining}（基岩盒 + 固定资源布局），构造期解码为状态基线，
- * 首个 reset 物化（agent 替换为场景 player_sim、空物品栏），此后 reset 由基线恢复
- * （方块差异写回 + 区域实体清除），close 恢复原世界。
+ * 场景创建时，训练区域、资源布局及 agent 装备全部来自显式场景文件。
+ * 无场景挂载仅管理现有 agent，不扫描训练区域，也不启用越界或铁矿丢失判定。
+ * reset 恢复对应状态基线；close 不恢复世界。
  * 任务状态只从真实世界与 Agent 统一物品栏推导，不依赖 Python 客户端自行判分。
  * </p>
  */
@@ -55,7 +53,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
     private StepEvaluation evaluation = StepEvaluation.initial();
 
     /**
-     * 创建并绑定固定训练区域，构造期从内置资产解码状态基线，首个 reset 前不修改世界。
+     * 在现有 Mob 上创建采矿环境，仅捕获 agent 基线，不管理世界区域。
      *
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob
@@ -64,7 +62,12 @@ public final class IronMiningEnv extends AbstractMcEnv {
         this(envTypeId, mob, null);
     }
 
-    /** 在普通构造之上携带外部场景源（手动 env load）。 */
+    /**
+     * 根据显式场景创建环境；未提供场景时仅挂载当前 Mob。
+     * @param envTypeId 环境类型注册 ID
+     * @param mob 服务端世界中的受控 Mob
+     * @param scenario 完整场景；null 表示仅捕获 agent，状态范围不含方块及周围实体
+     */
     public IronMiningEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
         super(
             envTypeId,
@@ -89,7 +92,6 @@ public final class IronMiningEnv extends AbstractMcEnv {
                 ObservationCreators.WORLD.get()
             ),
             List.of(MobAttachments.AGENT_BACKPACK),
-            EnvStateProfile.bundled("iron_mining"),
             scenario
         );
         if (!(mob.level() instanceof ServerLevel serverLevel)) {
@@ -205,7 +207,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
             failureReason = "agent_dead";
         } else if (!this.isInsideArena(mob.position())) {
             failureReason = "out_of_bounds";
-        } else if (!success && !this.containsBlockInArena(Blocks.IRON_ORE)
+        } else if (this.stateRegion() != null && !success && !this.containsBlockInArena(Blocks.IRON_ORE)
             && !this.hasRawIronDrop()) {
             failureReason = "iron_lost";
         }
@@ -288,6 +290,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
      */
     private boolean containsBlockInArena(Block block) {
         AABB arena = this.scopeAabb();
+        if (arena == null) return false;
         for (BlockPos pos : BlockPos.betweenClosed(
             BlockPos.containing(arena.minX, arena.minY, arena.minZ),
             BlockPos.containing(arena.maxX - 1, arena.maxY - 1, arena.maxZ - 1)
@@ -305,9 +308,11 @@ public final class IronMiningEnv extends AbstractMcEnv {
      * @return 存在存活粗铁掉落物时为 true
      */
     private boolean hasRawIronDrop() {
+        AABB arena = this.scopeAabb();
+        if (arena == null) return false;
         return !this.level.getEntitiesOfClass(
             ItemEntity.class,
-            this.scopeAabb(),
+            arena,
             item -> item.isAlive() && item.getItem().is(Items.RAW_IRON)
         ).isEmpty();
     }
@@ -320,6 +325,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
      */
     private boolean isInsideArena(Vec3 position) {
         AABB arena = this.scopeAabb();
+        if (arena == null) return true;
         return position.x >= arena.minX && position.x < arena.maxX
             && position.z >= arena.minZ && position.z < arena.maxZ;
     }

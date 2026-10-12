@@ -35,6 +35,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSelfMenuTarget;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.IronMiningEnv;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMenuObservation;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyItems;
@@ -63,7 +64,8 @@ public final class IronMiningEnvGameTests {
         chest.setItem(0, new ItemStack(Items.DIAMOND, 3));
         mob.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, new ItemStack(Items.GOLD_INGOT));
 
-        IronMiningEnv env = new IronMiningEnv(testId("restore"), mob);
+        IronMiningEnv env = new IronMiningEnv(testId("restore"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_mining").orElseThrow());
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
@@ -98,7 +100,8 @@ public final class IronMiningEnvGameTests {
     public static void completeToolProgression(GameTestHelper helper) {
         Mob originalMob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         BlockPos origin = BlockPos.containing(originalMob.position());
-        IronMiningEnv env = new IronMiningEnv(testId("progression"), originalMob);
+        IronMiningEnv env = new IronMiningEnv(testId("progression"), originalMob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_mining").orElseThrow());
         AtomicReference<StepResponse> finalResponse = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
 

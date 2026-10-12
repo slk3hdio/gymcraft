@@ -92,7 +92,7 @@ public final class RegionEntitySnapshot {
     }
 
     /**
-     * 文件实体条目：实体类型 + 完整 NBT（场景存档 world.nbt 解码路径的输入单元，
+     * 文件实体条目：实体类型 + 完整 NBT（场景存档 MCA 区块解码路径的输入单元，
      * NBT 中的 Pos 必须已是绝对坐标）。
      */
     public record EntityEntry(EntityType<?> type, CompoundTag data) {

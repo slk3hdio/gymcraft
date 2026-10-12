@@ -39,7 +39,6 @@ import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateProfile;
 import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
@@ -48,11 +47,9 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 /**
  * 建造铁傀儡并击败 Warden 的任务环境。
  * <p>
- * 环境在创建位置周围占用固定 13x13 战斗场（玻璃围墙，可观战外部）：场景来自内置资产
- * {@code gymcraft:scenario/iron_golem_warden}（场地 + 建材 4 铁块主手 / 1 雕刻南瓜 /
- * 64 铁锭 + 角落 Warden 含虚弱效果），构造期解码为状态基线，首个 reset 物化（agent
- * 替换为场景 player_sim、Warden 重分配 UUID 从基线按需懒解析），此后 reset 由基线
- * 恢复（方块差异写回 + 区域实体重建，Warden 保留 UUID）。
+ * 场景创建时，战斗场、建材与 Warden 全部来自显式场景文件。区域实体 UUID
+ * 在解码时重分配，reset 后重新注入 Warden 防钻地记忆。无场景挂载只管理当前
+ * agent，不扫描或改写周围傀儡，不启用场景边界及结构性失败判定。
  * Agent 本体没有攻击能力：需要按原版图案摆放铁块并在最后放置雕刻南瓜生成铁傀儡，
  * 战斗期间用铁锭治疗铁傀儡（原版交互，+25 生命/锭）耗死 Warden。Warden 死亡即成功；
  * 任务状态只从真实世界推导，不依赖 Python 客户端自行判分。
@@ -78,7 +75,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     private float lastGolemHealth;
 
     /**
-     * 创建并绑定固定战斗场，构造期从内置资产解码状态基线，首个 reset 前不修改世界。
+     * 在现有 Mob 上创建战斗环境，仅捕获 agent 基线，不管理世界区域。
      *
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob
@@ -87,7 +84,12 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
         this(envTypeId, mob, null);
     }
 
-    /** 在普通构造之上携带外部场景源（手动 env load）。 */
+    /**
+     * 根据显式场景创建环境；未提供场景时仅挂载当前 Mob。
+     * @param envTypeId 环境类型注册 ID
+     * @param mob 服务端世界中的受控 Mob
+     * @param scenario 完整场景；null 表示仅捕获 agent，状态范围不含方块及周围实体
+     */
     public IronGolemWardenEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
         super(
             envTypeId,
@@ -108,7 +110,6 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
                 ObservationCreators.WORLD.get()
             ),
             List.of(MobAttachments.AGENT_BACKPACK),
-            EnvStateProfile.bundled("iron_golem_warden"),
             scenario
         );
         if (!(mob.level() instanceof ServerLevel serverLevel)) {
@@ -122,7 +123,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
     /**
      * 将坐标类动作组件的参数空间收紧到战斗场内部，使场外目标在空间校验阶段即被拒绝。
      * <p>
-     * move_to 使用实体坐标，边界直接取 {@link #arenaBounds}；set_block 使用方块坐标，
+     * move_to 使用实体坐标，边界直接取 {@link #scopeAabb()}；set_block 使用方块坐标，
      * 边界为场地覆盖的方块列（上界比 arenaBounds 小 1）。use_item/look_at 保持默认空间：
      * 二者的 contains 对非方块目标以 (0,0,0) 占位坐标做空间校验（DictSpace 要求键集合
      * 精确匹配），收紧坐标界会在场地远离世界原点时误伤实体交互（如铁锭治疗傀儡）。
@@ -130,6 +131,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      */
     private void restrictActionSpacesToArena() {
         AABB arena = this.scopeAabb();
+        if (arena == null) return;
         this.actionComponent(ActionComponents.MOVE_TO.get()).setSpace(new DictSpace(Map.of(
             "x", new BoxSpace(arena.minX, arena.maxX, 1),
             "y", new BoxSpace(arena.minY, arena.maxY, 1),
@@ -325,6 +327,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      * @param golem 战斗场内存活的铁傀儡，不存在时为 null
      */
     private void updateStructuralFailures(Mob mob, @Nullable IronGolem golem) {
+        if (this.stateRegion() == null) return;
         if (golem == null && countInventoryItems(mob, Items.CARVED_PUMPKIN) <= 0) {
             this.failMilestone(Milestone.GOLEM_SPAWNED,
                 "carved pumpkin already placed but no golem spawned (iron pattern was invalid)");
@@ -476,7 +479,9 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      */
     @Nullable
     private IronGolem findGolem() {
-        List<IronGolem> golems = this.level.getEntitiesOfClass(IronGolem.class, this.scopeAabb());
+        AABB arena = this.scopeAabb();
+        if (arena == null) return null;
+        List<IronGolem> golems = this.level.getEntitiesOfClass(IronGolem.class, arena);
         return golems.isEmpty() ? null : golems.getFirst();
     }
 
@@ -488,6 +493,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      */
     private boolean isInsideArena(Vec3 position) {
         AABB arena = this.scopeAabb();
+        if (arena == null) return true;
         return position.x >= arena.minX && position.x < arena.maxX
             && position.z >= arena.minZ && position.z < arena.maxZ;
     }

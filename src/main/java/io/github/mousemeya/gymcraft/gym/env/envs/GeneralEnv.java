@@ -4,7 +4,6 @@ import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateProfile;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 import net.minecraft.resources.Identifier;
@@ -16,7 +15,8 @@ import javax.annotation.Nullable;
 
 
 /**
- * 通用 LLM 控制环境。
+ * 通用 LLM 控制环境，装配全部通用动作与观测并管理所需附件。
+ * 受控 Mob 必须位于服务端世界；未提供外部场景时仅捕获 agent，不维护世界区域。
  */
 public class GeneralEnv extends AbstractMcEnv {
     /**
@@ -29,7 +29,12 @@ public class GeneralEnv extends AbstractMcEnv {
         this(envTypeId, mob, null);
     }
 
-    /** 在普通构造之上携带外部场景源（手动 env load）。 */
+    /**
+     * 根据显式场景创建环境；未提供场景时仅挂载当前 Mob。
+     * @param envTypeId 环境类型注册 ID
+     * @param mob 服务端世界中的受控 Mob
+     * @param scenario 完整场景；null 表示仅捕获 agent，状态范围不含方块及周围实体
+     */
     public GeneralEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
         super(
             envTypeId,
@@ -66,7 +71,7 @@ public class GeneralEnv extends AbstractMcEnv {
                 ObservationCreators.HEALTH_LOG.get()
             ),
             List.of(MobAttachments.AGENT_BACKPACK, MobAttachments.DAMAGE_LOG),
-            EnvStateProfile.empty(),
+            // 状态区域仅来自显式场景；挂载现有 Mob 时只捕获 agent。
             scenario
         );
         this.observationComponent(ObservationCreators.NEARBY_BLOCKS.get()).setMaxBlocks(32);

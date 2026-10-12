@@ -16,17 +16,14 @@ import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateProfile;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 
 /**
  * 跳跃搭方块环境：Mob 在受限水平区域中跳跃并将手持方块放到脚下，逐层到达目标高度。
  * <p>
- * 场景来自内置资产 {@code gymcraft:scenario/parkour_mob}（起点平台 + 训练柱 + 主手
- * 方块），构造期解码为状态基线，首个 reset 物化；布局以资产为权威——需要不同布局
- * 时经 {@code /gymcraft env save/load} 自制场景。环境不管理区域实体（训练柱区域内
- * 其他实体不进基线）；close 不做世界恢复，场景残留由外部清理。
+ * 显式场景定义训练柱、装备和目标高度；无场景挂载只管理当前 agent，
+ * 不启用区域边界、目标高度及场景资源耗尽判定。reset 恢复基线，close 保留世界。
  * </p>
  */
 public class ParkourMobEnv extends AbstractMcEnv {
@@ -37,7 +34,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
     private final BlockPos origin;
     private final double baseY;
     /** 训练柱目标高度（从场景区域高度推导：范围 y 覆盖 -1..targetHeight+2）。 */
-    private final int targetHeight;
+    @Nullable private final Integer targetHeight;
     private int maxSteps = DEFAULT_MAX_STEPS;
     private int steps;
     private int previousCount;
@@ -51,7 +48,12 @@ public class ParkourMobEnv extends AbstractMcEnv {
         this(envTypeId, mob, null);
     }
 
-    /** 在普通构造之上携带外部场景源（手动 env load）。 */
+    /**
+     * 根据显式场景创建环境；未提供场景时仅挂载当前 Mob。
+     * @param envTypeId 环境类型注册 ID
+     * @param mob 服务端世界中的受控 Mob
+     * @param scenario 完整场景；null 表示仅捕获 agent，状态范围不含方块及周围实体
+     */
     public ParkourMobEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
         super(envTypeId, mob,
             List.of(ActionComponents.NOOP.get(), ActionComponents.JUMP.get(),
@@ -59,17 +61,14 @@ public class ParkourMobEnv extends AbstractMcEnv {
             List.of(ObservationCreators.SELF.get(), ObservationCreators.NEARBY_BLOCKS.get(),
                 ObservationCreators.WORLD.get()),
             List.of(),
-            EnvStateProfile.bundled("parkour_mob"),
             scenario);
 
         observationComponent(ObservationCreators.NEARBY_BLOCKS.get()).setMaxBlocks(64);
         this.origin = BlockPos.containing(mob.position());
         this.baseY = this.origin.getY();
-        // 场景是布局的唯一权威：训练柱目标高度从场景区域推导（y 覆盖 -1..targetHeight+2，
-        // 修改资产即可改变任务难度）
-        BoundingBox region = java.util.Objects.requireNonNull(this.stateRegion(),
-            "parkour_mob scenario must declare a region");
-        this.targetHeight = region.getYSpan() - 4;
+        // 场景是布局的唯一权威；无区域挂载时不推导训练柱目标。
+        BoundingBox region = this.stateRegion();
+        this.targetHeight = region == null ? null : region.getYSpan() - 4;
     }
 
     /** 每回合重置计数器（场景内容与 agent 由状态基线恢复）。 */
@@ -91,7 +90,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
         Mob mob = mob();
         double currentY = mob.getY();
         double reward = currentY - this.previousY;
-        if (currentY - this.baseY >= this.targetHeight) {
+        if (this.targetHeight != null && currentY - this.baseY >= this.targetHeight) {
             reward += 0.2 * Math.max(0, Math.floor(currentY - this.previousY));
             if (!this.success) {
                 reward += 10.0;
@@ -119,9 +118,9 @@ public class ParkourMobEnv extends AbstractMcEnv {
         Mob mob = mob();
         this.steps++;
         AABB arena = this.scopeAabb();
-        this.outOfBounds = mob.getX() < arena.minX || mob.getX() >= arena.maxX
-            || mob.getZ() < arena.minZ || mob.getZ() >= arena.maxZ;
-        this.resourceExhausted = mob.getMainHandItem().isEmpty();
+        this.outOfBounds = arena != null && (mob.getX() < arena.minX || mob.getX() >= arena.maxX
+            || mob.getZ() < arena.minZ || mob.getZ() >= arena.maxZ);
+        this.resourceExhausted = arena != null && mob.getMainHandItem().isEmpty();
         return !this.success && (this.outOfBounds || this.resourceExhausted || this.steps >= this.maxSteps);
     }
 

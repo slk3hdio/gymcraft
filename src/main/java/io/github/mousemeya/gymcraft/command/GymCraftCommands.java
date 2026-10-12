@@ -12,7 +12,6 @@ import java.util.Optional;
 
 import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
-import io.github.mousemeya.gymcraft.gym.scenario.ScenarioOps;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.registry.EnvFactories;
 import net.minecraft.commands.CommandSourceStack;
@@ -32,13 +31,13 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 /**
  * /gymcraft 指令。
  *
- * <p>提供与 {@link io.github.mousemeya.gymcraft.item.EnvToolItem} 等价的环境创建/删除能力，
+ * <p>提供与 {@link io.github.mousemeya.gymcraft.item.EnvToolItem} 等价的已有 Mob 挂载/删除能力（挂载不加载场景），
  * 便于在专用服务器控制台或 RCON 下使用。create/remove 的目标参数接受多实体选择器
  * （如 {@code @e[type=zombie,limit=3]}），对每个目标逐一执行，返回成功数。</p>
  *
  * <p>另提供环境场景存档管理：{@code env save} 对目标 Mob 的环境取当前时刻的即时快照
  * （不要求 reset 过）保存为服务器全局目录下的命名场景；{@code env load} 是唯一加载路径
- * ——生成场景自带的 agent 并以（缺省指令来源位置的）指定位置为锚完整加载（挂载即自动
+ * ——生成场景自带的 agent 并以（缺省指令来源位置的）指定位置为锚完整加载（场景创建即自动
  * reset 物化）；{@code env list/delete} 管理场景文件。场景系统见 {@code gym/scenario} 包。</p>
  */
 public final class GymCraftCommands {
@@ -98,7 +97,7 @@ public final class GymCraftCommands {
     }
 
     /**
-     * 为每个目标 Mob 创建指定类型的环境，逐个反馈成功/失败。
+     * 为每个现有 Mob 挂载指定环境，只捕获 agent，不加载场景，逐个反馈成功/失败。
      *
      * @param source 指令来源
      * @param targets 目标实体集合（多实体选择器展开结果）
@@ -116,7 +115,7 @@ public final class GymCraftCommands {
                 continue;
             }
             try {
-                EnvManager.create(envType, mob);
+                EnvManager.attach(envType, mob);
             } catch (IllegalArgumentException e) {
                 source.sendFailure(Component.translatable("message.gymcraft.error", e.getMessage()));
                 continue;
@@ -175,7 +174,7 @@ public final class GymCraftCommands {
         }
         String envType = env.get().getRegisterId();
         try {
-            ScenarioOps.capture(name, env.get(), ScenarioStore.forServer());
+            EnvManager.saveScenario(name, env.get(), ScenarioStore.forServer());
         } catch (IllegalArgumentException | IllegalStateException | IOException e) {
             source.sendFailure(Component.translatable("message.gymcraft.scenario_save_failed", name, e.getMessage()));
             return 0;
@@ -202,7 +201,7 @@ public final class GymCraftCommands {
         return scenarios.size();
     }
 
-/**
+    /**
      * 删除场景目录。
      *
      * @param source 指令来源
@@ -224,7 +223,7 @@ public final class GymCraftCommands {
     }
 
     /**
-     * 读取场景文件，失败时统一反馈并返回 null。
+     * 显式读取场景文件：同名磁盘目录优先，否则读取内置资源；失败反馈并返回 null。
      *
      * @param source 指令来源
      * @param name 场景名
@@ -232,8 +231,8 @@ public final class GymCraftCommands {
      */
     private static ScenarioStore.LoadedScenario loadScenario(CommandSourceStack source, String name) {
         try {
-            return ScenarioStore.forServer().load(name);
-        } catch (IllegalArgumentException | IOException e) {
+            return ScenarioStore.forServer().load(name, source.getLevel());
+        } catch (IllegalArgumentException | IllegalStateException | IOException e) {
             source.sendFailure(Component.translatable("message.gymcraft.scenario_load_failed", name, e.getMessage()));
             return null;
         }
@@ -241,7 +240,7 @@ public final class GymCraftCommands {
 
     /**
      * 完整加载场景（唯一路径）：生成场景自带的 agent（新 UUID）并以生成位置为锚创建
-     * 环境，挂载即自动 reset 物化场景内容。
+     * 环境，场景创建即自动 reset 物化场景内容。
      *
      * @param source 指令来源
      * @param name 场景名
@@ -255,7 +254,7 @@ public final class GymCraftCommands {
         }
         ServerLevel level = source.getLevel();
         try {
-            Mob agent = ScenarioOps.spawn(loaded, level, pos);
+            Mob agent = EnvManager.createFromScenario(loaded, level, pos);
             source.sendSuccess(() -> Component.translatable(
                 "message.gymcraft.scenario_loaded_spawn", name, agent.getUUID().toString()), true);
         } catch (IllegalArgumentException | IllegalStateException e) {

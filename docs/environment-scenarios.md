@@ -1,139 +1,132 @@
-# 环境场景（Scenario）存档
+# 环境场景存档
 
-把某个 Mob 上的环境保存为服务器全局目录下的**命名场景**，可在**不同世界、不同位置**加载复原。
-适合任务场地的分发、复现与共享：搭好一次环境，存成场景文件，之后在任意服务器、任意世界、
-任意位置一键重现（含场地方块、区域实体与 agent 本体）。任务环境还各带一份**内置场景资产**
-打包在模组 jar 内，构造期自动成为状态基线（见文末）。
+场景保存某个环境当前时刻的 agent、状态区域方块及区域实体，可在不同世界、不同位置复原。
+场景创建的布局与初始物资以显式场景文件为权威，首次 reset 才物化到世界。
+在已有 Mob 上挂载环境时不读取场景，状态范围只包含当前 agent。
 
-实现位于 `gym/scenario/` 包（`EnvScenario` / `ScenarioStore` / `ScenarioWorldCodec` /
-`ScenarioOps` / `BundledScenarios`），建立在环境状态基线系统（`gym/state`，恒基线模型，
-见 `environment-state-system.md`）之上。
+## 职责与接口
 
-## 保存内容
+`gym/scenario` 包包含两个类：
 
-- 环境类型（注册 ID）
-- 保存时**最近一次 reset 的生效 options**（未 reset 过为空；加载侧经 preset 合并回放）
-- **实体管理开关**（`manage_entities`，缺省 true）——与 world.nbt 的区域共同构成
-  环境状态占用，加载侧不再依赖环境硬编码声明
-- agent 完整 NBT（`saveWithoutId`，含装备与可序列化附件如专属背包）
-- 环境占用区域内的**完整世界内容**：区域方块（含方块实体）与区域实体，
-  取自**保存时刻的即时快照**（所见即所得）
+- `ScenarioWorldCodec`：统一编码、校验和解码场景定义与世界内容，并处理坐标平移及实体 UUID。
+- `ScenarioStore`：磁盘保存、加载、列表、删除和内置资源读取；文件读写复用原版 `RegionFile` 与 `NbtIo`。
 
-不保存：原世界快照（加载目标的原始地形不在场景职责内）；计划刻/脑记忆等不随 NBT 序列化的
-运行时状态（沿用状态系统既有限制，需补丁的环境从 `baselineSnapshot()` 按需懒解析，
-如 `IronGolemWardenEnv` 的 Warden 重分配 UUID）。
+`EnvManager` 统一负责环境注册、即时保存、生成 agent 和后台首次 reset，原 `ScenarioOps` 已合并删除。
+创建只保留两个入口：
 
-## 目录与文件格式
+- `EnvManager.createFromScenario(loaded, level, pos)`：根据完整场景生成 agent，环境 ID、装备、区域和 preset options 均来自文件，自动首次 reset。
+- `EnvManager.attach(envType, mob)`：指定环境 ID 挂载现有 Mob，仅捕获 agent 基线，不加载任何场景，不自动 reset。
 
-```
+`ScenarioStore.LoadedScenario` 包含 `CompoundTag definition` 和 `Map<ChunkPos, CompoundTag> chunks`。
+构造与访问器均深拷贝 NBT，避免重复加载同一场景时互相污染。
+Codec 的编码入口接收世界上下文、环境类型、options 和 `EnvStateSnapshot`；
+解码入口接收世界、完整场景和锚定 Mob，返回状态基线，不修改世界；恢复始终采用差异写回。
+
+## 目录与格式
+
+```text
 <game dir>/gymcraft/scenarios/<name>/
-├── scenario.json   # 元数据（JSON，可读可手编）
-└── world.nbt       # 世界内容（gzip NBT，原版结构模板格式）
+├── scenario.nbt
+└── region/
+    ├── r.0.0.mca
+    ├── r.1.0.mca
+    └── c.<x>.<z>.mcc    # 超大区块条目的原版外置载荷，仅需要时生成
 ```
 
-目录相对游戏根目录而非世界存档，场景因此天然跨世界复用。场景名即目录名，限制为
-`[a-z0-9_.-]`、1–64 字符；同名保存即覆盖（两个文件均先写 `.tmp` 再原子替换）。
+场景名即目录名，限制为 `[a-z0-9_.-]`、1–64 字符，并拒绝 `.` 和 `..`。
+同名保存先在根目录下的临时目录完整写入，关闭 MCA 句柄后替换整个目录；
+替换失败时回滚旧目录，回滚也失败则保留备份。成功覆盖不会留下旧区域文件。
 
-**scenario.json**（version 1，版本不匹配拒绝加载）：
+`scenario.nbt` 使用 gzip 压缩 NBT。以下为结构说明，实体标签中省略了具体属性：
 
-```json
+```snbt
 {
-  "version": 1,
-  "name": "parkour_easy",
-  "env_type": "gymcraft:parkour_mob",
-  "options": { "disable_vanilla_ai": true },
-  "manage_entities": false,
-  "agent": { "type": "gymcraft:player_sim", "nbt": "{...saveWithoutId 的 SNBT...}" }
+  version: 2,
+  DataVersion: 0,
+  env_type: "gymcraft:parkour_mob",
+  options: {
+    disable_vanilla_ai: {type: "boolean", value: 1b}
+  },
+  agent: {id: "gymcraft:player_sim", Pos: [0.5d, 64.0d, 0.5d]},
+  manage_entities: 0b,
+  region: {min_offset: [I; -3, -1, -3], size: [I; 7, 12, 7]}
 }
 ```
 
-**world.nbt**（原版结构模板格式块；状态模型为单区域——regions 列表至多一项，多区域文件解码时被拒绝）：
+- 示例中 `DataVersion: 0` 仅为占位，实际写入当前 Minecraft 数据版本；格式 `version` 必须为 2。
+- `agent` 直接保存实体 NBT（补充类型 `id`，剥离 UUID），包括装备和可序列化附件，无 SNBT 字符串中间层。
+- `region` 可缺省，表示无世界区域；存在时 `size` 三个维度必须为正。
+- `min_offset` 是保存时区域最小角相对于 agent 方块位置的偏移，决定加载时的区域位置。
+- `manage_entities` 显式保存实体管理开关；管理空实体区域时也构建空实体快照，以便 reset 清场。
 
-```
-{
-  DataVersion: int,                  # 写入当前版本，避免解码端走 DataFixer 升级
-  origin: [x, y, z],                 # 场景原点 = 保存时 agent 方块坐标，一切坐标相对它
-  regions: [
-    { size: [sx, sy, sz], min_offset: [dx, dy, dz],        # region.min - origin
-      palette: [{Name, Properties}], blocks: [{pos, state, nbt?}],   # 原版模板格式；pos 相对 region min
-      entities: [{pos, blockPos, nbt}] }                   # 归属本区域的实体；nbt 已剥 UUID、补 id
-  ]
-}
-```
+Options 每个值使用 `{type, value}` 递归表示；支持 `boolean`、`string`、
+`byte`、`short`、`int`、`long`、`float`、`double`、`list`、`map` 和 `null`。
+`null` 无 value；列表元素仍为带类型的复合标签，映射键必须是字符串。
+该表示保留 Java 类型，包括混合列表、嵌套映射与 null，避免 NBT byte 将布尔值转换为数值。
 
-空状态范围环境（`simple_mob`/`general`）的 world.nbt 为空容器（无 regions），场景即
-纯元数据 + agent。
+### 世界内容
 
-## 指令
+世界坐标以区域最小角归零：MCA 中的局部区块坐标从 `(0, 0)` 开始，
+段 Y 从 0 开始，边界之外填充空气。每个区块的 NBT 包含：
 
-全部经 `/gymcraft env`（权限 `LEVEL_GAMEMASTERS`）：
-
-```
-/gymcraft env save <target:entity> <name:word>      — 保存目标 Mob 的环境为场景（当前时刻即时快照）
-/gymcraft env load <name:word> [pos:vec3]          — 完整加载（唯一路径）：生成场景自带 agent（新 UUID）
-                                                     — 并以其为锚创建环境（缺省用指令来源位置）
-/gymcraft env list                                  — 列出场景（名 + 环境类型）
-/gymcraft env delete <name:word>                    — 删除场景目录
+```text
+DataVersion, xPos, zPos
+sections: [{Y, block_states: {palette, data?}}]
+block_entities: [完整方块实体 NBT，x/y/z 为局部坐标]
+entities: [完整实体 NBT，含 id，Pos 为局部坐标，剥离 UUID]
 ```
 
+`block_states` 直接复用 `PalettedContainerFactory.blockStatesContainerCodec()`；
+MCA 容器、扇区分配、压缩和大条目 `.mcc` 溢出由原版 `RegionFile` 实现，写入使用默认 deflate。
+这些是场景区域载荷，不是可直接替换普通世界完整区块的存档：
+不保存生物群系、光照、计划刻、结构生成状态或世界时间。
 
-## 关键语义
+加载时根据区域尺寸推导所有必需区块，并要求每个覆盖段存在且不重复。
+缺失 MCA、区块条目或区块段直接报错，不以空气回退。
+无区域场景只有 `scenario.nbt`，不生成 `region` 目录。
 
-- **保存 = 即时快照（所见即所得）**：不要求环境 reset 过——保存的是调用时刻的世界与 agent。
-  想保存场景本体（而非训练中途的漂移）请先 reset 物化再保存。快照动作不修改世界，但要求
-  范围内区块已加载（同状态系统 `requireChunksLoaded`）。
-- **位置无关**：一切坐标相对场景原点（保存时 agent 方块坐标），加载时以生成位置重新定位。
-- **加载不放置世界，挂载即自动 reset**：`load` 只把文件解码为环境状态基线（坐标平移
-  到锚点、区域实体重分配 UUID、agent 的 UUID/Pos 覆写为锚定实体），**不修改世界**；
-  挂载随后在后台虚拟线程自动完成首个 reset——物化场景内容（区域方块差异写回 +
-  区域实体清除重建）、替换 agent、使 preset options 生效，挂载完成即可 step、可再次
-  `env save`。普通 `env create` 挂载不自动 reset，首个 reset 的 options/seed 效果留给
-  外部发起方。
-- **首个 reset 替换 agent**：锚定实体被基线 agent（场景文件 NBT，携带装备与附件）以同
-  UUID 替换，`EnvManager` 映射不破；此后 reset 与常规环境完全同构（走基线快照恢复）。
-- **close 不恢复世界**：环境关闭只做运行时清理，已物化的场景与训练痕迹保留在世界，
-  由外部负责清理（原世界快照机制已删除）。
-- **options 优先级**：当次 reset options > 场景 preset options > 默认值。场景 options
-  合并进首个 reset（preset 一次性）。
-- **状态区域随场景持久化**：加载侧的环境占用区域来自场景文件——取自 world.nbt
-  的唯一区域块（锚定当前 Mob），实体管理开关取自 scenario.json 的
-  `manage_entities`；环境不再硬编码声明区域（`EnvStateProfile.region` 仅为
-  非场景环境的回退）。
-- **区域实体重分配 UUID**：解码时经 `RegionEntitySnapshot.of` 分配新 UUID（同一场景可
-  多次加载而不与现存实体冲突）；按 UUID 追踪区域实体的环境从基线实体快照懒解析新 UUID
-  （基线不可变，首读后缓存——`IronGolemWardenEnv` 已实现）。
-- **物化要求目标区域区块已加载**：区块校验发生在首个 reset 的基线恢复时（不是加载时）；
-  无头服务器请先 `forceload` 目标区域。
+## 指令与生命周期
 
-## 内置场景资产
-
-三个任务环境不再硬编码场景搭建，布局与初始物资以模组 jar 内的内置资产为唯一权威：
-
-```
-src/main/resources/data/gymcraft/scenario/
-├── iron_mining/{scenario.json, world.nbt}          # 基岩盒训练场 + 原木/石头/铁矿
-├── iron_golem_warden/{scenario.json, world.nbt}    # 玻璃墙战斗场 + 建材 + Warden（含虚弱）
-└── parkour_mob/{scenario.json, world.nbt}          # 石平台 + 训练柱 + 主手 32 石头
+```text
+/gymcraft env create <target:entity> [type:word]  # 挂载现有 Mob
+/gymcraft env save <target:entity> <name:word>
+/gymcraft env load <name:word> [pos:vec3]
+/gymcraft env list
+/gymcraft env delete <name:word>
 ```
 
-- 环境经 `EnvStateProfile.bundled` 声明资产名，`AbstractMcEnv` 构造期经
-  `BundledScenarios`（服务端 ResourceManager 读取，按名全局缓存）加载并
-  `ScenarioWorldCodec.decode` 解码为自持范围的基线。
-- 场景源优先级：手动 `env load` 传入的场景 > 内置资产 > 现场快照（非场景环境）。
-- 修改内置场景的流程：`/gymcraft env save` 保存调整后的环境 → 用产物目录替换
-  `data/gymcraft/scenario/<name>/` 重新打包。
-- 需要不同布局（如 parkour 换方块/高度——布局 reset 选项已随硬编码场景删除）时，
-  自制场景文件并经 `env load` 使用。
+- 保存为即时快照，不要求 reset 过；options 取最近一次 reset 的生效值，未 reset 为空。
+- `env load` 优先读取同名磁盘目录；目录不存在时读取内置资源，目录损坏直接报错。加载生成场景 agent，以指定位置为锚创建环境，并在后台虚拟线程自动首次 reset。
+- 解码区域位置为目标 agent 方块位置加 `min_offset`；方块、方块实体、区域实体位置相应平移。
+  允许负坐标与非 16 格对齐位置，恢复时严格裁剪到区域边界。
+- 首次 reset 物化世界并以同 UUID 替换 agent；区域实体在解码时重新分配 UUID，之后跨 reset 保持基线 UUID。
+- `env create` 与工具物品仅挂载现有 Mob，不隐式加载内置资产；`env load` 明确读取场景后创建新 agent。
+- 无场景挂载的 save 只保存 agent 与 options，reset 不恢复周围方块或实体。
+- 首次 reset 的 options 优先级：当次显式 options > 场景 preset > 默认值。
+- 物化要求目标区域区块已经加载；无头服务器先 `forceload`。Codec 本身不加载区块。
+- close 只清理运行时，不恢复世界；训练痕迹和场景残留由外部清理。
+
+## 内置资产与迁移
+
+内置场景位于 `data/gymcraft/scenario/{iron_mining,iron_golem_warden,parkour_mob}/`，
+均使用 `scenario.nbt` 加 `region/*.mca`，与磁盘场景共用同一读取路径。
+
+`ScenarioStore.loadBundled` 从当前服务端 `ResourceManager` 获取定义和区域资源。
+调用方显式读取内置资源后传入场景创建入口，环境构造器不自行查找资产。
+MCA/MCC 临时落盘后由原版读取，关闭句柄再清理；无跨服务器或跨资源重载的全局缓存。
+修改流程仍为 `env save` 保存调整后的场景，再用完整产物目录替换内置资产并重新打包。
+
+旧 `scenario.json` 加 `world.nbt` 格式不再支持，三个内置资产已一次性迁移。
+已有用户场景需要外部转换或用旧版本重新导出后另行迁移；运行时不自动转换。
 
 ## 测试
 
-`gametest/ScenarioGameTests`（注册名前缀 `scenario_`）：
+`ScenarioGameTests` 保留 parkour、Warden、即时保存与自动首次 reset 的端到端测试，并覆盖：
 
-- `scenario_parkour_round_trip`：parkour（内置资产）保存 → 异位置 spawn 加载 → 首个
-  reset 物化平台/主手物资/preset options（close 不恢复世界）
-- `scenario_warden_relocation`：iron_golem_warden 保存 → 异位置加载 → 首个 reset 物化
-  新 UUID Warden（虚弱效果与 DIG_COOLDOWN 补丁生效）与建材
-- `scenario_immediate_capture`：未 reset 即保存（即时快照携带现场标记方块与当前 agent
-  类型），加载侧手动场景优先于内置资产
-- `scenario_store_edges`：存储边界（非法名称、覆盖写、列表排序、损坏条目跳过、缺失
-  world.nbt 回退、删除幂等）
+- 存储边界：名称拒绝、空区域、类型化 options、覆盖、列表排序、损坏或旧格式拒绝、删除幂等。
+- 合成场景：跨区块段、跨区块、跨 MCA 文件、负目标坐标与非对齐平移、容器和实体 NBT、UUID 隔离。
+- 区域恢复：擦除基线空气中的新增方块、恢复箱子物品、保留区域外方块。
+- 三份内置资源读取及重复加载隔离。
+- 所有环境 ID 的现有 Mob 挂载、空范围 reset/step、装备保持及周围世界保留。
+
+验证命令：`.\gradlew compileJava`、`.\gradlew runGameTestServer`。

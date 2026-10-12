@@ -4,11 +4,15 @@ import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertEq
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
 
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
@@ -17,13 +21,20 @@ import java.util.stream.Stream;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.DoubleTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.warden.Warden;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -34,10 +45,12 @@ import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
-import io.github.mousemeya.gymcraft.gym.scenario.EnvScenario;
-import io.github.mousemeya.gymcraft.gym.scenario.ScenarioOps;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
+import io.github.mousemeya.gymcraft.gym.state.EntitySnapshot;
+import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
+import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
+import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 
 /**
  * 环境场景存档（{@code gym/scenario}）的端到端测试：保存 → 跨位置加载 → 首个 reset 重建基线。
@@ -57,7 +70,7 @@ public final class ScenarioGameTests {
     /**
      * 验证 parkour 场景（内置资产）的保存 → 异位置 spawn 加载往返：平台方块、agent 主手
      * 物资与最近一次 reset 的生效 options 随场景迁移；场景内容延迟到加载侧首个 reset 物化；
-     * 源环境 close 后原世界被恢复（场景不残留）。
+     * 源环境 close 后保留场景内容（不恢复世界）。
      * <p>
      * 两个锚点都收在相对坐标 x/z ∈ [-1, 8] 的安全带内：GameTest 批次沿 x 轴间隔 13 格排布，
      * 相邻批次的 13 格宽竞技场测试（iron/state 系）可触及本批相对坐标 -2 与 +9 以外的区域，
@@ -68,27 +81,27 @@ public final class ScenarioGameTests {
      */
     public static void parkourSaveSpawnRoundTrip(GameTestHelper helper) {
         // Husk 免疫阳光：parkour 场景无顶棚，普通僵尸会在 500 tick 断言窗口内烧死
-        Mob mobA = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
+        Mob mobA = createBundledAgent(helper, "parkour_mob", new BlockPos(2, 1, 2));
         ServerLevel level = helper.getLevel();
         Path storeDir = createTempStoreDir();
         ScenarioStore store = new ScenarioStore(storeDir);
         BlockPos absB = helper.absolutePos(new BlockPos(2, 2, 0));
         AtomicReference<UUID> mobBUuid = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        McEnv envA = EnvManager.create("gymcraft:parkour_mob", mobA);
+        McEnv envA = EnvManager.get(mobA.getUUID()).orElseThrow();
         Thread.startVirtualThread(() -> {
             try {
                 envA.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
                 runOnServer(helper, () -> {
                     try {
-                        ScenarioOps.capture("roundtrip", envA, store);
-                        EnvScenario saved = store.load("roundtrip").scenario();
-                        check("gymcraft:parkour_mob".equals(saved.envTypeId()), "scenario env type mismatch");
-                        check(Boolean.TRUE.equals(saved.options().get(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION)),
+                        EnvManager.saveScenario("roundtrip", envA, store);
+                        CompoundTag saved = store.load("roundtrip").definition();
+                        check("gymcraft:parkour_mob".equals(ScenarioWorldCodec.envType(saved)), "scenario env type mismatch");
+                        check(Boolean.TRUE.equals(ScenarioWorldCodec.options(saved).get(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION)),
                             "scenario options lost disable_vanilla_ai");
                         EnvManager.close(mobA.getUUID());
                         ensureChunksLoaded(level, absB.offset(-3, 0, -3), absB.offset(3, 0, 3));
-                        Mob mobB = ScenarioOps.spawn(store.load("roundtrip"), level, Vec3.atBottomCenterOf(absB));
+                        Mob mobB = EnvManager.createFromScenario(store.load("roundtrip"), level, Vec3.atBottomCenterOf(absB));
                         mobBUuid.set(mobB.getUUID());
                     } catch (Throwable error) {
                         throw new IllegalStateException(error);
@@ -96,7 +109,7 @@ public final class ScenarioGameTests {
                 });
                 EnvManager.get(mobBUuid.get())
                     .orElseThrow(() -> new IllegalStateException("spawned scenario env not registered"));
-                // 挂载即在后台线程自动完成首个 reset（物化场景内容），无需手动 reset
+                // 场景创建即在后台线程自动完成首个 reset（物化场景内容），无需手动 reset
             } catch (Throwable error) {
                 failure.set(error);
             }
@@ -151,7 +164,7 @@ public final class ScenarioGameTests {
      * @param helper GameTest 辅助对象
      */
     public static void wardenRelocation(GameTestHelper helper) {
-        Mob mobA = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
+        Mob mobA = createBundledAgent(helper, "iron_golem_warden", new BlockPos(5, 1, 5));
         ServerLevel level = helper.getLevel();
         BlockPos absA = BlockPos.containing(mobA.position());
         BlockPos absB = helper.absolutePos(new BlockPos(2, 2, 2));
@@ -160,7 +173,7 @@ public final class ScenarioGameTests {
         AtomicReference<UUID> wardenAUuid = new AtomicReference<>();
         AtomicReference<UUID> mobBUuid = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        McEnv envA = EnvManager.create("gymcraft:iron_golem_warden", mobA);
+        McEnv envA = EnvManager.get(mobA.getUUID()).orElseThrow();
         Thread.startVirtualThread(() -> {
             try {
                 envA.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
@@ -170,10 +183,10 @@ public final class ScenarioGameTests {
                         // 冻结 AI 开启的 Warden 会游荡/索敌：NoAi 后再取即时快照，NoAi 随 NBT 迁移
                         wardenA.setNoAi(true);
                         wardenAUuid.set(wardenA.getUUID());
-                        ScenarioOps.capture("warden", envA, store);
+                        EnvManager.saveScenario("warden", envA, store);
                         EnvManager.close(mobA.getUUID());
                         ensureChunksLoaded(level, absB.offset(-6, 0, -6), absB.offset(6, 0, 6));
-                        Mob mobB = ScenarioOps.spawn(store.load("warden"), level, Vec3.atBottomCenterOf(absB));
+                        Mob mobB = EnvManager.createFromScenario(store.load("warden"), level, Vec3.atBottomCenterOf(absB));
                         mobBUuid.set(mobB.getUUID());
                     } catch (Throwable error) {
                         throw new IllegalStateException(error);
@@ -181,7 +194,7 @@ public final class ScenarioGameTests {
                 });
                 EnvManager.get(mobBUuid.get())
                     .orElseThrow(() -> new IllegalStateException("spawned scenario env not registered"));
-                // 挂载自动 reset 物化场景内容（含 NoAi Warden），无需手动 reset
+                // 场景创建自动 reset 物化场景内容（含 NoAi Warden），无需手动 reset
             } catch (Throwable error) {
                 failure.set(error);
             }
@@ -223,8 +236,7 @@ public final class ScenarioGameTests {
 
     /**
      * 验证即时快照保存：环境未 reset 过也能保存——快照取当前世界与 agent（而非基线），
-     * 加载侧从文件构建完整状态基线，首个 reset 物化；手动场景优先于内置资产
-     * （iron_mining 的内置训练场不出现）。
+     * 挂载现有 Mob 的空范围随文件保存，加载后仍只重建 agent，不导入内置训练场。
      *
      * @param helper GameTest 辅助对象
      */
@@ -232,28 +244,29 @@ public final class ScenarioGameTests {
         // Husk 免疫阳光：加载侧 agent 在 500 tick 断言窗口内保持无顶棚场景
         Mob mobA = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(5, 1, 5));
         ServerLevel level = helper.getLevel();
-        // 构造环境前在范围内放一个标记方块：即时快照应原样携带（WYSIWYG）
+        // 无场景挂载不捕获周围方块，标记方块不应随 agent 迁移。
         BlockPos markerRel = BlockPos.containing(mobA.position()).offset(2, 0, 2);
         level.setBlock(markerRel, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
         BlockPos absB = helper.absolutePos(new BlockPos(2, 2, 0));
+        level.setBlock(absB.below(), Blocks.STONE.defaultBlockState(), 3);
         Path storeDir = createTempStoreDir();
         ScenarioStore store = new ScenarioStore(storeDir);
         AtomicReference<UUID> mobBUuid = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        McEnv envA = EnvManager.create("gymcraft:iron_mining", mobA);
+        McEnv envA = EnvManager.attach("gymcraft:iron_mining", mobA);
         Thread.startVirtualThread(() -> {
             try {
                 runOnServer(helper, () -> {
                     try {
-                        // 未 reset 即保存：agent 应为当前实体（zombie），options 为空
-                        ScenarioOps.capture("immediate", envA, store);
-                        EnvScenario saved = store.load("immediate").scenario();
-                        check("minecraft:husk".equals(saved.agentType()),
-                            "pre-reset capture should snapshot the live agent: " + saved.agentType());
-                        check(saved.options().isEmpty(), "pre-reset capture should carry no reset options");
+                        // 未 reset 即保存：agent 应为当前实体（husk），options 为空
+                        EnvManager.saveScenario("immediate", envA, store);
+                        CompoundTag saved = store.load("immediate").definition();
+                        check("minecraft:husk".equals(saved.getCompoundOrEmpty("agent").getStringOr("id", "")),
+                            "pre-reset capture should snapshot the live agent");
+                        check(ScenarioWorldCodec.options(saved).isEmpty(), "pre-reset capture should carry no reset options");
                         EnvManager.close(mobA.getUUID());
                         ensureChunksLoaded(level, absB.offset(-4, 0, -4), absB.offset(4, 0, 4));
-                        Mob mobB = ScenarioOps.spawn(store.load("immediate"), level, Vec3.atBottomCenterOf(absB));
+                        Mob mobB = EnvManager.createFromScenario(store.load("immediate"), level, Vec3.atBottomCenterOf(absB));
                         mobBUuid.set(mobB.getUUID());
                     } catch (Throwable error) {
                         throw new IllegalStateException(error);
@@ -270,16 +283,14 @@ public final class ScenarioGameTests {
                 assertTrue(helper, failure.get() == null, "immediate capture round trip failed: " + failure.get());
                 McEnv envB = EnvManager.get(mobBUuid.get()).orElseThrow();
                 assertEquals(helper, "gymcraft:iron_mining", envB.getRegisterId(), "loaded env type mismatch");
-                assertTrue(helper, level.getBlockState(absB.offset(2, 0, 2)).is(Blocks.GOLD_BLOCK),
-                    "pre-reset marker block missing at load position");
+                assertTrue(helper, !level.getBlockState(absB.offset(2, 0, 2)).is(Blocks.GOLD_BLOCK),
+                    "agent-only scene captured surrounding blocks");
                 assertTrue(helper, !level.getBlockState(absB.offset(2, 0, 0)).is(Blocks.OAK_LOG),
                     "bundled asset leaked into a manually loaded scenario env");
-                // 保存侧记录的 manage_entities=true，scope 区域随文件迁移（9×9×5）
-                BoundingBox scopeRegion = ((AbstractMcEnv) envB).stateRegion();
-                assertTrue(helper, scopeRegion != null, "scenario env scope region missing");
-                assertEquals(helper, 9, scopeRegion.getXSpan(), "scenario scope x span");
-                assertTrue(helper, ((AbstractMcEnv) envB).baselineSnapshot().entities() != null,
-                    "iron scenario should manage entities");
+                assertTrue(helper, ((AbstractMcEnv) envB).stateRegion() == null,
+                    "agent-only scene unexpectedly created a region");
+                assertTrue(helper, ((AbstractMcEnv) envB).baselineSnapshot().entities() == null,
+                    "agent-only scene unexpectedly manages surrounding entities");
                 Mob mobB = (Mob) level.getEntity(mobBUuid.get());
                 assertTrue(helper, mobB != null && mobB.isAlive() && mobB.getType() == EntityType.HUSK,
                     "scenario agent missing or wrong type after reset");
@@ -295,30 +306,30 @@ public final class ScenarioGameTests {
     }
 
     /**
-     * 验证场景挂载即自动完成首个 reset：spawn 后不手动调用 reset，场景内容（平台与
+     * 验证场景创建即自动完成首个 reset：spawn 后不手动调用 reset，场景内容（平台与
      * agent 物资）应已物化、preset options 已生效——挂载完成即可 step/save。
      *
      * @param helper GameTest 辅助对象
      */
     public static void mountAutoResets(GameTestHelper helper) {
-        Mob mobA = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
+        Mob mobA = createBundledAgent(helper, "parkour_mob", new BlockPos(2, 1, 2));
         ServerLevel level = helper.getLevel();
         BlockPos absB = helper.absolutePos(new BlockPos(2, 2, 0));
         Path storeDir = createTempStoreDir();
         ScenarioStore store = new ScenarioStore(storeDir);
         AtomicReference<UUID> mobBUuid = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        McEnv envA = EnvManager.create("gymcraft:parkour_mob", mobA);
+        McEnv envA = EnvManager.get(mobA.getUUID()).orElseThrow();
         Thread.startVirtualThread(() -> {
             try {
                 envA.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
                 runOnServer(helper, () -> {
                     try {
-                        ScenarioOps.capture("autoreset", envA, store);
+                        EnvManager.saveScenario("autoreset", envA, store);
                         EnvManager.close(mobA.getUUID());
                         ensureChunksLoaded(level, absB.offset(-3, 0, -3), absB.offset(3, 0, 3));
                         // 关键差异：spawn 之后不调用 reset——挂载应自动完成首个 reset
-                        Mob mobB = ScenarioOps.spawn(store.load("autoreset"), level, Vec3.atBottomCenterOf(absB));
+                        Mob mobB = EnvManager.createFromScenario(store.load("autoreset"), level, Vec3.atBottomCenterOf(absB));
                         mobBUuid.set(mobB.getUUID());
                     } catch (Throwable error) {
                         throw new IllegalStateException(error);
@@ -358,69 +369,332 @@ public final class ScenarioGameTests {
     }
 
     /**
-     * 验证场景存储的边界行为：非法名称拒绝、同名覆盖、列表排序与损坏条目跳过、缺失
-     * world.nbt 回退空世界内容、删除幂等与未找到报错。纯文件 I/O，不触碰世界。
-     *
+     * 验证名称、覆盖、列表、损坏文件、空区域与 options 完整类型往返。
      * @param helper GameTest 辅助对象
      */
     public static void storeEdgeCases(GameTestHelper helper) {
-        Path storeDir = createTempStoreDir();
+        Path dir = createTempStoreDir();
         try {
-            ScenarioStore store = new ScenarioStore(storeDir);
-            CompoundTag world = ScenarioWorldCodec.empty();
-            boolean rejected = false;
-            try {
-                store.save(new EnvScenario("Bad Name", "gymcraft:simple_mob", Map.of(), "minecraft:zombie", "{}"), world);
-            } catch (IllegalArgumentException expected) {
-                rejected = true;
+            ScenarioStore store = new ScenarioStore(dir);
+            ServerLevel level = helper.getLevel();
+            Map<String, Object> options = new LinkedHashMap<>();
+            options.put("bool", true);
+            options.put("byte", (byte) 1);
+            options.put("short", (short) 2);
+            options.put("int", 3);
+            options.put("long", 9007199254740993L);
+            options.put("float", 1.25f);
+            options.put("double", 2.5d);
+            options.put("text", "场景");
+            options.put("empty_text", "");
+            options.put("null", null);
+            options.put("list", Arrays.asList(true, 4, "x", null, Map.of("nested", false)));
+            options.put("map", Map.of("empty", List.of(), "number", 7L));
+            ScenarioStore.LoadedScenario empty = emptyScenario(level, "gymcraft:simple_mob", options, false);
+            for (String name : List.of("Bad Name", ".", "..", "../escape")) {
+                boolean rejected = false;
+                try { store.save(name, empty); }
+                catch (IllegalArgumentException expected) { rejected = true; }
+                assertTrue(helper, rejected, "invalid name accepted: " + name);
             }
-            assertTrue(helper, rejected, "invalid scenario name was not rejected");
-            store.save(new EnvScenario("beta", "gymcraft:simple_mob", Map.of("k", "v"), "minecraft:zombie", "{}"), world);
-            store.save(new EnvScenario("alpha", "gymcraft:simple_mob", Map.of(), "minecraft:zombie", "{}"), world);
-            store.save(new EnvScenario("alpha", "gymcraft:general", Map.of(), "minecraft:zombie", "{NoAI:1b}"), world);
+            // 显式加载支持内置资源；同名磁盘存档优先，损坏时不能回退掩盖错误。
+            assertEquals(helper, "gymcraft:parkour_mob",
+                ScenarioWorldCodec.envType(store.load("parkour_mob", level).definition()), "bundled load unavailable");
+            store.save("parkour_mob", empty);
+            assertTrue(helper, store.load("parkour_mob", level).chunks().isEmpty(), "disk scene did not override bundle");
+            Files.writeString(dir.resolve("parkour_mob/scenario.nbt"), "broken nbt");
+            boolean rejectedBundleFallback = false;
+            try { store.load("parkour_mob", level); }
+            catch (IOException expected) { rejectedBundleFallback = true; }
+            assertTrue(helper, rejectedBundleFallback, "broken disk scene fell back to bundled scene");
+            store.delete("parkour_mob");
+            store.save("beta", empty);
+            store.save("alpha", empty);
+            store.save("alpha", emptyScenario(level, "gymcraft:general", Map.of(), true));
             ScenarioStore.LoadedScenario overwritten = store.load("alpha");
-            assertEquals(helper, "gymcraft:general", overwritten.scenario().envTypeId(),
-                "overwrite did not replace metadata");
-            assertEquals(helper, "{NoAI:1b}", overwritten.scenario().agentNbt(),
-                "overwrite did not replace agent nbt");
-            assertEquals(helper, "v", store.load("beta").scenario().options().get("k"),
-                "options did not round trip");
-            assertTrue(helper, overwritten.world().getListOrEmpty("regions").isEmpty(),
-                "empty world content should have no regions");
-            assertEquals(helper, List.of("alpha", "beta"),
-                store.list().stream().map(ScenarioStore.ScenarioInfo::name).toList(),
-                "scenario list not sorted or incomplete");
-            Files.delete(storeDir.resolve("beta").resolve("world.nbt"));
-            assertTrue(helper, store.load("beta").world().getListOrEmpty("regions").isEmpty(),
-                "missing world.nbt should fall back to empty world content");
-            Files.createDirectories(storeDir.resolve("gamma"));
-            Files.writeString(storeDir.resolve("gamma").resolve("scenario.json"), "not json {");
-            boolean brokenRejected = false;
-            try {
-                store.load("gamma");
-            } catch (IllegalArgumentException expected) {
-                brokenRejected = true;
-            }
-            assertTrue(helper, brokenRejected, "broken scenario metadata was not rejected");
-            assertEquals(helper, List.of("alpha", "beta"),
-                store.list().stream().map(ScenarioStore.ScenarioInfo::name).toList(),
-                "broken scenario leaked into list");
-            boolean missingRejected = false;
-            try {
-                store.load("zzz");
-            } catch (IOException expected) {
-                missingRejected = true;
-            }
-            assertTrue(helper, missingRejected, "missing scenario did not raise IOException");
-            assertTrue(helper, store.delete("alpha"), "delete of existing scenario returned false");
-            assertTrue(helper, !store.delete("alpha"), "delete was not idempotent");
-            assertTrue(helper, !store.delete("zzz"), "delete of missing scenario returned true");
+            assertEquals(helper, "gymcraft:general", ScenarioWorldCodec.envType(overwritten.definition()), "definition not overwritten");
+            assertTrue(helper, overwritten.definition().getCompoundOrEmpty("agent").getBooleanOr("NoAI", false), "agent NBT not overwritten");
+            assertEquals(helper, options, ScenarioWorldCodec.options(store.load("beta").definition()), "options type or value changed");
+            assertTrue(helper, overwritten.chunks().isEmpty() && !Files.exists(dir.resolve("alpha/region")), "empty scenario wrote world files");
+            // 构造参数及访问器均须隔离标签，外部修改不能污染后续读取。
+            CompoundTag definition = empty.definition();
+            ScenarioStore.LoadedScenario isolated = new ScenarioStore.LoadedScenario(definition, Map.of());
+            definition.putString("env_type", "changed");
+            isolated.definition().putString("env_type", "changed-again");
+            assertEquals(helper, "gymcraft:simple_mob", ScenarioWorldCodec.envType(isolated.definition()), "definition was shared");
+            assertEquals(helper, List.of("alpha", "beta"), store.list().stream().map(ScenarioStore.ScenarioInfo::name).toList(), "list not sorted");
+            Files.createDirectories(dir.resolve("gamma"));
+            Files.writeString(dir.resolve("gamma/scenario.nbt"), "broken nbt");
+            assertTrue(helper, loadRejected(store, "gamma"), "broken NBT accepted");
+            CompoundTag unsupported = empty.definition();
+            unsupported.putInt("version", 1);
+            Files.createDirectories(dir.resolve("old"));
+            NbtIo.writeCompressed(unsupported, dir.resolve("old/scenario.nbt"));
+            assertTrue(helper, loadRejected(store, "old"), "old version accepted");
+            Files.createDirectories(dir.resolve("legacy"));
+            Files.writeString(dir.resolve("legacy/scenario.json"), "{}");
+            assertTrue(helper, loadRejected(store, "legacy"), "legacy JSON format accepted");
+            assertEquals(helper, List.of("alpha", "beta"), store.list().stream().map(ScenarioStore.ScenarioInfo::name).toList(), "broken scenario listed");
+            assertTrue(helper, loadRejected(store, "zzz"), "missing scenario accepted");
+            assertTrue(helper, store.delete("alpha") && !store.delete("alpha") && !store.delete("zzz"), "delete not idempotent");
             helper.succeed();
-        } catch (IOException e) {
-            helper.fail("scenario store test I/O failed: " + e.getMessage());
-        } finally {
-            deleteRecursivelyQuietly(storeDir);
+        } catch (IOException e) { helper.fail("scenario store I/O failed: " + e.getMessage()); }
+        finally { deleteRecursivelyQuietly(dir); }
+    }
+
+    /**
+     * 验证跨段、跨区块、跨 MCA 的往返及负坐标非对齐平移；不放置大区域到世界。
+     * @param helper GameTest 辅助对象
+     */
+    public static void codecMcaRoundTrip(GameTestHelper helper) {
+        Path dir = createTempStoreDir();
+        try {
+            ServerLevel level = helper.getLevel();
+            ScenarioStore store = new ScenarioStore(dir);
+            ScenarioStore.LoadedScenario encoded = wideScenario(level);
+            store.save("wide", encoded);
+            assertTrue(helper, Files.isRegularFile(dir.resolve("wide/region/r.0.0.mca"))
+                && Files.isRegularFile(dir.resolve("wide/region/r.1.0.mca")), "cross-MCA files missing");
+            ScenarioStore.LoadedScenario loaded = store.load("wide");
+            Mob anchor = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
+            anchor.snapTo(-37.5, 80, -21.5, 0, 0);
+            EnvStateSnapshot decoded = ScenarioWorldCodec.decode(level, loaded, anchor);
+            BlockPos min = new BlockPos(-41, 79, -25);
+            assertEquals(helper, min.getX(), decoded.region().minX(), "region x translation incorrect");
+            assertEquals(helper, min.getY(), decoded.region().minY(), "region y translation incorrect");
+            assertEquals(helper, min.getZ(), decoded.region().minZ(), "region z translation incorrect");
+            decoded.blocks().forEachCapturedBlock((pos, block) -> {
+                BlockState expected = pos.equals(min) ? Blocks.CHEST.defaultBlockState()
+                    : pos.equals(min.offset(512, 16, 1)) ? Blocks.DIAMOND_BLOCK.defaultBlockState()
+                    : pos.equals(min.offset(1, 0, 1)) ? Blocks.CAVE_AIR.defaultBlockState() : Blocks.AIR.defaultBlockState();
+                check(block == expected, "block translation changed at " + pos);
+            });
+            CompoundTag chest = decoded.blocks().blockEntities().get(min.asLong());
+            assertEquals(helper, min.getX(), chest.getIntOr("x", 0), "block entity coordinate not translated");
+            assertEquals(helper, 7, chest.getListOrEmpty("Items").getCompoundOrEmpty(0).getIntOr("count", 0), "container contents lost");
+            UUID[] firstUuid = new UUID[1];
+            decoded.entities().forEachEntity((type, data) -> {
+                assertEquals(helper, EntityType.ARMOR_STAND, type, "region entity type changed");
+                assertEquals(helper, min.getX() + 17.5, data.getListOrEmpty("Pos").getDoubleOr(0, 0), "entity position not translated");
+                firstUuid[0] = RegionEntitySnapshot.getEntityUuid(data, "UUID");
+            });
+            ScenarioWorldCodec.decode(level, loaded, anchor).entities().forEachEntity((type, data) ->
+                check(!firstUuid[0].equals(RegionEntitySnapshot.getEntityUuid(data, "UUID")), "repeated load reused entity UUID"));
+            assertEquals(helper, anchor.getUUID(), RegionEntitySnapshot.getEntityUuid(decoded.agent().data(), "UUID"), "agent UUID changed");
+            // 区块载荷不能共享可变 NBT；错误段集合与调色板必须拒绝。
+            Map<ChunkPos, CompoundTag> modified = loaded.chunks();
+            modified.get(ChunkPos.ZERO).putInt("xPos", 99);
+            assertEquals(helper, 0, loaded.chunks().get(ChunkPos.ZERO).getIntOr("xPos", -1), "chunk NBT was shared");
+            Map<ChunkPos, CompoundTag> damaged = loaded.chunks();
+            damaged.get(ChunkPos.ZERO).getListOrEmpty("sections").remove(0);
+            boolean rejected = false;
+            try { ScenarioWorldCodec.decode(level, new ScenarioStore.LoadedScenario(loaded.definition(), damaged), anchor); }
+            catch (IllegalArgumentException expected) { rejected = true; }
+            assertTrue(helper, rejected, "missing section accepted");
+            damaged = loaded.chunks();
+            damaged.get(ChunkPos.ZERO).getListOrEmpty("sections").getCompoundOrEmpty(0).put("block_states", new CompoundTag());
+            rejected = false;
+            try { ScenarioWorldCodec.decode(level, new ScenarioStore.LoadedScenario(loaded.definition(), damaged), anchor); }
+            catch (IllegalArgumentException expected) { rejected = true; }
+            assertTrue(helper, rejected, "broken palette accepted");
+            externalChunkRoundTrip(helper, store, loaded, dir);
+            try (RandomAccessFile file = new RandomAccessFile(dir.resolve("wide/region/r.0.0.mca").toFile(), "rw")) {
+                file.writeInt(0);
+            }
+            assertTrue(helper, loadRejected(store, "wide"), "missing MCA chunk slot accepted");
+            store.save("wide", loaded);
+            Files.delete(dir.resolve("wide/region/r.1.0.mca"));
+            assertTrue(helper, loadRejected(store, "wide"), "missing region silently became air");
+            store.save("wide", emptyScenario(level, "gymcraft:general", Map.of(), false));
+            assertTrue(helper, !Files.exists(dir.resolve("wide/region")), "overwrite left stale MCA files");
+            helper.succeed();
+        } catch (IOException e) { helper.fail("scenario MCA I/O failed: " + e.getMessage()); }
+        finally { deleteRecursivelyQuietly(dir); }
+    }
+
+    /** 验证小区域恢复能清除基线空气、恢复容器内容且不触碰区域外方块。 */
+    public static void regionRestore(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos min = helper.absolutePos(new BlockPos(1, 1, 1));
+        BlockPos outside = min.offset(2, 0, 0);
+        Mob anchor = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
+        anchor.snapTo(min.getX() + 0.5, min.getY(), min.getZ() + 0.5, 0, 0);
+        BoundingBox box = new BoundingBox(min.getX(), min.getY(), min.getZ(), min.getX() + 1, min.getY() + 1, min.getZ() + 1);
+        RegionBlockSnapshot blocks = RegionBlockSnapshot.of(PalettedContainerFactory.create(level.registryAccess()), box,
+            List.of(new RegionBlockSnapshot.BlockEntry(min, Blocks.CHEST.defaultBlockState(), chestData(min))));
+        EnvStateSnapshot source = EnvStateSnapshot.of(EntitySnapshot.capture(anchor), blocks, null);
+        ScenarioStore.LoadedScenario encoded = ScenarioWorldCodec.encode(level, "gymcraft:general", Map.of(), source);
+        helper.setBlock(new BlockPos(1, 1, 1), Blocks.STONE);
+        helper.setBlock(new BlockPos(2, 1, 1), Blocks.GOLD_BLOCK);
+        helper.setBlock(new BlockPos(3, 1, 1), Blocks.EMERALD_BLOCK);
+        ScenarioWorldCodec.decode(level, encoded, anchor).restoreWorldAndEntities(level);
+        assertTrue(helper, level.getBlockState(min.offset(1, 0, 0)).isAir(), "baseline air did not erase added block");
+        assertTrue(helper, level.getBlockState(outside).is(Blocks.EMERALD_BLOCK), "restore touched outside region");
+        ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(min);
+        assertTrue(helper, chest != null && chest.getItem(0).is(Items.DIAMOND) && chest.getItem(0).getCount() == 7, "container NBT did not restore");
+        helper.succeed();
+    }
+
+    /** 验证三份内置资源均可加载，重复读取及 UUID 分配互不污染。 */
+    public static void bundledIsolation(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Mob anchor = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
+        anchor.snapTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(2, 1, 2))));
+        for (String name : List.of("iron_mining", "iron_golem_warden", "parkour_mob")) {
+            ScenarioStore.LoadedScenario first = ScenarioStore.loadBundled(level, name).orElseThrow();
+            ScenarioStore.LoadedScenario second = ScenarioStore.loadBundled(level, name).orElseThrow();
+            assertEquals(helper, "gymcraft:" + name, ScenarioWorldCodec.envType(first.definition()), "bundled env type changed");
+            assertTrue(helper, !first.chunks().isEmpty(), "bundled world empty");
+            first.definition().getCompoundOrEmpty("agent").putString("id", "invalid");
+            first.chunks().get(ChunkPos.ZERO).putInt("xPos", 99);
+            ScenarioWorldCodec.decode(level, second, anchor);
+            if (name.equals("iron_golem_warden")) {
+                UUID[] uuid = new UUID[1];
+                ScenarioWorldCodec.decode(level, first, anchor).entities().forEachEntity((type, data) ->
+                    uuid[0] = RegionEntitySnapshot.getEntityUuid(data, "UUID"));
+                ScenarioWorldCodec.decode(level, second, anchor).entities().forEachEntity((type, data) ->
+                    check(!uuid[0].equals(RegionEntitySnapshot.getEntityUuid(data, "UUID")), "bundled loads reused UUID"));
+            }
         }
+        helper.succeed();
+    }
+
+    /** 创建无世界区域的测试场景；返回经正式 Codec 编码的独立载荷。 */
+    private static ScenarioStore.LoadedScenario emptyScenario(ServerLevel level, String envType, Map<String, Object> options, boolean noAi) {
+        CompoundTag agent = new CompoundTag();
+        agent.put("Pos", positionTag(15.5, 40, 15.5));
+        agent.putBoolean("NoAI", noAi);
+        EnvStateSnapshot state = EnvStateSnapshot.of(new EntitySnapshot(EntityType.HUSK, level.dimension(), agent), null, null);
+        return ScenarioWorldCodec.encode(level, envType, options, state);
+    }
+
+    /** 创建 513×17×2 的合成场景，含容器、跨 MCA 标记和区域实体；不读取世界区块。 */
+    private static ScenarioStore.LoadedScenario wideScenario(ServerLevel level) {
+        BoundingBox box = new BoundingBox(12, 39, 12, 524, 55, 13);
+        BlockPos min = new BlockPos(12, 39, 12);
+        RegionBlockSnapshot blocks = RegionBlockSnapshot.of(PalettedContainerFactory.create(level.registryAccess()), box, List.of(
+            new RegionBlockSnapshot.BlockEntry(min, Blocks.CHEST.defaultBlockState(), chestData(min)),
+            new RegionBlockSnapshot.BlockEntry(min.offset(512, 16, 1), Blocks.DIAMOND_BLOCK.defaultBlockState(), null),
+            new RegionBlockSnapshot.BlockEntry(min.offset(1, 0, 1), Blocks.CAVE_AIR.defaultBlockState(), null)));
+        CompoundTag agent = new CompoundTag();
+        agent.put("Pos", positionTag(15.5, 40, 15.5));
+        UUID uuid = UUID.randomUUID();
+        RegionEntitySnapshot.putEntityUuid(agent, "UUID", uuid);
+        CompoundTag entity = new CompoundTag();
+        entity.put("Pos", positionTag(29.5, 40, 12.5));
+        RegionEntitySnapshot entities = RegionEntitySnapshot.of(RegionEntitySnapshot.toAabb(box), uuid,
+            List.of(new RegionEntitySnapshot.EntityEntry(EntityType.ARMOR_STAND, entity)));
+        EnvStateSnapshot state = EnvStateSnapshot.of(new EntitySnapshot(EntityType.HUSK, level.dimension(), agent), blocks, entities);
+        return ScenarioWorldCodec.encode(level, "gymcraft:general", Map.of("enabled", true), state);
+    }
+
+    /** 创建装有七颗钻石的箱子 NBT；参数为源方块位置。 */
+    private static CompoundTag chestData(BlockPos pos) {
+        CompoundTag item = new CompoundTag();
+        item.putByte("Slot", (byte) 0);
+        item.putString("id", "minecraft:diamond");
+        item.putInt("count", 7);
+        ListTag items = new ListTag();
+        items.add(item);
+        CompoundTag chest = new CompoundTag();
+        chest.putString("id", "minecraft:chest");
+        chest.putInt("x", pos.getX()); chest.putInt("y", pos.getY()); chest.putInt("z", pos.getZ());
+        chest.put("Items", items);
+        return chest;
+    }
+
+    /** 创建实体位置标签；参数为三个坐标，返回 DoubleTag 列表。 */
+    private static ListTag positionTag(double x, double y, double z) {
+        ListTag pos = new ListTag();
+        pos.add(DoubleTag.valueOf(x)); pos.add(DoubleTag.valueOf(y)); pos.add(DoubleTag.valueOf(z));
+        return pos;
+    }
+
+    /** 尝试加载场景；格式损坏、缺失或 I/O 失败时返回 true。 */
+    private static boolean loadRejected(ScenarioStore store, String name) {
+        try { store.load(name); return false; }
+        catch (IOException | IllegalArgumentException expected) { return true; }
+    }
+
+    /** 验证原版超过 255 个扇区的条目写入外置 MCC，载荷可完整读回，缺文件时拒绝加载。 */
+    private static void externalChunkRoundTrip(GameTestHelper helper, ScenarioStore store, ScenarioStore.LoadedScenario source, Path dir) throws IOException {
+        byte[] payload = new byte[1_100_000];
+        new Random(42).nextBytes(payload);
+        Map<ChunkPos, CompoundTag> chunks = source.chunks();
+        chunks.get(ChunkPos.ZERO).putByteArray("test_payload", payload);
+        store.save("external", new ScenarioStore.LoadedScenario(source.definition(), chunks));
+        Path external = dir.resolve("external/region/c.0.0.mcc");
+        assertTrue(helper, Files.isRegularFile(external), "oversized chunk did not use MCC");
+        byte[] restored = store.load("external").chunks().get(ChunkPos.ZERO).getByteArray("test_payload").orElseThrow();
+        assertTrue(helper, Arrays.equals(payload, restored), "external chunk payload changed");
+        Files.delete(external);
+        assertTrue(helper, loadRejected(store, "external"), "missing external MCC accepted");
+    }
+
+    /**
+     * 验证所有环境 ID 的无场景挂载：保留当前 Mob、装备和周围世界，reset 不清除邻居。
+     * @param helper GameTest 辅助对象
+     */
+    public static void attachExistingMob(GameTestHelper helper) {
+        Mob original = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(3, 1, 3));
+        original.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
+            new net.minecraft.world.item.ItemStack(Items.DIAMOND, 5));
+        Mob neighbor = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(5, 1, 5));
+        BlockPos marker = helper.absolutePos(new BlockPos(1, 2, 1));
+        helper.getLevel().setBlock(marker, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        AtomicReference<Boolean> done = new AtomicReference<>(false);
+        Thread.startVirtualThread(() -> {
+            try {
+                // 每种工厂都走同一个挂载入口，并执行 reset 与 step 以覆盖空范围分支。
+                for (String name : List.of("simple_mob", "general", "parkour_mob", "iron_mining", "iron_golem_warden")) {
+                    AtomicReference<McEnv> ref = new AtomicReference<>();
+                    runOnServer(helper, () -> {
+                        Mob mob = (Mob) helper.getLevel().getEntity(original.getUUID());
+                        McEnv env = EnvManager.attach("gymcraft:" + name, mob);
+                        ref.set(env);
+                        AbstractMcEnv abs = (AbstractMcEnv) env;
+                        check(helper.getLevel().getEntity(original.getUUID()) == mob, "attach replaced existing Mob");
+                        check(abs.baselineSnapshot().blocks() == null && abs.baselineSnapshot().entities() == null,
+                            "attach captured surrounding world: " + name);
+                        check(abs.lastResetOptionsView().isEmpty(), "attach automatically reset or applied scene options");
+                        check(mob.getType() == EntityType.HUSK && mob.getMainHandItem().is(Items.DIAMOND),
+                            "attach changed agent type or equipment");
+                    });
+                    ref.get().reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
+                    var response = ref.get().step(List.of(), 10);
+                    check(!response.getTerminated() && !response.getTruncated(), "empty scope failed step: " + name);
+                    runOnServer(helper, () -> {
+                        Mob mob = (Mob) helper.getLevel().getEntity(original.getUUID());
+                        check(mob.getType() == EntityType.HUSK && mob.getMainHandItem().getCount() == 5,
+                            "agent-only reset lost entity type or equipment");
+                        check(helper.getLevel().getBlockState(marker).is(Blocks.GOLD_BLOCK), "reset modified surrounding blocks");
+                        check(helper.getLevel().getEntity(neighbor.getUUID()) == neighbor, "reset replaced surrounding entity");
+                        EnvManager.close(original.getUUID());
+                    });
+                }
+            } catch (Throwable error) {
+                failure.set(error);
+            } finally {
+                done.set(true);
+            }
+        });
+        helper.succeedWhen(() -> {
+            assertTrue(helper, done.get(), "waiting for attach/reset checks");
+            try {
+                assertTrue(helper, failure.get() == null, "attach/reset failed: " + failure.get());
+            } finally {
+                EnvManager.close(original.getUUID());
+            }
+        });
+    }
+
+    /** 显式读取内置场景并通过场景入口生成 agent；参数为辅助对象、场景名和相对地板锚点。 */
+    private static Mob createBundledAgent(GameTestHelper helper, String name, BlockPos floor) {
+        BlockPos pos = helper.absolutePos(floor.above());
+        ensureChunksLoaded(helper.getLevel(), pos.offset(-6, 0, -6), pos.offset(6, 0, 6));
+        return EnvManager.createFromScenario(ScenarioStore.loadBundled(helper.getLevel(), name).orElseThrow(),
+            helper.getLevel(), Vec3.atBottomCenterOf(pos));
     }
 
     /**
