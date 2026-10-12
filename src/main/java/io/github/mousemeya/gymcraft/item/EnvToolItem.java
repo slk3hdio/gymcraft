@@ -6,6 +6,7 @@ import java.util.List;
 
 import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
+import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.network.EnvToolScreenPayload;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import net.minecraft.core.BlockPos;
@@ -123,6 +124,14 @@ public class EnvToolItem extends Item {
         int up = mob.level().getMaxY() - 1 - anchor.getY();
         int north = 0;
         int south = 0;
+        // 六方向延伸距离上限：水平为钳制上限；垂直为到世界边界的实际距离
+        // （与 AttachScope.around 的钳制一致），随目标位置变化。
+        int maxWest = AttachScope.MAX_RADIUS;
+        int maxEast = AttachScope.MAX_RADIUS;
+        int maxDown = down;
+        int maxUp = up;
+        int maxNorth = AttachScope.MAX_RADIUS;
+        int maxSouth = AttachScope.MAX_RADIUS;
         boolean captureBlocks = false;
         boolean captureEntities = false;
         if (EnvManager.get(mob.getUUID()).orElse(null) instanceof AbstractMcEnv env) {
@@ -142,7 +151,9 @@ public class EnvToolItem extends Item {
         }
         PacketDistributor.sendToPlayer(player, new EnvToolScreenPayload(
             mob.getUUID(), getRegisteredEnvTypes(), currentEnvType,
-            west, east, down, up, north, south, captureBlocks, captureEntities));
+            west, east, down, up, north, south,
+            maxWest, maxEast, maxDown, maxUp, maxNorth, maxSouth,
+            captureBlocks, captureEntities));
     }
 
     /**
