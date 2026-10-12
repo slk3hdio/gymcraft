@@ -6,7 +6,7 @@
 
 设计边界（与需求方确认）：
 
-- reset 基线恒存在：场景环境在构造期从场景文件（内置资产或手动 `env load`）解码出完整基线，非场景环境在构造期仅现场捕获 agent（空区域）——不存在"基线未冻结"分支；任意时点快照由场景存档系统按需捕获（`captureCurrentState`）
+- reset 基线恒存在：场景环境在构造期从场景文件（内置资产或手动 `env load`）解码出完整基线，挂载环境在构造期按 `AttachScope` 现场捕获（默认 `AGENT_ONLY` 空区域）——不存在"基线未冻结"分支；任意时点快照由场景存档系统按需捕获（`captureCurrentState`）
 - 内存保存：快照以 NBT/注册表引用组织，不落盘，环境 close 即丢弃
 - 任务环境的场景搭建代码全部删除，场景布局以显式提供的场景文件为唯一权威
 
@@ -31,11 +31,12 @@
 ```
 EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateSnapshot）
 ├── EntitySnapshot agent             // 复用既有实体 NBT 快照（gym/env/EntitySnapshot）
-├── RegionBlockSnapshot blocks       // 单区域：区块段深拷贝（PalettedContainer 调色板压缩）+ 稀疏 BE-NBT；null = 空范围
+├── BoundingBox region               // 环境占用区域（自持，独立于方块快照）；null = 空范围
+├── RegionBlockSnapshot blocks       // 区块段深拷贝（PalettedContainer 调色板压缩）+ 稀疏 BE-NBT；null = 不管理方块
 └── RegionEntitySnapshot entities    // 实体 NBT 列表（UUID 保留）；null = 不管理实体
 ```
 
-- 单区域模型：`EnvStateSnapshot.region()` 从方块快照读取环境占用区域（null = 不占用世界，reset 仅重建 agent，等价旧行为）；`entities != null` 即实体管理开关。区域与实体管理开关由场景定义；非场景环境固定为空区域，仅捕获 agent。历史上 `EnvStateScope` 的多区域支持从未被使用，已收敛删除
+- 单区域模型：`EnvStateSnapshot.region()` 直接持有环境占用区域（null = 不占用世界，reset 仅重建 agent）；方块与实体捕获相互独立——`blocks`/`entities` 各自可空（如只管理实体不恢复方块）。区域与捕获开关由场景定义或挂载作用域（`AttachScope`）声明；历史上 `EnvStateScope` 的多区域支持从未被使用，已收敛删除
 - `RegionBlockSnapshot`：按整段深拷贝区域覆盖的 `LevelChunkSection`（内含调色板压缩的方块容器，空气段近零成本；必须含空气格——恢复时靠基线空气记录擦除 agent 放置的方块），方块实体从区块稀疏表收集完整 NBT；`restore(level)` 按区域逐格裁剪并差异写回（基线与现状同为全空气的段整段跳过）；共享 `replaceWithoutDrops`（先清容器防掉落）；`requireChunksLoaded` 守卫，区块未加载直接抛错
 - `RegionEntitySnapshot`：排除真实玩家、受控 agent、乘客实体（乘客由载具根实体代表）；恢复 = 同过滤器清除现存 → `EntityType.create(ValueInput, level, LOAD)` 重建 → `addWithUUID` 保留原 UUID
 
@@ -48,7 +49,8 @@ EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateS
           区域实体重分配 UUID）+ 携带 preset options
         → 不触碰世界：场景内容延迟到首个 reset 随基线恢复物化
     attach（指定环境 ID 与已有 Mob，不读取场景）
-        → 仅对 agent 当场捕获基线（空区域、不管理区域实体）（EnvStateSnapshot.capture）
+        → 按挂载作用域当场捕获基线（AttachScope：区域 + 方块/实体捕获开关；
+          AGENT_ONLY = 空区域仅捕获 agent）（EnvStateSnapshot.capture）
     两条路径都产出不可变 EnvStateSnapshot（自持生效范围），不依赖环境任何回调
 reset            runtime 清理动作管线 → 组件 release 自清会话（菜单/消费）→
                   AbstractMcEnv.resetEnvironment 编排：基线快照恢复自身
@@ -78,9 +80,9 @@ close             runtime 组件 release → AgentMobLifecycle 撤销附件作�
 - `iron_golem_warden`：Warden 来自资产实体（含虚弱效果，随 NBT 往返），UUID 由 `RegionEntitySnapshot.of` 解码时重分配、运行期经 `wardenUuid()` 从基线懒解析；`DIG_COOLDOWN` 脑记忆不随 NBT 序列化，每次 reset 由 `repinWarden` 重新注入
 - `parkour_mob`：单区域、不管理实体（平台层 + 训练柱，高度与资产一致）；布局选项（`block`/`block_count`/`target_height`）随硬编码场景一并删除——需要不同布局时经 `env save/load` 自制场景
 
-无场景挂载时 `scopeAabb()` 返回 null，任务环境跳过区域扫描、越界与场景资源丢失判定；
+空作用域挂载（`AttachScope.AGENT_ONLY`）时 `scopeAabb()` 返回 null，任务环境跳过区域扫描、越界与场景资源丢失判定；
 跳搭环境不设置目标高度，战斗环境不改写周围铁傀儡的 AI。通用动作与观测仍可访问世界，
-空状态范围仅限定保存和恢复的对象。
+空状态范围仅限定保存和恢复的对象；携带区域的挂载作用域会让任务环境启用对应的区域判定。
 
 ## 已知限制
 

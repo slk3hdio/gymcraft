@@ -1,6 +1,8 @@
 package io.github.mousemeya.gymcraft.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
@@ -13,7 +15,9 @@ import java.util.Optional;
 import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
+import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.registry.EnvFactories;
+import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
@@ -22,6 +26,7 @@ import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
@@ -31,7 +36,8 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 /**
  * /gymcraft 指令。
  *
- * <p>提供与 {@link io.github.mousemeya.gymcraft.item.EnvToolItem} 等价的已有 Mob 挂载/删除能力（挂载不加载场景），
+ * <p>提供与 {@link io.github.mousemeya.gymcraft.item.EnvToolItem} 管理界面等价的已有 Mob 挂载/删除能力
+ * （挂载不加载场景，create 可指定状态范围半径与方块/实体快照开关），
  * 便于在专用服务器控制台或 RCON 下使用。create/remove 的目标参数接受多实体选择器
  * （如 {@code @e[type=zombie,limit=3]}），对每个目标逐一执行，返回成功数。</p>
  *
@@ -52,6 +58,12 @@ public final class GymCraftCommands {
         SharedSuggestionProvider.suggest(
             ScenarioStore.forServer().loadableNames(context.getSource().getLevel()), builder);
 
+    /** create 的环境类型补全：来自环境工厂注册表。 */
+    private static final SuggestionProvider<CommandSourceStack> ENV_TYPE_SUGGESTIONS = (context, builder) ->
+        SharedSuggestionProvider.suggest(
+            RegistryKeys.ENV_FACTORIES.keySet().stream().map(Identifier::toString).toList(),
+            builder);
+
     /** 禁止实例化仅包含静态指令注册逻辑的工具类。 */
     private GymCraftCommands() {
     }
@@ -69,10 +81,26 @@ public final class GymCraftCommands {
                 .then(Commands.literal("env")
                         .then(Commands.literal("create")
                                 .then(Commands.argument("target", EntityArgument.entities())
-                                        .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"), defaultType))
+                                        .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"), defaultType, 0, true, true))
                                         .then(Commands.argument("type", IdentifierArgument.id())
+                                                .suggests(ENV_TYPE_SUGGESTIONS)
                                                 .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
-                                                        IdentifierArgument.getId(ctx, "type").toString())))))
+                                                        IdentifierArgument.getId(ctx, "type").toString(), 0, true, true))
+                                                .then(Commands.argument("radius", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
+                                                        .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
+                                                                IdentifierArgument.getId(ctx, "type").toString(),
+                                                                IntegerArgumentType.getInteger(ctx, "radius"), true, true))
+                                                        .then(Commands.argument("captureBlocks", BoolArgumentType.bool())
+                                                                .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
+                                                                        IdentifierArgument.getId(ctx, "type").toString(),
+                                                                        IntegerArgumentType.getInteger(ctx, "radius"),
+                                                                        BoolArgumentType.getBool(ctx, "captureBlocks"), true))
+                                                                .then(Commands.argument("captureEntities", BoolArgumentType.bool())
+                                                                        .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
+                                                                                IdentifierArgument.getId(ctx, "type").toString(),
+                                                                                IntegerArgumentType.getInteger(ctx, "radius"),
+                                                                                BoolArgumentType.getBool(ctx, "captureBlocks"),
+                                                                                BoolArgumentType.getBool(ctx, "captureEntities")))))))))
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("target", EntityArgument.entities())
                                         .executes(ctx -> remove(ctx.getSource(), EntityArgument.getEntities(ctx, "target")))))
@@ -102,16 +130,21 @@ public final class GymCraftCommands {
     }
 
     /**
-     * 为每个现有 Mob 挂载指定环境，只捕获 agent，不加载场景，逐个反馈成功/失败。
+     * 为每个现有 Mob 挂载指定环境（不加载场景），逐个反馈成功/失败。
+     * 半径为正且至少一个捕获开关打开时，以 Mob 为中心捕获半径立方体的状态基线；
+     * 否则只捕获 agent。区域覆盖的区块必须已加载。
      *
      * @param source 指令来源
      * @param targets 目标实体集合（多实体选择器展开结果）
      * @param envType 环境注册表 ID
+     * @param radius 状态范围半径（0 = 仅捕获 agent）
+     * @param captureBlocks 是否保存区域方块快照
+     * @param captureEntities 是否保存区域实体快照
      * @return 成功创建环境的目标数（0 表示全部失败）
      * @throws CommandSyntaxException 目标实体参数解析失败时抛出
      */
-    private static int create(CommandSourceStack source, Collection<? extends Entity> targets, String envType)
-            throws CommandSyntaxException {
+    private static int create(CommandSourceStack source, Collection<? extends Entity> targets, String envType,
+            int radius, boolean captureBlocks, boolean captureEntities) throws CommandSyntaxException {
         int created = 0;
         for (Entity target : targets) {
             // 非 Mob 目标跳过并逐个反馈，不中断其余目标的处理
@@ -120,8 +153,8 @@ public final class GymCraftCommands {
                 continue;
             }
             try {
-                EnvManager.attach(envType, mob);
-            } catch (IllegalArgumentException e) {
+                EnvManager.attach(envType, mob, AttachScope.around(mob, radius, captureBlocks, captureEntities));
+            } catch (IllegalArgumentException | IllegalStateException e) {
                 source.sendFailure(Component.translatable("message.gymcraft.error", e.getMessage()));
                 continue;
             }

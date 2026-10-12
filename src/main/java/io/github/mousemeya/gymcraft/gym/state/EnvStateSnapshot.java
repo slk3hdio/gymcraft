@@ -7,11 +7,11 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 /**
- * 环境完整状态：受控 agent 实体快照 + 单个区域方块快照 + 区域实体快照。创建后
+ * 环境完整状态：受控 agent 实体快照 + 区域定义 + 区域方块快照 + 区域实体快照。创建后
  * 不可变——环境构造期经 {@link #capture}（现场捕获）或 {@code ScenarioWorldCodec.decode}
- * （场景文件解码）产出的实例即环境状态基线；区域几何从方块快照读取（{@link #region()}，
- * 无方块快照 = 空范围，不占用世界），reset 恢复与再捕获（{@link #recapture}）都在
- * 本对象上进行。
+ * （场景文件解码）产出的实例即环境状态基线；区域由本对象自持（{@link #region()}，
+ * 无区域 = 空范围，不占用世界），方块快照与实体快照相互独立，reset 恢复与再捕获
+ * （{@link #recapture}）都在本对象上进行。
  * <p>
  * 每次 reset 把世界与 agent 恢复到基线：先恢复方块与区域实体（保证 agent 落脚的方块
  * 已就位），再重建 agent 实体——场景文件的基线因此延迟到首个 reset 才物化进世界。
@@ -21,22 +21,30 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  */
 public final class EnvStateSnapshot {
     private final EntitySnapshot agent;
-    /** 单区域方块快照；null = 空范围（不占用世界，reset 只重建 agent）。 */
+    /** 环境占用区域；null = 空范围（不占用世界，reset 只重建 agent）。 */
+    @Nullable private final BoundingBox region;
+    /** 区域方块快照；null = 不管理区域方块。 */
     @Nullable private final RegionBlockSnapshot blocks;
     /** 区域实体快照；null = 不管理区域实体。 */
     @Nullable private final RegionEntitySnapshot entities;
     /**
-     * 组装状态基线，区域范围和实体管理开关由对应快照部件决定。
+     * 组装状态基线；区域独立持有，方块与实体快照可各自缺省。
      * @param agent 受控 agent 的完整实体快照
-     * @param blocks 区域方块快照；null 表示空范围
+     * @param region 环境占用区域；null 表示空范围（此时方块与实体快照必须同为 null）
+     * @param blocks 区域方块快照；null 表示不管理区域方块
      * @param entities 区域实体快照；null 表示不管理区域实体
      */
     private EnvStateSnapshot(
         EntitySnapshot agent,
+        @Nullable BoundingBox region,
         @Nullable RegionBlockSnapshot blocks,
         @Nullable RegionEntitySnapshot entities
     ) {
+        if (region == null && (blocks != null || entities != null)) {
+            throw new IllegalArgumentException("Region snapshots require a non-null region");
+        }
         this.agent = agent;
+        this.region = region;
         this.blocks = blocks;
         this.entities = entities;
     }
@@ -47,6 +55,7 @@ public final class EnvStateSnapshot {
      * @param level 服务端世界
      * @param agent 受控 agent（当前时刻即基线位姿与物品状态）
      * @param region 环境占用区域（闭区间方块盒）；null = 空范围
+     * @param captureBlocks 是否捕获区域方块
      * @param captureEntities 是否捕获区域实体
      * @return 完整环境状态快照
      */
@@ -54,36 +63,56 @@ public final class EnvStateSnapshot {
         ServerLevel level,
         Mob agent,
         @Nullable BoundingBox region,
+        boolean captureBlocks,
         boolean captureEntities
     ) {
-        RegionBlockSnapshot blocks = region == null ? null : RegionBlockSnapshot.capture(level, region);
-        RegionEntitySnapshot entities = region != null && captureEntities
+        if (region == null) {
+            return new EnvStateSnapshot(EntitySnapshot.capture(agent), null, null, null);
+        }
+        // 中心±半径构造的区域可能超出建筑高度，区块段索引按世界高度裁剪。
+        region = clampToBuildHeight(level, region);
+        // 实体收集同样依赖已加载区块，未加载直接抛错而非静默留下空快照。
+        RegionBlockSnapshot.requireChunksLoaded(level, region);
+        RegionBlockSnapshot blocks = captureBlocks ? RegionBlockSnapshot.capture(level, region) : null;
+        RegionEntitySnapshot entities = captureEntities
             ? RegionEntitySnapshot.capture(level, RegionEntitySnapshot.toAabb(region), agent)
             : null;
-        return new EnvStateSnapshot(EntitySnapshot.capture(agent), blocks, entities);
+        return new EnvStateSnapshot(EntitySnapshot.capture(agent), region, blocks, entities);
+    }
+
+    /** 把区域 Y 范围裁剪到世界建筑高度内（X/Z 不动）。 */
+    private static BoundingBox clampToBuildHeight(ServerLevel level, BoundingBox region) {
+        int minY = Math.max(region.minY(), level.getMinY());
+        int maxY = Math.min(region.maxY(), level.getMaxY() - 1);
+        if (minY == region.minY() && maxY == region.maxY()) {
+            return region;
+        }
+        return new BoundingBox(region.minX(), minY, region.minZ(), region.maxX(), maxY, region.maxZ());
     }
 
     /**
      * 从既有部件组装完整状态快照（场景存档解码路径）。
      *
      * @param agent agent 快照
-     * @param blocks 区域方块快照；null = 空范围
+     * @param region 环境占用区域；null = 空范围
+     * @param blocks 区域方块快照；null = 不管理区域方块
      * @param entities 区域实体快照；null = 不管理实体
      * @return 完整环境状态快照
      */
     public static EnvStateSnapshot of(
         EntitySnapshot agent,
+        @Nullable BoundingBox region,
         @Nullable RegionBlockSnapshot blocks,
         @Nullable RegionEntitySnapshot entities
     ) {
-        return new EnvStateSnapshot(agent, blocks, entities);
+        return new EnvStateSnapshot(agent, region, blocks, entities);
     }
 
     /**
-     * @return 环境占用区域（取自方块快照，捕获/解码时确定）；空范围环境为 null
+     * @return 环境占用区域（捕获/解码时确定，此后不变）；空范围环境为 null
      */
     @Nullable public BoundingBox region() {
-        return this.blocks == null ? null : this.blocks.region();
+        return this.region;
     }
 
     /**
@@ -104,14 +133,14 @@ public final class EnvStateSnapshot {
 
     /**
      * 对当前世界与 agent 立即再取一次快照（场景保存用，不要求环境 reset 过），
-     * 沿用本快照的区域与实体管理开关。
+     * 沿用本快照的区域与方块/实体捕获开关。
      *
      * @param level 服务端世界
      * @param agent 受控 agent
      * @return 当前时刻的完整状态快照
      */
     public EnvStateSnapshot recapture(ServerLevel level, Mob agent) {
-        return capture(level, agent, this.region(), this.entities != null);
+        return capture(level, agent, this.region, this.blocks != null, this.entities != null);
     }
 
     /**
@@ -159,7 +188,7 @@ public final class EnvStateSnapshot {
     }
 
     /**
-     * @return 区域方块快照（场景存档序列化用）；空范围环境为 null
+     * @return 区域方块快照（场景存档序列化用）；不管理方块时为 null
      */
     @Nullable public RegionBlockSnapshot blocks() {
         return this.blocks;
