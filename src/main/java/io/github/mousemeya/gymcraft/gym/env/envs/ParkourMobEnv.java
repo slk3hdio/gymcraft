@@ -16,6 +16,7 @@ import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
+import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 
@@ -55,13 +56,25 @@ public class ParkourMobEnv extends AbstractMcEnv {
      * @param scenario 完整场景；null 表示仅捕获 agent，状态范围不含方块及周围实体
      */
     public ParkourMobEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
+        this(envTypeId, mob, scenario, AttachScope.AGENT_ONLY);
+    }
+
+    /**
+     * 根据显式场景或挂载作用域创建环境；场景非空时忽略作用域（区域与捕获开关由文件决定）。
+     * @param envTypeId 环境类型注册 ID
+     * @param mob 服务端世界中的受控 Mob
+     * @param scenario 完整场景；null 表示挂载已有 Mob
+     * @param scope 挂载作用域（区域与方块/实体捕获开关）
+     */
+    public ParkourMobEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
         super(envTypeId, mob,
             List.of(ActionComponents.NOOP.get(), ActionComponents.JUMP.get(),
                 ActionComponents.SET_BLOCK.get(), ActionComponents.STEP_MOVE.get()),
             List.of(ObservationCreators.SELF.get(), ObservationCreators.NEARBY_BLOCKS.get(),
                 ObservationCreators.WORLD.get()),
             List.of(),
-            scenario);
+            scenario,
+            scope);
 
         observationComponent(ObservationCreators.NEARBY_BLOCKS.get()).setMaxBlocks(64);
         this.origin = BlockPos.containing(mob.position());
@@ -152,8 +165,8 @@ public class ParkourMobEnv extends AbstractMcEnv {
     public static final class Factory implements McEnvFactory {
         /** 创建指定 Mob 的跳搭环境。 */
         @Override
-        public ParkourMobEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
-            return new ParkourMobEnv(envTypeId, mob, scenario);
+        public ParkourMobEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
+            return new ParkourMobEnv(envTypeId, mob, scenario, scope);
         }
     }
 }

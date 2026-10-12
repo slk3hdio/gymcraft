@@ -72,6 +72,9 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("scenario_region_restore", () -> ScenarioGameTests::regionRestore);
         TEST_FUNCTIONS.register("scenario_bundled_isolation", () -> ScenarioGameTests::bundledIsolation);
         TEST_FUNCTIONS.register("scenario_attach_existing_mob", () -> ScenarioGameTests::attachExistingMob);
+        TEST_FUNCTIONS.register("scenario_attach_scope_full", () -> ScenarioGameTests::attachScopeRestoresBlocksAndEntities);
+        TEST_FUNCTIONS.register("scenario_attach_scope_entities_only", () -> ScenarioGameTests::attachScopeEntitiesOnlyLeavesBlocks);
+        TEST_FUNCTIONS.register("scenario_entities_only_codec", () -> ScenarioGameTests::entitiesOnlyCodecRoundTrip);
 
         // ===== 任务环境端到端 =====
         TEST_FUNCTIONS.register("iron_mining_reset_restore", () -> IronMiningEnvGameTests::resetMaterializesScenario);

@@ -5,11 +5,12 @@ import java.util.Comparator;
 import java.util.List;
 
 import io.github.mousemeya.gymcraft.gym.EnvManager;
-import io.github.mousemeya.gymcraft.registry.EnvFactories;
+import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
+import io.github.mousemeya.gymcraft.network.EnvToolScreenPayload;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
@@ -17,20 +18,19 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
- * 环境工具物品，用于在现有 Mob 上挂载、切换或移除 GymCraft 环境，不加载任何场景。
+ * 环境工具物品：右键 Mob 打开环境管理界面（选择环境类型、设定状态范围与方块/实体
+ * 快照开关、挂载、保存场景、移除环境），Shift+右键直接移除目标环境。
  * <p>
  * 实体右键由高优先级交互事件优先转发到本物品，确保村民等会主动消费右键的实体
- * 不会在环境绑定前打开自身界面；非 Mob 目标保持原版交互行为。
+ * 不会在打开管理界面前弹出自身界面；非 Mob 目标保持原版交互行为。
  * </p>
  */
 public class EnvToolItem extends Item {
-    private static final String ENV_TYPE_TAG = "gymcraft_env_type";
-    private static final String DEFAULT_ENV_TYPE = EnvFactories.SIMPLE_MOB.getId().toString();
-
     /**
      * 创建环境工具物品。
      *
@@ -55,7 +55,7 @@ public class EnvToolItem extends Item {
             return InteractionResult.PASS;
         }
 
-        return interactWithMob(stack, player, mob);
+        return interactWithMob(player, mob);
     }
 
     /**
@@ -69,7 +69,7 @@ public class EnvToolItem extends Item {
             return;
         }
 
-        InteractionResult result = envTool.interactWithMob(event.getItemStack(), event.getEntity(), mob);
+        InteractionResult result = envTool.interactWithMob(event.getEntity(), mob);
         if (result.consumesAction()) {
             event.setCancellationResult(result);
             event.setCanceled(true);
@@ -77,14 +77,13 @@ public class EnvToolItem extends Item {
     }
 
     /**
-     * 为目标现有 Mob 挂载或移除环境；挂载仅捕获 agent，不管理周围世界。
+     * 为目标 Mob 打开环境管理界面；Shift+右键为快速移除环境的捷径。
      *
-     * @param stack 当前环境工具物品栈
      * @param player 发起交互的玩家
      * @param mob 目标 Mob
      * @return 已处理时返回 SUCCESS
      */
-    private InteractionResult interactWithMob(ItemStack stack, Player player, Mob mob) {
+    private InteractionResult interactWithMob(Player player, Mob mob) {
 
         if (player.level().isClientSide()) {
             return InteractionResult.SUCCESS;
@@ -99,60 +98,35 @@ public class EnvToolItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        String envType = getSelectedEnvType(stack);
-        try {
-            EnvManager.attach(envType, mob);
-        } catch (IllegalArgumentException e) {
-            player.sendSystemMessage(Component.translatable("message.gymcraft.error", e.getMessage()));
-            return InteractionResult.SUCCESS;
+        if (player instanceof ServerPlayer serverPlayer) {
+            openScreen(serverPlayer, mob);
         }
-        player.sendSystemMessage(Component.translatable(
-            "message.gymcraft.environment_created",
-            envType,
-            mob.getUUID().toString()
-        ));
         return InteractionResult.SUCCESS;
     }
 
     /**
-     * 读取环境工具当前保存的环境类型。
+     * 向玩家发送环境管理界面载荷（打开或就地刷新）：携带全部已注册环境类型与
+     * 目标当前绑定的环境状态（未绑定时预填默认项）。
      *
-     * @param stack 环境工具物品栈
-     * @return 环境注册表 ID；未设置时返回默认环境
+     * @param player 目标玩家
+     * @param mob 界面管理的 Mob
      */
-    public static String getSelectedEnvType(ItemStack stack) {
-        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
-        if (customData == null || !customData.contains(ENV_TYPE_TAG)) {
-            return DEFAULT_ENV_TYPE;
+    public static void openScreen(ServerPlayer player, Mob mob) {
+        String currentEnvType = null;
+        int regionRadius = 0;
+        boolean captureBlocks = false;
+        boolean captureEntities = false;
+        if (EnvManager.get(mob.getUUID()).orElse(null) instanceof AbstractMcEnv env) {
+            currentEnvType = env.getRegisterId();
+            BoundingBox region = env.stateRegion();
+            if (region != null) {
+                regionRadius = (region.getXSpan() - 1) / 2;
+                captureBlocks = env.baselineSnapshot().blocks() != null;
+                captureEntities = env.baselineSnapshot().entities() != null;
+            }
         }
-        return customData.copyTag().getString(ENV_TYPE_TAG).orElse(DEFAULT_ENV_TYPE);
-    }
-
-    /**
-     * 按注册表排序循环选择环境类型，并写回物品组件。
-     *
-     * @param stack 环境工具物品栈
-     * @param direction 滚轮方向，正数向后、负数向前
-     * @return 切换后的环境注册表 ID
-     */
-    public static String cycleSelectedEnvType(ItemStack stack, int direction) {
-        List<String> envTypes = getRegisteredEnvTypes();
-        if (envTypes.isEmpty()) {
-            setSelectedEnvType(stack, DEFAULT_ENV_TYPE);
-            return DEFAULT_ENV_TYPE;
-        }
-
-        String current = getSelectedEnvType(stack);
-        int index = envTypes.indexOf(current);
-        if (index < 0) {
-            index = 0;
-        } else {
-            index = Math.floorMod(index + direction, envTypes.size());
-        }
-
-        String selected = envTypes.get(index);
-        setSelectedEnvType(stack, selected);
-        return selected;
+        PacketDistributor.sendToPlayer(player, new EnvToolScreenPayload(
+            mob.getUUID(), getRegisteredEnvTypes(), currentEnvType, regionRadius, captureBlocks, captureEntities));
     }
 
     /**
@@ -167,15 +141,5 @@ public class EnvToolItem extends Item {
         }
         envTypes.sort(Comparator.naturalOrder());
         return envTypes;
-    }
-
-    /**
-     * 将所选环境类型写入物品自定义数据。
-     *
-     * @param stack 环境工具物品栈
-     * @param envType 环境注册表 ID
-     */
-    public static void setSelectedEnvType(ItemStack stack, String envType) {
-        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putString(ENV_TYPE_TAG, envType));
     }
 }

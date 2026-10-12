@@ -30,6 +30,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.monster.warden.Warden;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
@@ -47,6 +48,7 @@ import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
+import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.gym.state.EntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
@@ -522,7 +524,7 @@ public final class ScenarioGameTests {
         BoundingBox box = new BoundingBox(min.getX(), min.getY(), min.getZ(), min.getX() + 1, min.getY() + 1, min.getZ() + 1);
         RegionBlockSnapshot blocks = RegionBlockSnapshot.of(PalettedContainerFactory.create(level.registryAccess()), box,
             List.of(new RegionBlockSnapshot.BlockEntry(min, Blocks.CHEST.defaultBlockState(), chestData(min))));
-        EnvStateSnapshot source = EnvStateSnapshot.of(EntitySnapshot.capture(anchor), blocks, null);
+        EnvStateSnapshot source = EnvStateSnapshot.of(EntitySnapshot.capture(anchor), box, blocks, null);
         ScenarioStore.LoadedScenario encoded = ScenarioWorldCodec.encode(level, "gymcraft:general", Map.of(), source);
         helper.setBlock(new BlockPos(1, 1, 1), Blocks.STONE);
         helper.setBlock(new BlockPos(2, 1, 1), Blocks.GOLD_BLOCK);
@@ -564,7 +566,7 @@ public final class ScenarioGameTests {
         CompoundTag agent = new CompoundTag();
         agent.put("Pos", positionTag(15.5, 40, 15.5));
         agent.putBoolean("NoAI", noAi);
-        EnvStateSnapshot state = EnvStateSnapshot.of(new EntitySnapshot(EntityType.HUSK, level.dimension(), agent), null, null);
+        EnvStateSnapshot state = EnvStateSnapshot.of(new EntitySnapshot(EntityType.HUSK, level.dimension(), agent), null, null, null);
         return ScenarioWorldCodec.encode(level, envType, options, state);
     }
 
@@ -584,7 +586,7 @@ public final class ScenarioGameTests {
         entity.put("Pos", positionTag(29.5, 40, 12.5));
         RegionEntitySnapshot entities = RegionEntitySnapshot.of(RegionEntitySnapshot.toAabb(box), uuid,
             List.of(new RegionEntitySnapshot.EntityEntry(EntityType.ARMOR_STAND, entity)));
-        EnvStateSnapshot state = EnvStateSnapshot.of(new EntitySnapshot(EntityType.HUSK, level.dimension(), agent), blocks, entities);
+        EnvStateSnapshot state = EnvStateSnapshot.of(new EntitySnapshot(EntityType.HUSK, level.dimension(), agent), box, blocks, entities);
         return ScenarioWorldCodec.encode(level, "gymcraft:general", Map.of("enabled", true), state);
     }
 
@@ -629,6 +631,184 @@ public final class ScenarioGameTests {
         assertTrue(helper, Arrays.equals(payload, restored), "external chunk payload changed");
         Files.delete(external);
         assertTrue(helper, loadRejected(store, "external"), "missing external MCC accepted");
+    }
+
+    /**
+     * 验证带作用域的挂载（方块与实体快照同时捕获）：reset 恢复区域内方块、按原 UUID
+     * 重建基线实体、清除区域外来客实体，且不触碰区域外方块。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void attachScopeRestoresBlocksAndEntities(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Mob agent = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(4, 1, 4));
+        UUID agentUuid = agent.getUUID();
+        // 基线内容：区域内一个标记方块与一个盔甲架（捕获进快照）。
+        BlockPos marker = helper.absolutePos(new BlockPos(3, 2, 3));
+        level.setBlock(marker, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
+        ArmorStand armorStand = EntityType.ARMOR_STAND.create(level, EntitySpawnReason.COMMAND);
+        armorStand.snapTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(5, 2, 3))));
+        level.addFreshEntity(armorStand);
+        UUID baselineEntityUuid = armorStand.getUUID();
+        BlockPos outside = helper.absolutePos(new BlockPos(1, 2, 1));
+        AtomicReference<UUID> intruderUuid = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        AtomicReference<Boolean> done = new AtomicReference<>(false);
+        Thread.startVirtualThread(() -> {
+            try {
+                AtomicReference<McEnv> ref = new AtomicReference<>();
+                runOnServer(helper, () -> {
+                    Mob mob = (Mob) level.getEntity(agentUuid);
+                    ref.set(EnvManager.attach("gymcraft:simple_mob", mob, AttachScope.around(mob, 2, true, true)));
+                });
+                AbstractMcEnv env = (AbstractMcEnv) ref.get();
+                runOnServer(helper, () -> {
+                    check(env.stateRegion() != null, "scope attach did not capture a region");
+                    check(env.baselineSnapshot().blocks() != null, "scope attach did not capture blocks");
+                    check(env.baselineSnapshot().entities() != null, "scope attach did not capture entities");
+                    // 基线后的扰动：方块被改、基线实体被移除、区域内新增来客、区域外放置标记。
+                    level.setBlock(marker, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+                    armorStand.discard();
+                    Mob intruder = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
+                    intruder.snapTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(5, 2, 5))));
+                    level.addFreshEntity(intruder);
+                    intruderUuid.set(intruder.getUUID());
+                    level.setBlock(outside, Blocks.EMERALD_BLOCK.defaultBlockState(), 3);
+                });
+                env.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
+                runOnServer(helper, () -> {
+                    check(level.getBlockState(marker).is(Blocks.GOLD_BLOCK), "block snapshot was not restored");
+                    check(level.getBlockState(outside).is(Blocks.EMERALD_BLOCK),
+                        "reset touched a block outside the scope");
+                    check(level.getEntity(baselineEntityUuid) instanceof ArmorStand,
+                        "baseline entity was not rebuilt with its UUID");
+                    check(level.getEntity(intruderUuid.get()) == null, "intruding entity was not cleared");
+                    check(level.getEntity(agentUuid) instanceof Mob, "agent missing after reset");
+                });
+            } catch (Throwable error) {
+                failure.set(error);
+            } finally {
+                done.set(true);
+            }
+        });
+        helper.succeedWhen(() -> {
+            assertTrue(helper, done.get(), "waiting for scoped attach checks");
+            try {
+                assertTrue(helper, failure.get() == null, "scoped attach failed: " + failure.get());
+            } finally {
+                EnvManager.close(agentUuid);
+            }
+        });
+    }
+
+    /**
+     * 验证仅实体快照的作用域挂载（不捕获方块）：reset 重建基线实体、清除来客实体，
+     * 但不恢复区域内方块改动。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void attachScopeEntitiesOnlyLeavesBlocks(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Mob agent = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(4, 1, 4));
+        UUID agentUuid = agent.getUUID();
+        BlockPos marker = helper.absolutePos(new BlockPos(3, 2, 3));
+        level.setBlock(marker, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
+        ArmorStand armorStand = EntityType.ARMOR_STAND.create(level, EntitySpawnReason.COMMAND);
+        armorStand.snapTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(5, 2, 3))));
+        level.addFreshEntity(armorStand);
+        UUID baselineEntityUuid = armorStand.getUUID();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        AtomicReference<Boolean> done = new AtomicReference<>(false);
+        Thread.startVirtualThread(() -> {
+            try {
+                AtomicReference<McEnv> ref = new AtomicReference<>();
+                runOnServer(helper, () -> {
+                    Mob mob = (Mob) level.getEntity(agentUuid);
+                    ref.set(EnvManager.attach("gymcraft:simple_mob", mob, AttachScope.around(mob, 2, false, true)));
+                });
+                AbstractMcEnv env = (AbstractMcEnv) ref.get();
+                runOnServer(helper, () -> {
+                    check(env.stateRegion() != null, "entities-only attach did not capture a region");
+                    check(env.baselineSnapshot().blocks() == null, "entities-only attach captured blocks");
+                    check(env.baselineSnapshot().entities() != null, "entities-only attach did not capture entities");
+                    level.setBlock(marker, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+                    armorStand.discard();
+                });
+                env.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
+                runOnServer(helper, () -> {
+                    check(level.getBlockState(marker).is(Blocks.DIAMOND_BLOCK),
+                        "entities-only reset restored block changes");
+                    check(level.getEntity(baselineEntityUuid) instanceof ArmorStand,
+                        "baseline entity was not rebuilt");
+                });
+            } catch (Throwable error) {
+                failure.set(error);
+            } finally {
+                done.set(true);
+            }
+        });
+        helper.succeedWhen(() -> {
+            assertTrue(helper, done.get(), "waiting for entities-only attach checks");
+            try {
+                assertTrue(helper, failure.get() == null, "entities-only attach failed: " + failure.get());
+            } finally {
+                EnvManager.close(agentUuid);
+            }
+        });
+    }
+
+    /**
+     * 验证仅实体快照场景的编解码往返：区域随定义保留（capture_blocks 落盘为 false）、
+     * 区块不携带方块段、区域实体按新锚点平移重建，恢复不触碰世界方块。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void entitiesOnlyCodecRoundTrip(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BoundingBox box = new BoundingBox(12, 39, 12, 16, 43, 16);
+        CompoundTag agentData = new CompoundTag();
+        agentData.put("Pos", positionTag(15.5, 40, 15.5));
+        UUID uuid = UUID.randomUUID();
+        RegionEntitySnapshot.putEntityUuid(agentData, "UUID", uuid);
+        CompoundTag entityData = new CompoundTag();
+        entityData.put("Pos", positionTag(13.5, 40, 13.5));
+        RegionEntitySnapshot entities = RegionEntitySnapshot.of(RegionEntitySnapshot.toAabb(box), uuid,
+            List.of(new RegionEntitySnapshot.EntityEntry(EntityType.ARMOR_STAND, entityData)));
+        EnvStateSnapshot state = EnvStateSnapshot.of(
+            new EntitySnapshot(EntityType.HUSK, level.dimension(), agentData), box, null, entities);
+        ScenarioStore.LoadedScenario encoded = ScenarioWorldCodec.encode(level, "gymcraft:general", Map.of(), state);
+        ScenarioWorldCodec.validate(encoded);
+        assertTrue(helper, !encoded.definition().getBooleanOr("capture_blocks", true),
+            "entities-only scenario must record capture_blocks=false");
+        assertTrue(helper, !encoded.chunks().isEmpty(), "entities-only scenario lost its chunks");
+        for (CompoundTag chunk : encoded.chunks().values()) {
+            assertTrue(helper, chunk.getListOrEmpty("sections").isEmpty(),
+                "entities-only chunk carries block sections");
+        }
+        // 解码到结构内的新锚点：区域随锚点平移（min_offset = 区域最小角 - agent 方块位置）。
+        Mob anchor = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
+        anchor.snapTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(4, 2, 4))));
+        EnvStateSnapshot decoded = ScenarioWorldCodec.decode(level, encoded, anchor);
+        BlockPos expectedMin = helper.absolutePos(new BlockPos(1, 1, 1));
+        assertTrue(helper, decoded.region() != null
+                && decoded.region().minX() == expectedMin.getX()
+                && decoded.region().minY() == expectedMin.getY()
+                && decoded.region().minZ() == expectedMin.getZ(),
+            "entities-only region translation incorrect");
+        assertTrue(helper, decoded.blocks() == null, "entities-only scenario decoded blocks");
+        assertTrue(helper, decoded.entities() != null, "entities-only scenario lost its entities");
+        // 恢复只重建实体：区域内预置的方块保持不动，实体出现在平移后的位置。
+        BlockPos untouched = helper.absolutePos(new BlockPos(3, 2, 3));
+        level.setBlock(untouched, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+        decoded.restoreWorldAndEntities(level);
+        assertTrue(helper, level.getBlockState(untouched).is(Blocks.DIAMOND_BLOCK),
+            "entities-only restore touched blocks");
+        assertTrue(helper,
+            !level.getEntitiesOfClass(ArmorStand.class, new AABB(
+                expectedMin.getX(), expectedMin.getY(), expectedMin.getZ(),
+                expectedMin.getX() + 5, expectedMin.getY() + 5, expectedMin.getZ() + 5)).isEmpty(),
+            "entities-only restore did not rebuild the entity");
+        helper.succeed();
     }
 
     /**

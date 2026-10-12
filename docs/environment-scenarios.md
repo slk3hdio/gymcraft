@@ -41,7 +41,7 @@ Codec 的编码入口接收世界上下文、环境类型、options 和 `EnvStat
 
 ```snbt
 {
-  version: 2,
+  version: 3,
   DataVersion: 0,
   env_type: "gymcraft:parkour_mob",
   options: {
@@ -49,13 +49,15 @@ Codec 的编码入口接收世界上下文、环境类型、options 和 `EnvStat
   },
   agent: {id: "gymcraft:player_sim", Pos: [0.5d, 64.0d, 0.5d]},
   manage_entities: 0b,
+  capture_blocks: 1b,
   region: {min_offset: [I; -3, -1, -3], size: [I; 7, 12, 7]}
 }
 ```
 
-- 示例中 `DataVersion: 0` 仅为占位，实际写入当前 Minecraft 数据版本；格式 `version` 必须为 2。
+- 示例中 `DataVersion: 0` 仅为占位，实际写入当前 Minecraft 数据版本；格式 `version` 必须为 3（旧版本直接拒绝，不做兼容迁移）。
 - `agent` 直接保存实体 NBT（补充类型 `id`，剥离 UUID），包括装备和可序列化附件，无 SNBT 字符串中间层。
-- `region` 可缺省，表示无世界区域；存在时 `size` 三个维度必须为正。
+- `region` 可缺省，表示无世界区域；存在时 `size` 三个维度必须为正，且必须有 `capture_blocks`。
+- `capture_blocks` 表示区域是否携带方块段（sections）；为假时区块只携带区域实体，reset 不恢复方块——方块与实体捕获相互独立。
 - `min_offset` 是保存时区域最小角相对于 agent 方块位置的偏移，决定加载时的区域位置。
 - `manage_entities` 显式保存实体管理开关；管理空实体区域时也构建空实体快照，以便 reset 清场。
 
@@ -81,14 +83,14 @@ MCA 容器、扇区分配、压缩和大条目 `.mcc` 溢出由原版 `RegionFil
 这些是场景区域载荷，不是可直接替换普通世界完整区块的存档：
 不保存生物群系、光照、计划刻、结构生成状态或世界时间。
 
-加载时根据区域尺寸推导所有必需区块，并要求每个覆盖段存在且不重复。
-缺失 MCA、区块条目或区块段直接报错，不以空气回退。
+加载时根据区域尺寸推导所有必需区块；`capture_blocks` 为真时要求每个覆盖段存在且不重复，
+为假时区块允许空段表（仅携带实体）。缺失 MCA、区块条目或区块段直接报错，不以空气回退。
 无区域场景只有 `scenario.nbt`，不生成 `region` 目录。
 
 ## 指令与生命周期
 
 ```text
-/gymcraft env create <target:entity> [type:word]  # 挂载现有 Mob
+/gymcraft env create <target:entity> [type:id] [radius:int] [captureBlocks:bool] [captureEntities:bool]  # 挂载现有 Mob
 /gymcraft env save <target:entity> <name:word>
 /gymcraft env load <name:word> [pos:vec3]
 /gymcraft env list
@@ -101,7 +103,8 @@ MCA 容器、扇区分配、压缩和大条目 `.mcc` 溢出由原版 `RegionFil
   允许负坐标与非 16 格对齐位置，恢复时严格裁剪到区域边界。
 - 首次 reset 物化世界并以同 UUID 替换 agent；区域实体在解码时重新分配 UUID，之后跨 reset 保持基线 UUID。
 - `env create` 与工具物品仅挂载现有 Mob，不隐式加载内置资产；`env load` 明确读取场景后创建新 agent。
-- 无场景挂载的 save 只保存 agent 与 options，reset 不恢复周围方块或实体。
+  `radius` 为正且至少一个捕获开关打开时以 Mob 为中心捕获半径立方体基线（上限 32 格），否则只捕获 agent。
+- 空作用域挂载的 save 只保存 agent 与 options，reset 不恢复周围方块或实体。
 - 首次 reset 的 options 优先级：当次显式 options > 场景 preset > 默认值。
 - 物化要求目标区域区块已经加载；无头服务器先 `forceload`。Codec 本身不加载区块。
 - close 只清理运行时，不恢复世界；训练痕迹和场景残留由外部清理。
@@ -128,5 +131,6 @@ MCA/MCC 临时落盘后由原版读取，关闭句柄再清理；无跨服务器
 - 区域恢复：擦除基线空气中的新增方块、恢复箱子物品、保留区域外方块。
 - 三份内置资源读取及重复加载隔离。
 - 所有环境 ID 的现有 Mob 挂载、空范围 reset/step、装备保持及周围世界保留。
+- 挂载作用域：半径 + 方块/实体捕获的 reset 恢复，仅实体作用域不恢复方块；仅实体场景的编解码往返。
 
 验证命令：`.\gradlew compileJava`、`.\gradlew runGameTestServer`。

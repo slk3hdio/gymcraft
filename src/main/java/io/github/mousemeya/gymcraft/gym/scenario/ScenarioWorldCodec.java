@@ -40,13 +40,18 @@ import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
  * 调用方在服务端线程捕获快照，解码结果仅在环境 reset 时物化。
  */
 public final class ScenarioWorldCodec {
-    public static final int FORMAT_VERSION = 2;
+    /** 格式版本：3 起区域与方块捕获解耦（新增 capture_blocks 键）；旧版本直接拒绝。 */
+    public static final int FORMAT_VERSION = 3;
 
     /** 工具类不允许实例化。 */
     private ScenarioWorldCodec() {}
 
     /**
      * 编码完整即时快照；区域边界之外的内容不进入存档。
+     * <p>
+     * 区域由状态快照自持，与方块捕获相互独立：{@code capture_blocks=false} 时
+     * 区块只携带区域实体，sections 为空。
+     * </p>
      * @param level 提供注册表的世界
      * @param envType 环境注册 ID
      * @param options 最近一次 reset 的生效选项
@@ -64,11 +69,13 @@ public final class ScenarioWorldCodec {
         definition.put("agent", agent);
         definition.putBoolean("manage_entities", state.entities() != null);
         Map<ChunkPos, CompoundTag> chunks = new LinkedHashMap<>();
-        if (state.blocks() == null) {
+        BoundingBox box = state.region();
+        if (box == null) {
             return new ScenarioStore.LoadedScenario(definition, chunks);
         }
+        boolean captureBlocks = state.blocks() != null;
+        definition.putBoolean("capture_blocks", captureBlocks);
         // 局部原点采用区域最小角，避免小场景因负偏移产生四个 MCA 文件。
-        BoundingBox box = state.region();
         BlockPos min = new BlockPos(box.minX(), box.minY(), box.minZ());
         BlockPos origin = entityBlockPos(agent);
         CompoundTag region = new CompoundTag();
@@ -85,30 +92,34 @@ public final class ScenarioWorldCodec {
             chunk.put("block_entities", new ListTag());
             chunk.put("entities", new ListTag());
             chunks.put(pos, chunk);
-            for (int y = 0; y <= (box.getYSpan() - 1) >> 4; y++) {
-                sections.put(SectionPos.asLong(pos.x(), y, pos.z()), factory.createForBlockStates());
+            if (captureBlocks) {
+                for (int y = 0; y <= (box.getYSpan() - 1) >> 4; y++) {
+                    sections.put(SectionPos.asLong(pos.x(), y, pos.z()), factory.createForBlockStates());
+                }
             }
         }
-        state.blocks().forEachCapturedBlock((pos, block) -> {
-            BlockPos local = pos.subtract(min);
-            sections.get(SectionPos.asLong(local.getX() >> 4, local.getY() >> 4, local.getZ() >> 4))
-                .set(local.getX() & 15, local.getY() & 15, local.getZ() & 15, block);
-        });
-        sections.forEach((key, container) -> {
-            SectionPos pos = SectionPos.of(key);
-            CompoundTag section = new CompoundTag();
-            section.putInt("Y", pos.y());
-            section.put("block_states", factory.blockStatesContainerCodec().encodeStart(NbtOps.INSTANCE, container)
-                .getOrThrow(message -> invalid("Cannot encode block states: " + message)));
-            chunks.get(new ChunkPos(pos.x(), pos.z())).getListOrEmpty("sections").add(section);
-        });
-        // 方块实体与区域实体按局部区块归属；存档中不复用实体 UUID。
-        state.blocks().blockEntities().forEach((key, data) -> {
-            BlockPos local = BlockPos.of(key).subtract(min);
-            CompoundTag nbt = data.copy();
-            putBlockPos(nbt, local);
-            chunks.get(ChunkPos.containing(local)).getListOrEmpty("block_entities").add(nbt);
-        });
+        if (captureBlocks) {
+            state.blocks().forEachCapturedBlock((pos, block) -> {
+                BlockPos local = pos.subtract(min);
+                sections.get(SectionPos.asLong(local.getX() >> 4, local.getY() >> 4, local.getZ() >> 4))
+                    .set(local.getX() & 15, local.getY() & 15, local.getZ() & 15, block);
+            });
+            sections.forEach((key, container) -> {
+                SectionPos pos = SectionPos.of(key);
+                CompoundTag section = new CompoundTag();
+                section.putInt("Y", pos.y());
+                section.put("block_states", factory.blockStatesContainerCodec().encodeStart(NbtOps.INSTANCE, container)
+                    .getOrThrow(message -> invalid("Cannot encode block states: " + message)));
+                chunks.get(new ChunkPos(pos.x(), pos.z())).getListOrEmpty("sections").add(section);
+            });
+            // 方块实体与区域实体按局部区块归属；存档中不复用实体 UUID。
+            state.blocks().blockEntities().forEach((key, data) -> {
+                BlockPos local = BlockPos.of(key).subtract(min);
+                CompoundTag nbt = data.copy();
+                putBlockPos(nbt, local);
+                chunks.get(ChunkPos.containing(local)).getListOrEmpty("block_entities").add(nbt);
+            });
+        }
         if (state.entities() != null) {
             state.entities().forEachEntity((type, data) -> {
                 if (box.isInside(entityBlockPos(data))) {
@@ -138,8 +149,9 @@ public final class ScenarioWorldCodec {
         RegionEntitySnapshot.putEntityUuid(data, "UUID", anchorMob.getUUID());
         EntitySnapshot agent = new EntitySnapshot(type, level.dimension(), data);
         if (!definition.contains("region")) {
-            return EnvStateSnapshot.of(agent, null, null);
+            return EnvStateSnapshot.of(agent, null, null, null);
         }
+        boolean captureBlocks = booleanValue(required(definition, "capture_blocks"));
         int[] size = vector(definition.getCompoundOrEmpty("region"), "size");
         int[] offset = vector(definition.getCompoundOrEmpty("region"), "min_offset");
         BlockPos min = anchorMob.blockPosition().offset(offset[0], offset[1], offset[2]);
@@ -151,38 +163,41 @@ public final class ScenarioWorldCodec {
         for (var entry : loaded.chunks().entrySet()) {
             ChunkPos cp = entry.getKey();
             CompoundTag chunk = entry.getValue();
-            Map<Integer, PalettedContainer<BlockState>> containers = new LinkedHashMap<>();
-            // 只读取区域内格子，非 16 格对齐平移后也不会污染区域之外。
-            for (Tag tag : list(chunk, "sections")) {
-                CompoundTag section = compound(tag);
-                int sy = integer(section, "Y");
-                PalettedContainer<BlockState> container = factory.blockStatesContainerCodec()
-                    .parse(NbtOps.INSTANCE, required(section, "block_states"))
-                    .getOrThrow(message -> invalid("Invalid block states at " + cp + "/" + sy + ": " + message));
-                containers.put(sy, container);
-                for (int y = 0; y < 16 && (sy << 4) + y < size[1]; y++) {
-                    for (int z = 0; z < 16 && (cp.z() << 4) + z < size[2]; z++) {
-                        for (int x = 0; x < 16 && (cp.x() << 4) + x < size[0]; x++) {
-                            BlockState block = container.get(x, y, z);
-                            if (block != Blocks.AIR.defaultBlockState()) {
-                                blocks.add(new RegionBlockSnapshot.BlockEntry(min.offset((cp.x() << 4) + x, (sy << 4) + y, (cp.z() << 4) + z), block, null));
+            // 只读取区域内格子，非 16 格对齐平移后也不会污染区域之外；
+            // capture_blocks=false 的存档不携带方块段，方块与方块实体一并跳过。
+            if (captureBlocks) {
+                Map<Integer, PalettedContainer<BlockState>> containers = new LinkedHashMap<>();
+                for (Tag tag : list(chunk, "sections")) {
+                    CompoundTag section = compound(tag);
+                    int sy = integer(section, "Y");
+                    PalettedContainer<BlockState> container = factory.blockStatesContainerCodec()
+                        .parse(NbtOps.INSTANCE, required(section, "block_states"))
+                        .getOrThrow(message -> invalid("Invalid block states at " + cp + "/" + sy + ": " + message));
+                    containers.put(sy, container);
+                    for (int y = 0; y < 16 && (sy << 4) + y < size[1]; y++) {
+                        for (int z = 0; z < 16 && (cp.z() << 4) + z < size[2]; z++) {
+                            for (int x = 0; x < 16 && (cp.x() << 4) + x < size[0]; x++) {
+                                BlockState block = container.get(x, y, z);
+                                if (block != Blocks.AIR.defaultBlockState()) {
+                                    blocks.add(new RegionBlockSnapshot.BlockEntry(min.offset((cp.x() << 4) + x, (sy << 4) + y, (cp.z() << 4) + z), block, null));
+                                }
                             }
                         }
                     }
                 }
-            }
-            // 方块实体覆写坐标；区域实体 UUID 由现有基线工厂重新分配。
-            for (Tag tag : list(chunk, "block_entities")) {
-                CompoundTag nbt = compound(tag).copy();
-                BlockPos local = new BlockPos(integer(nbt, "x"), integer(nbt, "y"), integer(nbt, "z"));
-                requireLocal(local, size, cp);
-                BlockState block = containers.get(local.getY() >> 4).get(local.getX() & 15, local.getY() & 15, local.getZ() & 15);
-                if (!block.hasBlockEntity()) {
-                    throw invalid("Block entity without matching block at " + local);
+                // 方块实体覆写坐标；区域实体 UUID 由现有基线工厂重新分配。
+                for (Tag tag : list(chunk, "block_entities")) {
+                    CompoundTag nbt = compound(tag).copy();
+                    BlockPos local = new BlockPos(integer(nbt, "x"), integer(nbt, "y"), integer(nbt, "z"));
+                    requireLocal(local, size, cp);
+                    BlockState block = containers.get(local.getY() >> 4).get(local.getX() & 15, local.getY() & 15, local.getZ() & 15);
+                    if (!block.hasBlockEntity()) {
+                        throw invalid("Block entity without matching block at " + local);
+                    }
+                    BlockPos target = local.offset(min);
+                    putBlockPos(nbt, target);
+                    blocks.add(new RegionBlockSnapshot.BlockEntry(target, block, nbt));
                 }
-                BlockPos target = local.offset(min);
-                putBlockPos(nbt, target);
-                blocks.add(new RegionBlockSnapshot.BlockEntry(target, block, nbt));
             }
             for (Tag tag : list(chunk, "entities")) {
                 CompoundTag nbt = compound(tag).copy();
@@ -193,7 +208,8 @@ public final class ScenarioWorldCodec {
                 entities.add(new RegionEntitySnapshot.EntityEntry(entityType, nbt));
             }
         }
-        return EnvStateSnapshot.of(agent, RegionBlockSnapshot.of(factory, box, blocks),
+        return EnvStateSnapshot.of(agent, box,
+            captureBlocks ? RegionBlockSnapshot.of(factory, box, blocks) : null,
             definition.getBooleanOr("manage_entities", false)
                 ? RegionEntitySnapshot.of(RegionEntitySnapshot.toAabb(box), anchorMob.getUUID(), entities) : null);
     }
@@ -208,6 +224,7 @@ public final class ScenarioWorldCodec {
             throw invalid("Missing or unexpected scenario chunks");
         }
         if (expected.isEmpty()) { return; }
+        boolean captureBlocks = booleanValue(required(definition, "capture_blocks"));
         int[] size = vector(definition.getCompoundOrEmpty("region"), "size");
         for (ChunkPos pos : expected) {
             CompoundTag chunk = chunks.get(pos);
@@ -215,7 +232,7 @@ public final class ScenarioWorldCodec {
                 throw invalid("Chunk coordinates do not match MCA slot: " + pos);
             }
             boolean[] seen = new boolean[((size[1] - 1) >> 4) + 1];
-            // 每个覆盖区块必须包含完整段集合，不把缺段当作空气。
+            // 每个覆盖区块必须包含完整段集合，不把缺段当作空气；不捕获方块的存档允许空段表。
             for (Tag tag : list(chunk, "sections")) {
                 CompoundTag section = compound(tag);
                 int y = integer(section, "Y");
@@ -225,8 +242,10 @@ public final class ScenarioWorldCodec {
                 seen[y] = true;
                 validateBlockStates(compound(required(section, "block_states")));
             }
-            for (boolean present : seen) {
-                if (!present) { throw invalid("Missing section at " + pos); }
+            if (captureBlocks) {
+                for (boolean present : seen) {
+                    if (!present) { throw invalid("Missing section at " + pos); }
+                }
             }
             for (Tag tag : list(chunk, "block_entities")) {
                 CompoundTag nbt = compound(tag);
@@ -250,6 +269,8 @@ public final class ScenarioWorldCodec {
         booleanValue(required(definition, "manage_entities"));
         options(definition);
         if (definition.contains("region")) {
+            // 区域与方块捕获相互独立：有区域就必须声明是否携带方块段。
+            booleanValue(required(definition, "capture_blocks"));
             CompoundTag region = compound(required(definition, "region"));
             vector(region, "min_offset");
             for (int span : vector(region, "size")) {

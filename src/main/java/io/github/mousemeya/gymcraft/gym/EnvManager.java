@@ -28,6 +28,7 @@ import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
+import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 
@@ -50,8 +51,20 @@ public final class EnvManager {
      * @return 注册完成的环境；同 Mob 上原环境会被关闭
      */
     public static McEnv attach(String envType, Mob mob) {
+        return attach(envType, mob, AttachScope.AGENT_ONLY);
+    }
+
+    /**
+     * 按挂载作用域向已有 Mob 挂载指定环境：构造期现场捕获状态基线（区域、方块与实体
+     * 由 scope 决定），不自动 reset。区域覆盖的区块必须已加载，否则直接抛错。
+     * @param envType 环境注册 ID
+     * @param mob 服务端世界中已经存在的受控 Mob
+     * @param scope 挂载作用域（区域与方块/实体捕获开关）
+     * @return 注册完成的环境；同 Mob 上原环境会被关闭
+     */
+    public static McEnv attach(String envType, Mob mob, AttachScope scope) {
         Identifier id = Identifier.parse(envType);
-        return register(id, factory(id), mob, null);
+        return register(id, factory(id), mob, null, scope);
     }
 
     /**
@@ -68,7 +81,7 @@ public final class EnvManager {
         McEnvFactory factory = factory(id);
         Mob mob = spawnAgent(loaded.definition(), level, pos);
         try {
-            resetScenario(register(id, factory, mob, loaded));
+            resetScenario(register(id, factory, mob, loaded, AttachScope.AGENT_ONLY));
             return mob;
         } catch (RuntimeException error) {
             mob.discard();
@@ -86,16 +99,17 @@ public final class EnvManager {
     }
 
     /**
-     * 两个创建入口共用的注册编排；场景为 null 时工厂只能建立 agent 基线。
+     * 两个创建入口共用的注册编排；场景为 null 时工厂按挂载作用域建立基线。
      * @param id 环境注册 ID
      * @param factory 已验证的环境工厂
      * @param mob 受控 Mob
      * @param scenario 完整场景；null 表示已有 Mob 挂载
+     * @param scope 挂载作用域；scenario 非空时被忽略
      * @return 已注册的环境实例
      */
-    private static McEnv register(Identifier id, McEnvFactory factory, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
+    private static McEnv register(Identifier id, McEnvFactory factory, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
         close(mob.getUUID());
-        McEnv env = factory.create(id, mob, scenario);
+        McEnv env = factory.create(id, mob, scenario, scope);
         ENVS_BY_ENTITY.put(mob.getUUID(), env);
         return env;
     }

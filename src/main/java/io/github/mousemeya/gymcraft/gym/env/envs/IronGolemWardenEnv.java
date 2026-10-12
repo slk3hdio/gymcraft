@@ -39,6 +39,7 @@ import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
@@ -91,6 +92,17 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      * @param scenario 完整场景；null 表示仅捕获 agent，状态范围不含方块及周围实体
      */
     public IronGolemWardenEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
+        this(envTypeId, mob, scenario, AttachScope.AGENT_ONLY);
+    }
+
+    /**
+     * 根据显式场景或挂载作用域创建环境；场景非空时忽略作用域（区域与捕获开关由文件决定）。
+     * @param envTypeId 环境类型注册 ID
+     * @param mob 服务端世界中的受控 Mob
+     * @param scenario 完整场景；null 表示挂载已有 Mob
+     * @param scope 挂载作用域（区域与方块/实体捕获开关）
+     */
+    public IronGolemWardenEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
         super(
             envTypeId,
             mob,
@@ -110,7 +122,8 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
                 ObservationCreators.WORLD.get()
             ),
             List.of(MobAttachments.AGENT_BACKPACK),
-            scenario
+            scenario,
+            scope
         );
         if (!(mob.level() instanceof ServerLevel serverLevel)) {
             throw new IllegalArgumentException("iron_golem_warden requires a server-level Mob");
@@ -628,8 +641,8 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
          * @return 新环境实例
          */
         @Override
-        public IronGolemWardenEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
-            return new IronGolemWardenEnv(envTypeId, mob, scenario);
+        public IronGolemWardenEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
+            return new IronGolemWardenEnv(envTypeId, mob, scenario, scope);
         }
     }
 }

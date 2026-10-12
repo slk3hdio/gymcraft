@@ -40,6 +40,7 @@ import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime.RuntimeStepResult;
 import io.github.mousemeya.gymcraft.gym.visualization.VisualizationService;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 
@@ -96,19 +97,21 @@ public abstract class AbstractMcEnv implements McEnv {
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents
     ) {
         this(envTypeId, mob, actionComponentFactories, observationComponents, List.of(),
-            null);
+            null, AttachScope.AGENT_ONLY);
     }
 
     /**
-     * 创建环境的主构造器：显式场景源在构造期解码为完整基线，区域和实体管理由文件决定。
-     * 未提供场景时只捕获当前 agent，世界范围为空；不加载任何默认或内置场景。
+     * 创建环境的主构造器：显式场景源在构造期解码为完整基线，区域和实体管理由文件决定；
+     * 未提供场景时按挂载作用域现场捕获基线（{@link AttachScope#AGENT_ONLY} 只捕获 agent）；
+     * 不加载任何默认或内置场景。
      *
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob（须位于服务端世界）
      * @param actionComponentFactories 动作组件工厂
      * @param observationComponents 观测组件工厂
      * @param attachmentSpecs 当前环境允许访问的附件描述器
-     * @param scenarioSource 显式完整场景；null 表示已有 Mob 挂载，仅捕获 agent
+     * @param scenarioSource 显式完整场景；null 表示已有 Mob 挂载
+     * @param scope 挂载作用域；scenarioSource 非空时被忽略
      */
     protected AbstractMcEnv(
         Identifier envTypeId,
@@ -116,7 +119,8 @@ public abstract class AbstractMcEnv implements McEnv {
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents,
         Collection<? extends MobAttachmentSpec<?>> attachmentSpecs,
-        @Nullable ScenarioStore.LoadedScenario scenarioSource
+        @Nullable ScenarioStore.LoadedScenario scenarioSource,
+        AttachScope scope
     ) {
         this.envTypeId = envTypeId;
         this.envId = UUID.randomUUID();
@@ -128,7 +132,7 @@ public abstract class AbstractMcEnv implements McEnv {
             throw new IllegalArgumentException("GymCraft environments require a server-level Mob: " + envTypeId);
         }
         this.baseline = scenarioSource == null
-            ? EnvStateSnapshot.capture(level, mob, null, false)
+            ? EnvStateSnapshot.capture(level, mob, scope.region(), scope.captureBlocks(), scope.captureEntities())
             : ScenarioWorldCodec.decode(level, scenarioSource, mob);
         if (scenarioSource != null) {
             // 场景源的 preset options 作为首次 reset 的默认值（当次 reset options 覆盖 preset）
@@ -277,8 +281,8 @@ public abstract class AbstractMcEnv implements McEnv {
 
     /**
      * 生效状态区域的只读视图，供可视化等环境外消费者读取：场景环境来自场景文件
-     * （scenario.nbt 单区域定义），无场景时为空区域，reset 仅重建 agent；
-     * 构造期一次性确定，此后不变；空区域（不占用世界）为 null。
+     * （scenario.nbt 单区域定义），挂载环境来自挂载作用域（可为空区域，reset 仅重建
+     * agent）；构造期一次性确定，此后不变；空区域（不占用世界）为 null。
      *
      * @return 当前生效的环境占用区域；空区域环境为 null
      */
