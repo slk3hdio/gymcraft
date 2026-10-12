@@ -14,6 +14,7 @@ service GymEnvService {
   rpc Reset(ResetRequest) returns (ResetResponse);
   rpc Step(StepRequest) returns (StepResponse);
   rpc CloseSession(CloseSessionRequest) returns (CloseSessionResponse);
+  rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
 }
 
 message ConnectRequest {
@@ -64,4 +65,21 @@ message CloseSessionRequest {
 
 message CloseSessionResponse {
   bool closed = 1;
+}
+
+message ListEnvironmentsRequest {
+}
+
+// 单个已注册环境的概要信息。
+message EnvironmentInfo {
+  // 环境绑定的受控实体 UUID，可直接用于 Connect
+  string entity_uuid = 1;
+  // 环境注册 ID（如 gymcraft:simple_mob）
+  string env_type = 2;
+  // 是否已被活跃 RPC 会话占用（true 时 Connect 返回 ALREADY_EXISTS）
+  bool connected = 3;
+}
+
+message ListEnvironmentsResponse {
+  repeated EnvironmentInfo environments = 1;
 }
