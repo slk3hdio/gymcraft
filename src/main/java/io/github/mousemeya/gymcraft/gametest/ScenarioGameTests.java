@@ -423,6 +423,11 @@ public final class ScenarioGameTests {
             isolated.definition().putString("env_type", "changed-again");
             assertEquals(helper, "gymcraft:simple_mob", ScenarioWorldCodec.envType(isolated.definition()), "definition was shared");
             assertEquals(helper, List.of("alpha", "beta"), store.list().stream().map(ScenarioStore.ScenarioInfo::name).toList(), "list not sorted");
+            List<String> expectedNames = List.of("alpha", "beta", "iron_golem_warden", "iron_mining", "parkour_mob");
+            assertEquals(helper, expectedNames, store.loadableNames(level), "load names missing disk or bundled scenes");
+            store.save("iron_mining", empty);
+            assertEquals(helper, expectedNames, store.loadableNames(level), "load names did not deduplicate disk override");
+            store.delete("iron_mining");
             Files.createDirectories(dir.resolve("gamma"));
             Files.writeString(dir.resolve("gamma/scenario.nbt"), "broken nbt");
             assertTrue(helper, loadRejected(store, "gamma"), "broken NBT accepted");
@@ -556,6 +561,17 @@ public final class ScenarioGameTests {
                     check(!uuid[0].equals(RegionEntitySnapshot.getEntityUuid(data, "UUID")), "bundled loads reused UUID"));
             }
         }
+        // 使用真实指令树验证 provider 接线及前缀过滤，避免名称枚举正确但命令没有补全。
+        var dispatcher = level.getServer().getCommands().getDispatcher();
+        var source = level.getServer().createCommandSourceStack().withLevel(level);
+        List<String> suggestions = dispatcher.getCompletionSuggestions(dispatcher.parse("gymcraft env load ", source))
+            .join().getList().stream().map(com.mojang.brigadier.suggestion.Suggestion::getText).toList();
+        assertTrue(helper, suggestions.containsAll(List.of("iron_mining", "iron_golem_warden", "parkour_mob")),
+            "load command did not suggest bundled scenes");
+        List<String> filtered = dispatcher.getCompletionSuggestions(dispatcher.parse("gymcraft env load iron_", source))
+            .join().getList().stream().map(com.mojang.brigadier.suggestion.Suggestion::getText).toList();
+        assertTrue(helper, filtered.containsAll(List.of("iron_mining", "iron_golem_warden"))
+            && !filtered.contains("parkour_mob"), "load suggestions did not filter by typed prefix");
         helper.succeed();
     }
 

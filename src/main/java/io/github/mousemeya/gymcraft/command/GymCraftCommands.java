@@ -41,11 +41,16 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
  * reset 物化）；{@code env list/delete} 管理场景文件。场景系统见 {@code gym/scenario} 包。</p>
  */
 public final class GymCraftCommands {
-    /** load/delete 的场景名补全：来自场景存储目录。 */
+    /** delete 仅补全可删除的磁盘场景。 */
     private static final SuggestionProvider<CommandSourceStack> SCENARIO_SUGGESTIONS = (context, builder) ->
         SharedSuggestionProvider.suggest(
             ScenarioStore.forServer().list().stream().map(ScenarioStore.ScenarioInfo::name).toList(),
             builder);
+
+    /** load 补全合并磁盘场景与当前数据包中的内置场景。 */
+    private static final SuggestionProvider<CommandSourceStack> LOAD_SCENARIO_SUGGESTIONS = (context, builder) ->
+        SharedSuggestionProvider.suggest(
+            ScenarioStore.forServer().loadableNames(context.getSource().getLevel()), builder);
 
     /** 禁止实例化仅包含静态指令注册逻辑的工具类。 */
     private GymCraftCommands() {
@@ -79,7 +84,7 @@ public final class GymCraftCommands {
                                                         StringArgumentType.getString(ctx, "name"))))))
                         .then(Commands.literal("load")
                                 .then(Commands.argument("name", StringArgumentType.word())
-                                        .suggests(SCENARIO_SUGGESTIONS)
+                                        .suggests(LOAD_SCENARIO_SUGGESTIONS)
                                         .executes(ctx -> loadSpawn(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "name"),
                                                 ctx.getSource().getPosition()))

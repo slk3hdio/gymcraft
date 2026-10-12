@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -206,6 +207,40 @@ public final class ScenarioStore {
             }
         } catch (IOException e) { LOGGER.warn("Failed to list scenarios in {}", this.root, e); }
         return List.copyOf(result);
+    }
+
+    /**
+     * 枚举加载入口的名称补全，合并磁盘目录与当前数据包资源并排序去重。
+     * 只检查定义文件是否存在，不解码 NBT 或打开 MCA，避免每次输入都读取完整场景。
+     * @param level 提供当前 ResourceManager 的世界
+     * @return 可供 load 补全的场景名，不跨资源重载缓存
+     */
+    public List<String> loadableNames(ServerLevel level) {
+        TreeSet<String> names = new TreeSet<>();
+        if (Files.isDirectory(this.root)) {
+            try (Stream<Path> dirs = Files.list(this.root)) {
+                dirs.filter(Files::isDirectory)
+                    .filter(dir -> Files.isRegularFile(dir.resolve(DEFINITION_FILE)))
+                    .map(dir -> dir.getFileName().toString())
+                    .filter(ScenarioStore::validName)
+                    .forEach(names::add);
+            } catch (IOException e) { LOGGER.warn("Failed to list scenario names in {}", this.root, e); }
+        }
+        String prefix = ASSET_DIR + "/";
+        String suffix = "/" + DEFINITION_FILE;
+        for (Identifier id : level.getServer().getResourceManager().listResources(ASSET_DIR,
+            id -> id.getNamespace().equals(GymCraft.MODID)
+                && id.getPath().startsWith(prefix) && id.getPath().endsWith(suffix)
+                && id.getPath().length() > prefix.length() + suffix.length()).keySet()) {
+            String name = id.getPath().substring(prefix.length(), id.getPath().length() - suffix.length());
+            if (validName(name)) { names.add(name); }
+        }
+        return List.copyOf(names);
+    }
+
+    /** 检查候选目录名是否合法；参数为名称，返回是否可作为单层场景名。 */
+    private static boolean validName(String name) {
+        return NAME_PATTERN.matcher(name).matches() && !name.equals(".") && !name.equals("..");
     }
 
     /** 删除命名场景目录；存在并删除时返回 true，不存在返回 false。 */
