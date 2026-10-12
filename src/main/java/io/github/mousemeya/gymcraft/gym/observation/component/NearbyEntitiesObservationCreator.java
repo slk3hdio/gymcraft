@@ -8,81 +8,87 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 
-import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.AbstractSpatialObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoEntityView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyEntities;
+import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
+import io.github.mousemeya.gymcraft.gym.space.SpatialSequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
 /**
- * 附近实体观测组件 —— 扫描 Mob 周围指定半径内的所有 {@link LivingEntity}。
+ * 附近实体观测组件 —— 扫描当前观测空间规定范围内的 {@link LivingEntity}。
  * <p>
  * 每个实体记录：ID、UUID、类型、坐标、距离、敌对/盟友标志等。
  * 使用 AABB 批量查询 {@code level.getEntitiesOfClass()}。
  * </p>
  * <p>
- * 默认值可通过环境构造期 setter 覆盖（调用后同步重建观测空间）：
- * {@link #setRadius(int)}（扫描半径，默认 16）、{@link #setMaxEntities(int)}
- * （实体数上限，默认 512）。
+ * 通过 setSpace 配置 entities 序列的 scan_space 和结果上限；边界按相对 Mob 位置的
+ * x/y/z 偏移判定，默认各轴 [-16, 16]，仅位置在闭区间内的候选进入结果。
+ * {@link #setMaxEntities(int)} 仅调整结果上限并保留扫描边界。
  * </p>
  */
-public class NearbyEntitiesObservationCreator extends AbstractObservationComponentCreator<ProtoNearbyEntities> {
-    /** 默认扫描半径。 */
-    public static final int DEFAULT_RADIUS = 16;
+public class NearbyEntitiesObservationCreator extends AbstractSpatialObservationCreator<ProtoNearbyEntities> {
+    /** 默认相对位置扫描边界（x/y/z，闭区间）。 */
+    public static final BoxSpace DEFAULT_SCAN_SPACE = new BoxSpace(-16, 16, 3);
     /** 默认实体数上限。 */
     public static final int DEFAULT_MAX_ENTITIES = 512;
 
-    /** 当前环境实例的扫描半径。 */
-    private int radius = DEFAULT_RADIUS;
-    /** 当前环境实例的实体数上限。 */
-    private int maxEntities = DEFAULT_MAX_ENTITIES;
-
+    /** 创建使用默认扫描空间的观测生成器。 */
     public NearbyEntitiesObservationCreator() {
+        super("entities", 3, false);
     }
 
+    /** @return 对应的 protobuf 类型 */
     @Override
     public Class<ProtoNearbyEntities> protoType() {
         return ProtoNearbyEntities.class;
     }
 
+    /** @return 包含扫描边界和结果上限的默认空间 */
     @Override
     public McSpace<Map<String, Object>> defaultSpace() {
-        return buildSpace(DEFAULT_MAX_ENTITIES);
+        return new DictSpace(Map.of(
+            "entities", new SpatialSequenceSpace<>(new TextSpace(), DEFAULT_MAX_ENTITIES, DEFAULT_SCAN_SPACE)
+        ));
     }
 
+    /**
+     * @param component 待校验观测
+     * @return 结果数量是否符合当前空间
+     */
     @Override
     public boolean contains(ProtoNearbyEntities component) {
-        return component != null && component.getEntitiesCount() <= this.maxEntities;
+        return component != null && component.getEntitiesCount() <= this.maxResults();
     }
 
-    /** 设置扫描半径（必须为正数）。 */
-    public void setRadius(int radius) {
-        if (radius <= 0) {
-            throw new IllegalArgumentException("radius must be positive, got: " + radius);
-        }
-        this.radius = radius;
-    }
-
-    /** 设置实体数上限（必须为正数），并重建观测空间。 */
+    /** @param maxEntities 返回实体数正数上限；保留当前扫描边界 */
     public void setMaxEntities(int maxEntities) {
-        if (maxEntities <= 0) {
-            throw new IllegalArgumentException("max_entities must be positive, got: " + maxEntities);
-        }
-        this.maxEntities = maxEntities;
-        this.setSpace(buildSpace(maxEntities));
+        this.setMaxResults(maxEntities);
     }
 
+    /**
+     * @param mob 受控实体
+     * @return 当前扫描边界与数量上限内的实体观测
+     */
     @Override
     public ProtoNearbyEntities create(Mob mob) {
         var builder = ProtoNearbyEntities.newBuilder();
         var pos = mob.position();
-        var aabb = new AABB(pos.x - this.radius, pos.y - this.radius, pos.z - this.radius,
-            pos.x + this.radius, pos.y + this.radius, pos.z + this.radius);
+        var bounds = this.scanBounds();
+        var low = bounds.low();
+        var high = bounds.high();
+        var aabb = new AABB(pos.x + low[0], pos.y + low[1], pos.z + low[2],
+            pos.x + high[0], pos.y + high[1], pos.z + high[2]);
 
-        for (var entity : mob.level().getEntitiesOfClass(LivingEntity.class, aabb, e -> e != mob)) {
+        // AABB 仅作粗筛，实体包围盒与范围相交但实体位置越界时仍须排除。
+        for (var entity : mob.level().getEntitiesOfClass(LivingEntity.class, aabb,
+            e -> e != mob && bounds.contains(new double[] {e.getX() - pos.x, e.getY() - pos.y, e.getZ() - pos.z}))) {
+            if (builder.getEntitiesCount() >= this.maxResults()) {
+                break;
+            }
             builder.addEntities(ProtoEntityView.newBuilder()
                 .setEntityId(entity.getId())
                 .setEntityType(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString())
@@ -98,16 +104,14 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
         return builder.build();
     }
 
-    private static McSpace<Map<String, Object>> buildSpace(int maxEntities) {
-        return new DictSpace(Map.of(
-            "entities", new SequenceSpace<>(new TextSpace(), maxEntities)
-        )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    }
-
     /**
      * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
      */
     public static final class Factory implements ObservationComponentFactory<ProtoNearbyEntities, NearbyEntitiesObservationCreator> {
+        /**
+         * @param mob 受控实体
+         * @return 独立配置的观测生成器
+         */
         @Override
         public NearbyEntitiesObservationCreator create(Mob mob) {
             return new NearbyEntitiesObservationCreator();

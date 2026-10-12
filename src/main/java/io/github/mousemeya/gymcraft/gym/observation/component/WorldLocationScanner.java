@@ -18,6 +18,8 @@ import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.phys.Vec3;
 
+import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
+
 /**
  * 世界位置探测工具 —— 解析受控实体当前所在的群系与结构注册 ID。
  * <p>
@@ -54,7 +56,7 @@ public final class WorldLocationScanner {
     }
 
     /**
-     * 扫描 Mob 附近 {@code chunkRadius} 区块范围内已加载区块中的结构起点。
+     * 扫描相对区块空间范围内已加载区块中的结构起点。
      * <p>
      * 只遍历已加载区块（{@code hasChunk} 守卫，绝不触发区块加载），逐区块读取
      * {@link ChunkStatus#STRUCTURE_STARTS} 的结构起点表；起点只存储在生成区块中，
@@ -64,20 +66,28 @@ public final class WorldLocationScanner {
      * </p>
      *
      * @param mob 探测目标 Agent
-     * @param chunkRadius 以 Mob 所在区块为中心的扫描半径（单位：区块）
+     * @param scanSpace 相对 Mob 所在区块的 x/z 偏移闭区间，单位为区块
      * @return 附近结构定位结果列表（距离升序）
      */
-    public static List<ScannedStructure> scanNearbyStructures(Mob mob, int chunkRadius) {
+    public static List<ScannedStructure> scanNearbyStructures(Mob mob, BoxSpace scanSpace) {
+        if (scanSpace.size() != 2) {
+            throw new IllegalArgumentException("structure scan_space must have two dimensions");
+        }
         if (!(mob.level() instanceof ServerLevel serverLevel)) {
             return List.of();
         }
         ChunkPos center = mob.chunkPosition();
+        var low = scanSpace.low();
+        var high = scanSpace.high();
+        // 按闭区间取整，并裁剪到世界水平坐标边界，避免大偏移转换为 int 时溢出。
+        int minX = (int) Math.max(-1_875_000, Math.ceil(center.x() + low[0]));
+        int maxX = (int) Math.min(1_874_999, Math.floor(center.x() + high[0]));
+        int minZ = (int) Math.max(-1_875_000, Math.ceil(center.z() + low[1]));
+        int maxZ = (int) Math.min(1_874_999, Math.floor(center.z() + high[1]));
         Registry<Structure> structures = serverLevel.registryAccess().lookupOrThrow(Registries.STRUCTURE);
         List<ScannedStructure> result = new ArrayList<>();
-        for (int dx = -chunkRadius; dx <= chunkRadius; dx++) {
-            for (int dz = -chunkRadius; dz <= chunkRadius; dz++) {
-                int chunkX = center.x() + dx;
-                int chunkZ = center.z() + dz;
+        for (int chunkX = minX; chunkX <= maxX; chunkX++) {
+            for (int chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
                 // 未加载区块直接跳过：getChunk 的默认行为会触发加载，必须显式守卫
                 if (!serverLevel.hasChunk(chunkX, chunkZ)) {
                     continue;

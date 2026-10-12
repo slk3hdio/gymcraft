@@ -19,20 +19,30 @@ public abstract class AbstractObservationComponentCreator<T extends Message> imp
     /** 当前环境实例使用的观测空间。 */
     private McSpace<Map<String, Object>> space;
 
+    /** 创建使用组件默认空间的观测生成器。 */
     protected AbstractObservationComponentCreator() {
         this.space = this.defaultSpace();
     }
 
+    /** @return 当前环境的观测空间 */
     @Override
     public final McSpace<Map<String, Object>> space() {
         return this.space;
     }
 
+    /** @param space 新的观测空间；校验失败时保留原空间 */
     @Override
     public final void setSpace(McSpace<Map<String, Object>> space) {
+        this.validateSpace(space);
         this.space = space;
     }
 
+    /** @param space 待设置的空间；子类可在此校验必要字段和空间类型 */
+    protected void validateSpace(McSpace<Map<String, Object>> space) {
+        java.util.Objects.requireNonNull(space, "space must not be null");
+    }
+
+    /** @return 对应 protobuf 类型的默认实例 */
     @Override
     @SuppressWarnings("unchecked")
     public T sample() {

@@ -6,84 +6,89 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.phys.AABB;
 
-import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.AbstractSpatialObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoItemEntityView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyItems;
+import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
+import io.github.mousemeya.gymcraft.gym.space.SpatialSequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
 /**
- * 附近掉落物观测组件 —— 扫描 Mob 周围指定半径内的所有 {@link ItemEntity}。
+ * 附近掉落物观测组件 —— 扫描当前观测空间规定范围内的 {@link ItemEntity}。
  * <p>
  * 每个掉落物记录：实体 ID、UUID、坐标、距离与物品内容（{@code item} 复用
  * {@link MenuObservationCreator#buildItemView}，含规范化 SNBT nbt）。
  * 使用 AABB 批量查询 {@code level.getEntitiesOfClass()}。
  * </p>
  * <p>
- * 默认值可通过环境构造期 setter 覆盖（调用后同步重建观测空间）：
- * {@link #setRadius(int)}（扫描半径，默认 16）、{@link #setMaxItems(int)}
- * （掉落物数上限，默认 512）。
+ * 通过 setSpace 配置 items 序列的 scan_space 和结果上限；边界按相对 Mob 位置的
+ * x/y/z 偏移判定，默认各轴 [-16, 16]，仅位置在闭区间内的候选进入结果。
+ * {@link #setMaxItems(int)} 仅调整结果上限并保留扫描边界。
  * </p>
  */
-public class NearbyItemsObservationCreator extends AbstractObservationComponentCreator<ProtoNearbyItems> {
-    /** 默认扫描半径。 */
-    public static final int DEFAULT_RADIUS = 16;
+public class NearbyItemsObservationCreator extends AbstractSpatialObservationCreator<ProtoNearbyItems> {
+    /** 默认相对位置扫描边界（x/y/z，闭区间）。 */
+    public static final BoxSpace DEFAULT_SCAN_SPACE = new BoxSpace(-16, 16, 3);
     /** 默认掉落物数上限。 */
     public static final int DEFAULT_MAX_ITEMS = 512;
 
-    /** 当前环境实例的扫描半径。 */
-    private int radius = DEFAULT_RADIUS;
-    /** 当前环境实例的掉落物数上限。 */
-    private int maxItems = DEFAULT_MAX_ITEMS;
-
+    /** 创建使用默认扫描空间的观测生成器。 */
     public NearbyItemsObservationCreator() {
+        super("items", 3, false);
     }
 
+    /** @return 对应的 protobuf 类型 */
     @Override
     public Class<ProtoNearbyItems> protoType() {
         return ProtoNearbyItems.class;
     }
 
+    /** @return 包含扫描边界和结果上限的默认空间 */
     @Override
     public McSpace<Map<String, Object>> defaultSpace() {
-        return buildSpace(DEFAULT_MAX_ITEMS);
+        return new DictSpace(Map.of(
+            "items", new SpatialSequenceSpace<>(new TextSpace(), DEFAULT_MAX_ITEMS, DEFAULT_SCAN_SPACE)
+        ));
     }
 
+    /**
+     * @param component 待校验观测
+     * @return 结果数量是否符合当前空间
+     */
     @Override
     public boolean contains(ProtoNearbyItems component) {
-        return component != null && component.getItemsCount() <= this.maxItems;
+        return component != null && component.getItemsCount() <= this.maxResults();
     }
 
-    /** 设置扫描半径（必须为正数）。 */
-    public void setRadius(int radius) {
-        if (radius <= 0) {
-            throw new IllegalArgumentException("radius must be positive, got: " + radius);
-        }
-        this.radius = radius;
-    }
-
-    /** 设置掉落物数上限（必须为正数），并重建观测空间。 */
+    /** @param maxItems 返回掉落物数正数上限；保留当前扫描边界 */
     public void setMaxItems(int maxItems) {
-        if (maxItems <= 0) {
-            throw new IllegalArgumentException("max_items must be positive, got: " + maxItems);
-        }
-        this.maxItems = maxItems;
-        this.setSpace(buildSpace(maxItems));
+        this.setMaxResults(maxItems);
     }
 
+    /**
+     * @param mob 受控实体
+     * @return 当前扫描边界与数量上限内的掉落物观测
+     */
     @Override
     public ProtoNearbyItems create(Mob mob) {
         var builder = ProtoNearbyItems.newBuilder();
         var pos = mob.position();
-        var aabb = new AABB(pos.x - this.radius, pos.y - this.radius, pos.z - this.radius,
-            pos.x + this.radius, pos.y + this.radius, pos.z + this.radius);
+        var bounds = this.scanBounds();
+        var low = bounds.low();
+        var high = bounds.high();
+        var aabb = new AABB(pos.x + low[0], pos.y + low[1], pos.z + low[2],
+            pos.x + high[0], pos.y + high[1], pos.z + high[2]);
         var registries = mob.level().registryAccess();
 
         for (var entity : mob.level().getEntitiesOfClass(ItemEntity.class, aabb,
-            e -> !e.isRemoved() && !e.getItem().isEmpty())) {
+            e -> !e.isRemoved() && !e.getItem().isEmpty()
+                && bounds.contains(new double[] {e.getX() - pos.x, e.getY() - pos.y, e.getZ() - pos.z}))) {
+            if (builder.getItemsCount() >= this.maxResults()) {
+                break;
+            }
             builder.addItems(ProtoItemEntityView.newBuilder()
                 .setEntityId(entity.getId())
                 .setUuid(entity.getUUID().toString())
@@ -95,16 +100,14 @@ public class NearbyItemsObservationCreator extends AbstractObservationComponentC
         return builder.build();
     }
 
-    private static McSpace<Map<String, Object>> buildSpace(int maxItems) {
-        return new DictSpace(Map.of(
-            "items", new SequenceSpace<>(new TextSpace(), maxItems)
-        )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-    }
-
     /**
      * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
      */
     public static final class Factory implements ObservationComponentFactory<ProtoNearbyItems, NearbyItemsObservationCreator> {
+        /**
+         * @param mob 受控实体
+         * @return 独立配置的观测生成器
+         */
         @Override
         public NearbyItemsObservationCreator create(Mob mob) {
             return new NearbyItemsObservationCreator();

@@ -108,13 +108,46 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:self` | 生命、位置、速度、姿态和目标等自身状态 |
 | `gymcraft:world` | 时间、天气、维度，所在群系/结构的注册 ID，以及附近已加载区块中的结构起点（注册 ID + 包围盒中心坐标 + 距离） |
 | `gymcraft:nearby_entities` | 一定范围内的实体 |
-| `gymcraft:nearby_blocks` | 空气连通域中可见的方块表面 |
-| `gymcraft:interesting_blocks` | 空气连通域中已标记为感兴趣的可见方块表面 |
+| `gymcraft:nearby_blocks` | 首个非空气方块连通域中可渲染的方块表面 |
+| `gymcraft:interesting_blocks` | 同一非空气连通域中已标记为感兴趣的可渲染方块表面 |
 | `gymcraft:menu` | 当前逻辑菜单、槽位、属性和按钮 |
 | `gymcraft:chat` | 最近聊天栏消息窗口（玩家聊天、`/say`、广播类 `/tellraw` 与系统消息；仅捕获多接收者广播，指令回显与私发内容被过滤） |
 
 环境构造函数可以通过 `actionComponent(factory)` 和 `observationComponent(factory)`
-获取当前环境专属组件实例，再覆盖观测半径、上限、移动速度或交互距离等默认参数。
+获取当前环境专属组件实例，再覆盖观测空间、上限、移动速度或交互距离等默认参数。
+
+附近扫描组件通过 `setSpace` 统一配置范围与结果上限。结果字段使用 `SpatialSequenceSpace`，
+其 `scan_space` 为 `BoxSpace`，并随 gRPC 返回的观测空间 JSON 一起序列化。边界是闭区间，
+支持各方向不对称设置；protobuf 观测中的位置仍为世界绝对坐标。
+
+| 组件 | 结果字段 | `scan_space` 坐标含义 | 默认边界 |
+|---|---|---|---|
+| `nearby_blocks` / `interesting_blocks` | `blocks` | 相对眼睛所在方块的 x/y/z 偏移（格） | 各轴 [-8, 8] |
+| `nearby_entities` | `entities` | 相对 Mob 位置的 x/y/z 偏移（格） | 各轴 [-16, 16] |
+| `nearby_items` | `items` | 相对 Mob 位置的 x/y/z 偏移（格） | 各轴 [-16, 16] |
+| `world` | `structures` | 相对 Mob 所在区块的 x/z 偏移（区块） | 各轴 [-4, 4] |
+
+例如，以下配置只扫描眼睛所在方块向西 2、向东 8、向下 3、向上 1、向北 4、向南 6 格的范围，
+最多返回 64 个可见表面方块：
+
+```java
+// 扫描边界与结果数量由同一个观测空间配置。
+observationComponent(ObservationCreators.NEARBY_BLOCKS.get()).setSpace(new DictSpace(Map.of(
+    "blocks", new SpatialSequenceSpace<>(new TextSpace(), 64,
+        new BoxSpace(new double[] {-2, -3, -4}, new double[] {8, 1, 6}))
+)));
+```
+
+方块扫描先从眼睛所在方块按六方向逐层寻找第一个非空气方块，再从该方块开始，以 FIFO 队列
+对六方向相连的非空气方块执行 BFS。只返回具有原版可渲染表面的方块；空气不连接独立方块簇，
+无碰撞体的非空气方块也参与遍历。兴趣过滤仅影响输出，不阻断遍历，也不改变起点选择。
+扫描边界要求包含原点；`setMaxVisited` 分别限制起点搜索与非空气 BFS 的节点数，预算内没有
+找到起点时返回空结果。距离仍相对眼睛所在方块计算。原 `setRadius` 与
+`setStructureChunkRadius` 已删除，方块默认范围也由球形改为 Box 范围。实体与掉落物按实体位置
+做精确筛选，包围盒仅用于粗筛；所有结果列表均按空间的 `max_length` 截断（允许通过 `setSpace`
+设为零）。数量便捷 setter 只修改上限，保留当前边界。配置 `world` 时应复制原 `DictSpace.spaces()`，
+再替换 `structures` 字段，保留时间、天气等其他字段。结构扫描只读取已加载区块，不触发加载；
+其范围约束结构起点所在区块，返回坐标取结构包围盒中心。
 
 ## 环境与 AI 控制
 

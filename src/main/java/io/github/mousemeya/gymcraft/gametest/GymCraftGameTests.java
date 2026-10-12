@@ -112,6 +112,11 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("world_state_structure_inside_piece", () -> ChatObservationGameTests::worldStateReportsStructureInsidePiece);
         TEST_FUNCTIONS.register("nearby_items_observation_lists_item", () -> PickupGameTests::nearbyItemsObservationListsItem);
         TEST_FUNCTIONS.register("interesting_blocks_update", () -> InterestingBlocksGameTests::updateIsIdempotentAndRemoves);
+        TEST_FUNCTIONS.register("observation_space_blocks", () -> SpatialObservationGameTests::blocksRespectSpace);
+        TEST_FUNCTIONS.register("observation_space_block_bfs", () -> SpatialObservationGameTests::blocksStartAtFirstNonAir);
+        TEST_FUNCTIONS.register("observation_space_block_noncolliding_seed", () -> SpatialObservationGameTests::blocksIncludeNonCollidingSeed);
+        TEST_FUNCTIONS.register("observation_space_entities_and_items", () -> SpatialObservationGameTests::entitiesAndItemsRespectSpace);
+        TEST_FUNCTIONS.register("observation_space_contract", () -> SpatialObservationGameTests::spaceContract);
 
         // ===== 菜单子系统：会话/槽位/按钮/桥接代表用例 =====
         TEST_FUNCTIONS.register("menu_session_id_stable", () -> MenuSessionGameTests::sessionIdStableAcrossObservations);

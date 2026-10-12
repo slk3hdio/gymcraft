@@ -40,6 +40,7 @@ import io.github.mousemeya.gymcraft.gym.observation.component.WorldStateObservat
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoRecentChat;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoWorldState;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
+import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 
 /**
@@ -329,6 +330,23 @@ public final class ChatObservationGameTests {
                         + nearby.getX() + "," + nearby.getZ() + " vs " + absPos);
                 assertTrue(helper, nearby.getDistance() >= 0 && nearby.getDistance() <= 64,
                     "nearby structure distance out of expected range: " + nearby.getDistance());
+                // 结构扫描按起点区块的相对 x/z 空间筛选，分数边界只枚举其内的整数区块。
+                var boundedWorld = new WorldStateObservationCreator();
+                Mob currentMob = (Mob) serverLevel.getEntity(mob.getUUID());
+                assertTrue(helper, currentMob != null, "reset agent must remain available for spatial observations");
+                SpatialObservationGameTests.configure(boundedWorld, "structures",
+                    new BoxSpace(-0.25, 0.25, 2), 1);
+                assertEquals(helper, 1, boundedWorld.create(currentMob).getStructuresCount(),
+                    "space containing only the current chunk must include its injected start");
+                SpatialObservationGameTests.configure(boundedWorld, "structures",
+                    new BoxSpace(
+                        new double[] {0.25, -0.25}, new double[] {0.75, 0.25}), 1);
+                assertEquals(helper, 0, boundedWorld.create(currentMob).getStructuresCount(),
+                    "fractional space containing no integer chunks must exclude the injected start");
+                SpatialObservationGameTests.configure(boundedWorld, "structures",
+                    new BoxSpace(-0.25, 0.25, 2), 0);
+                assertEquals(helper, 0, boundedWorld.create(currentMob).getStructuresCount(),
+                    "zero structure limit must return no nearby structures");
                 helper.succeed();
             } finally {
                 // 清理注入的结构起点与引用：GameTest 世界跨用例/跨批次复用，断言失败

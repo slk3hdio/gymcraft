@@ -4,7 +4,7 @@ import java.util.Map;
 
 import net.minecraft.world.entity.Mob;
 
-import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.AbstractSpatialObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoStructureLocation;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoWorldState;
@@ -12,7 +12,7 @@ import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
+import io.github.mousemeya.gymcraft.gym.space.SpatialSequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
 /**
@@ -24,13 +24,13 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * 探测），这些字段随 Mob 位置变化。
  * </p>
  * <p>
- * 默认值可通过环境构造期 setter 覆盖：{@link #setStructureChunkRadius(int)}
- * （附近结构扫描半径，单位区块，默认 {@value #DEFAULT_STRUCTURE_CHUNK_RADIUS}）。
+ * 通过 setSpace 配置 structures 序列的 scan_space 与结果上限。扫描边界为相对 Mob
+ * 所在区块的 x/z 偏移，单位是区块，默认各轴 [-4, 4]；边界约束结构起点所在区块。
  * </p>
  */
-public class WorldStateObservationCreator extends AbstractObservationComponentCreator<ProtoWorldState> {
-    /** 附近结构扫描的默认区块半径。 */
-    public static final int DEFAULT_STRUCTURE_CHUNK_RADIUS = 4;
+public class WorldStateObservationCreator extends AbstractSpatialObservationCreator<ProtoWorldState> {
+    /** 默认相对区块扫描边界（x/z，闭区间）。 */
+    public static final BoxSpace DEFAULT_SCAN_SPACE = new BoxSpace(-4, 4, 2);
     /** 附近结构数量上限（观测空间约束）。 */
     public static final int MAX_STRUCTURES = 64;
 
@@ -41,39 +41,40 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
         "dimension", new TextSpace(),
         "biome", new TextSpace(),
         "structure", new TextSpace(),
-        "structures", new SequenceSpace<>(new TextSpace(), MAX_STRUCTURES)
+        "structures", new SpatialSequenceSpace<>(new TextSpace(), MAX_STRUCTURES, DEFAULT_SCAN_SPACE)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
-    /** 当前环境实例的附近结构扫描半径（单位：区块）。 */
-    private int structureChunkRadius = DEFAULT_STRUCTURE_CHUNK_RADIUS;
-
+    /** 创建使用默认结构扫描空间的世界观测。 */
     public WorldStateObservationCreator() {
+        super("structures", 2, false);
     }
 
+    /** @return 对应的 protobuf 类型 */
     @Override
     public Class<ProtoWorldState> protoType() {
         return ProtoWorldState.class;
     }
 
+    /** @return 世界字段及结构扫描序列的默认空间 */
     @Override
     public McSpace<Map<String, Object>> defaultSpace() {
         return DEFAULT_SPACE;
     }
 
+    /**
+     * @param component 待校验观测
+     * @return 时间与结构数量是否满足约束
+     */
     @Override
     public boolean contains(ProtoWorldState component) {
         return component != null && component.getDayTime() >= 0
-            && component.getStructuresCount() <= MAX_STRUCTURES;
+            && component.getStructuresCount() <= this.maxResults();
     }
 
-    /** 设置附近结构扫描半径（单位：区块，必须为正数）。 */
-    public void setStructureChunkRadius(int structureChunkRadius) {
-        if (structureChunkRadius <= 0) {
-            throw new IllegalArgumentException("structure_chunk_radius must be positive, got: " + structureChunkRadius);
-        }
-        this.structureChunkRadius = structureChunkRadius;
-    }
-
+    /**
+     * @param mob 受控实体
+     * @return 全局世界字段与扫描范围内的结构起点
+     */
     @Override
     public ProtoWorldState create(Mob mob) {
         var level = mob.level();
@@ -86,8 +87,8 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
             .setBiome(location.biome())
             .setStructure(location.structure());
         for (WorldLocationScanner.ScannedStructure nearby : WorldLocationScanner
-            .scanNearbyStructures(mob, this.structureChunkRadius)) {
-            if (builder.getStructuresCount() >= MAX_STRUCTURES) {
+            .scanNearbyStructures(mob, this.scanBounds())) {
+            if (builder.getStructuresCount() >= this.maxResults()) {
                 break;
             }
             builder.addStructures(ProtoStructureLocation.newBuilder()
@@ -103,6 +104,10 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
      * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
      */
     public static final class Factory implements ObservationComponentFactory<ProtoWorldState, WorldStateObservationCreator> {
+        /**
+         * @param mob 受控实体
+         * @return 独立配置的世界观测生成器
+         */
         @Override
         public WorldStateObservationCreator create(Mob mob) {
             return new WorldStateObservationCreator();
