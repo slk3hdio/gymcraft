@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import javax.annotation.Nullable;
 
+import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.network.EnvToolAttachPayload;
 import io.github.mousemeya.gymcraft.network.EnvToolRemovePayload;
 import io.github.mousemeya.gymcraft.network.EnvToolSavePayload;
@@ -12,6 +13,7 @@ import io.github.mousemeya.gymcraft.network.EnvToolScreenPayload;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
@@ -34,6 +36,8 @@ public final class EnvToolScreen extends Screen {
         "screen.gymcraft.env_tool.dir_down", "screen.gymcraft.env_tool.dir_up",
         "screen.gymcraft.env_tool.dir_north", "screen.gymcraft.env_tool.dir_south"
     };
+    /** 四周水平方向（西/东/北/南）在距离数组中的下标。 */
+    private static final int[] HORIZONTAL_INDICES = {0, 1, 4, 5};
 
     private final UUID target;
     private final List<String> envTypes;
@@ -124,7 +128,7 @@ public final class EnvToolScreen extends Screen {
             for (int column = 0; column < 2; column++) {
                 int index = row * 2 + column;
                 boolean vertical = index == 2 || index == 3;
-                EditBox box = new EditBox(this.font, left + 16 + column * 150, 76 + row * 24, 122, 20,
+                EditBox box = new EditBox(this.font, left + 16 + column * 136, 76 + row * 24, 100, 20,
                     Component.translatable(DIRECTION_KEYS[index]));
                 box.setFilter(text -> text.isEmpty() || text.matches(vertical ? "\\d{1,4}" : "\\d{1,2}"));
                 box.setMaxLength(vertical ? 4 : 2);
@@ -136,6 +140,17 @@ public final class EnvToolScreen extends Screen {
                 this.extentBoxes[index] = this.addRenderableWidget(box);
             }
         }
+        // 四周最大：西/东/北/南四个水平方向一键设为延伸上限（垂直方向不变）。
+        this.addRenderableWidget(Button.builder(
+            Component.translatable("screen.gymcraft.env_tool.max_horizontal"), button -> {
+                for (int index : HORIZONTAL_INDICES) {
+                    this.extents[index] = AttachScope.MAX_RADIUS;
+                    this.extentBoxes[index].setValue(Integer.toString(AttachScope.MAX_RADIUS));
+                }
+            }).bounds(left + 256, 76, 44, 20)
+            .tooltip(Tooltip.create(Component.translatable(
+                "screen.gymcraft.env_tool.max_horizontal_hint", AttachScope.MAX_RADIUS)))
+            .build());
 
         this.addRenderableWidget(Button.builder(captureLabel(
                 "screen.gymcraft.env_tool.capture_blocks", this.captureBlocks), button -> {
@@ -250,7 +265,7 @@ public final class EnvToolScreen extends Screen {
         for (int row = 0; row < DIRECTIONS / 2; row++) {
             for (int column = 0; column < 2; column++) {
                 graphics.text(this.font, Component.translatable(DIRECTION_KEYS[row * 2 + column]),
-                    left + column * 150, 82 + row * 24, 0xFFFFFFFF);
+                    left + column * 136, 82 + row * 24, 0xFFFFFFFF);
             }
         }
     }

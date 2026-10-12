@@ -90,6 +90,8 @@
   "screen.gymcraft.env_tool.dir_up": "U",
   "screen.gymcraft.env_tool.dir_north": "N",
   "screen.gymcraft.env_tool.dir_south": "S",
+  "screen.gymcraft.env_tool.max_horizontal": "Max",
+  "screen.gymcraft.env_tool.max_horizontal_hint": "Set W/E/N/S extents to max (%s)",
   "screen.gymcraft.env_tool.capture_blocks": "Block snapshot: %s",
   "screen.gymcraft.env_tool.capture_entities": "Entity snapshot: %s",
   "screen.gymcraft.env_tool.on": "ON",
