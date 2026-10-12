@@ -16,7 +16,7 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
-from gymcraft import GymCraftEnv
+from gymcraft import GymCraftEnv, list_environments
 from gymcraft.llm.actions import ActionDslParser, ActionParseError, encode_action_batch, wrap_commands
 from gymcraft.llm.observations import ObservationTextFormatter, format_transition_result
 from gymcraft.type_info import Observation
@@ -81,6 +81,26 @@ def _decode_info(raw_info: str) -> dict[str, Any]:
     if not isinstance(decoded, dict):
         raise ValueError("Environment info must be a JSON object")
     return decoded
+
+
+@_SERVER.tool(
+    name="gymcraft_list_environments",
+    description="列出服务端当前所有已注册的 GymCraft 环境（entity_uuid、环境类型、会话占用状态），供 gymcraft_connect 选择目标实体。",
+)
+def gymcraft_list_environments(address: str = "localhost:50051") -> str:
+    """查询环境列表并渲染为文本；connected=true 的实体需等当前会话释放后才能连接。"""
+    try:
+        environments = list_environments(address=address)
+    except Exception as exc:
+        return f"list 失败: {type(exc).__name__}: {exc}"
+    if not environments:
+        return "服务端当前没有已注册环境；请先在游戏内创建环境（EnvToolItem 或 /gymcraft env 指令）。"
+    lines = [f"共 {len(environments)} 个环境:"]
+    for item in environments:
+        state = "已连接（需先释放）" if item["connected"] else "空闲可连接"
+        lines.append(f"- {item['entity_uuid']} type={item['env_type']} [{state}]")
+    lines.append("用 gymcraft_connect <entity_uuid> 连接目标环境。")
+    return "\n".join(lines)
 
 
 @_SERVER.tool(

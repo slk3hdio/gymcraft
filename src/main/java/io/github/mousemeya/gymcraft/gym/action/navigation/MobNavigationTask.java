@@ -93,6 +93,24 @@ public class MobNavigationTask {
     }
 
     /**
+     * 把请求坐标按方块位置解释，返回该方块中心的可站立点。
+     * <p>
+     * 整数方块坐标是方块的西北下角（四块交界），直接当作目标会把实体引向边角；
+     * 统一修正为 {@code Vec3.atBottomCenterOf}（x/z 半格中心、y 为方块底部，与
+     * 原版路径节点到达语义一致）。分数坐标向下取整到所在方块后再修正。
+     * move_to/swim_to 的到达判定与可视化共用本修正，保证绘制目标与实际导航目标一致。
+     * </p>
+     *
+     * @param x 请求坐标 X
+     * @param y 请求坐标 Y
+     * @param z 请求坐标 Z
+     * @return 修正后的导航目标
+     */
+    public static Vec3 blockCenterTarget(double x, double y, double z) {
+        return Vec3.atBottomCenterOf(BlockPos.containing(x, y, z));
+    }
+
+    /**
      * 抢占原版移动控制并创建首条路径。
      *
      * @param mob 本次动作控制的 Mob

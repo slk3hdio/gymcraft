@@ -100,6 +100,25 @@ final class RpcEnvSessions {
     }
 
     /**
+     * 查询指定实体当前是否存在活跃（非孤儿）会话。
+     * <p>
+     * 孤儿会话可被新 {@code Connect} 接管，不阻止连接；只有活跃会话才使
+     * {@code Connect} 返回 {@code ALREADY_EXISTS}。供环境列表查询展示占用状态。
+     * </p>
+     *
+     * @param entityUuid 实体 UUID
+     * @return 存在活跃会话返回 {@code true}
+     */
+    boolean hasActiveSession(UUID entityUuid) {
+        String sessionId = sessionsByEntity.get(entityUuid);
+        if (sessionId == null) {
+            return false;
+        }
+        Session session = sessions.get(sessionId);
+        return session != null && !session.isOrphaned();
+    }
+
+    /**
      * 将指定 transport 上的所有活跃会话标记为孤儿。
      * <p>
      * 由 {@link GymCraftRpcServer} 的 transport 终止回调调用；孤儿会话不会被立即删除，

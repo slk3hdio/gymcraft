@@ -81,3 +81,23 @@ class CloseSessionResponse(_message.Message):
     CLOSED_FIELD_NUMBER: _ClassVar[int]
     closed: bool
     def __init__(self, closed: _Optional[bool] = ...) -> None: ...
+
+class ListEnvironmentsRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class EnvironmentInfo(_message.Message):
+    __slots__ = ("entity_uuid", "env_type", "connected")
+    ENTITY_UUID_FIELD_NUMBER: _ClassVar[int]
+    ENV_TYPE_FIELD_NUMBER: _ClassVar[int]
+    CONNECTED_FIELD_NUMBER: _ClassVar[int]
+    entity_uuid: str
+    env_type: str
+    connected: bool
+    def __init__(self, entity_uuid: _Optional[str] = ..., env_type: _Optional[str] = ..., connected: _Optional[bool] = ...) -> None: ...
+
+class ListEnvironmentsResponse(_message.Message):
+    __slots__ = ("environments",)
+    ENVIRONMENTS_FIELD_NUMBER: _ClassVar[int]
+    environments: _containers.RepeatedCompositeFieldContainer[EnvironmentInfo]
+    def __init__(self, environments: _Optional[_Iterable[_Union[EnvironmentInfo, _Mapping]]] = ...) -> None: ...

@@ -33,9 +33,10 @@ import io.github.mousemeya.gymcraft.mixin.MobLookControlAccessor;
 import io.github.mousemeya.gymcraft.mixin.MobMoveControlAccessor;
 
 /**
- * 游泳动作组件 —— 使用两栖寻路把实体导航到指定三维坐标。
+ * 游泳动作组件 —— 使用两栖寻路把实体导航到指定方块。
  * <p>
- * 与 {@code move_to} 参数和到达判定完全一致，但寻路使用自有的
+ * 与 {@code move_to} 参数、方块中心目标修正和到达判定完全一致（目标统一为
+ * {@link MobNavigationTask#blockCenterTarget} 的可站立中心），但寻路使用自有的
  * {@link net.minecraft.world.entity.ai.navigation.AmphibiousPathNavigation}
  * （原版海龟同款，见 {@link SwimNavigationTask}）：WATER 格可通行、支持水中垂直
  * 移动与水中起点，因此落水、身处深水或目标在彼岸时仍可规划路径；陆地上与
@@ -238,9 +239,9 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
         }
     }
 
-    /** @return protobuf 坐标对应的原始目标，不做方块中心修正 */
+    /** @return 坐标所在方块的可站立中心（与 move_to 同一修正）；见 {@link MobNavigationTask#blockCenterTarget} */
     private static Vec3 target(ProtoSwimTo component) {
-        return new Vec3(component.getX(), component.getY(), component.getZ());
+        return MobNavigationTask.blockCenterTarget(component.getX(), component.getY(), component.getZ());
     }
 
     /** @return 当前 Mob 到目标的水平中心距离 */

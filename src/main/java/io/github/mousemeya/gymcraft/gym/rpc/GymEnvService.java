@@ -1,15 +1,20 @@
 package io.github.mousemeya.gymcraft.gym.rpc;
 
+import java.util.Map;
 import java.util.UUID;
 
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.EnvManager;
+import io.github.mousemeya.gymcraft.gym.env.McEnv;
 
 import io.github.mousemeya.gymcraft.gym.rpc.proto.CloseSessionRequest;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.CloseSessionResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ConnectRequest;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ConnectResponse;
+import io.github.mousemeya.gymcraft.gym.rpc.proto.EnvironmentInfo;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.GymEnvServiceGrpc;
+import io.github.mousemeya.gymcraft.gym.rpc.proto.ListEnvironmentsRequest;
+import io.github.mousemeya.gymcraft.gym.rpc.proto.ListEnvironmentsResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetRequest;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepRequest;
@@ -20,12 +25,13 @@ import io.grpc.stub.StreamObserver;
 /**
  * GymCraft gRPC 服务实现 —— 对应 {@code env_service.proto} 中定义的 {@code GymEnvService}.
  * <p>
- * 实现四个 RPC 端点：
+ * 实现五个 RPC 端点：
  * <ul>
  *   <li>{@link #connect(ConnectRequest, StreamObserver)} —— 按实体 UUID 连接已存在的游戏内环境，创建 RPC 会话</li>
  *   <li>{@link #reset(ResetRequest, StreamObserver)} —— 重置环境至初始状态</li>
  *   <li>{@link #step(StepRequest, StreamObserver)} —— 提交动作、返回观测与奖励</li>
  *   <li>{@link #closeSession(CloseSessionRequest, StreamObserver)} —— 关闭 RPC 会话</li>
+ *   <li>{@link #listEnvironments(ListEnvironmentsRequest, StreamObserver)} —— 列出所有已注册环境</li>
  * </ul>
  * 每个 {@code reset}/{@code step} 调用使用会话级别 {@link java.util.concurrent.locks.ReentrantLock}
  * 保证串行化，防止并发操作破坏环境状态。
@@ -174,6 +180,32 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
         responseObserver.onNext(CloseSessionResponse.newBuilder()
                 .setClosed(sessions.close(request.getSessionId()))
                 .build());
+        responseObserver.onCompleted();
+    }
+
+    /**
+     * {@code ListEnvironments} RPC —— 列出当前所有已注册环境。
+     * <p>
+     * 遍历 {@link EnvManager#list()} 的只读快照，返回每个环境的实体 UUID、
+     * 环境类型与活跃会话占用状态；{@code connected=true} 表示 {@code Connect}
+     * 将返回 {@code ALREADY_EXISTS}。仅读 {@code getRegisterId()} 等不可变信息，
+     * 不触碰环境内部状态，无需投递到服务端线程。
+     * </p>
+     *
+     * @param request          列表请求（无参数）
+     * @param responseObserver gRPC 流式响应观察者
+     */
+    @Override
+    public void listEnvironments(ListEnvironmentsRequest request, StreamObserver<ListEnvironmentsResponse> responseObserver) {
+        ListEnvironmentsResponse.Builder builder = ListEnvironmentsResponse.newBuilder();
+        for (Map.Entry<UUID, McEnv> entry : EnvManager.list().entrySet()) {
+            builder.addEnvironments(EnvironmentInfo.newBuilder()
+                    .setEntityUuid(entry.getKey().toString())
+                    .setEnvType(entry.getValue().getRegisterId())
+                    .setConnected(sessions.hasActiveSession(entry.getKey()))
+                    .build());
+        }
+        responseObserver.onNext(builder.build());
         responseObserver.onCompleted();
     }
 }

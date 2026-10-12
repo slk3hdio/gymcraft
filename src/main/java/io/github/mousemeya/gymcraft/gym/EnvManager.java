@@ -130,6 +130,14 @@ public final class EnvManager {
     }
 
     /**
+     * 列出所有已注册环境（实体 UUID → 环境实例）。
+     * @return 只读快照视图，调用方可安全遍历，不与后续增删互斥
+     */
+    public static Map<UUID, McEnv> list() {
+        return Map.copyOf(ENVS_BY_ENTITY);
+    }
+
+    /**
      * 保存目标 Mob 绑定环境的场景：对当前世界与 agent 立即取一次完整快照
      * （所见即所得——想要场景本体请先 reset 物化）。
      *

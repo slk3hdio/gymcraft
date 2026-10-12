@@ -650,8 +650,9 @@ public final class ScenarioGameTests {
     }
 
     /**
-     * 验证带作用域的挂载（方块与实体快照同时捕获）：reset 恢复区域内方块、按原 UUID
-     * 重建基线实体、清除区域外来客实体，且不触碰区域外方块。
+     * 验证带作用域的挂载（方块与实体快照同时捕获）：区域按六方向非对称延伸距离锚定
+     * agent，reset 恢复区域内方块、按原 UUID 重建基线实体、清除区域外来客实体，
+     * 且不触碰区域外方块。
      *
      * @param helper GameTest 辅助对象
      */
@@ -667,7 +668,10 @@ public final class ScenarioGameTests {
         level.addFreshEntity(armorStand);
         UUID baselineEntityUuid = armorStand.getUUID();
         BlockPos outside = helper.absolutePos(new BlockPos(1, 2, 1));
+        // 东侧边界点：east=3 的非对称区域内、等半径立方体（半径 1）区域外。
+        BlockPos eastEdge = helper.absolutePos(new BlockPos(7, 2, 4));
         AtomicReference<UUID> intruderUuid = new AtomicReference<>();
+        AtomicReference<BoundingBox> expectedRegion = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         AtomicReference<Boolean> done = new AtomicReference<>(false);
         Thread.startVirtualThread(() -> {
@@ -675,15 +679,23 @@ public final class ScenarioGameTests {
                 AtomicReference<McEnv> ref = new AtomicReference<>();
                 runOnServer(helper, () -> {
                     Mob mob = (Mob) level.getEntity(agentUuid);
-                    ref.set(EnvManager.attach("gymcraft:simple_mob", mob, AttachScope.around(mob, 2, true, true)));
+                    BlockPos anchor = mob.blockPosition();
+                    // 西/东/下/上/北/南 = 1/3/0/2/1/3 的非对称区域。
+                    expectedRegion.set(new BoundingBox(
+                        anchor.getX() - 1, anchor.getY(), anchor.getZ() - 1,
+                        anchor.getX() + 3, anchor.getY() + 2, anchor.getZ() + 3));
+                    ref.set(EnvManager.attach("gymcraft:simple_mob", mob,
+                        AttachScope.around(mob, 1, 3, 0, 2, 1, 3, true, true)));
                 });
                 AbstractMcEnv env = (AbstractMcEnv) ref.get();
                 runOnServer(helper, () -> {
                     check(env.stateRegion() != null, "scope attach did not capture a region");
+                    check(expectedRegion.get().equals(env.stateRegion()), "asymmetric scope region mismatch");
                     check(env.baselineSnapshot().blocks() != null, "scope attach did not capture blocks");
                     check(env.baselineSnapshot().entities() != null, "scope attach did not capture entities");
                     // 基线后的扰动：方块被改、基线实体被移除、区域内新增来客、区域外放置标记。
                     level.setBlock(marker, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+                    level.setBlock(eastEdge, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
                     armorStand.discard();
                     Mob intruder = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
                     intruder.snapTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(5, 2, 5))));
@@ -694,6 +706,8 @@ public final class ScenarioGameTests {
                 env.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
                 runOnServer(helper, () -> {
                     check(level.getBlockState(marker).is(Blocks.GOLD_BLOCK), "block snapshot was not restored");
+                    check(level.getBlockState(eastEdge).isAir(),
+                        "block inside the asymmetric east extent was not restored");
                     check(level.getBlockState(outside).is(Blocks.EMERALD_BLOCK),
                         "reset touched a block outside the scope");
                     check(level.getEntity(baselineEntityUuid) instanceof ArmorStand,

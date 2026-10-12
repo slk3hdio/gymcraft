@@ -61,7 +61,8 @@ public final class GymCraftNetwork {
         ServerPlayer player = (ServerPlayer) context.player();
         try {
             EnvManager.attach(payload.envType(), mob,
-                AttachScope.around(mob, payload.radius(), payload.captureBlocks(), payload.captureEntities()));
+                AttachScope.around(mob, payload.west(), payload.east(), payload.down(), payload.up(),
+                    payload.north(), payload.south(), payload.captureBlocks(), payload.captureEntities()));
             player.sendSystemMessage(Component.translatable(
                 "message.gymcraft.environment_created", payload.envType(), mob.getUUID().toString()));
         } catch (IllegalArgumentException | IllegalStateException e) {

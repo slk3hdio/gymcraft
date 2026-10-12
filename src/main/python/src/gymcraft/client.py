@@ -22,6 +22,7 @@ from gymcraft.gym.observation.observation_pb2 import ProtoMcObservation
 from gymcraft.gym.rpc.env_service_pb2 import (
     CloseSessionRequest,
     ConnectRequest,
+    ListEnvironmentsRequest,
     ResetRequest,
     ResetResponse,
     StepRequest,
@@ -108,6 +109,32 @@ class GymCraftEnv(gym.Env[Any, Any]):
             self.stub.CloseSession(CloseSessionRequest(session_id=session_id))
             self.session_id = ""
         self.channel.close()
+
+
+def list_environments(address: str = "localhost:50051") -> list[dict[str, Any]]:
+    """列出服务端当前所有已注册环境。
+
+    返回按 ``entity_uuid`` 排序的列表，每项含 ``entity_uuid``（可直接用于
+    构造 :class:`GymCraftEnv`）、``env_type`` 与 ``connected``（是否已被活跃
+    会话占用，占用时 Connect 会返回 ``ALREADY_EXISTS``）。独立于任何环境会话，
+    只临时建立 channel。
+    """
+    channel = grpc.insecure_channel(address)
+    try:
+        response = GymEnvServiceStub(channel).ListEnvironments(ListEnvironmentsRequest())
+        return sorted(
+            (
+                {
+                    "entity_uuid": env.entity_uuid,
+                    "env_type": env.env_type,
+                    "connected": env.connected,
+                }
+                for env in response.environments
+            ),
+            key=lambda item: item["entity_uuid"],
+        )
+    finally:
+        channel.close()
 
 
 def make_action(action: Action) -> ProtoMcAction:

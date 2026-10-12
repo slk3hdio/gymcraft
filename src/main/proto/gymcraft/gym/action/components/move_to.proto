@@ -7,6 +7,8 @@ option java_package = "io.github.mousemeya.gymcraft.gym.action.proto";
 option java_outer_classname = "MoveToProto";
 
 message ProtoMoveTo {
+  // 目标方块坐标；实际导航目标统一修正为该方块中心的可站立位置
+  // （x/z 半格中心、y 为方块底部），整数坐标不再是四块交界的边角。
   double x = 1;
   double y = 2;
   double z = 3;

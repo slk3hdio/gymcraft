@@ -8,6 +8,7 @@ import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.network.EnvToolScreenPayload;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
@@ -113,20 +114,34 @@ public class EnvToolItem extends Item {
      */
     public static void openScreen(ServerPlayer player, Mob mob) {
         String currentEnvType = null;
-        int regionRadius = 0;
+        // 六方向延伸距离预填值：西/东/下/上/北/南；未绑定或无区域时全 0。
+        int west = 0;
+        int east = 0;
+        int down = 0;
+        int up = 0;
+        int north = 0;
+        int south = 0;
         boolean captureBlocks = false;
         boolean captureEntities = false;
         if (EnvManager.get(mob.getUUID()).orElse(null) instanceof AbstractMcEnv env) {
             currentEnvType = env.getRegisterId();
             BoundingBox region = env.stateRegion();
             if (region != null) {
-                regionRadius = (region.getXSpan() - 1) / 2;
+                // 区域相对目标当前方块位置的各方向距离；agent 移出区域时为负，按 0 显示。
+                BlockPos anchor = mob.blockPosition();
+                west = Math.max(0, anchor.getX() - region.minX());
+                east = Math.max(0, region.maxX() - anchor.getX());
+                down = Math.max(0, anchor.getY() - region.minY());
+                up = Math.max(0, region.maxY() - anchor.getY());
+                north = Math.max(0, anchor.getZ() - region.minZ());
+                south = Math.max(0, region.maxZ() - anchor.getZ());
                 captureBlocks = env.baselineSnapshot().blocks() != null;
                 captureEntities = env.baselineSnapshot().entities() != null;
             }
         }
         PacketDistributor.sendToPlayer(player, new EnvToolScreenPayload(
-            mob.getUUID(), getRegisteredEnvTypes(), currentEnvType, regionRadius, captureBlocks, captureEntities));
+            mob.getUUID(), getRegisteredEnvTypes(), currentEnvType,
+            west, east, down, up, north, south, captureBlocks, captureEntities));
     }
 
     /**

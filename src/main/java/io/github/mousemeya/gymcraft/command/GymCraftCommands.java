@@ -4,6 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 
@@ -37,7 +38,7 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
  * /gymcraft 指令。
  *
  * <p>提供与 {@link io.github.mousemeya.gymcraft.item.EnvToolItem} 管理界面等价的已有 Mob 挂载/删除能力
- * （挂载不加载场景，create 可指定状态范围半径与方块/实体快照开关），
+ * （挂载不加载场景，create 可指定六方向延伸距离与方块/实体快照开关），
  * 便于在专用服务器控制台或 RCON 下使用。create/remove 的目标参数接受多实体选择器
  * （如 {@code @e[type=zombie,limit=3]}），对每个目标逐一执行，返回成功数。</p>
  *
@@ -81,26 +82,24 @@ public final class GymCraftCommands {
                 .then(Commands.literal("env")
                         .then(Commands.literal("create")
                                 .then(Commands.argument("target", EntityArgument.entities())
-                                        .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"), defaultType, 0, true, true))
+                                        .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"), defaultType,
+                                                0, 0, 0, 0, 0, 0, true, true))
                                         .then(Commands.argument("type", IdentifierArgument.id())
                                                 .suggests(ENV_TYPE_SUGGESTIONS)
                                                 .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
-                                                        IdentifierArgument.getId(ctx, "type").toString(), 0, true, true))
-                                                .then(Commands.argument("radius", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
-                                                        .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
-                                                                IdentifierArgument.getId(ctx, "type").toString(),
-                                                                IntegerArgumentType.getInteger(ctx, "radius"), true, true))
-                                                        .then(Commands.argument("captureBlocks", BoolArgumentType.bool())
-                                                                .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
-                                                                        IdentifierArgument.getId(ctx, "type").toString(),
-                                                                        IntegerArgumentType.getInteger(ctx, "radius"),
-                                                                        BoolArgumentType.getBool(ctx, "captureBlocks"), true))
-                                                                .then(Commands.argument("captureEntities", BoolArgumentType.bool())
-                                                                        .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
-                                                                                IdentifierArgument.getId(ctx, "type").toString(),
-                                                                                IntegerArgumentType.getInteger(ctx, "radius"),
-                                                                                BoolArgumentType.getBool(ctx, "captureBlocks"),
-                                                                                BoolArgumentType.getBool(ctx, "captureEntities")))))))))
+                                                        IdentifierArgument.getId(ctx, "type").toString(), 0, 0, 0, 0, 0, 0, true, true))
+                                                .then(Commands.argument("west", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
+                                                        .then(Commands.argument("east", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
+                                                                .then(Commands.argument("down", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
+                                                                        .then(Commands.argument("up", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
+                                                                                .then(Commands.argument("north", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
+                                                                                        .then(Commands.argument("south", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
+                                                                                                .executes(ctx -> create(ctx, true, true))
+                                                                                                .then(Commands.argument("captureBlocks", BoolArgumentType.bool())
+                                                                                                        .executes(ctx -> create(ctx, BoolArgumentType.getBool(ctx, "captureBlocks"), true))
+                                                                                                        .then(Commands.argument("captureEntities", BoolArgumentType.bool())
+                                                                                                                .executes(ctx -> create(ctx, BoolArgumentType.getBool(ctx, "captureBlocks"),
+                                                                                                                        BoolArgumentType.getBool(ctx, "captureEntities"))))))))))))))
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("target", EntityArgument.entities())
                                         .executes(ctx -> remove(ctx.getSource(), EntityArgument.getEntities(ctx, "target")))))
@@ -130,21 +129,46 @@ public final class GymCraftCommands {
     }
 
     /**
+     * 从指令上下文提取目标、环境类型与六方向距离后的便捷入口（距离参数集齐才可执行）。
+     *
+     * @param ctx 指令上下文
+     * @param captureBlocks 是否保存区域方块快照
+     * @param captureEntities 是否保存区域实体快照
+     * @return 成功创建环境的目标数（0 表示全部失败）
+     * @throws CommandSyntaxException 目标实体参数解析失败时抛出
+     */
+    private static int create(CommandContext<CommandSourceStack> ctx, boolean captureBlocks, boolean captureEntities)
+            throws CommandSyntaxException {
+        return create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
+            IdentifierArgument.getId(ctx, "type").toString(),
+            IntegerArgumentType.getInteger(ctx, "west"), IntegerArgumentType.getInteger(ctx, "east"),
+            IntegerArgumentType.getInteger(ctx, "down"), IntegerArgumentType.getInteger(ctx, "up"),
+            IntegerArgumentType.getInteger(ctx, "north"), IntegerArgumentType.getInteger(ctx, "south"),
+            captureBlocks, captureEntities);
+    }
+
+    /**
      * 为每个现有 Mob 挂载指定环境（不加载场景），逐个反馈成功/失败。
-     * 半径为正且至少一个捕获开关打开时，以 Mob 为中心捕获半径立方体的状态基线；
-     * 否则只捕获 agent。区域覆盖的区块必须已加载。
+     * 任一方向距离为正且至少一个捕获开关打开时，以 Mob 方块位置为锚、按六方向各自
+     * 延伸距离捕获状态基线；否则只捕获 agent。区域覆盖的区块必须已加载。
      *
      * @param source 指令来源
      * @param targets 目标实体集合（多实体选择器展开结果）
      * @param envType 环境注册表 ID
-     * @param radius 状态范围半径（0 = 仅捕获 agent）
+     * @param west 向西(-X)延伸距离（0 = 该方向不延伸）
+     * @param east 向东(+X)延伸距离
+     * @param down 向下(-Y)延伸距离
+     * @param up 向上(+Y)延伸距离
+     * @param north 向北(-Z)延伸距离
+     * @param south 向南(+Z)延伸距离
      * @param captureBlocks 是否保存区域方块快照
      * @param captureEntities 是否保存区域实体快照
      * @return 成功创建环境的目标数（0 表示全部失败）
      * @throws CommandSyntaxException 目标实体参数解析失败时抛出
      */
     private static int create(CommandSourceStack source, Collection<? extends Entity> targets, String envType,
-            int radius, boolean captureBlocks, boolean captureEntities) throws CommandSyntaxException {
+            int west, int east, int down, int up, int north, int south,
+            boolean captureBlocks, boolean captureEntities) throws CommandSyntaxException {
         int created = 0;
         for (Entity target : targets) {
             // 非 Mob 目标跳过并逐个反馈，不中断其余目标的处理
@@ -153,7 +177,8 @@ public final class GymCraftCommands {
                 continue;
             }
             try {
-                EnvManager.attach(envType, mob, AttachScope.around(mob, radius, captureBlocks, captureEntities));
+                EnvManager.attach(envType, mob,
+                    AttachScope.around(mob, west, east, down, up, north, south, captureBlocks, captureEntities));
             } catch (IllegalArgumentException | IllegalStateException e) {
                 source.sendFailure(Component.translatable("message.gymcraft.error", e.getMessage()));
                 continue;
