@@ -13,12 +13,16 @@ import javax.annotation.Nullable;
 import com.google.protobuf.Message;
 
 import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.neoforged.neoforge.common.NeoForge;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
@@ -34,10 +38,10 @@ import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime.RuntimeStepResult;
+import io.github.mousemeya.gymcraft.gym.visualization.VisualizationService;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
-import io.github.mousemeya.gymcraft.gym.state.StateRestoreMode;
+import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 
 
 
@@ -48,12 +52,13 @@ import io.github.mousemeya.gymcraft.gym.state.StateRestoreMode;
  * 将 Gymnasium 的 Env 概念绑定到一个具体的 Minecraft Mob 实体上，
  * 提供通用的 reset/step 流程，子类只需实现奖励计算、终止判断等策略方法。
  * <p>
- * 工厂方法 {@link #create(String, UUID)} 根据环境类型创建对应子类实例
- * 环境实现由 NeoForge 自定义注册表中的 McEnvFactory 创建。
+ * 环境实现由 NeoForge 自定义注册表中的 McEnvFactory 创建，EnvManager 明确区分
+ * 从场景生成 agent 与已有 Mob 挂载；本类不根据环境类型隐式加载场景。
  * <p>
- * 内部职责委托给两个协作类：环境状态系统（快照捕获/恢复）由 {@link EnvStateManager}
- * 持有，附件访问作用域与 reset 实体替换由 {@link AgentMobLifecycle} 执行，本类只保留
- * 身份、组件装配与 RL 主流程的编排。
+ * 环境状态基线（自持生效范围，快照捕获/恢复/再捕获均在
+ * {@link EnvStateSnapshot} 上进行）是构造期创建的不可变字段；附件访问作用域与
+ * reset 实体替换由 {@link AgentMobLifecycle} 执行，本类只保留身份、组件装配与
+ * RL 主流程的编排。
  */
 public abstract class AbstractMcEnv implements McEnv {
     /** reset options：是否在 reset 后和相邻动作之间的空闲期禁用原版 AI。 */
@@ -69,14 +74,12 @@ public abstract class AbstractMcEnv implements McEnv {
     private boolean disableVanillaAi;
     private boolean allowMultipleActions = true;
     private boolean closed;
-    /** 场景存档注入的 preset options：仅合并进首个 reset（当次 options 覆盖 preset），随后清空。 */
+    /** 场景存档注入的 preset options：合并进下一次 reset（当次 options 覆盖 preset），随后清空。 */
     private Map<String, Object> scenarioPresetOptions = Map.of();
-    /** 冻结基线那次 reset 的生效 options（空范围环境无基线可冻结，记录最近一次 reset 的），场景存档用。 */
-    private Map<String, Object> frozenOptions = Map.of();
-    /** 场景内容已由场景存档放置（首个 reset 跳过硬编码场景搭建）。 */
-    private boolean scenarioScenePlaced;
-    /** 环境状态管理器：状态系统（原世界快照、完整基线、初始实体快照）的全部持有状态与操作。 */
-    private final EnvStateManager stateManager;
+    /** 最近一次 reset 的生效 options（场景保存回放用）；未 reset 过为空 Map。 */
+    private Map<String, Object> lastResetOptions = Map.of();
+    /** 环境状态基线（自持生效范围）：构造期一次性创建，此后不可变。 */
+    private final EnvStateSnapshot baseline;
     /** 受控实体生命周期：附件访问作用域与 reset 实体替换。 */
     private final AgentMobLifecycle mobLifecycle;
 
@@ -85,38 +88,54 @@ public abstract class AbstractMcEnv implements McEnv {
         return this.envTypeId.toString();
     }
 
+    /** 仅装配动作/观测组件的最小环境（无场景，仅捕获 agent，测试内嵌环境用）。 */
     protected AbstractMcEnv(
         Identifier envTypeId,
         Mob mob,
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents
     ) {
-        this(envTypeId, mob, actionComponentFactories, observationComponents, java.util.List.of());
+        this(envTypeId, mob, actionComponentFactories, observationComponents, List.of(),
+            null);
     }
 
     /**
-     * 创建带显式 Mob 附件访问声明的环境。
+     * 创建环境的主构造器：显式场景源在构造期解码为完整基线，区域和实体管理由文件决定。
+     * 未提供场景时只捕获当前 agent，世界范围为空；不加载任何默认或内置场景。
      *
      * @param envTypeId 环境类型注册 ID
-     * @param mob 受控 Mob
+     * @param mob 受控 Mob（须位于服务端世界）
      * @param actionComponentFactories 动作组件工厂
      * @param observationComponents 观测组件工厂
      * @param attachmentSpecs 当前环境允许访问的附件描述器
+     * @param scenarioSource 显式完整场景；null 表示已有 Mob 挂载，仅捕获 agent
      */
     protected AbstractMcEnv(
         Identifier envTypeId,
         Mob mob,
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents,
-        Collection<? extends MobAttachmentSpec<?>> attachmentSpecs
+        Collection<? extends MobAttachmentSpec<?>> attachmentSpecs,
+        @Nullable ScenarioStore.LoadedScenario scenarioSource
     ) {
-        this(
-            envTypeId,
-            mob,
-            new ActionDispatcher(mob, actionComponentFactories),
-            new ObservationComposer(mob, observationComponents),
-            attachmentSpecs
-        );
+        this.envTypeId = envTypeId;
+        this.envId = UUID.randomUUID();
+        this.actionController = new ActionDispatcher(mob, actionComponentFactories);
+        this.observationCreator = new ObservationComposer(mob, observationComponents);
+        // 协作类创建顺序等价原内联顺序：激活附件作用域 → 建状态基线 → 建运行时。
+        this.mobLifecycle = new AgentMobLifecycle(mob, List.copyOf(attachmentSpecs));
+        if (!(mob.level() instanceof ServerLevel level)) {
+            throw new IllegalArgumentException("GymCraft environments require a server-level Mob: " + envTypeId);
+        }
+        this.baseline = scenarioSource == null
+            ? EnvStateSnapshot.capture(level, mob, null, false)
+            : ScenarioWorldCodec.decode(level, scenarioSource, mob);
+        if (scenarioSource != null) {
+            // 场景源的 preset options 作为首次 reset 的默认值（当次 reset options 覆盖 preset）
+            this.scenarioPresetOptions = ScenarioWorldCodec.options(scenarioSource.definition());
+        }
+        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
+        NeoForge.EVENT_BUS.register(this.agentRuntime);
     }
 
     /**
@@ -162,29 +181,6 @@ public abstract class AbstractMcEnv implements McEnv {
         return this.observationCreator.getComponent(factory);
     }
 
-    protected AbstractMcEnv(Identifier envTypeId, Mob mob, ActionDispatcher actionController, ObservationComposer observationCreator) {
-        this(envTypeId, mob, actionController, observationCreator, java.util.List.of());
-    }
-
-    /** 使用已构建组件与显式附件声明初始化环境。 */
-    protected AbstractMcEnv(
-        Identifier envTypeId,
-        Mob mob,
-        ActionDispatcher actionController,
-        ObservationComposer observationCreator,
-        Collection<? extends MobAttachmentSpec<?>> attachmentSpecs
-    ) {
-        this.envTypeId = envTypeId;
-        this.envId = UUID.randomUUID();
-        this.actionController = actionController;
-        this.observationCreator = observationCreator;
-        // 协作类创建顺序等价原内联顺序：激活附件作用域 → 捕获初始实体快照 → 建运行时。
-        this.mobLifecycle = new AgentMobLifecycle(mob, List.copyOf(attachmentSpecs));
-        this.stateManager = new EnvStateManager(mob, this.envId, this::stateScope, this::stateRestoreMode);
-        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
-        NeoForge.EVENT_BUS.register(this.agentRuntime);
-    }
-
     @Override
     public ResetResponse reset(Integer seed, Map<String, Object> options) {
         this.ensureOpen();
@@ -200,7 +196,7 @@ public abstract class AbstractMcEnv implements McEnv {
     public StepResponse step(List<ProtoMcAction> actions, float timeoutSeconds) {
         this.ensureReady();
         RuntimeStepResult result = this.agentRuntime.step(actions, timeoutSeconds);
-        Map<String, Object> info = new java.util.LinkedHashMap<>(this.createStepInfo(result.observation()));
+        Map<String, Object> info = new LinkedHashMap<>(this.createStepInfo(result.observation()));
         info.put("action_state", Map.of(
             "status", result.actionState().status().name().toLowerCase(),
             "description", result.actionState().description(),
@@ -261,83 +257,51 @@ public abstract class AbstractMcEnv implements McEnv {
         );
     }
 
-    /** 关闭环境与运行时，恢复原世界并撤销仅属于本环境实例的可视化订阅。 */
+    /**
+     * 关闭环境与运行时并撤销仅属于本环境实例的可视化订阅。不做世界恢复——已物化的
+     * 场景与训练痕迹保留在世界中，由外部负责清理。
+     */
     @Override
     public void close() {
         if (this.closed) {
             return;
         }
         // 先撤销本环境的可视化订阅（内部转交服务端线程，捕获实例防止误删同 UUID 新环境的订阅）。
-        io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.close(this.mob(), this);
+        VisualizationService.close(this.mob(), this);
         this.agentRuntime.clear();
         // 附件访问权必须在组件释放清算完成后撤销（清算经物品栏布局读取背包附件）。
         this.mobLifecycle.deactivate(this.mob());
         NeoForge.EVENT_BUS.unregister(this.agentRuntime);
-        this.stateManager.restoreOriginalWorld(this.mob().getUUID());
         this.closed = true;
     }
 
     /**
-     * 环境状态范围：环境占用的世界区域与是否捕获区域内实体。
-     * <p>
-     * 默认空范围——不做世界快照，reset 只重建 agent 实体（等价引入状态系统前的行为）。
-     * 占用世界的任务环境应覆盖此方法；范围在首个 reset 冻结基线后必须保持稳定。
-     * </p>
+     * 生效状态区域的只读视图，供可视化等环境外消费者读取：场景环境来自场景文件
+     * （scenario.nbt 单区域定义），无场景时为空区域，reset 仅重建 agent；
+     * 构造期一次性确定，此后不变；空区域（不占用世界）为 null。
      *
-     * @return 环境状态范围
+     * @return 当前生效的环境占用区域；空区域环境为 null
      */
-    protected EnvStateScope stateScope() {
-        return EnvStateScope.empty();
+    @Nullable
+    public final BoundingBox stateRegion() {
+        return this.baseline.region();
     }
 
     /**
-     * 环境状态范围的只读视图，供可视化等环境外消费者读取；子类仍经
-     * {@link #stateScope()} 覆盖声明。范围可能在首个 reset 才随布局选项确定，
-     * 调用方不应缓存结果。
+     * 生效状态区域的 AABB（闭区间方块盒转半开区间，max 端 +1）。场景环境的越界/
+     * 查询几何一律经本方法现算，不存布局副本；空区域为 null。
      *
-     * @return 当前环境状态范围
+     * @return 区域 AABB；空区域环境为 null
      */
-    public final EnvStateScope stateScopeView() {
-        return this.stateScope();
-    }
-
-    /**
-     * 方块恢复模式：默认差异恢复（只写回变更位置）。
-     *
-     * @return 恢复模式
-     */
-    protected StateRestoreMode stateRestoreMode() {
-        return StateRestoreMode.DIFF;
-    }
-
-    /**
-     * 在首次修改世界前捕获原世界方块快照，close 时恢复。空范围或已捕获时不做事。
-     * <p>
-     * 调用时机约束：必须早于任何场景搭建（区域在捕获后发生的修改才会被 close 还原）。
-     * 区域在构造期即可确定的环境在构造器尾部调用；区域依赖首个 reset 的
-     * 布局选项时在 resetMob 的场景搭建分支开头调用。
-     * </p>
-     *
-     * @param level 服务端世界
-     */
-    protected final void captureOriginalWorld(ServerLevel level) {
-        this.stateManager.captureOriginalWorld(level);
-    }
-
-    /**
-     * @return 状态基线是否已冻结（首个 reset 的场景搭建完成后冻结，此后 reset 走快照恢复）
-     */
-    protected final boolean isStateBaselineFrozen() {
-        return this.stateManager.isBaselineFrozen();
+    @Nullable protected final AABB scopeAabb() {
+        BoundingBox region = this.stateRegion();
+        return region == null ? null : RegionEntitySnapshot.toAabb(region);
     }
 
     /**
      * 每回合环境逻辑：清理脑记忆/导航（基类部分），子类叠加计数器归零、选项重读与
-     * 快照无法承载的实体补丁（如不随 NBT 序列化的脑记忆）。
-     * <p>
-     * 占用世界区域的环境（{@link #stateScope()} 非空）只在首个 reset（基线冻结前）
-     * 搭建场景；基线冻结后场景由状态快照恢复，本方法不再触碰世界。
-     * </p>
+     * 快照无法承载的实体补丁（如不随 NBT 序列化的脑记忆）。世界内容由状态基线恢复，
+     * 本方法不应再触碰世界场景。
      */
     protected void resetMob(Mob mob, Integer seed, Map<String, Object> options) {
         mob.getNavigation().stop();
@@ -350,12 +314,11 @@ public abstract class AbstractMcEnv implements McEnv {
 
     /**
      * 环境侧重置（由 runtime 在服务端 tick 线程经 {@code ResetHandler} 回调）的编排：
-     * 恢复状态基线、替换受控实体（含附件作用域迁移），最后执行每回合逻辑
-     * （场景分支、冻结基线、选项应用）。
+     * 恢复状态基线（场景环境的场景内容在此物化）、替换受控实体（含附件作用域迁移），
+     * 最后执行每回合逻辑（选项应用与计数器归零）。
      * <p>
      * 顺序约束由协作类保证：旧实体的组件会话已由 runtime 先行释放；背包附件受访问
-     * 作用域门控，故 {@code clearAllItems} 必须先于 scope 撤销，新实体的 scope 激活
-     * 必须先于 {@link #resetAgent} 的场景搭建分支（如发放补给）。
+     * 作用域门控，故 {@code clearAllItems} 必须先于 scope 撤销。
      * </p>
      *
      * @param currentMob 当前（待替换）实体
@@ -364,28 +327,24 @@ public abstract class AbstractMcEnv implements McEnv {
      * @return 重建后已加入世界的实体
      */
     private Mob resetEnvironment(Mob currentMob, Integer seed, Map<String, Object> options) {
-        Mob newMob = this.mobLifecycle.replace(currentMob, this.stateManager.restoreForReset(currentMob));
+        Mob newMob = this.mobLifecycle.replace(currentMob, this.baseline.restoreForReset(currentMob));
         this.resetAgent(newMob, seed, options);
         return newMob;
     }
 
-    /** 应用通用 reset 行为：合并场景 preset options、场景分支、冻结状态基线，最后提交动作间空闲期 AI 选项。 */
+    /** 应用通用 reset 行为：合并场景 preset options、执行每回合逻辑、记录生效 options，最后提交动作间空闲期 AI 选项。 */
     protected final void resetAgent(Mob mob, Integer seed, Map<String, Object> options) {
         Map<String, Object> effective = options;
         if (!this.scenarioPresetOptions.isEmpty()) {
-            // 场景存档的 preset options 只合并进首个 reset；当次 reset options 覆盖 preset
+            // 场景存档的 preset options 作为默认值；当次 reset options 覆盖 preset
             effective = new LinkedHashMap<>(this.scenarioPresetOptions);
             effective.putAll(options);
             this.scenarioPresetOptions = Map.of();
         }
-        if (!this.isStateBaselineFrozen()) {
-            // 本次 reset 将冻结基线：记录生效 options 供场景存档复现布局
-            this.frozenOptions = Collections.unmodifiableMap(new LinkedHashMap<>(effective));
-        }
+        this.lastResetOptions = Collections.unmodifiableMap(new LinkedHashMap<>(effective));
         boolean requestedDisableVanillaAi = parseDisableVanillaAi(effective);
         boolean requestedAllowMultipleActions = parseAllowMultipleActions(effective);
         this.resetMob(mob, seed, effective);
-        this.stateManager.freezeBaseline(mob);
         this.agentRuntime.setDisableVanillaAi(requestedDisableVanillaAi);
         this.agentRuntime.setAllowMultipleActions(requestedAllowMultipleActions);
         this.disableVanillaAi = requestedDisableVanillaAi;
@@ -393,49 +352,39 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     /**
-     * 注入场景存档的 preset options：合并进首个 reset（当次 reset options 按键覆盖 preset）。
+     * 注入场景存档的 preset options：合并进下一次 reset（当次 reset options 按键覆盖 preset）。
      *
      * @param options 场景存档中保存的生效 options
-     * @throws IllegalStateException 基线已冻结（首个 reset 已完成）时抛出
      */
     public void setScenarioPresetOptions(Map<String, Object> options) {
-        if (this.isStateBaselineFrozen()) {
-            throw new IllegalStateException("Scenario preset options must be applied before the first reset: " + this.envId);
-        }
         this.scenarioPresetOptions = Collections.unmodifiableMap(new LinkedHashMap<>(options));
     }
 
     /**
-     * @return 冻结基线那次 reset 的生效 options（场景存档用）；未 reset 过为空 Map
+     * @return 最近一次 reset 的生效 options（场景保存回放用）；未 reset 过为空 Map
      */
-    public Map<String, Object> frozenOptionsView() {
-        return this.frozenOptions;
+    public Map<String, Object> lastResetOptionsView() {
+        return this.lastResetOptions;
     }
 
     /**
-     * @return 已冻结的状态基线（场景存档序列化入口）；未冻结时为 null
+     * @return 状态基线（场景序列化与 UUID 追踪等运行时引用用）；构造期即非空
      */
-    @Nullable public EnvStateSnapshot baselineSnapshot() {
-        return this.stateManager.baseline();
-    }
-
-    /** 标记场景内容已由场景存档放置：首个 reset 跳过硬编码场景搭建，直接冻结已放置内容为基线。 */
-    public void markScenarioScenePlaced() {
-        this.scenarioScenePlaced = true;
+    public EnvStateSnapshot baselineSnapshot() {
+        return this.baseline;
     }
 
     /**
-     * @return 首个 reset 是否需要执行硬编码场景搭建（场景存档加载后为 false）
+     * 对当前世界与 agent 立即取一次完整状态快照（场景保存用，不要求环境 reset 过）。
+     *
+     * @return 当前时刻的完整状态快照
      */
-    protected final boolean shouldBuildScene() {
-        return !this.scenarioScenePlaced;
-    }
-
-    /**
-     * 场景存档加载完成后的补丁钩子：场景内容放置与环境创建完成后立即在服务端线程调用。
-     * 默认空实现；需要重建运行时引用（如按 UUID 追踪的区域实体）的环境应覆盖。
-     */
-    public void onScenarioLoaded() {
+    public EnvStateSnapshot captureCurrentState() {
+        Mob mob = this.mob();
+        if (!(mob.level() instanceof ServerLevel level)) {
+            throw new IllegalStateException("Cannot capture environment state outside a server level: " + this.envId);
+        }
+        return this.baseline.recapture(level, mob);
     }
 
     protected double computeReward(ProtoMcObservation observation) {

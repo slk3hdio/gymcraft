@@ -29,12 +29,14 @@ import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.IronGolemWardenEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.IronMiningEnv;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 
 /**
  * 环境状态基线（{@code gym/state}）的跨 reset 恢复测试。
  * <p>
- * 首个 reset 搭建场景并冻结基线，第二个 reset 起走快照恢复路径；测试在两次 reset
- * 之间注入世界破坏（挖方块、放方块、杀实体、丢掉落物），断言基线恢复把它们全部回滚。
+ * 基线在环境构造期从场景文件解码，首个 reset 物化场景，第二个 reset 起走快照
+ * 恢复路径；测试在两次 reset 之间注入世界破坏（挖方块、放方块、杀实体、丢掉落物），
+ * 断言基线恢复把它们全部回滚。
  * </p>
  */
 public final class EnvStateGameTests {
@@ -50,7 +52,8 @@ public final class EnvStateGameTests {
     public static void blockRollbackAcrossResets(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         BlockPos origin = BlockPos.containing(mob.position());
-        IronMiningEnv env = new IronMiningEnv(testId("block_rollback"), mob);
+        IronMiningEnv env = new IronMiningEnv(testId("block_rollback"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_mining").orElseThrow());
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
@@ -87,7 +90,8 @@ public final class EnvStateGameTests {
     public static void entityRollbackAcrossResets(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         BlockPos origin = BlockPos.containing(mob.position());
-        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("entity_rollback"), mob);
+        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("entity_rollback"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_golem_warden").orElseThrow());
         AtomicReference<UUID> baselineWarden = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
@@ -142,7 +146,8 @@ public final class EnvStateGameTests {
     public static void itemEntitiesClearedAcrossResets(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         BlockPos origin = BlockPos.containing(mob.position());
-        IronMiningEnv env = new IronMiningEnv(testId("item_cleanup"), mob);
+        IronMiningEnv env = new IronMiningEnv(testId("item_cleanup"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_mining").orElseThrow());
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
@@ -180,7 +185,8 @@ public final class EnvStateGameTests {
     public static void wardenBaselineResetKeepsSurfaced(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         BlockPos origin = BlockPos.containing(mob.position());
-        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("warden_no_dig"), mob);
+        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("warden_no_dig"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_golem_warden").orElseThrow());
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {

@@ -66,12 +66,17 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("scenario_parkour_round_trip", () -> ScenarioGameTests::parkourSaveSpawnRoundTrip);
         TEST_FUNCTIONS.register("scenario_warden_relocation", () -> ScenarioGameTests::wardenRelocation);
         TEST_FUNCTIONS.register("scenario_mount_auto_resets", () -> ScenarioGameTests::mountAutoResets);
+        TEST_FUNCTIONS.register("scenario_immediate_capture", () -> ScenarioGameTests::immediateCaptureRoundTrip);
         TEST_FUNCTIONS.register("scenario_store_edges", () -> ScenarioGameTests::storeEdgeCases);
+        TEST_FUNCTIONS.register("scenario_codec_mca", () -> ScenarioGameTests::codecMcaRoundTrip);
+        TEST_FUNCTIONS.register("scenario_region_restore", () -> ScenarioGameTests::regionRestore);
+        TEST_FUNCTIONS.register("scenario_bundled_isolation", () -> ScenarioGameTests::bundledIsolation);
+        TEST_FUNCTIONS.register("scenario_attach_existing_mob", () -> ScenarioGameTests::attachExistingMob);
 
         // ===== 任务环境端到端 =====
-        TEST_FUNCTIONS.register("iron_mining_reset_restore", () -> IronMiningEnvGameTests::resetAndCloseRestoreArena);
+        TEST_FUNCTIONS.register("iron_mining_reset_restore", () -> IronMiningEnvGameTests::resetMaterializesScenario);
         TEST_FUNCTIONS.register("iron_mining_progression", () -> IronMiningEnvGameTests::completeToolProgression);
-        TEST_FUNCTIONS.register("iron_golem_warden_reset_restore", () -> IronGolemWardenEnvGameTests::resetAndCloseRestoreArena);
+        TEST_FUNCTIONS.register("iron_golem_warden_reset_restore", () -> IronGolemWardenEnvGameTests::resetMaterializesScenario);
         TEST_FUNCTIONS.register("iron_golem_warden_victory", () -> IronGolemWardenEnvGameTests::golemSpawnHealAndVictory);
 
         // ===== PlayerSim 受控实体 =====

@@ -17,7 +17,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -27,20 +26,16 @@ import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
-import io.github.mousemeya.gymcraft.gym.state.EnvStateScope;
-import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
-import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
 
 /**
  * 从空物品栏开始完成木材、工作台、木镐、石镐与粗铁获取链路的任务环境。
  * <p>
- * 环境在创建位置周围占用固定 9x9 训练区域：构造时捕获原世界（close 时经基类恢复），
- * 首个 reset 搭建确定性资源布局并冻结状态基线，此后 reset 由 {@code gym/state}
- * 状态基线恢复（方块差异写回 + 区域实体清除），close 恢复原世界。
- * 经场景存档（{@code /gymcraft env save/load}）加载的环境首个 reset 跳过硬编码搭建，
- * 直接冻结已放置内容为基线；硬编码搭建路径（{@link #buildScene}）已废弃。
+ * 场景创建时，训练区域、资源布局及 agent 装备全部来自显式场景文件。
+ * 无场景挂载仅管理现有 agent，不扫描训练区域，也不启用越界或铁矿丢失判定。
+ * reset 恢复对应状态基线；close 不恢复世界。
  * 任务状态只从真实世界与 Agent 统一物品栏推导，不依赖 Python 客户端自行判分。
  * </p>
  */
@@ -50,16 +45,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
     /** 默认决策步数上限。 */
     public static final int DEFAULT_MAX_STEPS = 128;
 
-    private static final int ARENA_RADIUS = 4;
-    private static final int ARENA_BOTTOM_OFFSET = -1;
-    private static final int ARENA_TOP_OFFSET = 3;
-
     private final ServerLevel level;
-    private final BlockPos origin;
-    private final AABB arenaBounds;
-    private final List<BlockPos> logPositions;
-    private final List<BlockPos> stonePositions;
-    private final BlockPos ironOrePosition;
     private final EnumMap<Milestone, Boolean> milestones = new EnumMap<>(Milestone.class);
 
     private int maxSteps = DEFAULT_MAX_STEPS;
@@ -67,12 +53,22 @@ public final class IronMiningEnv extends AbstractMcEnv {
     private StepEvaluation evaluation = StepEvaluation.initial();
 
     /**
-     * 创建并绑定固定训练区域、捕获原世界快照，但在首个 reset 前不修改世界。
+     * 在现有 Mob 上创建采矿环境，仅捕获 agent 基线，不管理世界区域。
      *
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob
      */
     public IronMiningEnv(Identifier envTypeId, Mob mob) {
+        this(envTypeId, mob, null);
+    }
+
+    /**
+     * 根据显式场景创建环境；未提供场景时仅挂载当前 Mob。
+     * @param envTypeId 环境类型注册 ID
+     * @param mob 服务端世界中的受控 Mob
+     * @param scenario 完整场景；null 表示仅捕获 agent，状态范围不含方块及周围实体
+     */
+    public IronMiningEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
         super(
             envTypeId,
             mob,
@@ -95,36 +91,13 @@ public final class IronMiningEnv extends AbstractMcEnv {
                 ObservationCreators.MENU.get(),
                 ObservationCreators.WORLD.get()
             ),
-            List.of(MobAttachments.AGENT_BACKPACK)
+            List.of(MobAttachments.AGENT_BACKPACK),
+            scenario
         );
         if (!(mob.level() instanceof ServerLevel serverLevel)) {
             throw new IllegalArgumentException("iron_mining requires a server-level Mob");
         }
         this.level = serverLevel;
-        this.origin = BlockPos.containing(mob.position());
-        this.arenaBounds = new AABB(
-            this.origin.getX() - ARENA_RADIUS,
-            this.origin.getY() + ARENA_BOTTOM_OFFSET,
-            this.origin.getZ() - ARENA_RADIUS,
-            this.origin.getX() + ARENA_RADIUS + 1,
-            this.origin.getY() + ARENA_TOP_OFFSET + 1,
-            this.origin.getZ() + ARENA_RADIUS + 1
-        );
-        this.logPositions = List.of(
-            this.origin.offset(2, 0, -1),
-            this.origin.offset(2, 0, 0),
-            this.origin.offset(2, 0, 1),
-            this.origin.offset(3, 0, 1)
-        );
-        this.stonePositions = List.of(
-            this.origin.offset(-2, 0, -2),
-            this.origin.offset(-2, 0, -1),
-            this.origin.offset(-2, 0, 0),
-            this.origin.offset(-2, 0, 1),
-            this.origin.offset(-2, 0, 2)
-        );
-        this.ironOrePosition = this.origin.offset(0, 0, 3);
-        this.captureOriginalWorld(serverLevel);
         this.resetMilestones();
 
         // 紧凑训练场中的方块掉落常停在方块边缘；略微放宽距离可避免寻路在邻格中心提前结束。
@@ -132,58 +105,20 @@ public final class IronMiningEnv extends AbstractMcEnv {
         pickUp.setPickupReach(2.0);
     }
 
-    /** 环境状态范围：整个训练区域（方块 + 区域实体进入基线）。 */
-    @Override
-    protected EnvStateScope stateScope() {
-        return EnvStateScope.of(new BoundingBox(
-            (int) this.arenaBounds.minX, (int) this.arenaBounds.minY, (int) this.arenaBounds.minZ,
-            (int) this.arenaBounds.maxX - 1, (int) this.arenaBounds.maxY - 1, (int) this.arenaBounds.maxZ - 1));
-    }
-
     /**
-     * 首个 reset 确定训练场并冻结基线（场景存档路径跳过硬编码搭建，直接冻结已放置内容），
-     * 每回合重置计数器与里程碑。
+     * 每回合重置计数器与里程碑（场景内容与 agent 由状态基线恢复）。
      *
      * @param mob reset 后的新 Mob 实体
-     * @param seed 未用于固定布局的可选种子
+     * @param seed 未使用的可选种子
      * @param options reset 配置
      */
     @Override
     protected void resetMob(Mob mob, Integer seed, Map<String, Object> options) {
-        int requestedMaxSteps = positiveInt(options, MAX_STEPS_OPTION, DEFAULT_MAX_STEPS);
         super.resetMob(mob, seed, options);
-        if (!this.isStateBaselineFrozen()) {
-            if (this.shouldBuildScene()) {
-                this.buildScene(mob);
-            }
-            mob.snapTo(
-                this.origin.getX() + 0.5,
-                this.origin.getY(),
-                this.origin.getZ() + 0.5,
-                mob.getYRot(),
-                0.0F
-            );
-            mob.setDeltaMovement(Vec3.ZERO);
-        }
-        this.maxSteps = requestedMaxSteps;
+        this.maxSteps = positiveInt(options, MAX_STEPS_OPTION, DEFAULT_MAX_STEPS);
         this.steps = 0;
         this.evaluation = StepEvaluation.initial();
         this.resetMilestones();
-    }
-
-    /**
-     * 硬编码场景搭建：清场、清空物品栏并写入固定资源布局（仅旧用法首个 reset 调用一次）。
-     *
-     * @deprecated 由场景存档（{@code /gymcraft env save/load}，{@code gym/scenario} 包）取代；
-     * 仅为未使用场景存档的用法保留，将在未来版本移除。
-     * @param mob 当前受控 Mob
-     */
-    @Deprecated
-    private void buildScene(Mob mob) {
-        RegionEntitySnapshot.discardRegionEntities(
-            this.level, this.stateScope().entityRegions(), mob.getUUID());
-        AgentInventoryLayout.clearAllItems(mob);
-        this.buildArenaTemplate();
     }
 
     /**
@@ -272,7 +207,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
             failureReason = "agent_dead";
         } else if (!this.isInsideArena(mob.position())) {
             failureReason = "out_of_bounds";
-        } else if (!success && !this.level.getBlockState(this.ironOrePosition).is(Blocks.IRON_ORE)
+        } else if (this.stateRegion() != null && !success && !this.containsBlockInArena(Blocks.IRON_ORE)
             && !this.hasRawIronDrop()) {
             failureReason = "iron_lost";
         }
@@ -344,48 +279,21 @@ public final class IronMiningEnv extends AbstractMcEnv {
     private Map<String, Object> baseTaskInfo() {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("max_steps", this.maxSteps);
-        info.put("origin", serializePos(this.origin));
-        info.put("log_positions", serializePositions(this.logPositions));
-        info.put("stone_positions", serializePositions(this.stonePositions));
-        info.put("iron_ore_position", serializePos(this.ironOrePosition));
         return info;
     }
 
     /**
-     * 将固定模板写入训练区域（仅 {@link #buildScene} 调用一次）。
-     *
-     * @deprecated 硬编码场景搭建的一部分，随 {@link #buildScene} 一并废弃。
-     */
-    @Deprecated
-    private void buildArenaTemplate() {
-        for (int x = -ARENA_RADIUS; x <= ARENA_RADIUS; x++) {
-            for (int z = -ARENA_RADIUS; z <= ARENA_RADIUS; z++) {
-                RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, ARENA_BOTTOM_OFFSET, z), Blocks.BEDROCK.defaultBlockState());
-                for (int y = 0; y < ARENA_TOP_OFFSET; y++) {
-                    RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, y, z), Blocks.AIR.defaultBlockState());
-                }
-                RegionBlockSnapshot.replaceWithoutDrops(this.level, this.origin.offset(x, ARENA_TOP_OFFSET, z), Blocks.BEDROCK.defaultBlockState());
-            }
-        }
-        for (BlockPos pos : this.logPositions) {
-            RegionBlockSnapshot.replaceWithoutDrops(this.level, pos, Blocks.OAK_LOG.defaultBlockState());
-        }
-        for (BlockPos pos : this.stonePositions) {
-            RegionBlockSnapshot.replaceWithoutDrops(this.level, pos, Blocks.STONE.defaultBlockState());
-        }
-        RegionBlockSnapshot.replaceWithoutDrops(this.level, this.ironOrePosition, Blocks.IRON_ORE.defaultBlockState());
-    }
-
-    /**
-     * 判断指定方块是否存在于训练区域。
+     * 判断指定方块是否存在于训练区域（范围取自场景 scope）。
      *
      * @param block 目标方块
      * @return 区域内至少存在一块时为 true
      */
     private boolean containsBlockInArena(Block block) {
+        AABB arena = this.scopeAabb();
+        if (arena == null) return false;
         for (BlockPos pos : BlockPos.betweenClosed(
-            this.origin.offset(-ARENA_RADIUS, 0, -ARENA_RADIUS),
-            this.origin.offset(ARENA_RADIUS, ARENA_TOP_OFFSET, ARENA_RADIUS)
+            BlockPos.containing(arena.minX, arena.minY, arena.minZ),
+            BlockPos.containing(arena.maxX - 1, arena.maxY - 1, arena.maxZ - 1)
         )) {
             if (this.level.getBlockState(pos).is(block)) {
                 return true;
@@ -400,9 +308,11 @@ public final class IronMiningEnv extends AbstractMcEnv {
      * @return 存在存活粗铁掉落物时为 true
      */
     private boolean hasRawIronDrop() {
+        AABB arena = this.scopeAabb();
+        if (arena == null) return false;
         return !this.level.getEntitiesOfClass(
             ItemEntity.class,
-            this.arenaBounds,
+            arena,
             item -> item.isAlive() && item.getItem().is(Items.RAW_IRON)
         ).isEmpty();
     }
@@ -414,8 +324,10 @@ public final class IronMiningEnv extends AbstractMcEnv {
      * @return 位于边界内时为 true
      */
     private boolean isInsideArena(Vec3 position) {
-        return position.x >= this.arenaBounds.minX && position.x < this.arenaBounds.maxX
-            && position.z >= this.arenaBounds.minZ && position.z < this.arenaBounds.maxZ;
+        AABB arena = this.scopeAabb();
+        if (arena == null) return true;
+        return position.x >= arena.minX && position.x < arena.maxX
+            && position.z >= arena.minZ && position.z < arena.maxZ;
     }
 
     /**
@@ -446,30 +358,6 @@ public final class IronMiningEnv extends AbstractMcEnv {
             throw new IllegalArgumentException("Reset option '" + key + "' must be a positive integer");
         }
         return number.intValue();
-    }
-
-    /**
-     * 将方块坐标转为 JSON 友好的对象。
-     *
-     * @param pos 方块坐标
-     * @return x/y/z 字段映射
-     */
-    private static Map<String, Object> serializePos(BlockPos pos) {
-        return Map.of("x", pos.getX(), "y", pos.getY(), "z", pos.getZ());
-    }
-
-    /**
-     * 将坐标列表转为 JSON 友好的对象列表。
-     *
-     * @param positions 方块坐标列表
-     * @return 序列化后的坐标列表
-     */
-    private static List<Map<String, Object>> serializePositions(List<BlockPos> positions) {
-        List<Map<String, Object>> result = new ArrayList<>(positions.size());
-        for (BlockPos pos : positions) {
-            result.add(serializePos(pos));
-        }
-        return List.copyOf(result);
     }
 
     /** 定义任务的有序里程碑、info 标识和首次完成奖励。 */
@@ -538,11 +426,12 @@ public final class IronMiningEnv extends AbstractMcEnv {
          *
          * @param envTypeId 环境类型注册 ID
          * @param mob 受控 Mob
+         * @param scenario 外部场景源（手动 env load；null = 内置资产）
          * @return 新环境实例
          */
         @Override
-        public IronMiningEnv create(Identifier envTypeId, Mob mob) {
-            return new IronMiningEnv(envTypeId, mob);
+        public IronMiningEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
+            return new IronMiningEnv(envTypeId, mob, scenario);
         }
     }
 }

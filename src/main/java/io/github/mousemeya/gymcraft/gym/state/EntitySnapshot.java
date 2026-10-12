@@ -1,4 +1,4 @@
-package io.github.mousemeya.gymcraft.gym.env;
+package io.github.mousemeya.gymcraft.gym.state;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;

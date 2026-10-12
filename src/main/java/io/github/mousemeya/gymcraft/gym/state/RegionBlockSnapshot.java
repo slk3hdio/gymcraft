@@ -1,7 +1,10 @@
 package io.github.mousemeya.gymcraft.gym.state;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+
+import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -12,6 +15,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
@@ -22,9 +26,8 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * <p>
  * 捕获按整段对齐：区域边界外、同属一个段的格子会一并拷贝，恢复时按区域逐格裁剪。
  * 必须全覆盖捕获——agent 可能在原空气格放置方块，恢复时靠基线中的空气记录擦除。
- * 恢复默认逐格差异比较（{@link StateRestoreMode#DIFF}）：BlockState 是注册表 interned
- * 引用，比较极廉价，写回量与实际变更成正比；{@link StateRestoreMode#FULL} 全量写回，
- * 作排障对照。
+ * 恢复始终逐格差异比较：BlockState 是注册表 interned 引用，比较极廉价，
+ * 写回量与实际变更成正比；方块状态一致时仍检查方块实体内容漂移。
  * </p>
  * <p>
  * 捕获与恢复都要求区域覆盖的区块已加载（{@code hasChunk} 守卫），否则直接抛错，
@@ -86,12 +89,62 @@ public final class RegionBlockSnapshot {
     }
 
     /**
-     * 把区域恢复到快照状态。
+     * 文件稀疏方块条目：绝对坐标、方块状态与可选的方块实体完整 NBT
+     * （场景存档 MCA 区块段解码路径的输入单元）。
+     */
+    public record BlockEntry(BlockPos pos, BlockState state, @Nullable CompoundTag blockEntityData) {
+    }
+
+    /**
+     * 从稀疏方块条目构造区域快照（场景存档解码路径）。
+     * <p>
+     * 区域范围内的全部区块段存储先建为空气，再写入提供的方块；条目未覆盖的格子
+     * 即基线空气，与 {@link #capture} 的全量捕获在差异恢复语义上等价——世界中
+     * 多出来的方块会被恢复流程清除。
+     * </p>
+     *
+     * @param containerFactory 区块段存储工厂（{@code PalettedContainerFactory.create(registryAccess)}）
+     * @param region 闭区间方块区域
+     * @param blocks 稀疏方块条目（绝对坐标，必须落在区域内）
+     * @return 区域快照
+     * @throws IllegalArgumentException 条目坐标落在区域外时
+     */
+    public static RegionBlockSnapshot of(
+        PalettedContainerFactory containerFactory,
+        BoundingBox region,
+        List<BlockEntry> blocks
+    ) {
+        Map<Long, LevelChunkSection> sections = new HashMap<>();
+        int minSectionY = region.minY() >> 4;
+        int maxSectionY = region.maxY() >> 4;
+        for (int chunkX = region.minX() >> 4; chunkX <= region.maxX() >> 4; chunkX++) {
+            for (int chunkZ = region.minZ() >> 4; chunkZ <= region.maxZ() >> 4; chunkZ++) {
+                for (int sectionY = minSectionY; sectionY <= maxSectionY; sectionY++) {
+                    sections.put(SectionPos.asLong(chunkX, sectionY, chunkZ), new LevelChunkSection(containerFactory));
+                }
+            }
+        }
+        Map<Long, CompoundTag> blockEntities = new HashMap<>();
+        for (BlockEntry entry : blocks) {
+            BlockPos pos = entry.pos();
+            if (!region.isInside(pos.getX(), pos.getY(), pos.getZ())) {
+                throw new IllegalArgumentException("Scenario block outside its region: " + pos + " not in " + region);
+            }
+            LevelChunkSection section = sections.get(SectionPos.asLong(pos.getX() >> 4, pos.getY() >> 4, pos.getZ() >> 4));
+            section.setBlockState(pos.getX() & 15, pos.getY() & 15, pos.getZ() & 15, entry.state());
+            if (entry.blockEntityData() != null) {
+                blockEntities.put(pos.asLong(), entry.blockEntityData());
+            }
+        }
+        return new RegionBlockSnapshot(region, Map.copyOf(sections), Map.copyOf(blockEntities));
+    }
+
+    /**
+     * 按差异把区域恢复到快照状态，仅写回变化的方块与方块实体。
      *
      * @param level 服务端世界
-     * @param mode DIFF 只写回变更位置；FULL 全量写回
      */
-    public void restore(ServerLevel level, StateRestoreMode mode) {
+    public void restore(ServerLevel level) {
         requireChunksLoaded(level, this.region);
         int minSectionY = this.region.minY() >> 4;
         int maxSectionY = this.region.maxY() >> 4;
@@ -107,10 +160,10 @@ public final class RegionBlockSnapshot {
                     }
                     LevelChunkSection current = chunk.getSection(level.getSectionIndexFromSectionY(sectionY));
                     // 空气段快速跳过：基线与现状都是全空气时段内不可能有差异
-                    if (mode == StateRestoreMode.DIFF && baseline.hasOnlyAir() && current.hasOnlyAir()) {
+                    if (baseline.hasOnlyAir() && current.hasOnlyAir()) {
                         continue;
                     }
-                    this.restoreSection(level, chunkX, sectionY, chunkZ, baseline, current, mode);
+                    this.restoreSection(level, chunkX, sectionY, chunkZ, baseline, current);
                 }
             }
         }
@@ -208,8 +261,8 @@ public final class RegionBlockSnapshot {
     }
 
     /**
-     * 逐格恢复单个区块段与区域的交集：DIFF 模式只写回与基线不一致的位置，
-     * 一致位置仍检查方块实体内容漂移；FULL 模式逐格写回。
+     * 逐格恢复单个区块段与区域的交集：只写回与基线不一致的位置，
+     * 一致位置仍检查方块实体内容漂移。
      *
      * @param level 服务端世界
      * @param chunkX 区块 X 坐标
@@ -217,7 +270,6 @@ public final class RegionBlockSnapshot {
      * @param chunkZ 区块 Z 坐标
      * @param baseline 基线段的深拷贝
      * @param current 世界当前段
-     * @param mode 恢复模式
      */
     private void restoreSection(
         ServerLevel level,
@@ -225,8 +277,7 @@ public final class RegionBlockSnapshot {
         int sectionY,
         int chunkZ,
         LevelChunkSection baseline,
-        LevelChunkSection current,
-        StateRestoreMode mode
+        LevelChunkSection current
     ) {
         int minX = Math.max(this.region.minX(), chunkX << 4);
         int maxX = Math.min(this.region.maxX(), (chunkX << 4) + 15);
@@ -241,7 +292,7 @@ public final class RegionBlockSnapshot {
                     BlockState baselineState = baseline.getBlockState(x & 15, y & 15, z & 15);
                     boolean blockChanged = !current.getBlockState(x & 15, y & 15, z & 15).equals(baselineState);
                     cursor.set(x, y, z);
-                    if (mode == StateRestoreMode.FULL || blockChanged) {
+                    if (blockChanged) {
                         this.writeBack(level, cursor, baselineState);
                     } else {
                         this.restoreBlockEntityIfDrifted(level, cursor, baselineState);

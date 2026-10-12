@@ -121,7 +121,7 @@ Minecraft 服务端启动后会同时启动 gRPC 服务，默认监听 `localhos
 
 1. 从创造模式的 GymCraft 标签页取得 **Environment Tool** 和 **UUID Copier**。
 2. 按住 Shift 滚动滚轮，选择 `simple_mob`、`parkour_mob`、`iron_mining`、`iron_golem_warden` 或 `general` 环境。
-3. 使用 Environment Tool 右键 Mob 创建环境；Shift + 右键移除环境。
+3. 使用 Environment Tool 右键已有 Mob 挂载环境；仅保存该 Mob 的基线，不加载场景或管理周围世界。Shift + 右键移除环境。
 4. 使用 UUID Copier 右键同一 Mob，取得 Python 连接所需的实体 UUID。
 
 也可以在服务器控制台或 RCON 中使用：
@@ -129,7 +129,10 @@ Minecraft 服务端启动后会同时启动 gRPC 服务，默认监听 `localhos
 ```text
 /gymcraft env create <target> [type]
 /gymcraft env remove <target>
+/gymcraft env load <name> [pos]
 ```
+
+`env create` 指定环境类型挂载已有 Mob；`env load` 从场景文件生成自带 agent、装备和世界区域，并自动首次 reset。加载优先使用同名磁盘场景，否则读取内置场景，例如 `/gymcraft env load iron_mining ~ ~ ~`。
 
 ### 3. 连接 Python 客户端
 

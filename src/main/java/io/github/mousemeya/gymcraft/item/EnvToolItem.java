@@ -21,7 +21,7 @@ import net.minecraft.world.item.component.CustomData;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 
 /**
- * 环境工具物品，用于为 Mob 创建、切换或移除 GymCraft 环境。
+ * 环境工具物品，用于在现有 Mob 上挂载、切换或移除 GymCraft 环境，不加载任何场景。
  * <p>
  * 实体右键由高优先级交互事件优先转发到本物品，确保村民等会主动消费右键的实体
  * 不会在环境绑定前打开自身界面；非 Mob 目标保持原版交互行为。
@@ -77,7 +77,7 @@ public class EnvToolItem extends Item {
     }
 
     /**
-     * 为目标 Mob 创建或移除环境。
+     * 为目标现有 Mob 挂载或移除环境；挂载仅捕获 agent，不管理周围世界。
      *
      * @param stack 当前环境工具物品栈
      * @param player 发起交互的玩家
@@ -101,7 +101,7 @@ public class EnvToolItem extends Item {
 
         String envType = getSelectedEnvType(stack);
         try {
-            EnvManager.create(envType, mob);
+            EnvManager.attach(envType, mob);
         } catch (IllegalArgumentException e) {
             player.sendSystemMessage(Component.translatable("message.gymcraft.error", e.getMessage()));
             return InteractionResult.SUCCESS;

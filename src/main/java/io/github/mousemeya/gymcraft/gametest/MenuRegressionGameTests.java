@@ -27,7 +27,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoOpenMenu;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSelfMenuTarget;
-import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
+import io.github.mousemeya.gymcraft.gym.state.EntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;

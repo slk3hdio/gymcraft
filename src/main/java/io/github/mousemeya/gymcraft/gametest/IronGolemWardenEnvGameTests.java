@@ -32,6 +32,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItem;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItemEntityTarget;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.envs.IronGolemWardenEnv;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyEntities;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
@@ -49,11 +50,12 @@ public final class IronGolemWardenEnvGameTests {
     }
 
     /**
-     * 验证 reset 重建战斗场、发放建材并生成 Warden，close 恢复原世界并清走任务实体。
+     * 验证 reset 物化战斗场、发放建材并生成 Warden；close 不做世界恢复（场景与
+     * 任务实体保留在世界，由外部清理）。
      *
      * @param helper GameTest 辅助对象
      */
-    public static void resetAndCloseRestoreArena(GameTestHelper helper) {
+    public static void resetMaterializesScenario(GameTestHelper helper) {
         BlockPos mobFloor = new BlockPos(5, 1, 5);
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, mobFloor);
         BlockPos origin = BlockPos.containing(mob.position());
@@ -62,7 +64,8 @@ public final class IronGolemWardenEnvGameTests {
         ChestBlockEntity chest = (ChestBlockEntity) helper.getLevel().getBlockEntity(originalChestPos);
         chest.setItem(0, new ItemStack(Items.DIAMOND, 3));
 
-        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("restore"), mob);
+        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("restore"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_golem_warden").orElseThrow());
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
             try {
@@ -104,13 +107,10 @@ public final class IronGolemWardenEnvGameTests {
                 "warden is missing the weakness effect");
 
             env.close();
-            assertTrue(helper, helper.getLevel().getBlockState(originalChestPos).is(Blocks.CHEST),
-                "close did not restore original chest: " + helper.getLevel().getBlockState(originalChestPos));
-            ChestBlockEntity restoredChest = (ChestBlockEntity) helper.getLevel().getBlockEntity(originalChestPos);
-            assertTrue(helper, restoredChest != null, "restored chest block entity missing");
-            assertEquals(helper, 3, restoredChest.getItem(0).getCount(), "restored chest content mismatch");
-            assertTrue(helper, helper.getLevel().getEntitiesOfClass(Warden.class, arenaBounds(origin)).isEmpty(),
-                "close did not remove the warden");
+            assertTrue(helper, helper.getLevel().getBlockState(origin.offset(0, -1, 0)).is(Blocks.BEDROCK),
+                "close must not restore the world (arena should remain)");
+            assertTrue(helper, helper.getLevel().getEntitiesOfClass(Warden.class, arenaBounds(origin)).size() == 1,
+                "close must not remove the warden (no world restore)");
             helper.succeed();
         });
     }
@@ -123,7 +123,8 @@ public final class IronGolemWardenEnvGameTests {
     public static void golemSpawnHealAndVictory(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         BlockPos origin = BlockPos.containing(mob.position());
-        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("victory"), mob);
+        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("victory"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_golem_warden").orElseThrow());
         AtomicReference<Throwable> failure = new AtomicReference<>();
         AtomicReference<StepResponse> golemStep = new AtomicReference<>();
         AtomicReference<StepResponse> healStep = new AtomicReference<>();

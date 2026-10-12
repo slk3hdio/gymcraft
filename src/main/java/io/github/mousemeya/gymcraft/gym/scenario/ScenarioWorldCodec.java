@@ -1,257 +1,493 @@
 package io.github.mousemeya.gymcraft.gym.scenario;
 
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-
-import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderGetter;
-import net.minecraft.core.IdMapper;
+import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ByteTag;
 import net.minecraft.nbt.DoubleTag;
-import net.minecraft.nbt.IntTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.NumericTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.EmptyBlockGetter;
-import net.minecraft.world.level.block.Block;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import io.github.mousemeya.gymcraft.gym.env.EntitySnapshot;
+import io.github.mousemeya.gymcraft.gym.state.EntitySnapshot;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 
 /**
- * 环境世界内容（world.nbt）与冻结基线（{@link EnvStateSnapshot}）之间的编解码。
- * <p>
- * 文件格式参考原版结构模板（{@link StructureTemplate}）：每个状态区域一个
- * {@code {size, palette, blocks, entities}} 模板块；方块逐格带相对坐标与调色板索引，
- * 方块实体 NBT 内嵌在方块条目上，区域实体挂在所属区域的 {@code entities} 列表。
- * 一切坐标相对场景原点（基线 agent 的方块坐标），场景文件因此与保存时的世界、
- * 位置无关，可在任意世界任意位置加载。规模上逐方块列表 + gzip 足以覆盖数个完整区块
- * 量级的区域。
- * </p>
- * <p>
- * 加载路径的方块与实体放置完全复用原版 {@link StructureTemplate#load} +
- * {@link StructureTemplate#placeInWorld}：实体自动剥离 UUID 重新分配、容器方块经
- * barrier 技巧抑制内容物掉落。
- * </p>
+ * 场景定义与世界内容的统一编解码器。定义使用 NBT，世界复用原版区块段调色板格式。
+ * 世界坐标以区域最小角归零，解码时按 agent 方块锚点平移；本类不读写文件、不修改世界。
+ * 调用方在服务端线程捕获快照，解码结果仅在环境 reset 时物化。
  */
 public final class ScenarioWorldCodec {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ScenarioWorldCodec.class);
+    public static final int FORMAT_VERSION = 2;
 
-    private ScenarioWorldCodec() {
-    }
-
-    /**
-     * 空世界内容（无区域），供空状态范围环境（simple_mob/general）的场景使用。
-     *
-     * @return 无区域的世界内容 NBT
-     */
-    public static CompoundTag empty() {
-        CompoundTag tag = new CompoundTag();
-        tag.put("regions", new ListTag());
-        return NbtUtils.addCurrentDataVersion(tag);
-    }
+    /** 工具类不允许实例化。 */
+    private ScenarioWorldCodec() {}
 
     /**
-     * 把冻结基线编码为世界内容 NBT。
-     *
-     * @param baseline 已冻结的环境状态基线
-     * @return world.nbt 内容
+     * 编码完整即时快照；区域边界之外的内容不进入存档。
+     * @param level 提供注册表的世界
+     * @param envType 环境注册 ID
+     * @param options 最近一次 reset 的生效选项
+     * @param state 即时状态快照
+     * @return 场景定义和局部区块 NBT
      */
-    public static CompoundTag encode(EnvStateSnapshot baseline) {
-        BlockPos origin = agentOrigin(baseline.agent());
-        ListTag regions = new ListTag();
-        for (RegionBlockSnapshot region : baseline.blocks()) {
-            regions.add(encodeRegion(region, origin, baseline.entities()));
+    public static ScenarioStore.LoadedScenario encode(ServerLevel level, String envType, Map<String, Object> options, EnvStateSnapshot state) {
+        CompoundTag definition = NbtUtils.addCurrentDataVersion(new CompoundTag());
+        definition.putInt("version", FORMAT_VERSION);
+        definition.putString("env_type", envType);
+        definition.put("options", encodeMap(options));
+        CompoundTag agent = state.agent().data().copy();
+        agent.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(state.agent().type()).toString());
+        agent.remove("UUID");
+        definition.put("agent", agent);
+        definition.putBoolean("manage_entities", state.entities() != null);
+        Map<ChunkPos, CompoundTag> chunks = new LinkedHashMap<>();
+        if (state.blocks() == null) {
+            return new ScenarioStore.LoadedScenario(definition, chunks);
         }
-        CompoundTag tag = new CompoundTag();
-        putIntList(tag, "origin", origin.getX(), origin.getY(), origin.getZ());
-        tag.put("regions", regions);
-        return NbtUtils.addCurrentDataVersion(tag);
-    }
-
-    /**
-     * 以锚点（场景原点在新世界的位置，= agent 方块坐标）放置世界内容。
-     * <p>
-     * 顺序约束：先整体校验目标区域区块已加载（未加载直接抛错，不产生半份场景），
-     * 再按状态系统同一过滤器清除目标区域现存实体（豁免 agent 与真实玩家），最后逐区域
-     * 走原版模板放置（含区域实体生成）。
-     * </p>
-     *
-     * @param level 目标服务端世界
-     * @param world 世界内容 NBT（{@link #encode}/{@link #empty} 产物）
-     * @param anchor 场景原点在新世界的方块坐标
-     * @param agentUuid 清场时豁免的受控 agent UUID
-     */
-    public static void place(ServerLevel level, CompoundTag world, BlockPos anchor, UUID agentUuid) {
-        List<CompoundTag> regions = world.getListOrEmpty("regions").compoundStream().toList();
-        if (regions.isEmpty()) {
-            return;
-        }
-        List<BoundingBox> targetBoxes = regions.stream().map(tag -> targetBox(tag, anchor)).toList();
-        for (BoundingBox box : targetBoxes) {
-            RegionBlockSnapshot.requireChunksLoaded(level, box);
-        }
-        RegionEntitySnapshot.discardRegionEntities(level,
-            targetBoxes.stream()
-                .map(box -> new AABB(
-                    box.minX(), box.minY(), box.minZ(),
-                    box.maxX() + 1.0, box.maxY() + 1.0, box.maxZ() + 1.0))
-                .toList(),
-            agentUuid);
-        HolderGetter<Block> blockLookup = level.registryAccess().lookupOrThrow(Registries.BLOCK);
-        for (CompoundTag regionTag : regions) {
-            BlockPos corner = targetCorner(regionTag, anchor);
-            StructureTemplate template = new StructureTemplate();
-            template.load(blockLookup, regionTag);
-            template.placeInWorld(level, corner, corner, new StructurePlaceSettings(), RandomSource.create(), Block.UPDATE_ALL);
-        }
-    }
-
-    /**
-     * 把单个区域方块快照编码为原版结构模板格式块（含归属本区域的实体）。
-     * 方块排序与原版 {@code StructureTemplate} 一致：完整碰撞方块在前、方块实体在后，
-     * 各自按 y/x/z 排序，保证放置时支撑方块先于依附方块。
-     */
-    private static CompoundTag encodeRegion(
-        RegionBlockSnapshot region,
-        BlockPos origin,
-        @Nullable RegionEntitySnapshot entities
-    ) {
-        BoundingBox box = region.region();
+        // 局部原点采用区域最小角，避免小场景因负偏移产生四个 MCA 文件。
+        BoundingBox box = state.region();
         BlockPos min = new BlockPos(box.minX(), box.minY(), box.minZ());
-        IdMapper<BlockState> paletteIds = new IdMapper<>();
-        List<CompoundTag> fullBlocks = new ArrayList<>();
-        List<CompoundTag> otherBlocks = new ArrayList<>();
-        List<CompoundTag> blockEntityBlocks = new ArrayList<>();
-        Map<Long, CompoundTag> blockEntities = region.blockEntities();
-        region.forEachCapturedBlock((pos, state) -> {
-            int id = paletteIds.getId(state);
-            if (id < 0) {
-                id = paletteIds.size();
-                paletteIds.addMapping(state, id);
+        BlockPos origin = entityBlockPos(agent);
+        CompoundTag region = new CompoundTag();
+        region.putIntArray("min_offset", new int[]{min.getX() - origin.getX(), min.getY() - origin.getY(), min.getZ() - origin.getZ()});
+        region.putIntArray("size", new int[]{box.getXSpan(), box.getYSpan(), box.getZSpan()});
+        definition.put("region", region);
+        PalettedContainerFactory factory = PalettedContainerFactory.create(level.registryAccess());
+        Map<Long, PalettedContainer<BlockState>> sections = new LinkedHashMap<>();
+        for (ChunkPos pos : requiredChunks(definition)) {
+            CompoundTag chunk = NbtUtils.addCurrentDataVersion(new CompoundTag());
+            chunk.putInt("xPos", pos.x());
+            chunk.putInt("zPos", pos.z());
+            chunk.put("sections", new ListTag());
+            chunk.put("block_entities", new ListTag());
+            chunk.put("entities", new ListTag());
+            chunks.put(pos, chunk);
+            for (int y = 0; y <= (box.getYSpan() - 1) >> 4; y++) {
+                sections.put(SectionPos.asLong(pos.x(), y, pos.z()), factory.createForBlockStates());
             }
-            CompoundTag blockTag = new CompoundTag();
-            putIntList(blockTag, "pos", pos.getX() - min.getX(), pos.getY() - min.getY(), pos.getZ() - min.getZ());
-            blockTag.putInt("state", id);
-            CompoundTag blockEntity = blockEntities.get(pos.asLong());
-            if (blockEntity != null) {
-                blockTag.put("nbt", blockEntity.copy());
-                blockEntityBlocks.add(blockTag);
-            } else if (!state.getBlock().hasDynamicShape()
-                && state.isCollisionShapeFullBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO)) {
-                fullBlocks.add(blockTag);
-            } else {
-                otherBlocks.add(blockTag);
-            }
+        }
+        state.blocks().forEachCapturedBlock((pos, block) -> {
+            BlockPos local = pos.subtract(min);
+            sections.get(SectionPos.asLong(local.getX() >> 4, local.getY() >> 4, local.getZ() >> 4))
+                .set(local.getX() & 15, local.getY() & 15, local.getZ() & 15, block);
         });
-        Comparator<CompoundTag> order = Comparator
-            .comparingInt((CompoundTag tag) -> tag.getListOrEmpty("pos").getIntOr(1, 0))
-            .thenComparingInt(tag -> tag.getListOrEmpty("pos").getIntOr(0, 0))
-            .thenComparingInt(tag -> tag.getListOrEmpty("pos").getIntOr(2, 0));
-        fullBlocks.sort(order);
-        otherBlocks.sort(order);
-        blockEntityBlocks.sort(order);
-        ListTag blocks = new ListTag();
-        fullBlocks.forEach(blocks::add);
-        otherBlocks.forEach(blocks::add);
-        blockEntityBlocks.forEach(blocks::add);
-
-        ListTag palette = new ListTag();
-        for (int i = 0; i < paletteIds.size(); i++) {
-            palette.add(NbtUtils.writeBlockState(paletteIds.byId(i)));
-        }
-
-        ListTag entityList = new ListTag();
-        if (entities != null) {
-            int[] skipped = {0};
-            entities.forEachEntity((type, data) -> {
-                ListTag pos = data.getListOrEmpty("Pos");
-                double x = pos.getDoubleOr(0, 0.0);
-                double y = pos.getDoubleOr(1, 0.0);
-                double z = pos.getDoubleOr(2, 0.0);
-                BlockPos blockPos = BlockPos.containing(x, y, z);
-                if (!box.isInside(blockPos)) {
-                    skipped[0]++; // 多区域场景由实体所属区域承载
-                    return;
+        sections.forEach((key, container) -> {
+            SectionPos pos = SectionPos.of(key);
+            CompoundTag section = new CompoundTag();
+            section.putInt("Y", pos.y());
+            section.put("block_states", factory.blockStatesContainerCodec().encodeStart(NbtOps.INSTANCE, container)
+                .getOrThrow(message -> invalid("Cannot encode block states: " + message)));
+            chunks.get(new ChunkPos(pos.x(), pos.z())).getListOrEmpty("sections").add(section);
+        });
+        // 方块实体与区域实体按局部区块归属；存档中不复用实体 UUID。
+        state.blocks().blockEntities().forEach((key, data) -> {
+            BlockPos local = BlockPos.of(key).subtract(min);
+            CompoundTag nbt = data.copy();
+            putBlockPos(nbt, local);
+            chunks.get(ChunkPos.containing(local)).getListOrEmpty("block_entities").add(nbt);
+        });
+        if (state.entities() != null) {
+            state.entities().forEachEntity((type, data) -> {
+                if (box.isInside(entityBlockPos(data))) {
+                    CompoundTag nbt = data.copy();
+                    nbt.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(type).toString());
+                    translateEntity(nbt, -min.getX(), -min.getY(), -min.getZ());
+                    chunks.get(ChunkPos.containing(entityBlockPos(nbt))).getListOrEmpty("entities").add(nbt);
                 }
-                CompoundTag entityTag = new CompoundTag();
-                putDoubleList(entityTag, "pos", x - min.getX(), y - min.getY(), z - min.getZ());
-                putIntList(entityTag, "blockPos",
-                    blockPos.getX() - min.getX(), blockPos.getY() - min.getY(), blockPos.getZ() - min.getZ());
-                CompoundTag nbt = data.copy();
-                nbt.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(type).toString());
-                nbt.remove("UUID");
-                entityTag.put("nbt", nbt);
-                entityList.add(entityTag);
             });
-            if (skipped[0] > 0) {
-                LOGGER.warn("{} region entities were not inside region {} and were skipped", skipped[0], box);
+        }
+        return new ScenarioStore.LoadedScenario(definition, chunks);
+    }
+
+    /**
+     * 解码场景为基线；不加载区块、不放置世界。
+     * @param level 目标世界
+     * @param loaded 完整场景
+     * @param anchorMob 提供目标 UUID 和位置的 Mob
+     * @return 延迟到 reset 物化的状态基线
+     */
+    public static EnvStateSnapshot decode(ServerLevel level, ScenarioStore.LoadedScenario loaded, Mob anchorMob) {
+        validate(loaded);
+        CompoundTag definition = loaded.definition();
+        CompoundTag data = agentData(definition, anchorMob.position());
+        EntityType<?> type = entityType(data);
+        data.remove("id");
+        RegionEntitySnapshot.putEntityUuid(data, "UUID", anchorMob.getUUID());
+        EntitySnapshot agent = new EntitySnapshot(type, level.dimension(), data);
+        if (!definition.contains("region")) {
+            return EnvStateSnapshot.of(agent, null, null);
+        }
+        int[] size = vector(definition.getCompoundOrEmpty("region"), "size");
+        int[] offset = vector(definition.getCompoundOrEmpty("region"), "min_offset");
+        BlockPos min = anchorMob.blockPosition().offset(offset[0], offset[1], offset[2]);
+        BoundingBox box = new BoundingBox(min.getX(), min.getY(), min.getZ(),
+            Math.addExact(min.getX(), size[0] - 1), Math.addExact(min.getY(), size[1] - 1), Math.addExact(min.getZ(), size[2] - 1));
+        PalettedContainerFactory factory = PalettedContainerFactory.create(level.registryAccess());
+        List<RegionBlockSnapshot.BlockEntry> blocks = new ArrayList<>();
+        List<RegionEntitySnapshot.EntityEntry> entities = new ArrayList<>();
+        for (var entry : loaded.chunks().entrySet()) {
+            ChunkPos cp = entry.getKey();
+            CompoundTag chunk = entry.getValue();
+            Map<Integer, PalettedContainer<BlockState>> containers = new LinkedHashMap<>();
+            // 只读取区域内格子，非 16 格对齐平移后也不会污染区域之外。
+            for (Tag tag : list(chunk, "sections")) {
+                CompoundTag section = compound(tag);
+                int sy = integer(section, "Y");
+                PalettedContainer<BlockState> container = factory.blockStatesContainerCodec()
+                    .parse(NbtOps.INSTANCE, required(section, "block_states"))
+                    .getOrThrow(message -> invalid("Invalid block states at " + cp + "/" + sy + ": " + message));
+                containers.put(sy, container);
+                for (int y = 0; y < 16 && (sy << 4) + y < size[1]; y++) {
+                    for (int z = 0; z < 16 && (cp.z() << 4) + z < size[2]; z++) {
+                        for (int x = 0; x < 16 && (cp.x() << 4) + x < size[0]; x++) {
+                            BlockState block = container.get(x, y, z);
+                            if (block != Blocks.AIR.defaultBlockState()) {
+                                blocks.add(new RegionBlockSnapshot.BlockEntry(min.offset((cp.x() << 4) + x, (sy << 4) + y, (cp.z() << 4) + z), block, null));
+                            }
+                        }
+                    }
+                }
+            }
+            // 方块实体覆写坐标；区域实体 UUID 由现有基线工厂重新分配。
+            for (Tag tag : list(chunk, "block_entities")) {
+                CompoundTag nbt = compound(tag).copy();
+                BlockPos local = new BlockPos(integer(nbt, "x"), integer(nbt, "y"), integer(nbt, "z"));
+                requireLocal(local, size, cp);
+                BlockState block = containers.get(local.getY() >> 4).get(local.getX() & 15, local.getY() & 15, local.getZ() & 15);
+                if (!block.hasBlockEntity()) {
+                    throw invalid("Block entity without matching block at " + local);
+                }
+                BlockPos target = local.offset(min);
+                putBlockPos(nbt, target);
+                blocks.add(new RegionBlockSnapshot.BlockEntry(target, block, nbt));
+            }
+            for (Tag tag : list(chunk, "entities")) {
+                CompoundTag nbt = compound(tag).copy();
+                requireLocal(entityBlockPos(nbt), size, cp);
+                EntityType<?> entityType = entityType(nbt);
+                nbt.remove("id");
+                translateEntity(nbt, min.getX(), min.getY(), min.getZ());
+                entities.add(new RegionEntitySnapshot.EntityEntry(entityType, nbt));
             }
         }
-
-        CompoundTag regionTag = new CompoundTag();
-        putIntList(regionTag, "size", box.getXSpan(), box.getYSpan(), box.getZSpan());
-        putIntList(regionTag, "min_offset", min.getX() - origin.getX(), min.getY() - origin.getY(), min.getZ() - origin.getZ());
-        regionTag.put("palette", palette);
-        regionTag.put("blocks", blocks);
-        regionTag.put("entities", entityList);
-        return regionTag;
+        return EnvStateSnapshot.of(agent, RegionBlockSnapshot.of(factory, box, blocks),
+            definition.getBooleanOr("manage_entities", false)
+                ? RegionEntitySnapshot.of(RegionEntitySnapshot.toAabb(box), anchorMob.getUUID(), entities) : null);
     }
 
-    /** 场景原点 = 基线 agent 的方块坐标（从 agent 快照 NBT 的 Pos 读取）。 */
-    private static BlockPos agentOrigin(EntitySnapshot agent) {
-        ListTag pos = agent.data().getListOrEmpty("Pos");
-        return BlockPos.containing(pos.getDoubleOr(0, 0.0), pos.getDoubleOr(1, 0.0), pos.getDoubleOr(2, 0.0));
-    }
-
-    /** 区域在新世界的放置角点（锚点 + min_offset）。 */
-    private static BlockPos targetCorner(CompoundTag regionTag, BlockPos anchor) {
-        ListTag offset = regionTag.getListOrEmpty("min_offset");
-        return anchor.offset(offset.getIntOr(0, 0), offset.getIntOr(1, 0), offset.getIntOr(2, 0));
-    }
-
-    /** 区域在新世界覆盖的闭区间方块盒（角点 + size - 1）。 */
-    private static BoundingBox targetBox(CompoundTag regionTag, BlockPos anchor) {
-        BlockPos corner = targetCorner(regionTag, anchor);
-        ListTag size = regionTag.getListOrEmpty("size");
-        return new BoundingBox(
-            corner.getX(), corner.getY(), corner.getZ(),
-            corner.getX() + size.getIntOr(0, 1) - 1,
-            corner.getY() + size.getIntOr(1, 1) - 1,
-            corner.getZ() + size.getIntOr(2, 1) - 1);
-    }
-
-    private static void putIntList(CompoundTag tag, String key, int... values) {
-        ListTag list = new ListTag();
-        for (int value : values) {
-            list.add(IntTag.valueOf(value));
+    /** 校验定义和区块完整性；参数为待加载或待保存场景。 */
+    public static void validate(ScenarioStore.LoadedScenario loaded) {
+        CompoundTag definition = loaded.definition();
+        validateDefinition(definition);
+        Map<ChunkPos, CompoundTag> chunks = loaded.chunks();
+        List<ChunkPos> expected = requiredChunks(definition);
+        if (chunks.size() != expected.size() || !chunks.keySet().containsAll(expected)) {
+            throw invalid("Missing or unexpected scenario chunks");
         }
-        tag.put(key, list);
+        if (expected.isEmpty()) { return; }
+        int[] size = vector(definition.getCompoundOrEmpty("region"), "size");
+        for (ChunkPos pos : expected) {
+            CompoundTag chunk = chunks.get(pos);
+            if (integer(chunk, "xPos") != pos.x() || integer(chunk, "zPos") != pos.z()) {
+                throw invalid("Chunk coordinates do not match MCA slot: " + pos);
+            }
+            boolean[] seen = new boolean[((size[1] - 1) >> 4) + 1];
+            // 每个覆盖区块必须包含完整段集合，不把缺段当作空气。
+            for (Tag tag : list(chunk, "sections")) {
+                CompoundTag section = compound(tag);
+                int y = integer(section, "Y");
+                if (y < 0 || y >= seen.length || seen[y]) {
+                    throw invalid("Invalid or duplicate section: " + pos + "/" + y);
+                }
+                seen[y] = true;
+                validateBlockStates(compound(required(section, "block_states")));
+            }
+            for (boolean present : seen) {
+                if (!present) { throw invalid("Missing section at " + pos); }
+            }
+            for (Tag tag : list(chunk, "block_entities")) {
+                CompoundTag nbt = compound(tag);
+                requireLocal(new BlockPos(integer(nbt, "x"), integer(nbt, "y"), integer(nbt, "z")), size, pos);
+                Identifier.parse(string(nbt, "id"));
+            }
+            for (Tag tag : list(chunk, "entities")) {
+                CompoundTag nbt = compound(tag);
+                requireLocal(entityBlockPos(nbt), size, pos);
+                Identifier.parse(string(nbt, "id"));
+            }
+        }
     }
 
-    private static void putDoubleList(CompoundTag tag, String key, double... values) {
-        ListTag list = new ListTag();
-        for (double value : values) {
-            list.add(DoubleTag.valueOf(value));
+    /** 校验场景定义的必需字段、尺寸和格式版本。 */
+    public static void validateDefinition(CompoundTag definition) {
+        if (integer(definition, "version") != FORMAT_VERSION) { throw invalid("Unsupported scenario format version"); }
+        integer(definition, "DataVersion");
+        Identifier.parse(envType(definition));
+        Identifier.parse(string(compound(required(definition, "agent")), "id"));
+        booleanValue(required(definition, "manage_entities"));
+        options(definition);
+        if (definition.contains("region")) {
+            CompoundTag region = compound(required(definition, "region"));
+            vector(region, "min_offset");
+            for (int span : vector(region, "size")) {
+                if (span <= 0) { throw invalid("Region size must be positive"); }
+            }
         }
-        tag.put(key, list);
     }
+
+    /** 根据定义推导全部局部区块坐标；无区域返回空列表。 */
+    public static List<ChunkPos> requiredChunks(CompoundTag definition) {
+        if (!definition.contains("region")) { return List.of(); }
+        int[] size = vector(compound(required(definition, "region")), "size");
+        if (size[0] <= 0 || size[1] <= 0 || size[2] <= 0) { throw invalid("Region size must be positive"); }
+        List<ChunkPos> result = new ArrayList<>();
+        for (int x = 0; x <= (size[0] - 1) >> 4; x++) {
+            for (int z = 0; z <= (size[2] - 1) >> 4; z++) { result.add(new ChunkPos(x, z)); }
+        }
+        return List.copyOf(result);
+    }
+
+    /** 从定义读取环境注册 ID；返回必需的非空字符串。 */
+    public static String envType(CompoundTag definition) { return string(definition, "env_type"); }
+
+    /** 解码 preset options；返回允许 null 值的不可变映射。 */
+    public static Map<String, Object> options(CompoundTag definition) { return decodeMap(compound(required(definition, "options"))); }
+
+    /** 复制 agent NBT，去掉旧 UUID 并覆写目标位置；返回包含实体 id 的标签。 */
+    public static CompoundTag agentData(CompoundTag definition, Vec3 pos) {
+        CompoundTag nbt = compound(required(definition, "agent")).copy();
+        nbt.remove("UUID");
+        putEntityPos(nbt, pos.x, pos.y, pos.z);
+        return nbt;
+    }
+
+    /** 查找实体注册类型；未知类型拒绝加载。 */
+    public static EntityType<?> entityType(CompoundTag nbt) {
+        String id = string(nbt, "id");
+        return BuiltInRegistries.ENTITY_TYPE.get(Identifier.parse(id)).map(value -> value.value())
+            .orElseThrow(() -> invalid("Unknown entity type: " + id));
+    }
+
+    /** 编码字符串键映射；返回递归带类型的 NBT。 */
+    private static CompoundTag encodeMap(Map<?, ?> map) {
+        CompoundTag result = new CompoundTag();
+        map.forEach((key, value) -> {
+            if (!(key instanceof String text)) { throw invalid("Option map keys must be strings"); }
+            result.put(text, encodeValue(value));
+        });
+        return result;
+    }
+
+    /** 递归编码选项值；返回 type 与可选 value 标签。 */
+    private static CompoundTag encodeValue(Object value) {
+        CompoundTag tag = new CompoundTag();
+        switch (value) {
+            case null -> tag.putString("type", "null");
+            case Boolean v -> { tag.putString("type", "boolean"); tag.putBoolean("value", v); }
+            case String v -> { tag.putString("type", "string"); tag.putString("value", v); }
+            case Byte v -> { tag.putString("type", "byte"); tag.putByte("value", v); }
+            case Short v -> { tag.putString("type", "short"); tag.putShort("value", v); }
+            case Integer v -> { tag.putString("type", "int"); tag.putInt("value", v); }
+            case Long v -> { tag.putString("type", "long"); tag.putLong("value", v); }
+            case Float v -> { tag.putString("type", "float"); tag.putFloat("value", v); }
+            case Double v -> { tag.putString("type", "double"); tag.putDouble("value", v); }
+            case List<?> v -> {
+                tag.putString("type", "list");
+                ListTag list = new ListTag();
+                v.forEach(element -> list.add(encodeValue(element)));
+                tag.put("value", list);
+            }
+            case Map<?, ?> v -> { tag.putString("type", "map"); tag.put("value", encodeMap(v)); }
+            default -> throw invalid("Unsupported option value: " + value.getClass().getName());
+        }
+        return tag;
+    }
+
+    /** 递归解码字符串键映射；返回允许 null 值的不可变映射。 */
+    private static Map<String, Object> decodeMap(CompoundTag tag) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        tag.keySet().forEach(key -> result.put(key, decodeValue(compound(required(tag, key)))));
+        return Collections.unmodifiableMap(result);
+    }
+
+    /** 递归解码选项值；缺失载荷或未知类型拒绝读取。 */
+    private static Object decodeValue(CompoundTag tag) {
+        String type = string(tag, "type");
+        if (type.equals("null")) { return null; }
+        Tag value = required(tag, "value");
+        return switch (type) {
+            case "boolean" -> booleanValue(value);
+            case "string" -> tag.getString("value").orElseThrow(() -> invalid("Invalid string option"));
+            case "byte", "short", "int", "long", "float", "double" -> optionNumber(value, type);
+            case "list" -> {
+                List<Object> result = new ArrayList<>();
+                for (Tag element : list(tag, "value")) { result.add(decodeValue(compound(element))); }
+                yield Collections.unmodifiableList(result);
+            }
+            case "map" -> decodeMap(compound(value));
+            default -> throw invalid("Unknown option type: " + type);
+        };
+    }
+
+    /** 读取类型匹配的选项数值；返回原 Java 包装类型，拒绝隐式数值截断。 */
+    private static Number optionNumber(Tag value, String type) {
+        int expected = switch (type) {
+            case "byte" -> Tag.TAG_BYTE;
+            case "short" -> Tag.TAG_SHORT;
+            case "int" -> Tag.TAG_INT;
+            case "long" -> Tag.TAG_LONG;
+            case "float" -> Tag.TAG_FLOAT;
+            case "double" -> Tag.TAG_DOUBLE;
+            default -> throw invalid("Unknown number type: " + type);
+        };
+        if (!(value instanceof NumericTag number) || value.getId() != expected) {
+            throw invalid("Option payload does not match number type: " + type);
+        }
+        return number.box();
+    }
+
+    /** 校验原版方块调色板与打包数组，拒绝原版宽松解析可能回退为空气的损坏内容。 */
+    private static void validateBlockStates(CompoundTag states) {
+        ListTag palette = list(states, "palette");
+        if (palette.isEmpty() || palette.size() > 4096) {
+            throw invalid("Invalid block state palette size");
+        }
+        for (Tag tag : palette) {
+            CompoundTag entry = compound(tag);
+            Identifier.parse(string(entry, "Name"));
+            // 直接校验元素 Codec，避免 PalettedContainer 的默认空气部分结果掩盖错误。
+            BlockState.CODEC.parse(NbtOps.INSTANCE, entry)
+                .getOrThrow(message -> invalid("Invalid palette entry: " + message));
+        }
+        if (palette.size() > 1) {
+            long[] data = states.getLongArray("data").orElseThrow(() -> invalid("Missing block state data"));
+            int bits = Math.max(4, Integer.SIZE - Integer.numberOfLeadingZeros(palette.size() - 1));
+            int perLong = Long.SIZE / bits;
+            if (data.length != (4096 + perLong - 1) / perLong) {
+                throw invalid("Invalid block state data length");
+            }
+            long mask = (1L << bits) - 1;
+            for (int i = 0; i < 4096; i++) {
+                if (((data[i / perLong] >>> ((i % perLong) * bits)) & mask) >= palette.size()) {
+                    throw invalid("Block references missing palette entry");
+                }
+            }
+        } else if (states.contains("data") && !(states.get("data") instanceof net.minecraft.nbt.LongArrayTag)) {
+            throw invalid("Invalid block state data type");
+        }
+    }
+
+    /** 读取严格的 NBT 布尔值；必须为 byte 0 或 1，返回 Java Boolean。 */
+    private static boolean booleanValue(Tag value) {
+        if (!(value instanceof ByteTag number) || (number.byteValue() != 0 && number.byteValue() != 1)) {
+            throw invalid("Boolean must be byte 0 or 1");
+        }
+        return number.byteValue() == 1;
+    }
+
+    /** 读取实体位置的方块坐标；三个坐标必须为有限数字。 */
+    private static BlockPos entityBlockPos(CompoundTag nbt) {
+        ListTag pos = list(nbt, "Pos");
+        if (pos.size() != 3) { throw invalid("Entity Pos must have three coordinates"); }
+        double[] values = new double[3];
+        for (int i = 0; i < 3; i++) {
+            values[i] = pos.getDouble(i).orElseThrow(() -> invalid("Invalid entity coordinate"));
+            if (!Double.isFinite(values[i])) { throw invalid("Non-finite entity coordinate"); }
+        }
+        return BlockPos.containing(values[0], values[1], values[2]);
+    }
+
+    /** 平移实体及乘客位置并剥离 UUID；参数为三个坐标增量。 */
+    private static void translateEntity(CompoundTag nbt, double dx, double dy, double dz) {
+        entityBlockPos(nbt);
+        ListTag pos = list(nbt, "Pos");
+        putEntityPos(nbt, pos.getDoubleOr(0, 0) + dx, pos.getDoubleOr(1, 0) + dy, pos.getDoubleOr(2, 0) + dz);
+        nbt.remove("UUID");
+        if (nbt.contains("Passengers")) {
+            for (Tag passenger : list(nbt, "Passengers")) { translateEntity(compound(passenger), dx, dy, dz); }
+        }
+    }
+
+    /** 写入实体位置；参数为目标标签与三个坐标。 */
+    private static void putEntityPos(CompoundTag nbt, double x, double y, double z) {
+        ListTag pos = new ListTag();
+        pos.add(DoubleTag.valueOf(x)); pos.add(DoubleTag.valueOf(y)); pos.add(DoubleTag.valueOf(z));
+        nbt.put("Pos", pos);
+    }
+
+    /** 写入方块实体坐标；参数为目标标签与位置。 */
+    private static void putBlockPos(CompoundTag nbt, BlockPos pos) {
+        nbt.putInt("x", pos.getX()); nbt.putInt("y", pos.getY()); nbt.putInt("z", pos.getZ());
+    }
+
+    /** 校验局部位置在区域内且归属当前区块。 */
+    private static void requireLocal(BlockPos pos, int[] size, ChunkPos chunk) {
+        if (pos.getX() < 0 || pos.getY() < 0 || pos.getZ() < 0 || pos.getX() >= size[0]
+            || pos.getY() >= size[1] || pos.getZ() >= size[2] || !ChunkPos.containing(pos).equals(chunk)) {
+            throw invalid("Entity outside scenario chunk or region: " + pos);
+        }
+    }
+
+    /** 读取必需的三元整型数组；返回尺寸或偏移。 */
+    private static int[] vector(CompoundTag tag, String key) {
+        int[] result = tag.getIntArray(key).orElseThrow(() -> invalid("Missing vector: " + key));
+        if (result.length != 3) { throw invalid("Invalid vector: " + key); }
+        return result;
+    }
+
+    /** 读取必需标签；返回字段内容，缺失时抛出格式异常。 */
+    private static Tag required(CompoundTag tag, String key) {
+        Tag value = tag.get(key);
+        if (value == null) { throw invalid("Missing field: " + key); }
+        return value;
+    }
+
+    /** 校验并返回复合标签。 */
+    private static CompoundTag compound(Tag tag) {
+        if (!(tag instanceof CompoundTag value)) { throw invalid("Expected compound tag"); }
+        return value;
+    }
+
+    /** 读取必需列表；不将损坏或缺失列表视为空内容。 */
+    private static ListTag list(CompoundTag tag, String key) {
+        return tag.getList(key).orElseThrow(() -> invalid("Missing list: " + key));
+    }
+
+    /** 读取必需整数；返回已校验数值。 */
+    private static int integer(CompoundTag tag, String key) {
+        return tag.getInt(key).orElseThrow(() -> invalid("Missing integer: " + key));
+    }
+
+    /** 读取必需非空字符串；返回字段内容。 */
+    private static String string(CompoundTag tag, String key) {
+        String value = tag.getString(key).orElseThrow(() -> invalid("Missing string: " + key));
+        if (value.isEmpty()) { throw invalid("Empty string: " + key); }
+        return value;
+    }
+
+    /** 创建场景格式异常；参数为错误详情。 */
+    private static IllegalArgumentException invalid(String message) { return new IllegalArgumentException("Invalid scenario: " + message); }
 }

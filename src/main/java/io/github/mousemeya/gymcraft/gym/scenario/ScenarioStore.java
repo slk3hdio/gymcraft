@@ -1,160 +1,294 @@
 package io.github.mousemeya.gymcraft.gym.scenario;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.storage.RegionFile;
+import net.minecraft.world.level.chunk.storage.RegionFileVersion;
+import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
 import net.neoforged.fml.loading.FMLPaths;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.github.mousemeya.gymcraft.GymCraft;
+
 /**
- * 场景存档的文件存储：服务器全局目录 {@code <game dir>/gymcraft/scenarios/<name>/} 下
- * 存放 scenario.json（元数据）与 world.nbt（世界内容，原版结构模板格式）。
- * 目录相对游戏根目录而非世界存档，场景因此可跨世界复用。
+ * 场景的统一文件存储：读写游戏目录场景和数据包内置场景，业务字段统一交给 Codec 解释。
+ * 定义为 scenario.nbt，世界为 region/*.mca（含原版外置 .mcc）。所有 RegionFile 用后关闭。
+ * 同名保存采用临时目录和备份回滚；内置资源每次重新读取，不跨服务器缓存可变 NBT。
  */
 public final class ScenarioStore {
-    /** 加载结果：元数据 + 世界内容 NBT。 */
-    public record LoadedScenario(EnvScenario scenario, CompoundTag world) {
+    /** 场景载荷：定义与局部区块。构造及读取时深拷贝 NBT，调用方不能修改共享载荷。 */
+    public record LoadedScenario(CompoundTag definition, Map<ChunkPos, CompoundTag> chunks) {
+        /** 创建隔离载荷；参数为定义 NBT 和局部区块 NBT。 */
+        public LoadedScenario {
+            definition = definition.copy();
+            chunks = copyChunks(chunks);
+        }
+
+        /** 返回定义的深拷贝。 */
+        @Override
+        public CompoundTag definition() { return this.definition.copy(); }
+
+        /** 返回不可变区块映射，其标签为深拷贝。 */
+        @Override
+        public Map<ChunkPos, CompoundTag> chunks() { return copyChunks(this.chunks); }
+
+        /** 复制区块载荷；返回允许调用方修改标签而不污染原载荷的映射。 */
+        private static Map<ChunkPos, CompoundTag> copyChunks(Map<ChunkPos, CompoundTag> source) {
+            Map<ChunkPos, CompoundTag> result = new LinkedHashMap<>();
+            source.forEach((pos, tag) -> result.put(pos, tag.copy()));
+            return Collections.unmodifiableMap(result);
+        }
     }
 
-    /** 列表条目摘要。 */
-    public record ScenarioInfo(String name, String envTypeId) {
-    }
+    /** 场景列表摘要；名字来源于目录，环境类型由 Codec 读取。 */
+    public record ScenarioInfo(String name, String envTypeId) {}
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ScenarioStore.class);
     private static final Pattern NAME_PATTERN = Pattern.compile("[a-z0-9_.-]{1,64}");
-    private static final String META_FILE = "scenario.json";
-    private static final String WORLD_FILE = "world.nbt";
-
+    private static final String DEFINITION_FILE = "scenario.nbt";
+    private static final String ASSET_DIR = "scenario";
+    private static final RegionStorageInfo STORAGE_INFO = new RegionStorageInfo("gymcraft_scenario", Level.OVERWORLD, "scenario");
     private final Path root;
 
-    public ScenarioStore(Path root) {
-        this.root = root;
-    }
+    /** 创建磁盘存储；参数为场景根目录。 */
+    public ScenarioStore(Path root) { this.root = root.toAbsolutePath().normalize(); }
 
-    /**
-     * @return 服务器全局场景目录的存储（{@code <game dir>/gymcraft/scenarios}）
-     */
+    /** 返回游戏目录下的全局场景存储。 */
     public static ScenarioStore forServer() {
         return new ScenarioStore(FMLPaths.GAMEDIR.get().resolve("gymcraft").resolve("scenarios"));
     }
 
-    /**
-     * 校验场景名合法性（同时是目录名，限制为资源路径风格字符集）。
-     *
-     * @param name 场景名
-     * @throws IllegalArgumentException 名称非法时抛出
-     */
+    /** 校验目录名；拒绝非法字符及指向根目录或父目录的名称。 */
     public static void validateName(String name) {
-        if (!NAME_PATTERN.matcher(name).matches()) {
-            throw new IllegalArgumentException(
-                "Invalid scenario name: '" + name + "' (allowed: [a-z0-9_.-], 1-64 chars)");
+        if (name == null || !NAME_PATTERN.matcher(name).matches() || name.equals(".") || name.equals("..")) {
+            throw new IllegalArgumentException("Invalid scenario name: '" + name + "' (allowed: [a-z0-9_.-], 1-64 chars, excluding . and ..)");
         }
     }
 
     /**
-     * 保存场景（同名覆盖写）。两个文件均先写临时文件再替换，避免半成品。
-     *
-     * @param scenario 元数据
-     * @param world 世界内容 NBT（{@link ScenarioWorldCodec#encode} 产物）
-     * @throws IOException 写入失败时抛出
+     * 完整写入新目录后替换同名场景；替换失败时恢复旧目录。
+     * @param name 场景目录名
+     * @param loaded Codec 产出的完整场景
+     * @throws IOException 文件读写或目录替换失败
      */
-    public void save(EnvScenario scenario, CompoundTag world) throws IOException {
-        validateName(scenario.name());
-        Path dir = this.root.resolve(scenario.name());
-        Files.createDirectories(dir);
-        Path metaTmp = dir.resolve(META_FILE + ".tmp");
-        Files.writeString(metaTmp, scenario.toJson(), StandardCharsets.UTF_8);
-        Files.move(metaTmp, dir.resolve(META_FILE), StandardCopyOption.REPLACE_EXISTING);
-        Path worldTmp = dir.resolve(WORLD_FILE + ".tmp");
-        NbtIo.writeCompressed(world, worldTmp);
-        Files.move(worldTmp, dir.resolve(WORLD_FILE), StandardCopyOption.REPLACE_EXISTING);
+    public void save(String name, LoadedScenario loaded) throws IOException {
+        validateName(name);
+        ScenarioWorldCodec.validate(loaded);
+        Files.createDirectories(this.root);
+        Path staging = Files.createTempDirectory(this.root, "~scenario-staging-");
+        Path backup = staging.resolveSibling(staging.getFileName() + "~backup");
+        Path target = this.root.resolve(name);
+        boolean committed = false;
+        try {
+            NbtIo.writeCompressed(loaded.definition(), staging.resolve(DEFINITION_FILE));
+            writeChunks(staging, loaded.chunks());
+            // 所有 MCA 句柄关闭后才交换目录，Windows 上也可正常覆盖或回滚。
+            boolean replaced = Files.exists(target);
+            if (replaced) { Files.move(target, backup); }
+            try {
+                Files.move(staging, target);
+                committed = true;
+            } catch (IOException failure) {
+                if (replaced) {
+                    try { Files.move(backup, target); }
+                    catch (IOException rollback) { failure.addSuppressed(rollback); }
+                }
+                throw failure;
+            }
+        } finally {
+            cleanupDirectory(staging);
+            // 回滚失败时保留备份，避免删除唯一可恢复的旧场景。
+            if (committed) { cleanupDirectory(backup); }
+        }
     }
 
-    /**
-     * 加载场景。
-     *
-     * @param name 场景名
-     * @return 元数据 + 世界内容
-     * @throws IOException 场景不存在或读取失败时抛出
-     * @throws IllegalArgumentException 元数据损坏或版本不支持时抛出
-     */
+    /** 加载命名磁盘场景；返回独立载荷，不读取旧 JSON/结构模板格式。 */
     public LoadedScenario load(String name) throws IOException {
         validateName(name);
-        Path dir = this.root.resolve(name);
-        Path metaPath = dir.resolve(META_FILE);
-        if (!Files.isRegularFile(metaPath)) {
-            throw new IOException("Scenario not found: " + name);
-        }
-        EnvScenario scenario = EnvScenario.fromJson(Files.readString(metaPath, StandardCharsets.UTF_8));
-        Path worldPath = dir.resolve(WORLD_FILE);
-        CompoundTag world = Files.isRegularFile(worldPath)
-            ? NbtIo.readCompressed(worldPath, NbtAccounter.uncompressedQuota())
-            : ScenarioWorldCodec.empty();
-        return new LoadedScenario(scenario, world);
+        return readDirectory(this.root.resolve(name));
     }
 
     /**
-     * 列出全部场景摘要（按名字典序；损坏的场景跳过并记日志）。
-     *
-     * @return 场景摘要列表
+     * 显式按名称读取场景：同名磁盘目录优先，否则读取当前数据包资源。
+     * 磁盘目录存在但损坏时直接报错，不以内置资源掩盖存档错误。
+     * @param name 场景名
+     * @param level 提供当前 ResourceManager 的世界
+     * @return 独立的完整场景载荷
+     * @throws IOException 磁盘读取失败或两种来源均不存在
      */
-    public List<ScenarioInfo> list() {
-        if (!Files.isDirectory(this.root)) {
-            return List.of();
-        }
-        List<ScenarioInfo> result = new ArrayList<>();
-        try (Stream<Path> dirs = Files.list(this.root)) {
-            for (Path dir : dirs.filter(Files::isDirectory)
-                .sorted(Comparator.comparing(path -> path.getFileName().toString()))
-                .toList()) {
-                Path metaPath = dir.resolve(META_FILE);
-                if (!Files.isRegularFile(metaPath)) {
-                    continue;
-                }
-                try {
-                    EnvScenario scenario = EnvScenario.fromJson(Files.readString(metaPath, StandardCharsets.UTF_8));
-                    result.add(new ScenarioInfo(dir.getFileName().toString(), scenario.envTypeId()));
-                } catch (Exception e) {
-                    LOGGER.warn("Skipping broken scenario {}", dir.getFileName(), e);
+    public LoadedScenario load(String name, ServerLevel level) throws IOException {
+        validateName(name);
+        if (Files.exists(this.root.resolve(name))) { return load(name); }
+        return loadBundled(level, name)
+            .orElseThrow(() -> new IOException("Scenario does not exist: " + name));
+    }
+
+    /**
+     * 读取当前数据包中的内置场景；缺少定义返回空，其他读取失败抛出异常。
+     * @param level 提供当前 ResourceManager 的世界
+     * @param name 内置场景名
+     * @return 当前资源的独立载荷
+     */
+    public static Optional<LoadedScenario> loadBundled(ServerLevel level, String name) {
+        validateName(name);
+        ResourceManager resources = level.getServer().getResourceManager();
+        var definitionResource = resources.getResource(assetId(name, DEFINITION_FILE));
+        if (definitionResource.isEmpty()) { return Optional.empty(); }
+        Path temp = null;
+        try {
+            CompoundTag definition;
+            try (var input = definitionResource.get().open()) {
+                definition = NbtIo.readCompressed(input, NbtAccounter.uncompressedQuota());
+            }
+            ScenarioWorldCodec.validateDefinition(definition);
+            if (ScenarioWorldCodec.requiredChunks(definition).isEmpty()) {
+                return Optional.of(new LoadedScenario(definition, Map.of()));
+            }
+            // RegionFile 需要可寻址文件；MCA 与外置 MCC 落盘后复用磁盘读取路径。
+            temp = Files.createTempDirectory("gymcraft-scenario-");
+            Path regionDir = Files.createDirectories(temp.resolve("region"));
+            for (String file : groupChunks(ScenarioWorldCodec.requiredChunks(definition)).keySet()) {
+                var resource = resources.getResource(assetId(name, "region/" + file))
+                    .orElseThrow(() -> new IOException("Missing bundled scenario region: " + name + "/" + file));
+                try (var input = resource.open()) { Files.copy(input, regionDir.resolve(file)); }
+            }
+            String prefix = ASSET_DIR + "/" + name + "/region/";
+            for (var entry : resources.listResources(prefix.substring(0, prefix.length() - 1),
+                id -> id.getNamespace().equals(GymCraft.MODID) && id.getPath().startsWith(prefix)
+                    && id.getPath().substring(prefix.length()).matches("c\\.-?[0-9]+\\.-?[0-9]+\\.mcc")).entrySet()) {
+                try (var input = entry.getValue().open()) {
+                    Files.copy(input, regionDir.resolve(entry.getKey().getPath().substring(prefix.length())));
                 }
             }
+            return Optional.of(readChunks(temp, definition));
         } catch (IOException e) {
-            LOGGER.warn("Failed to list scenarios in {}", this.root, e);
+            throw new IllegalStateException("Failed to read bundled scenario: " + name, e);
+        } finally {
+            if (temp != null) {
+                cleanupDirectory(temp);
+            }
         }
-        return result;
     }
 
-    /**
-     * 删除场景目录（含全部内容）。
-     *
-     * @param name 场景名
-     * @return 场景存在并已删除时为 true
-     * @throws IOException 删除失败时抛出
-     */
+    /** 列出磁盘场景，按名称排序；损坏场景跳过并记录日志。 */
+    public List<ScenarioInfo> list() {
+        if (!Files.isDirectory(this.root)) { return List.of(); }
+        List<ScenarioInfo> result = new ArrayList<>();
+        try (Stream<Path> dirs = Files.list(this.root)) {
+            for (Path dir : dirs.filter(Files::isDirectory).sorted(Comparator.comparing(path -> path.getFileName().toString())).toList()) {
+                String name = dir.getFileName().toString();
+                if (!NAME_PATTERN.matcher(name).matches() || !Files.isRegularFile(dir.resolve(DEFINITION_FILE))) { continue; }
+                try {
+                    LoadedScenario loaded = load(name);
+                    result.add(new ScenarioInfo(name, ScenarioWorldCodec.envType(loaded.definition())));
+                } catch (IOException | IllegalArgumentException e) { LOGGER.warn("Skipping broken scenario {}", name, e); }
+            }
+        } catch (IOException e) { LOGGER.warn("Failed to list scenarios in {}", this.root, e); }
+        return List.copyOf(result);
+    }
+
+    /** 删除命名场景目录；存在并删除时返回 true，不存在返回 false。 */
     public boolean delete(String name) throws IOException {
         validateName(name);
         Path dir = this.root.resolve(name);
-        if (!Files.isDirectory(dir)) {
-            return false;
-        }
-        try (Stream<Path> walk = Files.walk(dir)) {
-            for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
-                Files.delete(path);
+        if (!Files.isDirectory(dir)) { return false; }
+        deleteTree(dir);
+        return true;
+    }
+
+    /** 读取目录定义，再经相同 MCA 路径读取世界；返回完整场景。 */
+    private static LoadedScenario readDirectory(Path dir) throws IOException {
+        if (!Files.isRegularFile(dir.resolve(DEFINITION_FILE))) { throw new IOException("Scenario not found: " + dir.getFileName()); }
+        CompoundTag definition = NbtIo.readCompressed(dir.resolve(DEFINITION_FILE), NbtAccounter.uncompressedQuota());
+        return readChunks(dir, definition);
+    }
+
+    /** 按声明的区块集合读取 MCA；文件、条目或区块段缺失时拒绝加载。 */
+    private static LoadedScenario readChunks(Path dir, CompoundTag definition) throws IOException {
+        ScenarioWorldCodec.validateDefinition(definition);
+        Map<ChunkPos, CompoundTag> chunks = new LinkedHashMap<>();
+        Path regionDir = dir.resolve("region");
+        for (var group : groupChunks(ScenarioWorldCodec.requiredChunks(definition)).entrySet()) {
+            Path file = regionDir.resolve(group.getKey());
+            if (!Files.isRegularFile(file) || Files.size(file) < 8192) { throw new IOException("Missing or truncated scenario region: " + file); }
+            try (RegionFile region = new RegionFile(STORAGE_INFO, file, regionDir, RegionFileVersion.DEFAULT, false)) {
+                for (ChunkPos pos : group.getValue()) {
+                    try (var input = region.getChunkDataInputStream(pos)) {
+                        if (input == null) { throw new IOException("Missing scenario chunk: " + pos); }
+                        chunks.put(pos, NbtIo.read(input));
+                    }
+                }
             }
         }
-        return true;
+        LoadedScenario loaded = new LoadedScenario(definition, chunks);
+        ScenarioWorldCodec.validate(loaded);
+        return loaded;
+    }
+
+    /** 用原版 RegionFile 写入区块及必要的外置 MCC；参数为临时目录和完整区块集合。 */
+    private static void writeChunks(Path dir, Map<ChunkPos, CompoundTag> chunks) throws IOException {
+        if (chunks.isEmpty()) { return; }
+        Path regionDir = Files.createDirectories(dir.resolve("region"));
+        for (var group : groupChunks(new ArrayList<>(chunks.keySet())).entrySet()) {
+            try (RegionFile region = new RegionFile(STORAGE_INFO, regionDir.resolve(group.getKey()), regionDir, RegionFileVersion.DEFAULT, true)) {
+                for (ChunkPos pos : group.getValue()) {
+                    try (var output = region.getChunkDataOutputStream(pos)) { NbtIo.write(chunks.get(pos), output); }
+                }
+                region.flush();
+            }
+        }
+    }
+
+    /** 按原版区域文件名分组局部区块，返回每个 MCA 中的区块坐标。 */
+    private static Map<String, List<ChunkPos>> groupChunks(List<ChunkPos> chunks) {
+        Map<String, List<ChunkPos>> groups = new LinkedHashMap<>();
+        for (ChunkPos pos : chunks) {
+            String file = "r." + pos.getRegionX() + "." + pos.getRegionZ() + ".mca";
+            groups.computeIfAbsent(file, ignored -> new ArrayList<>()).add(pos);
+        }
+        return groups;
+    }
+
+    /** 返回指定场景文件的数据包资源 ID。 */
+    private static Identifier assetId(String name, String file) {
+        return Identifier.fromNamespaceAndPath(GymCraft.MODID, ASSET_DIR + "/" + name + "/" + file);
+    }
+
+    /** 删除指定临时目录或已校验场景目录；不跟随符号链接。 */
+    private static void deleteTree(Path dir) throws IOException {
+        if (!Files.exists(dir)) { return; }
+        try (Stream<Path> paths = Files.walk(dir)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) { Files.delete(path); }
+        }
+    }
+
+    /** 清理已使用完的临时目录或备份；失败只记日志，不掩盖保存或加载的原始结果。 */
+    private static void cleanupDirectory(Path dir) {
+        try {
+            deleteTree(dir);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to remove temporary scenario directory {}", dir, e);
+        }
     }
 }
