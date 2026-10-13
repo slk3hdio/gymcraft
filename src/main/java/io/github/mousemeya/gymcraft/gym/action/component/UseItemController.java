@@ -146,9 +146,6 @@ public final class UseItemController extends AbstractActionComponentController<P
             this.state = error;
             return ActionApplyResult.none(error);
         }
-        if (!this.contains(action)) {
-            return this.fail("invalid use item payload");
-        }
         var layout = AgentInventoryLayout.resolve(this.mob());
         if (action.getSlotId() >= layout.size()) {
             return this.fail("slot id out of range");

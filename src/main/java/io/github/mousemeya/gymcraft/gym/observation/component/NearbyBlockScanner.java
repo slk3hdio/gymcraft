@@ -3,8 +3,8 @@ package io.github.mousemeya.gymcraft.gym.observation.component;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 import net.minecraft.core.BlockPos;
@@ -18,6 +18,7 @@ import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces.Bounds;
 /**
  * 附近可见方块扫描器 —— 从 Mob 眼睛所在空间执行有界 BFS，并返回符合过滤条件的可见表面方块。
  * 调用方提供绝对坐标边界、遍历及结果预算和过滤器；扫描器只读已加载区域并对多面可见方块去重。
+ * 每个可见位置只映射一次，元素过滤与最终返回复用同一结果对象。
  */
 public final class NearbyBlockScanner {
     /** 扫描结果 —— 保存方块坐标、状态以及到扫描中心的方块距离。 */
@@ -36,16 +37,19 @@ public final class NearbyBlockScanner {
      * @param maxVisited 最多访问的可穿过空间节点数
      * @param maxBlocks 最多返回的匹配方块数
      * @param filter 方块状态过滤器，只有通过过滤的表面方块才计入结果上限
+     * @param resultMapper 将扫描候选转换为组件需要的结果，每个可见位置最多调用一次
      * @param resultFilter 元素空间过滤器，拒绝的视图不计入结果上限
+     * @param <T> 调用方的结果类型，扫描器不解释其空间结构
      * @return 按 BFS 发现顺序排列的去重扫描结果
      */
-    public static List<ScannedBlock> scan(
+    public static <T> List<T> scan(
         Mob mob,
         Bounds bounds,
         int maxVisited,
         int maxBlocks,
         Predicate<BlockState> filter,
-        Predicate<ScannedBlock> resultFilter
+        Function<ScannedBlock, T> resultMapper,
+        Predicate<T> resultFilter
     ) {
         Level level = mob.level();
         BlockPos center = BlockPos.containing(mob.getEyePosition());
@@ -54,7 +58,8 @@ public final class NearbyBlockScanner {
         }
         var queue = new ArrayDeque<BlockPos>();
         var visited = new HashSet<Long>();
-        var visibleBlocks = new LinkedHashMap<Long, ScannedBlock>();
+        var visibleCandidates = new HashSet<Long>();
+        var visibleBlocks = new ArrayList<T>();
 
         queue.add(center);
         visited.add(center.asLong());
@@ -84,19 +89,21 @@ public final class NearbyBlockScanner {
                 }
 
                 Direction faceTowardAir = direction.getOpposite();
-                if (filter.test(state) && Block.shouldRenderFace(level, next, state, airState, faceTowardAir)) {
-                    var scanned = new ScannedBlock(next, state, distance(center, next));
-                    if (!resultFilter.test(scanned)) {
+                if (filter.test(state) && Block.shouldRenderFace(level, next, state, airState, faceTowardAir)
+                    && visibleCandidates.add(next.asLong())) {
+                    // 先按位置去重再映射，过滤通过后直接保存该对象，避免重复构建视图。
+                    T result = resultMapper.apply(new ScannedBlock(next, state, distance(center, next)));
+                    if (!resultFilter.test(result)) {
                         continue;
                     }
-                    visibleBlocks.putIfAbsent(next.asLong(), scanned);
+                    visibleBlocks.add(result);
                     if (visibleBlocks.size() >= maxBlocks) {
                         break;
                     }
                 }
             }
         }
-        return new ArrayList<>(visibleBlocks.values());
+        return visibleBlocks;
     }
 
     /**

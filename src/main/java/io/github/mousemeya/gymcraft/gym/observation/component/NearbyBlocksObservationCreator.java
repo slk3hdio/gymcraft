@@ -87,9 +87,10 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
     @Override
     public ProtoNearbyBlocks create(Mob mob) {
         var builder = ProtoNearbyBlocks.newBuilder();
+        // 扫描返回已构建且满足元素空间的视图，直接复用，不再二次构建 protobuf。
         for (var block : NearbyBlockScanner.scan(mob, this.bounds(), this.maxVisited,
-                this.resultSpace().maxLength(), state -> true, candidate -> this.accepts(view(candidate)))) {
-            builder.addBlocks(view(block));
+                this.resultSpace().maxLength(), state -> true, NearbyBlocksObservationCreator::view, this::accepts)) {
+            builder.addBlocks(block);
         }
         return builder.build();
     }

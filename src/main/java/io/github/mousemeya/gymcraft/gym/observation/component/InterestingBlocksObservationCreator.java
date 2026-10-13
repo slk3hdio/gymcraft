@@ -92,10 +92,11 @@ public class InterestingBlocksObservationCreator extends AbstractObservationComp
             return builder.build();
         }
         var interesting = mob.getData(ModAttachments.INTERESTING_BLOCKS);
+        // 兴趣与元素空间过滤通过后复用同一视图，不再二次构建 protobuf。
         for (var block : NearbyBlockScanner.scan(mob, this.bounds(), this.maxVisited,
                 this.resultSpace().maxLength(), state -> interesting.contains(state.getBlock()),
-                candidate -> this.accepts(view(candidate)))) {
-            builder.addBlocks(view(block));
+                InterestingBlocksObservationCreator::view, this::accepts)) {
+            builder.addBlocks(block);
         }
         return builder.build();
     }

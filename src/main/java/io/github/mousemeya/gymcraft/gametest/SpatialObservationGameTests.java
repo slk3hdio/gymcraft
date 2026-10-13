@@ -201,6 +201,21 @@ public final class SpatialObservationGameTests {
         assertEquals(helper, 1, interests.getBlocksCount(), "interesting ore must be visible");
         assertTrue(helper, interesting.contains(interests), "interesting block output must satisfy space");
         assertEquals(helper, "minecraft:diamond_ore", interests.getBlocks(0).getBlockId(), "interest type must be retained");
+        // WEST 比 EAST 先发现；被元素空间拒绝的候选不能占用唯一结果名额。
+        level.setBlock(eye.west(), Blocks.GOLD_BLOCK.defaultBlockState(), 3);
+        var root = new LinkedHashMap<>(((DictSpace) blocks.space()).spaces());
+        var element = new LinkedHashMap<>(((DictSpace) SpatialObservationSpaces.sequence(blocks.space(), "blocks").elementSpace()).spaces());
+        element.put("block_id", new TextSpace("minecraft:diamond_ore"));
+        root.put("blocks", new SequenceSpace<>(new DictSpace(element), 1));
+        blocks.setSpace(new DictSpace(root));
+        observed = blocks.create(mob);
+        assertEquals(helper, 1, observed.getBlocksCount(), "rejected candidate must not consume nearby block quota");
+        assertEquals(helper, "minecraft:diamond_ore", observed.getBlocks(0).getBlockId(), "nearby block view must satisfy element filtering");
+        mob.setData(ModAttachments.INTERESTING_BLOCKS, Set.of(Blocks.GOLD_BLOCK, Blocks.DIAMOND_ORE));
+        interesting.setSpace(blocks.space());
+        interests = interesting.create(mob);
+        assertEquals(helper, 1, interests.getBlocksCount(), "rejected candidate must not consume interesting block quota");
+        assertEquals(helper, "minecraft:diamond_ore", interests.getBlocks(0).getBlockId(), "interest result must satisfy both filters");
         var excluded = new BoundingBox(eye.west());
         blocks.setSpace(SpatialObservationSpaces.withRegion(blocks.space(), "blocks", excluded, false));
         assertEquals(helper, 0, blocks.create(mob).getBlocksCount(), "eye outside bounds must not start BFS");
