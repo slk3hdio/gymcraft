@@ -134,6 +134,9 @@ public abstract class AbstractMcEnv implements McEnv {
         this.baseline = scenarioSource == null
             ? EnvStateSnapshot.capture(level, mob, scope.region(), scope.captureBlocks(), scope.captureEntities())
             : ScenarioWorldCodec.decode(level, scenarioSource, mob);
+        // 基线区域经共享接口初始化动作及观测的默认空间；不随 reset 或实体移动重算。
+        this.observationCreator.initializeDefaultRegion(this.baseline.region());
+        this.actionController.initializeDefaultRegion(this.baseline.region());
         if (scenarioSource != null) {
             // 场景源的 preset options 作为首次 reset 的默认值（当次 reset options 覆盖 preset）
             this.scenarioPresetOptions = ScenarioWorldCodec.options(scenarioSource.definition());

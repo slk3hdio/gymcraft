@@ -1,5 +1,11 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
+import io.github.mousemeya.gymcraft.gym.component.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
+import io.github.mousemeya.gymcraft.gym.action.ActionSpaces;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import javax.annotation.Nullable;
+
 import java.util.Map;
 import java.util.UUID;
 
@@ -25,45 +31,82 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 /**
  * 设置攻击目标组件 —— 为 Mob 指定攻击目标实体。
  * <p>
- * 支持通过 UUID 或实体 ID 两种方式指定目标。通过 UUID 查找时会在所有已加载维度中搜索。
- * apply() 同时更新 Mob 的 target 和 AgentControlState 中的 attackTargetUuid。
+ * 支持通过 UUID 或实体 ID 两种方式指定目标，ID 分支优先。UUID 可跨已加载维度解析，
+ * 但只允许与 Agent 同维度且位置满足当前空间的目标。
+ * apply() 更新 Mob 的 target，并在返回策略中写入 ATTACK_TARGET 记忆；tick 复核边界并清理自有目标。
  * </p>
  */
-public class SetAttackTargetController extends AbstractActionComponentController<ProtoSetAttackTarget> {
+public class SetAttackTargetController extends AbstractActionComponentController<ProtoSetAttackTarget> implements EnvironmentRegionAware {
+    /** 默认区域是否已处理，含无区域情况。 */
+    private boolean defaultsApplied;
+    /** 内部初始化期间不记录为显式配置。 */
+    private boolean applyingDefaults;
+    /** 调用方成功设置空间后，默认区域不得覆盖。 */
+    private boolean explicitSpace;
+
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "target_uuid", new TextSpace(),
-        "target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
+        "target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
+        "x", new BoxSpace(-Double.MAX_VALUE, Double.MAX_VALUE, 1),
+        "y", new BoxSpace(-Double.MAX_VALUE, Double.MAX_VALUE, 1),
+        "z", new BoxSpace(-Double.MAX_VALUE, Double.MAX_VALUE, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
+    /**
+     * 创建并初始化组件内部状态。
+     *
+     * @param mob 受控生物
+     */
     public SetAttackTargetController(Mob mob) {
         super(mob);
     }
 
+    /**
+     * 校验受控生物是否具备本动作要求的能力。
+     *
+     * @return 是否满足能力要求
+     */
     @Override
     public boolean supports() {
         Mob mob = this.mob();
         return this.supportEntity(mob.getClass()) && mob.getAttribute(Attributes.ATTACK_DAMAGE) != null;
     }
 
+    /**
+     * 返回本组件的 protobuf 消息类型。
+     *
+     * @return 协议消息类
+     */
     @Override
     public Class<ProtoSetAttackTarget> protoType() {
         return ProtoSetAttackTarget.class;
     }
 
+    /**
+     * 返回本组件默认参数空间，供实例初始化及结构校验使用。
+     *
+     * @return 完整默认参数空间
+     */
     @Override
     public McSpace<Map<String, Object>> defaultSpace() {
         return DEFAULT_SPACE;
     }
 
+    /**
+     * 校验当前动作分支实际使用的字段；实体位置由执行入口独立验证。
+     *
+     * @param component 当前动作负载
+     * @return 当前分支参数是否有效
+     */
     @Override
     public boolean contains(ProtoSetAttackTarget component) {
-        if (component == null || !this.space().contains(Map.of(
-            "target_uuid", component.getTargetUuid(),
-            "target_entity_id", new double[] { component.getTargetEntityId() }
-        ))) {
-            return false;
+        if (component == null) return false;
+        if (component.getTargetEntityId() > 0 || component.getTargetUuid().isEmpty()) {
+            return ActionSpaces.containsFields(this.space(), Map.of(
+                "target_entity_id", new double[] { component.getTargetEntityId() }
+            ));
         }
-        if (component.getTargetUuid().isEmpty()) return true;
+        if (!ActionSpaces.containsFields(this.space(), Map.of("target_uuid", component.getTargetUuid()))) return false;
         try {
             UUID.fromString(component.getTargetUuid());
             return true;
@@ -72,9 +115,18 @@ public class SetAttackTargetController extends AbstractActionComponentController
         }
     }
 
+    /**
+     * 解析并执行动作，目标越界时在产生副作用前返回失败。
+     *
+     * @param component 当前动作负载
+     * @return 动作策略及初始状态
+     */
     @Override
     public ActionApplyResult apply(ProtoSetAttackTarget component) {
         Mob mob = this.mob();
+        if (!this.contains(component)) {
+            return ActionApplyResult.none(ActionState.failed("invalid action payload"));
+        }
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
@@ -95,6 +147,10 @@ public class SetAttackTargetController extends AbstractActionComponentController
                 requestedTargetDetails(component)
             ));
         }
+        ActionState boundaryError = this.checkTargetEntity(target);
+        if (boundaryError != null) {
+            return ActionApplyResult.none(boundaryError);
+        }
         ActionState invalid = invalidTargetState(mob, target);
         if (invalid != null) {
             return ActionApplyResult.none(invalid);
@@ -104,12 +160,18 @@ public class SetAttackTargetController extends AbstractActionComponentController
         return ActionApplyResult.applied(policy, ActionState.running("attack target set", targetDetails(target)));
     }
 
+    /**
+     * 按 ID 或 UUID 分支解析已加载目标，不改动实体状态。
+     *
+     * @param mob 受控生物
+     * @param component 当前动作负载
+     * @return 目标实体；未找到时为 null
+     */
     private static LivingEntity findTarget(Mob mob, ProtoSetAttackTarget component) {
         if (component.getTargetEntityId() > 0) {
             Entity found = mob.level().getEntity(component.getTargetEntityId());
-            if (found instanceof LivingEntity living) {
-                return living;
-            }
+            // ID 分支优先，不解析本次没有使用的 UUID 字段。
+            return found instanceof LivingEntity living ? living : null;
         }
         if (!component.getTargetUuid().isEmpty() && mob.level() instanceof ServerLevel serverLevel) {
             Entity found = serverLevel.getEntityInAnyDimension(UUID.fromString(component.getTargetUuid()));
@@ -143,6 +205,19 @@ public class SetAttackTargetController extends AbstractActionComponentController
         if (!target.isAlive()) {
             return ActionState.completed("target died", targetDetails(target));
         }
+        ActionState boundaryError = this.checkTargetEntity(target);
+        if (boundaryError != null || !this.contains(component)) {
+            // 只释放仍属于此动作的目标和记忆，避免清掉后来替换的目标。
+            if (mob.getTarget() == target) {
+                mob.setTarget(null);
+                mob.getNavigation().stop();
+            }
+            if (mob.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                && mob.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null) == target) {
+                mob.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+            }
+            return boundaryError != null ? boundaryError : ActionState.failed("invalid attack target payload");
+        }
         if (!isValidTarget(mob, target)) {
             return ActionState.completed("target is no longer valid", targetDetails(target));
         }
@@ -153,6 +228,13 @@ public class SetAttackTargetController extends AbstractActionComponentController
         return ActionState.running("tracking attack target", targetDetails(target));
     }
 
+    /**
+     * 判断目标是否满足原版攻击资格。
+     *
+     * @param mob 受控生物
+     * @param target 已解析目标
+     * @return 是否具备攻击资格
+     */
     private static boolean isValidTarget(Mob mob, LivingEntity target) {
         return target != mob
             && target.isAlive()
@@ -201,6 +283,12 @@ public class SetAttackTargetController extends AbstractActionComponentController
         return details;
     }
 
+    /**
+     * 构造当前目标的动作诊断字段。
+     *
+     * @param target 已解析目标
+     * @return 诊断字典
+     */
     private static Map<String, Object> targetDetails(LivingEntity target) {
         return Map.of(
             "target_uuid", target.getUUID().toString(),
@@ -210,10 +298,81 @@ public class SetAttackTargetController extends AbstractActionComponentController
         );
     }
 
+
+    /** @param region 默认环境区域；没有区域时保留原空间，显式配置始终优先 */
+    @Override
+    public void initializeDefaultRegion(@Nullable BoundingBox region) {
+        if (this.defaultsApplied) {
+            return;
+        }
+        if (!this.explicitSpace && region != null) {
+            this.applyingDefaults = true;
+            try {
+                this.setSpace(CoordinateSpaces.withRegion(this.space(), region, true));
+            } finally {
+                this.applyingDefaults = false;
+            }
+        }
+        this.defaultsApplied = true;
+    }
+
+    /** @param space 新动作空间；本组件校验全部字段及一维坐标轴 */
+    @Override
+    protected void validateSpace(McSpace<Map<String, Object>> space) {
+        ActionSpaces.validate(space, this.defaultSpace());
+        CoordinateSpaces.bounds(space);
+    }
+
+    /** 成功替换空间后记录调用方覆盖，默认初始化除外。 */
+    @Override
+    protected void onSpaceChanged() {
+        if (!this.applyingDefaults) {
+            this.explicitSpace = true;
+        }
+    }
+
+    /**
+     * @param x 目标 X
+     * @param y 目标 Y
+     * @param z 目标 Z
+     * @return 是否落在本组件当前坐标空间
+     */
+    private boolean containsTarget(double x, double y, double z) {
+        return CoordinateSpaces.bounds(this.space()).contains(x, y, z);
+    }
+
+    /**
+     * @param x 目标 X
+     * @param y 目标 Y
+     * @param z 目标 Z
+     * @return 本组件的越界失败及空间诊断
+     */
+    private ActionState outsideTarget(double x, double y, double z) {
+        return ActionState.failed("target outside action space", CoordinateSpaces.details(this.space(), x, y, z));
+    }
+
+    /**
+     * @param target 已解析实体
+     * @return 维度或位置不符合本组件空间时的失败；合法返回 null
+     */
+    private ActionState checkTargetEntity(net.minecraft.world.entity.Entity target) {
+        if (target.level() != this.mob().level()) {
+            return ActionState.failed("target entity is in another dimension", Map.of("entity_id", target.getId()));
+        }
+        return this.containsTarget(target.getX(), target.getY(), target.getZ())
+            ? null : this.outsideTarget(target.getX(), target.getY(), target.getZ());
+    }
+
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
     public static final class Factory implements ActionComponentFactory<ProtoSetAttackTarget, SetAttackTargetController> {
+        /**
+         * 为指定受控生物创建独立组件实例。
+         *
+         * @param mob 受控生物
+         * @return 新组件实例
+         */
         @Override
         public SetAttackTargetController create(Mob mob) {
             return new SetAttackTargetController(mob);

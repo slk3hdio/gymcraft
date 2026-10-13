@@ -11,14 +11,13 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.phys.Vec3;
-
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
+import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces.Bounds;
+import io.github.mousemeya.gymcraft.mixin.ChunkMapAccessor;
 
 /**
  * 世界位置探测工具 —— 解析受控实体当前所在的群系与结构注册 ID。
@@ -56,9 +55,9 @@ public final class WorldLocationScanner {
     }
 
     /**
-     * 扫描相对区块空间范围内已加载区块中的结构起点。
+     * 扫描已加载区块的结构起点，按包围盒中心的绝对坐标过滤。
      * <p>
-     * 只遍历已加载区块（{@code hasChunk} 守卫，绝不触发区块加载），逐区块读取
+     * 只遍历可见 holder，非阻塞读取已经存在的区块，绝不触发区块加载，逐区块读取
      * {@link ChunkStatus#STRUCTURE_STARTS} 的结构起点表；起点只存储在生成区块中，
      * 因此天然无重复。坐标取结构起点包围盒中心，距离为 Mob 到该中心的欧氏距离，
      * 结果按距离升序、再按注册 ID 字典序稳定排列。客户端世界无法解析结构信息，
@@ -66,54 +65,47 @@ public final class WorldLocationScanner {
      * </p>
      *
      * @param mob 探测目标 Agent
-     * @param scanSpace 相对 Mob 所在区块的 x/z 偏移闭区间，单位为区块
+     * @param bounds 结构中心的绝对坐标闭区间
      * @return 附近结构定位结果列表（距离升序）
      */
-    public static List<ScannedStructure> scanNearbyStructures(Mob mob, BoxSpace scanSpace) {
-        if (scanSpace.size() != 2) {
-            throw new IllegalArgumentException("structure scan_space must have two dimensions");
-        }
+    public static List<ScannedStructure> scanNearbyStructures(Mob mob, Bounds bounds) {
         if (!(mob.level() instanceof ServerLevel serverLevel)) {
             return List.of();
         }
-        ChunkPos center = mob.chunkPosition();
-        var low = scanSpace.low();
-        var high = scanSpace.high();
-        // 按闭区间取整，并裁剪到世界水平坐标边界，避免大偏移转换为 int 时溢出。
-        int minX = (int) Math.max(-1_875_000, Math.ceil(center.x() + low[0]));
-        int maxX = (int) Math.min(1_874_999, Math.floor(center.x() + high[0]));
-        int minZ = (int) Math.max(-1_875_000, Math.ceil(center.z() + low[1]));
-        int maxZ = (int) Math.min(1_874_999, Math.floor(center.z() + high[1]));
         Registry<Structure> structures = serverLevel.registryAccess().lookupOrThrow(Registries.STRUCTURE);
         List<ScannedStructure> result = new ArrayList<>();
-        for (int chunkX = minX; chunkX <= maxX; chunkX++) {
-            for (int chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
-                // 未加载区块直接跳过：getChunk 的默认行为会触发加载，必须显式守卫
-                if (!serverLevel.hasChunk(chunkX, chunkZ)) {
+        // 不能只枚举边界覆盖的区块：结构中心可能落在范围内，而生成起点保存在范围外。
+        var visibleChunks = List.copyOf(((ChunkMapAccessor) (Object) serverLevel.getChunkSource().chunkMap)
+            .gymcraft$getVisibleChunkMap().values());
+        for (var holder : visibleChunks) {
+            var chunk = holder.getChunkIfPresent(ChunkStatus.FULL);
+            if (chunk == null || !serverLevel.hasChunk(holder.getPos().x(), holder.getPos().z())) {
+                continue;
+            }
+            for (Map.Entry<Structure, StructureStart> entry : chunk.getAllStarts().entrySet()) {
+                StructureStart start = entry.getValue();
+                if (start == null || !start.isValid()) {
                     continue;
                 }
-                for (Map.Entry<Structure, StructureStart> entry : serverLevel
-                    .getChunk(chunkX, chunkZ, ChunkStatus.STRUCTURE_STARTS).getAllStarts().entrySet()) {
-                    StructureStart start = entry.getValue();
-                    if (start == null || !start.isValid()) {
-                        continue;
-                    }
-                    Identifier id = structures.getKey(entry.getKey());
-                    if (id == null) {
-                        continue;
-                    }
-                    BlockPos centerPos = start.getBoundingBox().getCenter();
-                    result.add(new ScannedStructure(
-                        id.toString(),
-                        centerPos.getX(),
-                        centerPos.getY(),
-                        centerPos.getZ(),
-                        Math.sqrt(mob.distanceToSqr(Vec3.atCenterOf(centerPos)))));
+                Identifier id = structures.getKey(entry.getKey());
+                if (id == null) {
+                    continue;
                 }
+                BlockPos centerPos = start.getBoundingBox().getCenter();
+                if (!bounds.contains(centerPos.getX(), centerPos.getY(), centerPos.getZ())) {
+                    continue;
+                }
+                result.add(new ScannedStructure(
+                    id.toString(),
+                    centerPos.getX(),
+                    centerPos.getY(),
+                    centerPos.getZ(),
+                    Math.sqrt(mob.distanceToSqr(Vec3.atCenterOf(centerPos)))));
             }
         }
         result.sort(Comparator.comparingDouble(ScannedStructure::distance)
-            .thenComparing(ScannedStructure::structureId));
+            .thenComparing(ScannedStructure::structureId)
+            .thenComparingInt(ScannedStructure::x).thenComparingInt(ScannedStructure::y).thenComparingInt(ScannedStructure::z));
         return result;
     }
 

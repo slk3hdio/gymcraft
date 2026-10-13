@@ -4,267 +4,402 @@ import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertEq
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.spawnAgent;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
+import com.google.protobuf.Message;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
+import net.minecraft.world.level.levelgen.structure.structures.BuriedTreasurePieces;
 
-import io.github.mousemeya.gymcraft.gym.observation.AbstractSpatialObservationCreator;
+import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
+import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnv;
+import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.observation.SpatialObservationSpaces;
 import io.github.mousemeya.gymcraft.gym.observation.component.InterestingBlocksObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.NearbyBlocksObservationCreator;
-import io.github.mousemeya.gymcraft.gym.observation.component.NearbyBlockScanner;
 import io.github.mousemeya.gymcraft.gym.observation.component.NearbyEntitiesObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.NearbyItemsObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.component.WorldStateObservationCreator;
-import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoBlockView;
-import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyEntities;
+import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
+import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
-import io.github.mousemeya.gymcraft.gym.space.SpatialSequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.state.AttachScope;
+import io.github.mousemeya.gymcraft.mixin.ChunkMapAccessor;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 /**
- * 观测扫描空间 GameTest —— 验证 setSpace 统一约束范围、数量与序列化信息。
- * 同步驱动观测组件，覆盖非对称边界、边界闭区间和包围盒粗筛的越界候选。
+ * 绝对空间观测回归测试：覆盖边界、空间更新、基线注入、可见表面及只读结构扫描。
+ * 世界操作在服务端线程执行；阻塞 reset 放到虚拟线程，测试实体保持在结构强加载区内。
  */
 public final class SpatialObservationGameTests {
     /** 禁止实例化测试工具类。 */
     private SpatialObservationGameTests() {
     }
 
-    /**
-     * 验证普通与感兴趣方块共享空间边界判定，范围由 BoxSpace 而非球形距离决定。
-     *
-     * @param helper 测试辅助对象
-     */
-    public static void blocksRespectSpace(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 3));
-        BlockPos center = BlockPos.containing(mob.getEyePosition());
-        BlockPos inside = center.offset(2, 0, 1);
-        BlockPos west = center.offset(-1, 0, 0);
-        BlockPos above = center.above();
-        helper.getLevel().setBlockAndUpdate(inside, Blocks.DIAMOND_ORE.defaultBlockState());
-        helper.getLevel().setBlockAndUpdate(west, Blocks.DIAMOND_ORE.defaultBlockState());
-        helper.getLevel().setBlockAndUpdate(above, Blocks.DIAMOND_ORE.defaultBlockState());
-        var bounds = new BoxSpace(new double[] {-0.25, -0.25, -0.25}, new double[] {2, 0.25, 1});
-        var nearby = new NearbyBlocksObservationCreator();
-        configure(nearby, "blocks", bounds, 8);
-        nearby.setMaxVisited(64);
-        nearby.setMaxBlocks(4);
-        var blocks = nearby.create(mob);
-        assertEquals(helper, 1, blocks.getBlocksCount(), "only the in-space surface should be observed");
-        assertBlock(helper, inside, blocks.getBlocks(0));
-        assertTrue(helper, nearby.contains(blocks), "created blocks should meet the current space limit");
-
-        // 兴趣集合中包含所有测试矿石，范围外矿石只能由扫描空间排除。
-        mob.setData(ModAttachments.INTERESTING_BLOCKS, Set.of(Blocks.DIAMOND_ORE));
-        var interesting = new InterestingBlocksObservationCreator();
-        configure(interesting, "blocks", bounds, 8);
-        interesting.setMaxVisited(64);
-        interesting.setMaxBlocks(4);
-        var selected = interesting.create(mob);
-        assertEquals(helper, 1, selected.getBlocksCount(), "interest filtering must retain the same spatial bounds");
-        assertBlock(helper, inside, selected.getBlocks(0));
-        configure(nearby, "blocks", bounds, 0);
-        configure(interesting, "blocks", bounds, 0);
-        assertEquals(helper, 0, nearby.create(mob).getBlocksCount(), "zero block limit must return no results");
-        assertEquals(helper, 0, interesting.create(mob).getBlocksCount(), "zero interest limit must return no results");
-        helper.succeed();
-    }
-
-    /**
-     * 验证选定首个非空气起点后仅遍历该连通域，过滤不阻断扩展且保持 FIFO 层次顺序。
-     *
-     * @param helper 测试辅助对象
-     */
-    public static void blocksStartAtFirstNonAir(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 3));
-        BlockPos center = BlockPos.containing(mob.getEyePosition());
-        BlockPos seed = center.south();
-        BlockPos firstBranch = seed.south();
-        BlockPos secondBranch = seed.east();
-        BlockPos descendant = firstBranch.east();
-        BlockPos disconnected = center.east(3);
-        helper.getLevel().setBlock(seed, Blocks.STONE.defaultBlockState(), 2);
-        helper.getLevel().setBlock(firstBranch, Blocks.DIAMOND_ORE.defaultBlockState(), 2);
-        helper.getLevel().setBlock(secondBranch, Blocks.DIAMOND_ORE.defaultBlockState(), 2);
-        helper.getLevel().setBlock(descendant, Blocks.GOLD_BLOCK.defaultBlockState(), 2);
-        helper.getLevel().setBlock(disconnected, Blocks.DIAMOND_ORE.defaultBlockState(), 2);
-        var bounds = new BoxSpace(new double[] {-0.25, -0.25, -0.25}, new double[] {3, 0.25, 2});
-
-        // 两条分支共享后继，既验证逐层顺序，也验证多路径访问不会产生重复结果。
-        var all = NearbyBlockScanner.scan(mob, bounds, 64, 16, state -> true);
-        assertEquals(helper, List.of(seed, firstBranch, secondBranch, descendant),
-            all.stream().map(NearbyBlockScanner.ScannedBlock::pos).toList(),
-            "scan should BFS from the first non-air seed without visiting disconnected blocks");
-        assertEquals(helper, 1.0, all.getFirst().distance(), "distance must use the eye block rather than the BFS seed");
-        var filtered = NearbyBlockScanner.scan(mob, bounds, 64, 16, state -> state.is(Blocks.DIAMOND_ORE));
-        assertEquals(helper, List.of(firstBranch, secondBranch),
-            filtered.stream().map(NearbyBlockScanner.ScannedBlock::pos).toList(),
-            "an unmatched seed must still connect matching descendants");
-        var capped = NearbyBlockScanner.scan(mob, bounds, 64, 1, state -> true);
-        assertEquals(helper, List.of(seed), capped.stream().map(NearbyBlockScanner.ScannedBlock::pos).toList(),
-            "result limit must include the BFS seed");
-        var limited = NearbyBlockScanner.scan(mob, bounds, 2, 16, state -> true);
-        assertEquals(helper, List.of(seed, firstBranch), limited.stream().map(NearbyBlockScanner.ScannedBlock::pos).toList(),
-            "non-air BFS must respect its own node budget");
-        assertEquals(helper, 0, NearbyBlockScanner.scan(mob, bounds, 1, 16, state -> true).size(),
-            "exhausting the seed-search budget must return no results");
-        helper.succeed();
-    }
-
-    /**
-     * 验证非空气起点不依赖碰撞体，并在纯空气范围中返回空列表。
-     *
-     * @param helper 测试辅助对象
-     */
-    public static void blocksIncludeNonCollidingSeed(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 3));
-        BlockPos center = BlockPos.containing(mob.getEyePosition());
-        BlockPos water = center.south();
-        BlockPos connected = water.south();
-        BlockPos disconnected = center.east();
-        var bounds = new BoxSpace(new double[] {-0.25, -0.25, -0.25}, new double[] {1, 0.25, 2});
-        assertEquals(helper, 0, NearbyBlockScanner.scan(mob, bounds, 64, 16, state -> true).size(),
-            "an air-only scan space must have no seed");
-        helper.getLevel().setBlock(water, Blocks.WATER.defaultBlockState(), 2);
-        helper.getLevel().setBlock(connected, Blocks.DIAMOND_ORE.defaultBlockState(), 2);
-        helper.getLevel().setBlock(disconnected, Blocks.DIAMOND_ORE.defaultBlockState(), 2);
-        var blocks = NearbyBlockScanner.scan(mob, bounds, 64, 16, state -> state.is(Blocks.DIAMOND_ORE));
-        assertEquals(helper, List.of(connected), blocks.stream().map(NearbyBlockScanner.ScannedBlock::pos).toList(),
-            "water must be the first non-air seed even though it has no collision shape");
-        helper.succeed();
-    }
-
-    /**
-     * 验证实体和掉落物使用位置闭区间判定，且 setSpace 的数量上限实际生效。
-     *
-     * @param helper 测试辅助对象
-     */
-    public static void entitiesAndItemsRespectSpace(GameTestHelper helper) {
-        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 3));
-        var bounds = new BoxSpace(new double[] {0, -0.25, -0.25}, new double[] {2, 0.25, 1});
-        var entities = new NearbyEntitiesObservationCreator();
-        var items = new NearbyItemsObservationCreator();
-        configure(entities, "entities", bounds, 8);
-        configure(items, "items", bounds, 8);
-        var offsets = new Vec3[] {
-            new Vec3(1, 0, 0), new Vec3(2, 0, 1), new Vec3(2.1, 0, 1),
-            new Vec3(-0.1, 0, 0), new Vec3(1, 0.3, 0), new Vec3(1, 0, 1.1)
-        };
-        // 越界候选的包围盒仍与 AABB 相交，必须进一步按实体位置过滤。
-        for (var offset : offsets) {
-            var position = mob.position().add(offset);
-            var cow = helper.spawnWithNoFreeWill(EntityType.COW, new BlockPos(3, 2, 3));
-            cow.setPos(position.x, position.y, position.z);
-            var item = new ItemEntity(helper.getLevel(), position.x, position.y, position.z, new ItemStack(Items.APPLE));
-            helper.getLevel().addFreshEntity(item);
+    /** @param helper 测试上下文；验证退化/负坐标边界、完整空间校验和非法替换的原子性 */
+    public static void spacesAreStructuredAndAtomic(GameTestHelper helper) {
+        Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
+        var point = new BoxSpace(new double[] {-7, -4, -2}, new double[] {-7, -4, -2});
+        assertTrue(helper, point.contains(point.sample()), "degenerate negative box must sample its fixed coordinates");
+        for (int i = 0; i < 32; i++) {
+            var wide = new BoxSpace(-Double.MAX_VALUE, Double.MAX_VALUE, 1);
+            assertTrue(helper, wide.contains(wide.sample()), "wide finite bounds must sample without overflow");
         }
-        var observed = entities.create(mob);
-        assertEquals(helper, 2, observed.getEntitiesCount(), "only two entity positions are in the closed bounds");
-        assertEquals(helper, 2, items.create(mob).getItemsCount(), "only two item positions are in the closed bounds");
-        entities.setMaxEntities(1);
-        items.setMaxItems(1);
-        assertEquals(helper, 1, entities.create(mob).getEntitiesCount(), "entity setter should preserve bounds and update limit");
-        assertEquals(helper, 1, items.create(mob).getItemsCount(), "item setter should preserve bounds and update limit");
-        assertTrue(helper, !entities.contains(observed), "contains must read the updated space limit");
-        configure(entities, "entities", bounds, 0);
-        configure(items, "items", bounds, 0);
-        assertEquals(helper, 0, entities.create(mob).getEntitiesCount(), "zero entity limit must return no results");
-        assertEquals(helper, 0, items.create(mob).getItemsCount(), "zero item limit must return no results");
-        assertTrue(helper, entities.contains(ProtoNearbyEntities.getDefaultInstance()), "zero limit must accept an empty observation");
-        helper.succeed();
-    }
-
-    /**
-     * 验证五个组件的扫描空间序列化及错误空间被原子拒绝。
-     *
-     * @param helper 测试辅助对象
-     */
-    public static void spaceContract(GameTestHelper helper) {
-        assertContract(helper, new NearbyBlocksObservationCreator(), "blocks", 3);
-        assertContract(helper, new InterestingBlocksObservationCreator(), "blocks", 3);
-        assertContract(helper, new NearbyEntitiesObservationCreator(), "entities", 3);
-        assertContract(helper, new NearbyItemsObservationCreator(), "items", 3);
-        assertContract(helper, new WorldStateObservationCreator(), "structures", 2);
-        var blocks = new NearbyBlocksObservationCreator();
-        assertRejected(helper, blocks, new DictSpace(Map.of("blocks", new SpatialSequenceSpace<>(
-            new TextSpace(), 1, new BoxSpace(1, 2, 3)))));
-        helper.succeed();
-    }
-
-    /**
-     * 使用 setSpace 替换指定结果序列，保留观测中的其他字段。
-     *
-     * @param creator 观测生成器
-     * @param field 结果字段名
-     * @param bounds 相对扫描边界
-     * @param limit 结果数量上限
-     */
-    static void configure(AbstractSpatialObservationCreator<?> creator, String field, BoxSpace bounds, int limit) {
-        var fields = new LinkedHashMap<>(((DictSpace) creator.space()).spaces());
-        fields.put(field, new SpatialSequenceSpace<>(new TextSpace(), limit, bounds));
-        creator.setSpace(new DictSpace(fields));
-    }
-
-    /**
-     * 校验序列化携带空间边界，并拒绝缺失边界或维度错误的配置。
-     *
-     * @param helper 测试辅助对象
-     * @param creator 观测生成器
-     * @param field 扫描字段名
-     * @param dimensions 正确的边界维数
-     */
-    private static void assertContract(GameTestHelper helper, AbstractSpatialObservationCreator<?> creator, String field, int dimensions) {
-        var sequence = (SpatialSequenceSpace<?>) ((DictSpace) creator.space()).spaces().get(field);
-        assertEquals(helper, dimensions, sequence.scanSpace().size(), "default bounds should use the documented axes");
-        var serializedFields = (Map<?, ?>) creator.space().serialize().get("spaces");
-        var serializedSequence = (Map<?, ?>) serializedFields.get(field);
-        assertEquals(helper, "sequence", serializedSequence.get("type"), "spatial sequence should retain the sequence schema");
-        assertEquals(helper, "box", ((Map<?, ?>) serializedSequence.get("scan_space")).get("type"), "scan bounds should serialize as box");
-        assertRejected(helper, creator, new DictSpace(Map.of(field, new SequenceSpace<>(new TextSpace(), 1))));
-        assertRejected(helper, creator, new DictSpace(Map.of(field, new SpatialSequenceSpace<>(
-            new TextSpace(), 1, new BoxSpace(-1, 1, dimensions == 3 ? 2 : 3)))));
-    }
-
-    /**
-     * 断言配置被拒绝，且原空间保持可用。
-     *
-     * @param helper 测试辅助对象
-     * @param creator 观测生成器
-     * @param invalid 待拒绝的空间
-     */
-    private static void assertRejected(GameTestHelper helper, AbstractSpatialObservationCreator<?> creator, DictSpace invalid) {
-        var original = creator.space();
         boolean rejected = false;
         try {
-            creator.setSpace(invalid);
+            new BoxSpace(Double.NaN, 1, 1);
         } catch (IllegalArgumentException expected) {
             rejected = true;
         }
-        assertTrue(helper, rejected, "invalid spatial space must be rejected by setSpace");
-        assertTrue(helper, original == creator.space(), "rejected configuration must preserve the previous space");
+        assertTrue(helper, rejected, "non-finite box must be rejected");
+        rejected = false;
+        try {
+            new BoxSpace(2, 1, 1);
+        } catch (IllegalArgumentException expected) {
+            rejected = true;
+        }
+        assertTrue(helper, rejected, "inverted box must be rejected");
+
+        // 五类组件都必须在 setSpace 时拒绝缺失字段、旧文本列表和二维坐标轴。
+        List<ObservationComponentCreator<?>> creators = List.of(new NearbyEntitiesObservationCreator(mob),
+            new NearbyItemsObservationCreator(mob), new NearbyBlocksObservationCreator(mob),
+            new InterestingBlocksObservationCreator(mob), new WorldStateObservationCreator(mob));
+        for (var creator : creators) {
+            String field = creator instanceof WorldStateObservationCreator ? "structures"
+                : creator instanceof NearbyEntitiesObservationCreator ? "entities"
+                : creator instanceof NearbyItemsObservationCreator ? "items" : "blocks";
+            var original = creator.space();
+            rejectSpace(helper, creator, new DictSpace(Map.of()));
+            var root = new LinkedHashMap<>(((DictSpace) original).spaces());
+            root.put(field, new SequenceSpace<>(new TextSpace(), 10));
+            rejectSpace(helper, creator, new DictSpace(root));
+            var sequence = SpatialObservationSpaces.sequence(original, field);
+            var element = new LinkedHashMap<>(((DictSpace) sequence.elementSpace()).spaces());
+            element.put("x", new BoxSpace(0, 1, 2));
+            root.put(field, new SequenceSpace<>(new DictSpace(element), 10));
+            rejectSpace(helper, creator, new DictSpace(root));
+            assertTrue(helper, creator.space() == original, "failed replacement must keep the original instance");
+            validateCreated(helper, creator, mob);
+        }
+        helper.succeed();
+    }
+
+    /** @param helper 测试上下文；验证六面闭区间、实体包围盒相交精筛、字段过滤和数量上限 */
+    public static void entitiesAndItemsRespectBounds(GameTestHelper helper) {
+        Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
+        var items = new NearbyItemsObservationCreator(mob);
+        BlockPos origin = helper.absolutePos(new BlockPos(2, 2, 2));
+        double x = origin.getX() + 0.5;
+        double y = origin.getY() + 0.5;
+        double z = origin.getZ() + 0.5;
+        items.setSpace(withBounds(items.space(), "items", new double[] {x, y, z}, new double[] {x + 2, y + 1, z + 3}, 20));
+        var accepted = new ArrayList<Integer>();
+        var rejected = new ArrayList<Integer>();
+        for (int axis = 0; axis < 3; axis++) {
+            double[] lowFace = {x + 1, y + 0.5, z + 1.5};
+            double[] highFace = lowFace.clone();
+            lowFace[axis] = new double[] {x, y, z}[axis];
+            highFace[axis] = new double[] {x + 2, y + 1, z + 3}[axis];
+            accepted.add(spawnItem(helper, lowFace).getId());
+            accepted.add(spawnItem(helper, highFace).getId());
+            lowFace[axis] -= 0.01;
+            highFace[axis] += 0.01;
+            rejected.add(spawnItem(helper, lowFace).getId());
+            rejected.add(spawnItem(helper, highFace).getId());
+        }
+        var observed = items.create(mob);
+        var ids = observed.getItemsList().stream().map(view -> view.getEntityId()).toList();
+        assertTrue(helper, ids.containsAll(accepted), "all six boundary faces must be included");
+        assertTrue(helper, rejected.stream().noneMatch(ids::contains), "intersecting entity boxes must not bypass position bounds");
+        assertTrue(helper, items.contains(observed), "item output must satisfy its space");
+
+        // 数量 setter 保留已有边界，直接覆盖序列长度为零则不返回结果。
+        var boundsBefore = SpatialObservationSpaces.bounds(SpatialObservationSpaces.sequence(items.space(), "items").elementSpace());
+        items.setMaxItems(2);
+        assertTrue(helper, items.create(mob).getItemsCount() <= 2, "item maximum must cap the output");
+        assertTrue(helper, boundsBefore.x() == SpatialObservationSpaces.bounds(
+            SpatialObservationSpaces.sequence(items.space(), "items").elementSpace()).x(), "maximum setter must preserve coordinate space");
+        var root = new LinkedHashMap<>(((DictSpace) items.space()).spaces());
+        var sequence = SpatialObservationSpaces.sequence(items.space(), "items");
+        var element = new LinkedHashMap<>(((DictSpace) sequence.elementSpace()).spaces());
+        var itemFields = new LinkedHashMap<>(((DictSpace) element.get("item")).spaces());
+        itemFields.put("item_id", new TextSpace("minecraft:diamond"));
+        element.put("item", new DictSpace(itemFields));
+        root.put("items", new SequenceSpace<>(new DictSpace(element), 20));
+        items.setSpace(new DictSpace(root));
+        assertEquals(helper, 0, items.create(mob).getItemsCount(), "nested element constraints must filter apples");
+        root.put("items", new SequenceSpace<>(sequence.elementSpace(), 0));
+        items.setSpace(new DictSpace(root));
+        assertEquals(helper, 0, items.create(mob).getItemsCount(), "zero maximum must return no items");
+
+        var entities = new NearbyEntitiesObservationCreator(mob);
+        var target = spawnAgent(helper, EntityType.HUSK, new BlockPos(5, 1, 5));
+        double[] position = {target.getX(), target.getY(), target.getZ()};
+        entities.setSpace(withBounds(entities.space(), "entities", position, position, 1));
+        assertTrue(helper, entities.create(mob).getEntitiesList().stream().anyMatch(view -> view.getEntityId() == target.getId()),
+            "degenerate coordinate box must include entity exactly on the point");
+        target.setPos(target.getX() + 0.01, target.getY(), target.getZ());
+        assertTrue(helper, entities.create(mob).getEntitiesList().stream().noneMatch(view -> view.getEntityId() == target.getId()),
+            "entity origin outside the point must be excluded despite its intersecting body");
+        mob.setPos(mob.getX() + 1, mob.getY(), mob.getZ());
+        assertTrue(helper, entities.create(mob).getEntitiesList().stream().noneMatch(view -> view.getEntityId() == target.getId()),
+            "moving observer must not recenter the absolute bounds");
+        helper.succeed();
+    }
+
+    /** @param helper 测试上下文；验证空气遍历预算、单层边界、兴趣及可见性过滤 */
+    public static void blocksRespectBoundsAndVisibility(GameTestHelper helper) {
+        Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(3, 1, 3));
+        BlockPos eye = BlockPos.containing(mob.getEyePosition());
+        var level = helper.getLevel();
+        level.setBlock(eye.east(), Blocks.DIAMOND_ORE.defaultBlockState(), 3);
+        level.setBlock(eye.east(2), Blocks.DIAMOND_ORE.defaultBlockState(), 3);
+        var blocks = new NearbyBlocksObservationCreator(mob);
+        var region = new BoundingBox(eye.getX() - 1, eye.getY(), eye.getZ(),
+            eye.getX() + 2, eye.getY(), eye.getZ());
+        blocks.setSpace(SpatialObservationSpaces.withRegion(blocks.space(), "blocks", region, false));
+        blocks.setMaxVisited(1);
+        var observed = blocks.create(mob);
+        assertEquals(helper, 1, observed.getBlocksCount(), "single visited eye node must still inspect its adjacent visible surface");
+        assertEquals(helper, eye.east().getX(), observed.getBlocks(0).getX(), "visible near ore must be returned");
+        assertTrue(helper, blocks.contains(observed), "single-layer block output must satisfy space");
+        blocks.setMaxVisited(40);
+        observed = blocks.create(mob);
+        assertTrue(helper, observed.getBlocksList().stream().noneMatch(view -> view.getX() == eye.east(2).getX()),
+            "hidden far ore must not be returned through the near solid block");
+
+        // 兴趣过滤与坐标范围独立生效；缩小数量上限不会恢复默认边界。
+        mob.setData(ModAttachments.INTERESTING_BLOCKS, Set.of(Blocks.DIAMOND_ORE));
+        var interesting = new InterestingBlocksObservationCreator(mob);
+        interesting.setSpace(SpatialObservationSpaces.withRegion(interesting.space(), "blocks", region, false));
+        interesting.setMaxBlocks(1);
+        var interests = interesting.create(mob);
+        assertEquals(helper, 1, interests.getBlocksCount(), "interesting ore must be visible");
+        assertTrue(helper, interesting.contains(interests), "interesting block output must satisfy space");
+        assertEquals(helper, "minecraft:diamond_ore", interests.getBlocks(0).getBlockId(), "interest type must be retained");
+        var excluded = new BoundingBox(eye.west());
+        blocks.setSpace(SpatialObservationSpaces.withRegion(blocks.space(), "blocks", excluded, false));
+        assertEquals(helper, 0, blocks.create(mob).getBlocksCount(), "eye outside bounds must not start BFS");
+
+        // 使用不加入世界的探针测试已加载区域最东侧，空气扩展和表面优先检查都不能加载相邻区块。
+        var holders = ((ChunkMapAccessor) (Object) level.getChunkSource().chunkMap).gymcraft$getVisibleChunkMap();
+        var edge = holders.values().stream().max(java.util.Comparator.comparingInt(holder -> holder.getPos().x())).orElseThrow().getPos();
+        assertTrue(helper, !level.hasChunk(edge.x() + 1, edge.z()), "probe neighbor must be unloaded before scanning");
+        Mob probe = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
+        probe.setPos(edge.x() * 16 + 15.5, mob.getY(), edge.z() * 16 + 8.5);
+        var probeBlocks = new NearbyBlocksObservationCreator(probe);
+        var probeEye = BlockPos.containing(probe.getEyePosition());
+        var probeRegion = new BoundingBox(probeEye.getX() - 1, probeEye.getY() - 1, probeEye.getZ() - 1,
+            probeEye.getX() + 2, probeEye.getY() + 1, probeEye.getZ() + 1);
+        probeBlocks.setSpace(SpatialObservationSpaces.withRegion(probeBlocks.space(), "blocks", probeRegion, false));
+        int loadedBefore = holders.size();
+        probeBlocks.create(probe);
+        assertEquals(helper, loadedBefore, holders.size(), "block scanning must not create chunk holders");
+        assertTrue(helper, !level.hasChunk(edge.x() + 1, edge.z()), "BFS and surface priority must not load the neighbor");
+        helper.succeed();
+    }
+
+    /** @param helper 测试上下文；验证挂载和场景区域优先、无区域后备范围及跨 reset 固定性 */
+    public static void defaultsFollowBaselineAndSurviveReset(GameTestHelper helper) {
+        Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(3, 1, 3));
+        BlockPos anchor = mob.blockPosition();
+        var region = new BoundingBox(anchor.getX() - 1, anchor.getY(), anchor.getZ() - 1,
+            anchor.getX() + 3, anchor.getY() + 1, anchor.getZ() + 2);
+        var id = Identifier.fromNamespaceAndPath("gymcraft", "spatial_defaults_test");
+        var env = new SimpleMobEnv(id, mob, null, new AttachScope(region, false, false));
+        assertRegion(helper, env, region);
+        var encoded = ScenarioWorldCodec.encode(helper.getLevel(), "gymcraft:simple_mob", Map.of(), env.baselineSnapshot());
+        env.close();
+        var scenarioEnv = new SimpleMobEnv(id, mob, encoded);
+        assertRegion(helper, scenarioEnv, scenarioEnv.baselineSnapshot().region());
+        scenarioEnv.close();
+
+        // 空区域的默认边界在创建位置固定，直接 setSpace 可以覆盖环境默认值。
+        var fallback = new SimpleMobEnv(id, mob);
+        String fallbackJson = ProtoJson.toJson(fallback.getObservationSpace().serialize());
+        mob.setPos(mob.getX() + 1, mob.getY(), mob.getZ());
+        assertEquals(helper, fallbackJson, ProtoJson.toJson(fallback.getObservationSpace().serialize()), "fallback must remain fixed after movement");
+        fallback.close();
+        var resetEnv = new SimpleMobEnv(id, mob, null, new AttachScope(region, false, false));
+        var custom = withBounds(resetEnv.getObservationComponentSpace("gymcraft:nearby_items"), "items",
+            new double[] {-12, -5, -9}, new double[] {-12, -5, -9}, 2);
+        resetEnv.setObservationComponentSpace("gymcraft:nearby_items", custom);
+        // 动作也允许在基线外显式设置范围，reset 和实体替换必须保留配置。
+        resetEnv.setActionComponentSpace("gymcraft:move_to", CoordinateSpaces.withRegion(
+            resetEnv.getActionComponentSpace("gymcraft:move_to"), new BoundingBox(-12, -5, -9, -1, -1, -2), true));
+        String expectedActions = ProtoJson.toJson(resetEnv.getActionSpace().serialize());
+        String expectedJson = ProtoJson.toJson(resetEnv.getObservationSpace().serialize());
+        var parsed = ProtoJson.fromJson(expectedJson);
+        assertEquals(helper, "dict", parsed.get("type"), "RPC space JSON must retain the dict shape");
+        assertTrue(helper, expectedJson.contains("\"x\"") && expectedJson.contains("-12.0"), "serialized coordinates must reflect custom bounds");
+        CompletableFuture<Void> tested = new CompletableFuture<>();
+        Thread.startVirtualThread(() -> {
+            try {
+                resetEnv.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
+                resetEnv.reset(2, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
+                tested.complete(null);
+            } catch (Throwable error) {
+                tested.completeExceptionally(error);
+            }
+        });
+        // 成功标记必须在 GameTest 的 tick 序列内设置，框架才能通知批次监听器并启动下一批。
+        helper.startSequence().thenWaitUntil(() -> assertTrue(helper, tested.isDone(), "waiting for resets"))
+            .thenExecute(() -> {
+            try {
+                tested.join();
+                assertEquals(helper, expectedJson, ProtoJson.toJson(resetEnv.getObservationSpace().serialize()), "reset must preserve absolute spaces");
+                assertEquals(helper, expectedActions, ProtoJson.toJson(resetEnv.getActionSpace().serialize()), "reset must preserve action overrides and derived coordinate JSON");
+                var replaced = (Mob) helper.getLevel().getEntity(mob.getUUID());
+                assertTrue(helper, replaced != null && replaced != mob, "reset must replace the agent without replacing component bounds");
+            } finally {
+                resetEnv.close();
+            }
+        }).thenSucceed();
+    }
+
+    /** @param helper 测试上下文；验证结构中心与起点区块分离、零上限及扫描不加载区块 */
+    public static void structuresUseCenterWithoutLoading(GameTestHelper helper) {
+        Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(3, 1, 3));
+        var level = helper.getLevel();
+        var chunk = level.getChunkAt(mob.blockPosition());
+        var treasure = level.registryAccess().lookupOrThrow(Registries.STRUCTURE)
+            .getValue(Identifier.withDefaultNamespace("buried_treasure"));
+        var original = new LinkedHashMap<>(chunk.getAllStarts());
+        BlockPos center = mob.blockPosition().offset(-32, 0, -32);
+        var start = new StructureStart(treasure, chunk.getPos(), 1,
+            new PiecesContainer(List.of(new BuriedTreasurePieces.BuriedTreasurePiece(center))));
+        chunk.setStartForStructure(treasure, start);
+        try {
+            var creator = new WorldStateObservationCreator(mob);
+            creator.setSpace(SpatialObservationSpaces.withRegion(creator.space(), "structures", new BoundingBox(center), false));
+            var visible = (ChunkMapAccessor) (Object) level.getChunkSource().chunkMap;
+            int before = visible.gymcraft$getVisibleChunkMap().size();
+            var observed = creator.create(mob);
+            assertEquals(helper, 1, observed.getStructuresCount(), "center in space must be found even when start chunk is outside");
+            assertEquals(helper, center.getX(), observed.getStructures(0).getX(), "returned center must match the absolute point");
+            assertTrue(helper, creator.contains(observed), "structure observation must satisfy its space");
+            creator.setSpace(SpatialObservationSpaces.withRegion(creator.space(), "structures", new BoundingBox(center.above()), false));
+            assertEquals(helper, 0, creator.create(mob).getStructuresCount(), "center outside Y bounds must be excluded");
+            assertEquals(helper, before, visible.gymcraft$getVisibleChunkMap().size(), "structure scans must not load any chunks");
+            var root = new LinkedHashMap<>(((DictSpace) creator.space()).spaces());
+            root.put("structures", new SequenceSpace<>(SpatialObservationSpaces.sequence(creator.space(), "structures").elementSpace(), 0));
+            creator.setSpace(new DictSpace(root));
+            assertEquals(helper, 0, creator.create(mob).getStructuresCount(), "zero structure maximum must return an empty list");
+            helper.succeed();
+        } finally {
+            chunk.setAllStarts(original);
+        }
     }
 
     /**
-     * 校验观测保留世界绝对坐标。
-     *
-     * @param helper 测试辅助对象
-     * @param expected 预期的绝对位置
-     * @param actual 方块观测
+     * @param helper 上下文
+     * @param creator 待测组件
+     * @param space 非法空间；断言设置立即失败
      */
-    private static void assertBlock(GameTestHelper helper, BlockPos expected, ProtoBlockView actual) {
-        assertEquals(helper, expected, new BlockPos(actual.getX(), actual.getY(), actual.getZ()), "observation coordinates must remain absolute");
+    private static void rejectSpace(GameTestHelper helper, ObservationComponentCreator<?> creator, McSpace<Map<String, Object>> space) {
+        boolean rejected = false;
+        try {
+            creator.setSpace(space);
+        } catch (IllegalArgumentException expected) {
+            rejected = true;
+        }
+        assertTrue(helper, rejected, "invalid space must be rejected when configured");
+    }
+
+    /**
+     * @param helper 上下文
+     * @param creator 组件
+     * @param mob 实体
+     * @param <T> 消息类型；断言默认生成结果合法
+     */
+    private static <T extends Message> void validateCreated(GameTestHelper helper, ObservationComponentCreator<T> creator, Mob mob) {
+        assertTrue(helper, creator.contains(creator.create(mob)), "created observation must be contained in its current space");
+    }
+
+    /**
+     * @param helper 上下文
+     * @param coordinates 绝对位置
+     * @return 结构范围内的苹果掉落物
+     */
+    private static ItemEntity spawnItem(GameTestHelper helper, double[] coordinates) {
+        var item = new ItemEntity(helper.getLevel(), coordinates[0], coordinates[1], coordinates[2], new ItemStack(Items.APPLE));
+        helper.getLevel().addFreshEntity(item);
+        return item;
+    }
+
+    /**
+     * @param space 组件空间
+     * @param field 列表名
+     * @param low 三轴下界
+     * @param high 三轴上界
+     * @param maximum 数量上限
+     * @return 保留其他字段的新空间
+     */
+    private static DictSpace withBounds(McSpace<Map<String, Object>> space, String field, double[] low, double[] high, int maximum) {
+        var root = new LinkedHashMap<>(((DictSpace) space).spaces());
+        var element = new LinkedHashMap<>(((DictSpace) SpatialObservationSpaces.sequence(space, field).elementSpace()).spaces());
+        String[] axes = {"x", "y", "z"};
+        for (int i = 0; i < 3; i++) {
+            element.put(axes[i], new BoxSpace(low[i], high[i], 1));
+        }
+        root.put(field, new SequenceSpace<>(new DictSpace(element), maximum));
+        return new DictSpace(root);
+    }
+
+    /**
+     * @param helper 上下文
+     * @param env 环境
+     * @param region 基线区域；断言全部坐标列表均使用区域边界
+     */
+    private static void assertRegion(GameTestHelper helper, SimpleMobEnv env, BoundingBox region) {
+        // 两侧组合器均经共享接口注入区域，捕获开关为 false 时也不能漏掉动作边界。
+        for (String id : List.of("move_to", "look_at", "break_block", "set_block", "pick_up_item",
+            "attack_once", "set_attack_target", "open_menu", "use_item")) {
+            var bounds = CoordinateSpaces.bounds(env.getActionComponentSpace("gymcraft:" + id));
+            boolean continuous = !id.equals("break_block") && !id.equals("set_block");
+            assertEquals(helper, (double) region.minX(), bounds.x().low()[0], "action region minimum for " + id);
+            assertEquals(helper, continuous ? Math.nextDown((double) region.maxX() + 1) : (double) region.maxX(),
+                bounds.x().high()[0], "action region maximum for " + id);
+            assertEquals(helper, (double) region.minY(), bounds.y().low()[0], "action region Y minimum for " + id);
+            assertEquals(helper, (double) region.minZ(), bounds.z().low()[0], "action region Z minimum for " + id);
+        }
+        for (String id : List.of("nearby_entities", "nearby_items", "nearby_blocks", "interesting_blocks", "world")) {
+            String field = id.equals("world") ? "structures" : id.equals("nearby_entities") ? "entities"
+                : id.equals("nearby_items") ? "items" : "blocks";
+            boolean continuous = id.equals("nearby_entities") || id.equals("nearby_items");
+            var bounds = SpatialObservationSpaces.bounds(SpatialObservationSpaces.sequence(
+                env.getObservationComponentSpace("gymcraft:" + id), field).elementSpace());
+            assertEquals(helper, (double) region.minX(), bounds.x().low()[0], "region minimum must be used for " + id);
+            assertEquals(helper, continuous ? Math.nextDown((double) region.maxX() + 1) : (double) region.maxX(),
+                bounds.x().high()[0], "region maximum must be used for " + id);
+            assertEquals(helper, (double) region.minY(), bounds.y().low()[0], "region Y minimum must be used for " + id);
+            assertEquals(helper, continuous ? Math.nextDown((double) region.maxY() + 1) : (double) region.maxY(),
+                bounds.y().high()[0], "region Y maximum must be used for " + id);
+            assertEquals(helper, (double) region.minZ(), bounds.z().low()[0], "region Z minimum must be used for " + id);
+            assertEquals(helper, continuous ? Math.nextDown((double) region.maxZ() + 1) : (double) region.maxZ(),
+                bounds.z().high()[0], "region Z maximum must be used for " + id);
+        }
     }
 }

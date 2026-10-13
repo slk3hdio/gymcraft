@@ -304,31 +304,40 @@ class ActionDslParser:
                 )
 
     def _component_values(self, action: ParsedAction) -> dict[str, Any]:
-        """把 oneof 等 protobuf 结构展开成服务端空间使用的字段字典。"""
+        """只展开当前分支实际使用的参数，服务端派生实体坐标不由客户端填写。"""
         payload = action.payload
+        if action.component_id == ACTION_SET_ATTACK_TARGET:
+            target_payload = cast(set_attack_target_pb2.ProtoSetAttackTarget, payload)
+            if target_payload.target_entity_id > 0 or not target_payload.target_uuid:
+                return {"target_entity_id": target_payload.target_entity_id}
+            return {"target_uuid": target_payload.target_uuid}
         if action.component_id == ACTION_OPEN_MENU:
             open_payload = cast(open_menu_pb2.ProtoOpenMenu, payload)
             target = open_payload.WhichOneof("target")
             if target == "block":
-                return {"x": open_payload.block.x, "y": open_payload.block.y, "z": open_payload.block.z, "entity_id": 0}
+                return {"x": open_payload.block.x, "y": open_payload.block.y, "z": open_payload.block.z}
             if target == "entity":
-                return {"x": 0, "y": 0, "z": 0, "entity_id": open_payload.entity.entity_id}
-            return {"x": 0, "y": 0, "z": 0, "entity_id": 0}
+                return {"entity_id": open_payload.entity.entity_id}
+            return {}
         if action.component_id == ACTION_LOOK_AT:
             look_payload = cast(look_at_pb2.ProtoLookAt, payload)
             target = look_payload.WhichOneof("target")
             if target == "block":
-                return {"x": look_payload.block.x, "y": look_payload.block.y, "z": look_payload.block.z, "entity_id": 0}
+                return {"x": look_payload.block.x, "y": look_payload.block.y, "z": look_payload.block.z}
             if target == "entity":
-                return {"x": 0, "y": 0, "z": 0, "entity_id": look_payload.entity.entity_id}
+                return {"entity_id": look_payload.entity.entity_id}
             if target == "item":
-                return {"x": 0, "y": 0, "z": 0, "entity_id": look_payload.item.entity_id}
-            return {"x": 0, "y": 0, "z": 0, "entity_id": 0}
+                return {"entity_id": look_payload.item.entity_id}
+            return {}
         if action.component_id == ACTION_USE_ITEM:
             use_payload = cast(use_item_pb2.ProtoUseItem, payload)
-            return {"slot_id": use_payload.slot_id, "x": use_payload.block.x,
-                    "y": use_payload.block.y, "z": use_payload.block.z,
-                    "entity_id": use_payload.entity.entity_id}
+            values: dict[str, Any] = {"slot_id": use_payload.slot_id}
+            # 坐标只存在于方块分支，实体位置由服务端解析，自身使用没有目标坐标。
+            if use_payload.WhichOneof("target") == "block":
+                values.update(x=use_payload.block.x, y=use_payload.block.y, z=use_payload.block.z)
+            elif use_payload.WhichOneof("target") == "entity":
+                values["entity_id"] = use_payload.entity.entity_id
+            return values
         fields: dict[str, Any] = {}
         for descriptor, value in payload.ListFields():
             fields[descriptor.name] = value

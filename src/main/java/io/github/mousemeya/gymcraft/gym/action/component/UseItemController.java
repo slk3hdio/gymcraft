@@ -1,5 +1,10 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
+import io.github.mousemeya.gymcraft.gym.component.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
+import io.github.mousemeya.gymcraft.gym.action.ActionSpaces;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+
 import java.util.Map;
 import java.util.LinkedHashMap;
 import javax.annotation.Nullable;
@@ -39,7 +44,14 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  * 目标不接受直接交互的物品（如投掷物）回退为面向目标的普通使用。
  * 瞬时交互通过独立玩家桥接，食物药水由 Mob 原版 tick 消费；不执行目标自身交互。
  */
-public final class UseItemController extends AbstractActionComponentController<ProtoUseItem> {
+public final class UseItemController extends AbstractActionComponentController<ProtoUseItem> implements EnvironmentRegionAware {
+    /** 默认区域是否已处理，含无区域情况。 */
+    private boolean defaultsApplied;
+    /** 内部初始化期间不记录为显式配置。 */
+    private boolean applyingDefaults;
+    /** 调用方成功设置空间后，默认区域不得覆盖。 */
+    private boolean explicitSpace;
+
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "slot_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
@@ -94,15 +106,18 @@ public final class UseItemController extends AbstractActionComponentController<P
      * @return 是否显式指定槽号且数值有效
      */
     @Override public boolean contains(ProtoUseItem action) {
-        return action != null && action.hasSlotId()
-            && (!action.hasEntity() || action.getEntity().getEntityId() > 0)
-            && this.space().contains(Map.of(
-                "slot_id", new double[] { action.getSlotId() },
-                "x", new double[] { action.getBlock().getX() },
-                "y", new double[] { action.getBlock().getY() },
-                "z", new double[] { action.getBlock().getZ() },
-                "entity_id", new double[] { action.getEntity().getEntityId() }
-            ));
+        if (action == null || !action.hasSlotId()
+            || (action.hasEntity() && action.getEntity().getEntityId() <= 0)) return false;
+        var values = new LinkedHashMap<String, Object>();
+        values.put("slot_id", new double[] { action.getSlotId() });
+        if (action.hasBlock()) {
+            values.put("x", new double[] { action.getBlock().getX() });
+            values.put("y", new double[] { action.getBlock().getY() });
+            values.put("z", new double[] { action.getBlock().getZ() });
+        } else if (action.hasEntity()) {
+            values.put("entity_id", new double[] { action.getEntity().getEntityId() });
+        }
+        return ActionSpaces.containsFields(this.space(), values);
     }
 
     /**
@@ -110,6 +125,19 @@ public final class UseItemController extends AbstractActionComponentController<P
      * @return 即时结果或持续消费状态
      */
     @Override public ActionApplyResult apply(ProtoUseItem action) {
+        // 先验证外部目标，拒绝越界时不切槽、不启动消费、不产生世界交互。
+        if (action != null && action.hasBlock()
+            && !this.containsTarget(action.getBlock().getX(), action.getBlock().getY(), action.getBlock().getZ())) {
+            return ActionApplyResult.none(this.outsideTarget(action.getBlock().getX(), action.getBlock().getY(), action.getBlock().getZ()));
+        }
+        if (!this.contains(action)) return ActionApplyResult.none(ActionState.failed("invalid use item payload"));
+        if (action.hasEntity()) {
+            var entity = this.mob().level().getEntity(action.getEntity().getEntityId());
+            if (entity != null) {
+                ActionState boundaryError = this.checkTargetEntity(entity);
+                if (boundaryError != null) return ActionApplyResult.none(boundaryError);
+            }
+        }
         this.onInterrupt(action);
         this.consumption = null;
         this.details = Map.of("slot_id", action.getSlotId(), "target", action.getTargetCase().name());
@@ -407,6 +435,71 @@ public final class UseItemController extends AbstractActionComponentController<P
     @Override public void release(String reason) {
         this.consumption = null;
         UseItemConsumption.closeFor(this.mob());
+    }
+
+
+    /** @param region 默认环境区域；没有区域时保留原空间，显式配置始终优先 */
+    @Override
+    public void initializeDefaultRegion(@Nullable BoundingBox region) {
+        if (this.defaultsApplied) {
+            return;
+        }
+        if (!this.explicitSpace && region != null) {
+            this.applyingDefaults = true;
+            try {
+                this.setSpace(CoordinateSpaces.withRegion(this.space(), region, true));
+            } finally {
+                this.applyingDefaults = false;
+            }
+        }
+        this.defaultsApplied = true;
+    }
+
+    /** @param space 新动作空间；本组件校验全部字段及一维坐标轴 */
+    @Override
+    protected void validateSpace(McSpace<Map<String, Object>> space) {
+        ActionSpaces.validate(space, this.defaultSpace());
+        CoordinateSpaces.bounds(space);
+    }
+
+    /** 成功替换空间后记录调用方覆盖，默认初始化除外。 */
+    @Override
+    protected void onSpaceChanged() {
+        if (!this.applyingDefaults) {
+            this.explicitSpace = true;
+        }
+    }
+
+    /**
+     * @param x 目标 X
+     * @param y 目标 Y
+     * @param z 目标 Z
+     * @return 是否落在本组件当前坐标空间
+     */
+    private boolean containsTarget(double x, double y, double z) {
+        return CoordinateSpaces.bounds(this.space()).contains(x, y, z);
+    }
+
+    /**
+     * @param x 目标 X
+     * @param y 目标 Y
+     * @param z 目标 Z
+     * @return 本组件的越界失败及空间诊断
+     */
+    private ActionState outsideTarget(double x, double y, double z) {
+        return ActionState.failed("target outside action space", CoordinateSpaces.details(this.space(), x, y, z));
+    }
+
+    /**
+     * @param target 已解析实体
+     * @return 维度或位置不符合本组件空间时的失败；合法返回 null
+     */
+    private ActionState checkTargetEntity(net.minecraft.world.entity.Entity target) {
+        if (target.level() != this.mob().level()) {
+            return ActionState.failed("target entity is in another dimension", Map.of("entity_id", target.getId()));
+        }
+        return this.containsTarget(target.getX(), target.getY(), target.getZ())
+            ? null : this.outsideTarget(target.getX(), target.getY(), target.getZ());
     }
 
     /** 为每个环境创建独立控制器的注册工厂。 */

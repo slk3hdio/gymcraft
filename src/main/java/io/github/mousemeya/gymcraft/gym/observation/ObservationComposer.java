@@ -60,6 +60,15 @@ public class ObservationComposer {
         return factory.componentType().cast(creator);
     }
 
+    /** @param region 环境基线区域；仅对空间观测组件初始化默认边界，null 保留固定后备范围 */
+    public void initializeDefaultRegion(@Nullable net.minecraft.world.level.levelgen.structure.BoundingBox region) {
+        for (var creator : this.components.values()) {
+            if (creator instanceof io.github.mousemeya.gymcraft.gym.component.EnvironmentRegionAware spatial) {
+                spatial.initializeDefaultRegion(region);
+            }
+        }
+    }
+
     /**
      * 组装一次完整观测。
      *

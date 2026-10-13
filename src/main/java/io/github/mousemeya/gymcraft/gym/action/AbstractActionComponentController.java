@@ -43,24 +43,55 @@ public abstract class AbstractActionComponentController<T extends Message> imple
         this.space = this.defaultSpace();
     }
 
+    /**
+     * 返回当前绑定的受控生物。
+     *
+     * @return 当前生物
+     */
     @Override
     public final Mob mob() {
         return this.mob;
     }
 
+    /**
+     * 替换绑定生物，保留组件当前空间及配置来源。
+     *
+     * @param mob 受控生物
+     */
     @Override
     public final void setMob(Mob mob) {
         this.mob = mob;
     }
 
+    /**
+     * 返回组件当前空间。
+     *
+     * @return 当前空间
+     */
     @Override
     public final McSpace<Map<String, Object>> space() {
         return this.space;
     }
 
+    /**
+     * 先校验完整空间，再替换并通知；校验失败保留旧空间。
+     *
+     * @param space 候选参数空间
+     */
     @Override
     public final void setSpace(McSpace<Map<String, Object>> space) {
+        java.util.Objects.requireNonNull(space, "space");
+        this.validateSpace(space);
         this.space = space;
+        this.onSpaceChanged();
+    }
+
+    /** @param space 候选参数空间；组件自行校验结构，默认不增加约束 */
+    protected void validateSpace(McSpace<Map<String, Object>> space) {
+    }
+
+    /** 空间成功替换后的通知；组件可维护配置来源，默认不增加行为。 */
+    protected void onSpaceChanged() {
     }
 
     /** @return 是否支持指定实体类型 */
@@ -78,6 +109,11 @@ public abstract class AbstractActionComponentController<T extends Message> imple
         return this.supportedEntities;
     }
 
+    /**
+     * 校验受控生物是否具备本动作要求的能力。
+     *
+     * @return 是否满足能力要求
+     */
     @Override
     public boolean supports() {
         return this.supportEntity(this.mob.getClass());
@@ -123,6 +159,11 @@ public abstract class AbstractActionComponentController<T extends Message> imple
 
     @Override
     @SuppressWarnings("unchecked")
+    /**
+     * 返回默认协议负载；运行时仍须通过组件的参数及目标检查。
+     *
+     * @return 默认协议负载
+     */
     public T sample() {
         try {
             return (T) this.protoType().getMethod("getDefaultInstance").invoke(null);

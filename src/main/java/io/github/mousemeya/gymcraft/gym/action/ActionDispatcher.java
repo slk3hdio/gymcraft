@@ -90,6 +90,15 @@ public class ActionDispatcher {
         }
     }
 
+    /** @param region 环境默认区域；只经共享接口初始化，不解释组件的具体边界策略 */
+    public void initializeDefaultRegion(@Nullable net.minecraft.world.level.levelgen.structure.BoundingBox region) {
+        for (var controller : this.components.values()) {
+            if (controller instanceof io.github.mousemeya.gymcraft.gym.component.EnvironmentRegionAware spatial) {
+                spatial.initializeDefaultRegion(region);
+            }
+        }
+    }
+
     /** @return 以组件 ID 为键的可选动作空间目录 */
     public McSpace<Map<String, Object>> space() {
         var spaces = new LinkedHashMap<String, McSpace<?>>();
@@ -99,7 +108,10 @@ public class ActionDispatcher {
         return new DictSpace(spaces);
     }
 
-    /** @param componentId 组件 ID @param space 新空间 */
+    /**
+     * @param componentId 组件 ID
+     * @param space 新空间
+     */
     public void setComponentSpace(String componentId, McSpace<Map<String, Object>> space) {
         ActionComponentController<?> controller = this.components.get(componentId);
         if (controller == null) {
@@ -108,7 +120,10 @@ public class ActionDispatcher {
         controller.setSpace(space);
     }
 
-    /** @param componentId 组件 ID @return 组件空间 */
+    /**
+     * @param componentId 组件 ID
+     * @return 组件空间
+     */
     public McSpace<Map<String, Object>> getComponentSpace(String componentId) {
         ActionComponentController<?> controller = this.components.get(componentId);
         if (controller == null) {

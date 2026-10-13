@@ -112,11 +112,16 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("world_state_structure_inside_piece", () -> ChatObservationGameTests::worldStateReportsStructureInsidePiece);
         TEST_FUNCTIONS.register("nearby_items_observation_lists_item", () -> PickupGameTests::nearbyItemsObservationListsItem);
         TEST_FUNCTIONS.register("interesting_blocks_update", () -> InterestingBlocksGameTests::updateIsIdempotentAndRemoves);
-        TEST_FUNCTIONS.register("observation_space_blocks", () -> SpatialObservationGameTests::blocksRespectSpace);
-        TEST_FUNCTIONS.register("observation_space_block_bfs", () -> SpatialObservationGameTests::blocksStartAtFirstNonAir);
-        TEST_FUNCTIONS.register("observation_space_block_noncolliding_seed", () -> SpatialObservationGameTests::blocksIncludeNonCollidingSeed);
-        TEST_FUNCTIONS.register("observation_space_entities_and_items", () -> SpatialObservationGameTests::entitiesAndItemsRespectSpace);
-        TEST_FUNCTIONS.register("observation_space_contract", () -> SpatialObservationGameTests::spaceContract);
+        // 绝对坐标空间：配置契约、实体边界、可见表面、默认区域与只读结构扫描。
+        TEST_FUNCTIONS.register("spatial_space_contract", () -> SpatialObservationGameTests::spacesAreStructuredAndAtomic);
+        TEST_FUNCTIONS.register("spatial_entity_bounds", () -> SpatialObservationGameTests::entitiesAndItemsRespectBounds);
+        TEST_FUNCTIONS.register("spatial_block_visibility", () -> SpatialObservationGameTests::blocksRespectBoundsAndVisibility);
+        TEST_FUNCTIONS.register("spatial_defaults_reset", () -> SpatialObservationGameTests::defaultsFollowBaselineAndSurviveReset);
+        TEST_FUNCTIONS.register("spatial_structure_center", () -> SpatialObservationGameTests::structuresUseCenterWithoutLoading);
+        // 共享区域初始化与动作组件自主检查，含直接调用和持续动作收尾。
+        TEST_FUNCTIONS.register("spatial_action_defaults", () -> SpatialActionGameTests::defaultsAndOverrides);
+        TEST_FUNCTIONS.register("spatial_action_direct", () -> SpatialActionGameTests::directCallsHaveNoOutsideEffects);
+        TEST_FUNCTIONS.register("spatial_action_running", () -> SpatialActionGameTests::runningTargetsAreRechecked);
 
         // ===== 菜单子系统：会话/槽位/按钮/桥接代表用例 =====
         TEST_FUNCTIONS.register("menu_session_id_stable", () -> MenuSessionGameTests::sessionIdStableAcrossObservations);
@@ -149,13 +154,18 @@ public final class GymCraftGameTests {
         Holder<TestEnvironmentDefinition<?>> structureInjectionEnvironment = event.registerEnvironment(
             Identifier.fromNamespaceAndPath(GymCraft.MODID, "structure_injection")
         );
+        // 两组结构注入测试也不能同批执行，否则其起点备份和清理可能相互覆盖。
+        Holder<TestEnvironmentDefinition<?>> spatialStructureEnvironment = event.registerEnvironment(
+            Identifier.fromNamespaceAndPath(GymCraft.MODID, "spatial_structure_injection")
+        );
         for (var holder : TEST_FUNCTIONS.getEntries()) {
             boolean injectsStructureStarts = holder.getId().getPath().equals("world_state_structure_inside_piece");
+            boolean spatialStructure = holder.getId().getPath().equals("spatial_structure_center");
             event.registerTest(
                 holder.getId(),
                 new FunctionGameTestInstance(
                     holder.getKey(),
-                    new TestData<>(injectsStructureStarts ? structureInjectionEnvironment : environment,
+                    new TestData<>(spatialStructure ? spatialStructureEnvironment : injectsStructureStarts ? structureInjectionEnvironment : environment,
                         USE_ITEM_STRUCTURE,
                         holder.getId().getPath().startsWith("iron_mining_") ? 12000
                             : holder.getId().getPath().startsWith("iron_golem_warden_") ? 12000
@@ -165,6 +175,7 @@ public final class GymCraftGameTests {
                             // 伤害日志用例含 600ms 无敌帧等待与多次阻塞 step，放宽时限
                             : holder.getId().getPath().startsWith("damage_log_") ? 1200
                             : holder.getId().getPath().startsWith("world_state_") ? 12000
+                            : holder.getId().getPath().equals("spatial_defaults_reset") ? 12000
                             : holder.getId().getPath().startsWith("player_sim_env") ? 12000
                             // 追击+近战受服务器启动期卡顿影响，100 tick 偶发打满
                             : holder.getId().getPath().equals("player_sim_attack_target") ? 400

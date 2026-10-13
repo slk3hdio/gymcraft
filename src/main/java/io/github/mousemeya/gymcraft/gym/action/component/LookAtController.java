@@ -1,5 +1,11 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
+import io.github.mousemeya.gymcraft.gym.component.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
+import io.github.mousemeya.gymcraft.gym.action.ActionSpaces;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import javax.annotation.Nullable;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -34,7 +40,14 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 该动作为瞬时动作，应用后立即返回终态；不限制注视距离，也不要求目标可见。
  * </p>
  */
-public class LookAtController extends AbstractActionComponentController<ProtoLookAt> {
+public class LookAtController extends AbstractActionComponentController<ProtoLookAt> implements EnvironmentRegionAware {
+    /** 默认区域是否已处理，含无区域情况。 */
+    private boolean defaultsApplied;
+    /** 内部初始化期间不记录为显式配置。 */
+    private boolean applyingDefaults;
+    /** 调用方成功设置空间后，默认区域不得覆盖。 */
+    private boolean explicitSpace;
+
     /** 动作空间沿用现有 oneof 组件的扁平字段表达。 */
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
@@ -88,11 +101,10 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
                 && this.containsEntityId(component.getEntity().getEntityId());
             case ITEM -> component.getItem().getEntityId() > 0
                 && this.containsEntityId(component.getItem().getEntityId());
-            case BLOCK -> this.space().contains(Map.of(
+            case BLOCK -> ActionSpaces.containsFields(this.space(), Map.of(
                 "x", new double[] { component.getBlock().getX() },
                 "y", new double[] { component.getBlock().getY() },
-                "z", new double[] { component.getBlock().getZ() },
-                "entity_id", new double[] { 0 }
+                "z", new double[] { component.getBlock().getZ() }
             ));
             case TARGET_NOT_SET -> false;
         };
@@ -107,6 +119,13 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
     @Override
     public ActionApplyResult apply(ProtoLookAt component) {
         Mob mob = this.mob();
+        if (component != null && component.hasBlock()
+            && !this.containsTarget(component.getBlock().getX(), component.getBlock().getY(), component.getBlock().getZ())) {
+            return ActionApplyResult.none(this.outsideTarget(component.getBlock().getX(), component.getBlock().getY(), component.getBlock().getZ()));
+        }
+        if (!this.contains(component)) {
+            return ActionApplyResult.none(ActionState.failed("invalid action payload"));
+        }
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
@@ -143,10 +162,7 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
      * @return ID 是否位于空间边界内
      */
     private boolean containsEntityId(int entityId) {
-        return this.space().contains(Map.of(
-            "x", new double[] { 0 },
-            "y", new double[] { 0 },
-            "z", new double[] { 0 },
+        return ActionSpaces.containsFields(this.space(), Map.of(
             "entity_id", new double[] { entityId }
         ));
     }
@@ -180,6 +196,8 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
                 "entity_id", entityId
             )));
         }
+        ActionState boundaryError = this.checkTargetEntity(found);
+        if (boundaryError != null) return ActionApplyResult.none(boundaryError);
         Vec3 targetPos = EntityAnchorArgument.Anchor.EYES.apply(found);
         return this.applyLook(targetPos, Map.of(
             "target_type", "entity",
@@ -216,6 +234,8 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
                 "entity_id", entityId
             )));
         }
+        ActionState boundaryError = this.checkTargetEntity(item);
+        if (boundaryError != null) return ActionApplyResult.none(boundaryError);
         return this.applyLook(item.getBoundingBox().getCenter(), Map.of(
             "target_type", "item",
             "entity_id", entityId,
@@ -270,6 +290,71 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
             ActionControlPolicy.none().disableGoalFlags(Goal.Flag.LOOK),
             ActionState.completed("look target acquired", details)
         );
+    }
+
+
+    /** @param region 默认环境区域；没有区域时保留原空间，显式配置始终优先 */
+    @Override
+    public void initializeDefaultRegion(@Nullable BoundingBox region) {
+        if (this.defaultsApplied) {
+            return;
+        }
+        if (!this.explicitSpace && region != null) {
+            this.applyingDefaults = true;
+            try {
+                this.setSpace(CoordinateSpaces.withRegion(this.space(), region, true));
+            } finally {
+                this.applyingDefaults = false;
+            }
+        }
+        this.defaultsApplied = true;
+    }
+
+    /** @param space 新动作空间；本组件校验全部字段及一维坐标轴 */
+    @Override
+    protected void validateSpace(McSpace<Map<String, Object>> space) {
+        ActionSpaces.validate(space, this.defaultSpace());
+        CoordinateSpaces.bounds(space);
+    }
+
+    /** 成功替换空间后记录调用方覆盖，默认初始化除外。 */
+    @Override
+    protected void onSpaceChanged() {
+        if (!this.applyingDefaults) {
+            this.explicitSpace = true;
+        }
+    }
+
+    /**
+     * @param x 目标 X
+     * @param y 目标 Y
+     * @param z 目标 Z
+     * @return 是否落在本组件当前坐标空间
+     */
+    private boolean containsTarget(double x, double y, double z) {
+        return CoordinateSpaces.bounds(this.space()).contains(x, y, z);
+    }
+
+    /**
+     * @param x 目标 X
+     * @param y 目标 Y
+     * @param z 目标 Z
+     * @return 本组件的越界失败及空间诊断
+     */
+    private ActionState outsideTarget(double x, double y, double z) {
+        return ActionState.failed("target outside action space", CoordinateSpaces.details(this.space(), x, y, z));
+    }
+
+    /**
+     * @param target 已解析实体
+     * @return 维度或位置不符合本组件空间时的失败；合法返回 null
+     */
+    private ActionState checkTargetEntity(net.minecraft.world.entity.Entity target) {
+        if (target.level() != this.mob().level()) {
+            return ActionState.failed("target entity is in another dimension", Map.of("entity_id", target.getId()));
+        }
+        return this.containsTarget(target.getX(), target.getY(), target.getZ())
+            ? null : this.outsideTarget(target.getX(), target.getY(), target.getZ());
     }
 
     /**

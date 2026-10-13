@@ -32,7 +32,17 @@ public class SequenceSpace<T> implements McSpace<List<T>> {
         this.maxLength = maxLength;
     }
 
-    /** @return 默认的空序列样本 */
+    /** @return 不可变序列配置中的元素空间 */
+    public McSpace<T> elementSpace() {
+        return this.elementSpace;
+    }
+
+    /** @return 序列允许的最大长度 */
+    public int maxLength() {
+        return this.maxLength;
+    }
+
+    /** @return 合法的空序列样本 */
     @Override
     public List<T> sample() {
         return new ArrayList<>();
@@ -40,7 +50,7 @@ public class SequenceSpace<T> implements McSpace<List<T>> {
 
     /**
      * @param value 待校验序列
-     * @return 长度及每个元素是否均符合空间约束
+     * @return 数量及全部元素是否满足空间
      */
     @Override
     public boolean contains(List<T> value) {
@@ -51,7 +61,7 @@ public class SequenceSpace<T> implements McSpace<List<T>> {
         return true;
     }
 
-    /** @return 包含元素空间和长度上限的序列定义 */
+    /** @return 含元素空间与最大长度的序列描述 */
     @Override
     public Map<String, Object> serialize() {
         return Map.of(
@@ -59,15 +69,5 @@ public class SequenceSpace<T> implements McSpace<List<T>> {
             "element", elementSpace.serialize(),
             "max_length", maxLength
         );
-    }
-
-    /** @return 序列中单个元素的空间 */
-    public McSpace<T> elementSpace() {
-        return this.elementSpace;
-    }
-
-    /** @return 序列允许的最大长度 */
-    public int maxLength() {
-        return this.maxLength;
     }
 }

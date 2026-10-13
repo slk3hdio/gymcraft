@@ -1,5 +1,10 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
+import io.github.mousemeya.gymcraft.gym.component.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
+import io.github.mousemeya.gymcraft.gym.action.ActionSpaces;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+
 import java.util.ArrayList;
 import java.util.Map;
 
@@ -45,7 +50,14 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * {@code StepRequest.timeout_seconds} 由运行时对整个批次统一处理。被打断时 {@link #onInterrupt} 停止导航。
  * </p>
  */
-public class PickUpItemController extends AbstractActionComponentController<ProtoPickUpItem> implements NavigationPathProvider {
+public class PickUpItemController extends AbstractActionComponentController<ProtoPickUpItem> implements NavigationPathProvider, EnvironmentRegionAware {
+    /** 默认区域是否已处理，含无区域情况。 */
+    private boolean defaultsApplied;
+    /** 内部初始化期间不记录为显式配置。 */
+    private boolean applyingDefaults;
+    /** 调用方成功设置空间后，默认区域不得覆盖。 */
+    private boolean explicitSpace;
+
     private static final Logger LOGGER = LoggerFactory.getLogger(PickUpItemController.class);
 
     /** 默认拾取距离（与原版生物拾取范围同量级）。 */
@@ -54,7 +66,10 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
     public static final double DEFAULT_SPEED = 1.0;
 
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
+        "entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
+        "x", new BoxSpace(-Double.MAX_VALUE, Double.MAX_VALUE, 1),
+        "y", new BoxSpace(-Double.MAX_VALUE, Double.MAX_VALUE, 1),
+        "z", new BoxSpace(-Double.MAX_VALUE, Double.MAX_VALUE, 1)
     )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
     /** 当前环境实例的拾取距离（默认 1.5，可用 {@link #setPickupReach} 覆盖）。 */
@@ -88,27 +103,52 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         this.speed = speed;
     }
 
+    /**
+     * 返回本组件的 protobuf 消息类型。
+     *
+     * @return 协议消息类
+     */
     @Override
     public Class<ProtoPickUpItem> protoType() {
         return ProtoPickUpItem.class;
     }
 
+    /**
+     * 返回本组件默认参数空间，供实例初始化及结构校验使用。
+     *
+     * @return 完整默认参数空间
+     */
     @Override
     public McSpace<Map<String, Object>> defaultSpace() {
         return DEFAULT_SPACE;
     }
 
+    /**
+     * 校验当前动作分支实际使用的字段；实体位置由执行入口独立验证。
+     *
+     * @param component 当前动作负载
+     * @return 当前分支参数是否有效
+     */
     @Override
     public boolean contains(ProtoPickUpItem component) {
-        return component != null && this.space().contains(Map.of(
+        return component != null && ActionSpaces.containsFields(this.space(), Map.of(
             "entity_id", new double[] { component.getEntityId() }
         ));
     }
 
+    /**
+     * 解析并执行动作，目标越界时在产生副作用前返回失败。
+     *
+     * @param component 当前动作负载
+     * @return 动作策略及初始状态
+     */
     @Override
     public ActionApplyResult apply(ProtoPickUpItem component) {
         Mob mob = this.mob();
         this.terminal = null;
+        if (!this.contains(component)) {
+            return ActionApplyResult.none(ActionState.failed("invalid action payload"));
+        }
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
@@ -118,6 +158,10 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
             return ActionApplyResult.none(ActionState.failed("item entity not found", Map.of(
                 "entity_id", component.getEntityId()
             )));
+        }
+        ActionState boundaryError = this.checkTargetEntity(item);
+        if (boundaryError != null) {
+            return ActionApplyResult.none(boundaryError);
         }
         var policy = ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE)
@@ -164,6 +208,11 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
                 "entity_id", component.getEntityId()
             ));
         }
+        ActionState boundaryError = this.checkTargetEntity(item);
+        if (boundaryError != null || !this.contains(component)) {
+            this.onInterrupt(component);
+            return boundaryError != null ? boundaryError : ActionState.failed("invalid pickup payload");
+        }
         double distance = horizontalDistance(mob, item);
         if (distance <= this.pickupReach) {
             if (item.hasPickUpDelay()) {
@@ -185,6 +234,11 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         return ActionState.running("navigating to item", targetDetails(mob, item));
     }
 
+    /**
+     * 释放本动作拥有的持续状态和导航。
+     *
+     * @param component 当前动作负载
+     */
     @Override
     public void onInterrupt(ProtoPickUpItem component) {
         this.terminal = null;
@@ -299,6 +353,13 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         };
     }
 
+    /**
+     * 构造当前目标的动作诊断字段。
+     *
+     * @param mob 受控生物
+     * @param item 当前调用参数
+     * @return 诊断字典
+     */
     private Map<String, Object> targetDetails(Mob mob, ItemEntity item) {
         var details = new java.util.LinkedHashMap<String, Object>(this.navigationTask.details(
             item.position(),
@@ -316,10 +377,81 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         return details;
     }
 
+
+    /** @param region 默认环境区域；没有区域时保留原空间，显式配置始终优先 */
+    @Override
+    public void initializeDefaultRegion(@Nullable BoundingBox region) {
+        if (this.defaultsApplied) {
+            return;
+        }
+        if (!this.explicitSpace && region != null) {
+            this.applyingDefaults = true;
+            try {
+                this.setSpace(CoordinateSpaces.withRegion(this.space(), region, true));
+            } finally {
+                this.applyingDefaults = false;
+            }
+        }
+        this.defaultsApplied = true;
+    }
+
+    /** @param space 新动作空间；本组件校验全部字段及一维坐标轴 */
+    @Override
+    protected void validateSpace(McSpace<Map<String, Object>> space) {
+        ActionSpaces.validate(space, this.defaultSpace());
+        CoordinateSpaces.bounds(space);
+    }
+
+    /** 成功替换空间后记录调用方覆盖，默认初始化除外。 */
+    @Override
+    protected void onSpaceChanged() {
+        if (!this.applyingDefaults) {
+            this.explicitSpace = true;
+        }
+    }
+
+    /**
+     * @param x 目标 X
+     * @param y 目标 Y
+     * @param z 目标 Z
+     * @return 是否落在本组件当前坐标空间
+     */
+    private boolean containsTarget(double x, double y, double z) {
+        return CoordinateSpaces.bounds(this.space()).contains(x, y, z);
+    }
+
+    /**
+     * @param x 目标 X
+     * @param y 目标 Y
+     * @param z 目标 Z
+     * @return 本组件的越界失败及空间诊断
+     */
+    private ActionState outsideTarget(double x, double y, double z) {
+        return ActionState.failed("target outside action space", CoordinateSpaces.details(this.space(), x, y, z));
+    }
+
+    /**
+     * @param target 已解析实体
+     * @return 维度或位置不符合本组件空间时的失败；合法返回 null
+     */
+    private ActionState checkTargetEntity(net.minecraft.world.entity.Entity target) {
+        if (target.level() != this.mob().level()) {
+            return ActionState.failed("target entity is in another dimension", Map.of("entity_id", target.getId()));
+        }
+        return this.containsTarget(target.getX(), target.getY(), target.getZ())
+            ? null : this.outsideTarget(target.getX(), target.getY(), target.getZ());
+    }
+
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
     public static final class Factory implements ActionComponentFactory<ProtoPickUpItem, PickUpItemController> {
+        /**
+         * 为指定受控生物创建独立组件实例。
+         *
+         * @param mob 受控生物
+         * @return 新组件实例
+         */
         @Override
         public PickUpItemController create(Mob mob) {
             return new PickUpItemController(mob);

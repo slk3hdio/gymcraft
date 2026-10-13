@@ -3,8 +3,8 @@ package io.github.mousemeya.gymcraft.gym.observation.component;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Predicate;
 
 import net.minecraft.core.BlockPos;
@@ -13,13 +13,11 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
+import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces.Bounds;
 
 /**
- * 附近可见方块扫描器 —— 先从 Mob 眼睛向外寻找首个非空气方块，再对其非空气连通域执行 BFS。
- * 调用方提供相对扫描空间、每阶段遍历预算、结果上限与过滤器；只返回具有可渲染表面的匹配方块。
- * 未匹配过滤器的方块仍参与扩展，空气不连接不同方块簇；读取世界时不触发区块加载。
+ * 附近可见方块扫描器 —— 从 Mob 眼睛所在空间执行有界 BFS，并返回符合过滤条件的可见表面方块。
+ * 调用方提供绝对坐标边界、遍历及结果预算和过滤器；扫描器只读已加载区域并对多面可见方块去重。
  */
 public final class NearbyBlockScanner {
     /** 扫描结果 —— 保存方块坐标、状态以及到扫描中心的方块距离。 */
@@ -34,112 +32,99 @@ public final class NearbyBlockScanner {
      * 扫描指定 Mob 附近符合条件的可见表面方块。
      *
      * @param mob 扫描中心所属的 Agent
-     * @param scanSpace 相对眼睛所在方块的 x/y/z 扫描边界，必须包含原点
-     * @param maxVisited 寻找起点和非空气 BFS 各自最多访问的节点数
+     * @param bounds 绝对坐标闭区间，同时约束空气节点和输出方块
+     * @param maxVisited 最多访问的可穿过空间节点数
      * @param maxBlocks 最多返回的匹配方块数
      * @param filter 方块状态过滤器，只有通过过滤的表面方块才计入结果上限
+     * @param resultFilter 元素空间过滤器，拒绝的视图不计入结果上限
      * @return 按 BFS 发现顺序排列的去重扫描结果
      */
     public static List<ScannedBlock> scan(
         Mob mob,
-        BoxSpace scanSpace,
+        Bounds bounds,
         int maxVisited,
         int maxBlocks,
-        Predicate<BlockState> filter
+        Predicate<BlockState> filter,
+        Predicate<ScannedBlock> resultFilter
     ) {
         Level level = mob.level();
         BlockPos center = BlockPos.containing(mob.getEyePosition());
-        if (scanSpace.size() != 3 || !scanSpace.contains(new double[3])) {
-            throw new IllegalArgumentException("block scan_space must be three-dimensional and contain the origin");
-        }
-        if (maxVisited <= 0 || maxBlocks <= 0 || !chunkLoaded(level, center)) {
+        if (maxVisited <= 0 || maxBlocks <= 0 || !accessible(level, center, bounds)) {
             return List.of();
         }
-        // 第一阶段只负责确定起点，兴趣过滤不参与选择；无起点时不进入第二阶段。
-        var firstBlock = findFirstNonAir(level, center, scanSpace, maxVisited);
-        if (firstBlock.isEmpty()) {
-            return List.of();
-        }
-        BlockPos seed = firstBlock.orElseThrow();
         var queue = new ArrayDeque<BlockPos>();
         var visited = new HashSet<Long>();
-        var visibleBlocks = new ArrayList<ScannedBlock>();
-        queue.addLast(seed);
-        visited.add(seed.asLong());
+        var visibleBlocks = new LinkedHashMap<Long, ScannedBlock>();
 
-        // 第二阶段只沿六方向相连的非空气方块扩展，严格使用 FIFO 保持 BFS 顺序。
-        while (!queue.isEmpty() && visibleBlocks.size() < maxBlocks) {
-            BlockPos pos = queue.removeFirst();
-            BlockState state = level.getBlockState(pos);
-            if (filter.test(state) && hasVisibleFace(level, pos, state)) {
-                visibleBlocks.add(new ScannedBlock(pos, state, distance(center, pos)));
-            }
-            if (visibleBlocks.size() >= maxBlocks) {
-                break;
-            }
-            for (Direction direction : Direction.values()) {
-                BlockPos next = pos.relative(direction);
-                if (visited.size() >= maxVisited) {
-                    break;
-                }
-                if (!visited.contains(next.asLong()) && withinSpace(center, next, scanSpace)
-                    && chunkLoaded(level, next) && !level.getBlockState(next).isAir()) {
-                    visited.add(next.asLong());
-                    queue.addLast(next);
-                }
-            }
-        }
-        return visibleBlocks;
-    }
-
-    /**
-     * 从扫描中心按六方向逐层搜索首个非空气方块，同层按 Direction.values() 顺序访问。
-     *
-     * @param level 所在世界
-     * @param center 眼睛所在方块
-     * @param scanSpace 相对扫描边界
-     * @param maxVisited 搜索阶段最多访问的节点数
-     * @return 首个非空气方块的不可变坐标；未找到时为空
-     */
-    private static Optional<BlockPos> findFirstNonAir(Level level, BlockPos center, BoxSpace scanSpace, int maxVisited) {
-        var queue = new ArrayDeque<BlockPos>();
-        var visited = new HashSet<Long>();
-        queue.addLast(center);
+        queue.add(center);
         visited.add(center.asLong());
-        while (!queue.isEmpty()) {
-            BlockPos pos = queue.removeFirst();
-            if (!level.getBlockState(pos).isAir()) {
-                return Optional.of(pos);
-            }
+
+        // 预算约束发现的节点数，已入队节点仍会被处理，避免恰好达到预算时漏掉表面。
+        while (!queue.isEmpty() && visibleBlocks.size() < maxBlocks) {
+            BlockPos airPos = queue.removeFirst();
+            BlockState airState = level.getBlockState(airPos);
+
             for (Direction direction : Direction.values()) {
-                if (visited.size() >= maxVisited) {
-                    break;
+                BlockPos next = airPos.relative(direction);
+                if (!accessible(level, next, bounds)) {
+                    continue;
                 }
-                BlockPos next = pos.relative(direction);
-                if (withinSpace(center, next, scanSpace) && chunkLoaded(level, next) && visited.add(next.asLong())) {
-                    queue.addLast(next);
+
+                BlockState state = level.getBlockState(next);
+                if (canTraverse(level, next, state)) {
+                    long key = next.asLong();
+                    if (visited.size() < maxVisited && visited.add(key)) {
+                        if (touchesVisibleSurface(level, next, bounds)) {
+                            queue.addFirst(next);
+                        } else {
+                            queue.addLast(next);
+                        }
+                    }
+                    continue;
+                }
+
+                Direction faceTowardAir = direction.getOpposite();
+                if (filter.test(state) && Block.shouldRenderFace(level, next, state, airState, faceTowardAir)) {
+                    var scanned = new ScannedBlock(next, state, distance(center, next));
+                    if (!resultFilter.test(scanned)) {
+                        continue;
+                    }
+                    visibleBlocks.putIfAbsent(next.asLong(), scanned);
+                    if (visibleBlocks.size() >= maxBlocks) {
+                        break;
+                    }
                 }
             }
         }
-        return Optional.empty();
+        return new ArrayList<>(visibleBlocks.values());
     }
 
     /**
-     * 依据原版面剔除判定结果方块是否具有可渲染表面；邻面判定允许读取边界外相邻方块。
-     *
-     * @param level 所在世界
-     * @param pos 非空气方块的位置
+     * @param level 世界
+     * @param pos 方块位置
      * @param state 方块状态
-     * @return 是否至少有一个已加载邻面需要渲染
+     * @return 是否可作为 BFS 空气节点
      */
-    private static boolean hasVisibleFace(Level level, BlockPos pos, BlockState state) {
+    private static boolean canTraverse(Level level, BlockPos pos, BlockState state) {
+        return state.isAir() || state.getCollisionShape(level, pos).isEmpty();
+    }
+
+    /**
+     * @param level 世界
+     * @param airPos 空气节点
+     * @param bounds 边界
+     * @return 是否邻接范围内已加载的可见表面
+     */
+    private static boolean touchesVisibleSurface(Level level, BlockPos airPos, Bounds bounds) {
+        BlockState airState = level.getBlockState(airPos);
         for (Direction direction : Direction.values()) {
-            BlockPos neighborPos = pos.relative(direction);
-            if (!chunkLoaded(level, neighborPos)) {
+            BlockPos neighborPos = airPos.relative(direction);
+            if (!accessible(level, neighborPos, bounds)) {
                 continue;
             }
             BlockState neighborState = level.getBlockState(neighborPos);
-            if (Block.shouldRenderFace(level, pos, state, neighborState, direction)) {
+            if (!canTraverse(level, neighborPos, neighborState)
+                && Block.shouldRenderFace(level, neighborPos, neighborState, airState, direction.getOpposite())) {
                 return true;
             }
         }
@@ -147,30 +132,21 @@ public final class NearbyBlockScanner {
     }
 
     /**
-     * @param center 扫描中心
-     * @param pos 候选位置
-     * @param scanSpace 相对边界
-     * @return 候选是否属于空间
+     * @param level 世界
+     * @param pos 候选节点
+     * @param bounds 绝对边界
+     * @return 是否在范围、建筑高度和已加载区块内
      */
-    private static boolean withinSpace(BlockPos center, BlockPos pos, BoxSpace scanSpace) {
-        return scanSpace.contains(new double[] {
-            (double) pos.getX() - center.getX(), (double) pos.getY() - center.getY(), (double) pos.getZ() - center.getZ()
-        });
+    private static boolean accessible(Level level, BlockPos pos, Bounds bounds) {
+        return bounds.contains(pos.getX(), pos.getY(), pos.getZ())
+            && pos.getY() >= level.getMinY() && pos.getY() < level.getMaxY()
+            && level.hasChunk(pos.getX() >> 4, pos.getZ() >> 4);
     }
 
     /**
-     * @param level 所在世界
-     * @param pos 候选位置
-     * @return 对应区块是否已加载，不触发加载
-     */
-    private static boolean chunkLoaded(Level level, BlockPos pos) {
-        return level.hasChunk(pos.getX() >> 4, pos.getZ() >> 4);
-    }
-
-    /**
-     * @param center 扫描中心
-     * @param pos 候选方块
-     * @return 到扫描中心的欧氏距离
+     * @param center 眼睛所在方块
+     * @param pos 输出方块
+     * @return 方块坐标间的欧氏距离
      */
     private static double distance(BlockPos center, BlockPos pos) {
         return Math.sqrt(center.distSqr(pos));

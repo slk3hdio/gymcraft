@@ -4,120 +4,165 @@ import java.util.Map;
 
 import net.minecraft.world.entity.Mob;
 
-import io.github.mousemeya.gymcraft.gym.observation.AbstractSpatialObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
+import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
+import io.github.mousemeya.gymcraft.gym.component.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import javax.annotation.Nullable;
+import com.google.protobuf.Message;
+import io.github.mousemeya.gymcraft.gym.observation.SpatialObservationSpaces;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoStructureLocation;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoWorldState;
 import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SpatialSequenceSpace;
+import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
 /**
- * 世界状态观测组件 —— 获取 Mob 所在维度的全局环境信息与当前位置信息。
- * <p>
- * 输出维度 ID、游戏刻、天气状态等全局字段：这些字段与 Mob 自身状态无关，
- * 同一 tick 内所有 Mob 的观测结果相同。另外输出 Mob 当前所在群系与结构的
- * 注册 ID，以及附近已加载区块中的结构起点列表（经 {@link WorldLocationScanner}
- * 探测），这些字段随 Mob 位置变化。
- * </p>
- * <p>
- * 通过 setSpace 配置 structures 序列的 scan_space 与结果上限。扫描边界为相对 Mob
- * 所在区块的 x/z 偏移，单位是区块，默认各轴 [-4, 4]；边界约束结构起点所在区块。
- * </p>
+ * 世界观测：报告全局天气、时间及当前位置的群系和结构。
+ * structures 列表按绝对 space 过滤已加载结构的包围盒中心，范围不随受控实体移动。
  */
-public class WorldStateObservationCreator extends AbstractSpatialObservationCreator<ProtoWorldState> {
-    /** 默认相对区块扫描边界（x/z，闭区间）。 */
-    public static final BoxSpace DEFAULT_SCAN_SPACE = new BoxSpace(-4, 4, 2);
-    /** 附近结构数量上限（观测空间约束）。 */
+public class WorldStateObservationCreator extends AbstractObservationComponentCreator<ProtoWorldState> implements EnvironmentRegionAware {
+    /** 默认区域是否已处理，含无区域的固定后备范围。 */
+    private boolean defaultsApplied;
+    /** 内部初始化及数量修改不记录为显式坐标覆盖。 */
+    private boolean applyingDefaults;
+    /** 调用方成功设置空间后，默认区域不得覆盖。 */
+    private boolean explicitSpace;
+
+    /** 默认结构数量上限，可通过列表空间覆盖。 */
     public static final int MAX_STRUCTURES = 64;
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "day_time", new BoxSpace(0, Long.MAX_VALUE, 1),
-        "raining", new BooleanSpace(),
-        "thundering", new BooleanSpace(),
-        "dimension", new TextSpace(),
-        "biome", new TextSpace(),
-        "structure", new TextSpace(),
-        "structures", new SpatialSequenceSpace<>(new TextSpace(), MAX_STRUCTURES, DEFAULT_SCAN_SPACE)
-    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
-
-    /** 创建使用默认结构扫描空间的世界观测。 */
-    public WorldStateObservationCreator() {
-        super("structures", 2, false);
+    /** @param mob 创建实体，用于固定后备区块范围与世界建筑高度 */
+    public WorldStateObservationCreator(Mob mob) {
+        this.applyDefaultRegion(CoordinateSpaces.aroundChunks(mob, 4));
     }
 
-    /** @return 对应的 protobuf 类型 */
+    /** @return 本组件的 protobuf 类型 */
     @Override
     public Class<ProtoWorldState> protoType() {
         return ProtoWorldState.class;
     }
 
-    /** @return 世界字段及结构扫描序列的默认空间 */
+    /** @return 世界标量字段及结构化结构列表的默认空间 */
     @Override
     public McSpace<Map<String, Object>> defaultSpace() {
-        return DEFAULT_SPACE;
+        return new DictSpace(Map.of(
+            "day_time", new BoxSpace(0, Long.MAX_VALUE, 1),
+            "raining", new BooleanSpace(), "thundering", new BooleanSpace(),
+            "dimension", new TextSpace(), "biome", new TextSpace(), "structure", new TextSpace(),
+            "structures", new SequenceSpace<>(SpatialObservationSpaces.viewSpace(ProtoStructureLocation.getDescriptor()), MAX_STRUCTURES)));
     }
 
     /**
-     * @param component 待校验观测
-     * @return 时间与结构数量是否满足约束
-     */
-    @Override
-    public boolean contains(ProtoWorldState component) {
-        return component != null && component.getDayTime() >= 0
-            && component.getStructuresCount() <= this.maxResults();
-    }
-
-    /**
-     * @param mob 受控实体
-     * @return 全局世界字段与扫描范围内的结构起点
+     * @param mob 当前受控实体
+     * @return 世界状态以及范围内按距离排序的结构列表
      */
     @Override
     public ProtoWorldState create(Mob mob) {
         var level = mob.level();
-        WorldLocationScanner.ScannedLocation location = WorldLocationScanner.scan(mob);
+        var location = WorldLocationScanner.scan(mob);
         var builder = ProtoWorldState.newBuilder()
-            .setDayTime(level.getGameTime())
-            .setRaining(level.isRaining())
-            .setThundering(level.isThundering())
+            .setDayTime(level.getGameTime()).setRaining(level.isRaining()).setThundering(level.isThundering())
             .setDimension(level.dimension().identifier().toString())
-            .setBiome(location.biome())
-            .setStructure(location.structure());
-        for (WorldLocationScanner.ScannedStructure nearby : WorldLocationScanner
-            .scanNearbyStructures(mob, this.scanBounds())) {
-            if (builder.getStructuresCount() >= this.maxResults()) {
+            .setBiome(location.biome()).setStructure(location.structure());
+        if (this.resultSpace().maxLength() == 0) {
+            return builder.build();
+        }
+        for (var nearby : WorldLocationScanner.scanNearbyStructures(mob, this.bounds())) {
+            if (builder.getStructuresCount() >= this.resultSpace().maxLength()) {
                 break;
             }
-            builder.addStructures(ProtoStructureLocation.newBuilder()
+            var view = ProtoStructureLocation.newBuilder()
                 .setStructureId(nearby.structureId())
-                .setX(nearby.x()).setY(nearby.y()).setZ(nearby.z())
-                .setDistance(nearby.distance())
-                .build());
+                .setX(nearby.x()).setY(nearby.y()).setZ(nearby.z()).setDistance(nearby.distance()).build();
+            if (this.accepts(view)) {
+                builder.addStructures(view);
+            }
         }
         return builder.build();
     }
 
+
+    /** @param region 环境默认区域；显式配置优先，无区域时保留创建位置的固定范围 */
+    @Override
+    public void initializeDefaultRegion(@Nullable BoundingBox region) {
+        if (this.defaultsApplied) {
+            return;
+        }
+        if (!this.explicitSpace && region != null) {
+            this.applyDefaultRegion(region);
+        }
+        this.defaultsApplied = true;
+    }
+
+    /** @param region 默认方块区域；本组件决定整数/连续坐标转换 */
+    private void applyDefaultRegion(BoundingBox region) {
+        this.applyingDefaults = true;
+        try {
+            this.setSpace(SpatialObservationSpaces.withRegion(this.space(), "structures", region, false));
+        } finally {
+            this.applyingDefaults = false;
+        }
+    }
+
+    /** @param space 候选观测空间；校验本组件完整消息形状和坐标维度 */
+    @Override
+    protected void validateSpace(McSpace<Map<String, Object>> space) {
+        SpatialObservationSpaces.validate(space, ProtoWorldState.getDescriptor());
+        SpatialObservationSpaces.bounds(SpatialObservationSpaces.sequence(space, "structures").elementSpace());
+    }
+
+    /** 成功替换空间后记录显式覆盖，内部默认初始化和数量 setter 除外。 */
+    @Override
+    protected void onSpaceChanged() {
+        if (!this.applyingDefaults) {
+            this.explicitSpace = true;
+        }
+    }
+
+    /** @return 当前空间中本组件的结果列表及数量上限 */
+    private SequenceSpace<Map<String, Object>> resultSpace() {
+        return SpatialObservationSpaces.sequence(this.space(), "structures");
+    }
+
+    /** @return 本组件当前元素空间的绝对坐标边界 */
+    private CoordinateSpaces.Bounds bounds() {
+        return SpatialObservationSpaces.bounds(this.resultSpace().elementSpace());
+    }
+
     /**
-     * 观测工厂 —— 注册表引用该内部轻量 {@link ObservationComponentFactory}，而非目标类构造函数。
+     * @param view 本组件的候选结果
+     * @return 是否满足当前元素的所有字段约束
      */
+    private boolean accepts(Message view) {
+        return this.resultSpace().elementSpace().contains(SpatialObservationSpaces.value(view));
+    }
+
+    /**
+     * @param component 本组件的观测结果
+     * @return 是否完整满足当前空间
+     */
+    @Override
+    public boolean contains(ProtoWorldState component) {
+        return component != null && this.space().contains(SpatialObservationSpaces.value(component));
+    }
+
+    /** 观测工厂：为每个环境创建独立世界观测组件。 */
     public static final class Factory implements ObservationComponentFactory<ProtoWorldState, WorldStateObservationCreator> {
         /**
-         * @param mob 受控实体
-         * @return 独立配置的世界观测生成器
+         * @param mob 创建实体
+         * @return 世界观测组件
          */
         @Override
         public WorldStateObservationCreator create(Mob mob) {
-            return new WorldStateObservationCreator();
+            return new WorldStateObservationCreator(mob);
         }
 
-        /**
-         * 返回该工厂创建的具体观测生成器类型。
-         *
-         * @return WorldStateObservationCreator 的运行时类型
-         */
+        /** @return 工厂创建的运行时组件类型 */
         @Override
         public Class<WorldStateObservationCreator> componentType() {
             return WorldStateObservationCreator.class;

@@ -9,6 +9,11 @@
 （原生容器或专属背包）。
 目标 `oneof target` 包含 `block`（整数世界坐标 `x/y/z`）或 `entity`（网络 `entity_id`）；省略目标表示自身。
 
+默认目标空间经 `EnvironmentRegionAware` 从环境基线区域一次初始化；无区域时保留原有范围。
+显式 `setSpace` 可收窄或放宽，reset 不改变空间。方块目标和服务端解析出的实体位置须满足当前
+`x/y/z`，越界在切槽、消费或交互之前失败；自身使用不验证占位坐标。客户端仍只发送实体 ID，
+空间 JSON 的实体坐标由服务端派生，protobuf 和 DSL 均不变。配置与公共接口见[开发文档](dev/README.md)。
+
 ```python
 from gymcraft.gym.action.components.use_item_pb2 import (
     ProtoUseItem, ProtoUseItemBlockTarget, ProtoUseItemEntityTarget,

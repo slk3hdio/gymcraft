@@ -54,7 +54,7 @@ public final class PickupGameTests {
         var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
         var item = spawnItem(helper, new BlockPos(3, 2, 3), new ItemStack(Items.DIAMOND, 1));
 
-        var observation = new NearbyItemsObservationCreator().create(mob);
+        var observation = new NearbyItemsObservationCreator(mob).create(mob);
         var found = observation.getItemsList().stream()
             .filter(view -> view.getEntityId() == item.getId())
             .findFirst();

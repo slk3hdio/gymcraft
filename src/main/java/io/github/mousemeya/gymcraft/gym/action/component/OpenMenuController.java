@@ -1,5 +1,11 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
+import io.github.mousemeya.gymcraft.gym.component.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
+import io.github.mousemeya.gymcraft.gym.action.ActionSpaces;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import javax.annotation.Nullable;
+
 import java.util.Map;
 
 import net.minecraft.core.BlockPos;
@@ -32,7 +38,14 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * 转换与结果上报。该动作为瞬时动作，应用后立即返回终态。
  * </p>
  */
-public class OpenMenuController extends AbstractActionComponentController<ProtoOpenMenu> {
+public class OpenMenuController extends AbstractActionComponentController<ProtoOpenMenu> implements EnvironmentRegionAware {
+    /** 默认区域是否已处理，含无区域情况。 */
+    private boolean defaultsApplied;
+    /** 内部初始化期间不记录为显式配置。 */
+    private boolean applyingDefaults;
+    /** 调用方成功设置空间后，默认区域不得覆盖。 */
+    private boolean explicitSpace;
+
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
         "y", new BoxSpace(-2048, 2048, 1),
@@ -40,55 +53,87 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
         "entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
     ));
 
+    /**
+     * 创建并初始化组件内部状态。
+     *
+     * @param mob 受控生物
+     */
     public OpenMenuController(Mob mob) {
         super(mob);
     }
 
+    /**
+     * 返回本组件的 protobuf 消息类型。
+     *
+     * @return 协议消息类
+     */
     @Override
     public Class<ProtoOpenMenu> protoType() {
         return ProtoOpenMenu.class;
     }
 
+    /**
+     * 返回本组件默认参数空间，供实例初始化及结构校验使用。
+     *
+     * @return 完整默认参数空间
+     */
     @Override
     public McSpace<Map<String, Object>> defaultSpace() {
         return DEFAULT_SPACE;
     }
 
+    /**
+     * 校验当前动作分支实际使用的字段；实体位置由执行入口独立验证。
+     *
+     * @param component 当前动作负载
+     * @return 当前分支参数是否有效
+     */
     @Override
     public boolean contains(ProtoOpenMenu component) {
         if (component == null) {
             return false;
         }
-        // oneof 未使用的字段按 0 校验（恒在界内），与 SetAttackTargetController 的双字段风格一致
+        // 只校验当前 oneof 分支实际使用的字段，自身操作不检查坐标。
         return switch (component.getTargetCase()) {
-            case BLOCK -> this.space().contains(Map.of(
+            case BLOCK -> ActionSpaces.containsFields(this.space(), Map.of(
                 "x", new double[] { component.getBlock().getX() },
                 "y", new double[] { component.getBlock().getY() },
-                "z", new double[] { component.getBlock().getZ() },
-                "entity_id", new double[] { 0 }
+                "z", new double[] { component.getBlock().getZ() }
             ));
-            case ENTITY -> this.space().contains(Map.of(
-                "x", new double[] { 0 },
-                "y", new double[] { 0 },
-                "z", new double[] { 0 },
+            case ENTITY -> ActionSpaces.containsFields(this.space(), Map.of(
                 "entity_id", new double[] { component.getEntity().getEntityId() }
             ));
-            case SELF -> this.space().contains(Map.of(
-                "x", new double[] { 0 },
-                "y", new double[] { 0 },
-                "z", new double[] { 0 },
-                "entity_id", new double[] { 0 }
-            ));
+            case SELF -> true;
             case TARGET_NOT_SET -> false;
         };
     }
 
+    /**
+     * 解析并执行动作，目标越界时在产生副作用前返回失败。
+     *
+     * @param component 当前动作负载
+     * @return 动作策略及初始状态
+     */
     @Override
     public ActionApplyResult apply(ProtoOpenMenu component) {
         Mob mob = this.mob();
+        if (component != null && component.hasBlock()
+            && !this.containsTarget(component.getBlock().getX(), component.getBlock().getY(), component.getBlock().getZ())) {
+            return ActionApplyResult.none(this.outsideTarget(component.getBlock().getX(), component.getBlock().getY(), component.getBlock().getZ()));
+        }
+        if (!this.contains(component)) {
+            return ActionApplyResult.none(ActionState.failed("invalid action payload"));
+        }
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
+        }
+        if (component.hasEntity()) {
+            var entity = mob.level().getEntity(component.getEntity().getEntityId());
+            if (entity != null) {
+                ActionState boundaryError = this.checkTargetEntity(entity);
+                if (boundaryError != null) return ActionApplyResult.none(boundaryError);
+            }
         }
         OpenMenuTarget target = toTarget(component);
         if (target == null) {
@@ -149,6 +194,12 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
         };
     }
 
+    /**
+     * 返回菜单目标的可读描述。
+     *
+     * @param target 已解析目标
+     * @return 可读目标描述
+     */
     private static String describeTarget(OpenMenuTarget target) {
         return switch (target) {
             case OpenMenuTarget.Block block -> "block " + block.pos().toShortString();
@@ -179,10 +230,81 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
         }
     }
 
+
+    /** @param region 默认环境区域；没有区域时保留原空间，显式配置始终优先 */
+    @Override
+    public void initializeDefaultRegion(@Nullable BoundingBox region) {
+        if (this.defaultsApplied) {
+            return;
+        }
+        if (!this.explicitSpace && region != null) {
+            this.applyingDefaults = true;
+            try {
+                this.setSpace(CoordinateSpaces.withRegion(this.space(), region, true));
+            } finally {
+                this.applyingDefaults = false;
+            }
+        }
+        this.defaultsApplied = true;
+    }
+
+    /** @param space 新动作空间；本组件校验全部字段及一维坐标轴 */
+    @Override
+    protected void validateSpace(McSpace<Map<String, Object>> space) {
+        ActionSpaces.validate(space, this.defaultSpace());
+        CoordinateSpaces.bounds(space);
+    }
+
+    /** 成功替换空间后记录调用方覆盖，默认初始化除外。 */
+    @Override
+    protected void onSpaceChanged() {
+        if (!this.applyingDefaults) {
+            this.explicitSpace = true;
+        }
+    }
+
+    /**
+     * @param x 目标 X
+     * @param y 目标 Y
+     * @param z 目标 Z
+     * @return 是否落在本组件当前坐标空间
+     */
+    private boolean containsTarget(double x, double y, double z) {
+        return CoordinateSpaces.bounds(this.space()).contains(x, y, z);
+    }
+
+    /**
+     * @param x 目标 X
+     * @param y 目标 Y
+     * @param z 目标 Z
+     * @return 本组件的越界失败及空间诊断
+     */
+    private ActionState outsideTarget(double x, double y, double z) {
+        return ActionState.failed("target outside action space", CoordinateSpaces.details(this.space(), x, y, z));
+    }
+
+    /**
+     * @param target 已解析实体
+     * @return 维度或位置不符合本组件空间时的失败；合法返回 null
+     */
+    private ActionState checkTargetEntity(net.minecraft.world.entity.Entity target) {
+        if (target.level() != this.mob().level()) {
+            return ActionState.failed("target entity is in another dimension", Map.of("entity_id", target.getId()));
+        }
+        return this.containsTarget(target.getX(), target.getY(), target.getZ())
+            ? null : this.outsideTarget(target.getX(), target.getY(), target.getZ());
+    }
+
     /**
      * 动作工厂 —— 注册表引用该内部轻量 {@link ActionComponentFactory}，而非目标类构造函数。
      */
     public static final class Factory implements ActionComponentFactory<ProtoOpenMenu, OpenMenuController> {
+        /**
+         * 为指定受控生物创建独立组件实例。
+         *
+         * @param mob 受控生物
+         * @return 新组件实例
+         */
         @Override
         public OpenMenuController create(Mob mob) {
             return new OpenMenuController(mob);
