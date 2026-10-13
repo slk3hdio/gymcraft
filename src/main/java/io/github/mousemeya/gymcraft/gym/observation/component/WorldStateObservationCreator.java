@@ -17,7 +17,6 @@ import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoWorldState;
 import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
@@ -43,7 +42,7 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
 
     /** @return 世界标量字段及结构化结构列表的默认空间 */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return new DictSpace(Map.of(
             "day_time", new BoxSpace(0, Long.MAX_VALUE, 1),
             "raining", new BooleanSpace(), "thundering", new BooleanSpace(),
@@ -63,11 +62,11 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
             .setDayTime(level.getGameTime()).setRaining(level.isRaining()).setThundering(level.isThundering())
             .setDimension(level.dimension().identifier().toString())
             .setBiome(location.biome()).setStructure(location.structure());
-        if (this.resultSpace().maxLength() == 0) {
+        if (this.structuresSpace().maxLength() == 0) {
             return builder.build();
         }
         for (var nearby : WorldLocationScanner.scanNearbyStructures(mob, this.bounds())) {
-            if (builder.getStructuresCount() >= this.resultSpace().maxLength()) {
+            if (builder.getStructuresCount() >= this.structuresSpace().maxLength()) {
                 break;
             }
             var view = ProtoStructureLocation.newBuilder()
@@ -95,13 +94,13 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
     }
 
     /** @return 当前空间中本组件的结果列表及数量上限 */
-    private SequenceSpace<Map<String, Object>> resultSpace() {
-        return SpatialObservationSpaces.sequence(this.space(), "structures");
+    private SequenceSpace<Map<String, Object>> structuresSpace() {
+        return this.space().dictSequence("structures");
     }
 
     /** @return 本组件当前元素空间的绝对坐标边界 */
     private CoordinateSpaces.Bounds bounds() {
-        return SpatialObservationSpaces.bounds(this.resultSpace().elementSpace());
+        return CoordinateSpaces.bounds(this.structuresSpace().dictElement());
     }
 
     /**
@@ -109,7 +108,7 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
      * @return 是否满足当前元素的所有字段约束
      */
     private boolean accepts(Message view) {
-        return this.resultSpace().elementSpace().contains(SpatialObservationSpaces.value(view));
+        return this.structuresSpace().elementSpace().contains(SpatialObservationSpaces.value(view));
     }
 
     /**

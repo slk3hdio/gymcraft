@@ -40,6 +40,7 @@ import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime;
 import io.github.mousemeya.gymcraft.gym.runtime.AgentRuntime.RuntimeStepResult;
 import io.github.mousemeya.gymcraft.gym.visualization.VisualizationService;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
@@ -235,7 +236,7 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     /** 获取指定动作组件在当前 env 中使用的参数空间。 */
-    public McSpace<Map<String, Object>> getActionComponentSpace(String componentId) {
+    public DictSpace getActionComponentSpace(String componentId) {
         this.ensureOpen();
         return this.actionController.getComponentSpace(componentId);
     }
@@ -247,7 +248,7 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     /** 获取指定观测组件在当前 env 中使用的观测空间。 */
-    public McSpace<Map<String, Object>> getObservationComponentSpace(String componentId) {
+    public DictSpace getObservationComponentSpace(String componentId) {
         this.ensureOpen();
         return this.observationCreator.getComponentSpace(componentId);
     }

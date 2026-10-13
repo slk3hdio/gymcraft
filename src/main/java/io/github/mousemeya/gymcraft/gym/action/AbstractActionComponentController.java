@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.SpaceUtils;
 
 /**
@@ -28,7 +29,7 @@ public abstract class AbstractActionComponentController<T extends Message> imple
     /** 支持的实体类型列表（默认所有 {@link Mob} 及其子类）。 */
     private final Collection<Class<?>> supportedEntities;
     /** 当前环境实例使用的参数空间。 */
-    private McSpace<Map<String, Object>> space;
+    private DictSpace space;
     /** 当前控制器绑定的目标 Mob（reset 后可能被运行时替换）。 */
     private Mob mob;
 
@@ -70,7 +71,7 @@ public abstract class AbstractActionComponentController<T extends Message> imple
      * @return 当前空间
      */
     @Override
-    public final McSpace<Map<String, Object>> space() {
+    public final DictSpace space() {
         return this.space;
     }
 
@@ -83,7 +84,7 @@ public abstract class AbstractActionComponentController<T extends Message> imple
     public final void setSpace(McSpace<Map<String, Object>> space) {
         java.util.Objects.requireNonNull(space, "space");
         SpaceUtils.validateSpaceStructure(space, this.defaultSpace());
-        this.space = space;
+        this.space = (DictSpace) space;
     }
 
 

@@ -37,7 +37,6 @@ import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoBreakBlock;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
  * 破坏方块动作组件 —— 让 Mob 用指定槽位的工具按原版规则挖掘指定方块。
@@ -74,7 +73,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     /** 默认挥手动画间隔（tick）。 */
     public static final int DEFAULT_SWING_INTERVAL_TICKS = 10;
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
         "y", new BoxSpace(-2048, 2048, 1),
         "z", new BoxSpace(-30_000_000, 30_000_000, 1),
@@ -158,7 +157,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
      * @return 完整默认参数空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 
@@ -170,7 +169,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
      */
     @Override
     public boolean contains(ProtoBreakBlock component) {
-        return component != null && component.hasSlotId() && ((DictSpace) this.space()).containsFields(Map.of(
+        return component != null && component.hasSlotId() && this.space().containsFields(Map.of(
             "x", new double[] { component.getX() },
             "y", new double[] { component.getY() },
             "z", new double[] { component.getZ() },
@@ -455,7 +454,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
      * @return 是否落在本组件当前坐标空间
      */
     private boolean containsTarget(double x, double y, double z) {
-        return ((DictSpace) this.space()).containsFields(Map.of(
+        return this.space().containsFields(Map.of(
             "x", new double[] {x}, "y", new double[] {y}, "z", new double[] {z}));
     }
 

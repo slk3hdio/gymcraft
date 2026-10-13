@@ -25,7 +25,6 @@ import io.github.mousemeya.gymcraft.gym.menu.MenuTypeUtil;
 import io.github.mousemeya.gymcraft.gym.menu.session.OpenMenuTarget;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
  * 打开菜单动作组件 —— 为 Agent 打开指定目标的逻辑菜单会话。
@@ -39,7 +38,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  */
 public class OpenMenuController extends AbstractActionComponentController<ProtoOpenMenu> implements EnvironmentRegionAware {
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
         "y", new BoxSpace(-2048, 2048, 1),
         "z", new BoxSpace(-30_000_000, 30_000_000, 1),
@@ -71,7 +70,7 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
      * @return 完整默认参数空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 
@@ -88,12 +87,12 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
         }
         // 只校验当前 oneof 分支实际使用的字段，自身操作不检查坐标。
         return switch (component.getTargetCase()) {
-            case BLOCK -> ((DictSpace) this.space()).containsFields(Map.of(
+            case BLOCK -> this.space().containsFields(Map.of(
                 "x", new double[] { component.getBlock().getX() },
                 "y", new double[] { component.getBlock().getY() },
                 "z", new double[] { component.getBlock().getZ() }
             ));
-            case ENTITY -> ((DictSpace) this.space()).containsFields(Map.of(
+            case ENTITY -> this.space().containsFields(Map.of(
                 "entity_id", new double[] { component.getEntity().getEntityId() }
             ));
             case SELF -> true;
@@ -239,7 +238,7 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
      * @return 是否落在本组件当前坐标空间
      */
     private boolean containsTarget(double x, double y, double z) {
-        return ((DictSpace) this.space()).containsFields(Map.of(
+        return this.space().containsFields(Map.of(
             "x", new double[] {x}, "y", new double[] {y}, "z", new double[] {z}));
     }
 

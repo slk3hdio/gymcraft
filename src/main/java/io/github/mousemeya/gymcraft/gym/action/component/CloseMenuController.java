@@ -14,7 +14,6 @@ import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
  * 关闭菜单动作组件 —— 显式关闭 Agent 当前的逻辑菜单会话。
@@ -26,7 +25,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class CloseMenuController extends AbstractActionComponentController<ProtoCloseMenu> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "session_id", new BoxSpace(0, Long.MAX_VALUE, 1)
     ));
 
@@ -40,7 +39,7 @@ public class CloseMenuController extends AbstractActionComponentController<Proto
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 

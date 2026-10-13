@@ -32,7 +32,6 @@ import io.github.mousemeya.gymcraft.gym.action.navigation.SwimNavigationTask;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSwimTo;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.mixin.MobLookControlAccessor;
 import io.github.mousemeya.gymcraft.mixin.MobMoveControlAccessor;
 
@@ -53,7 +52,7 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SwimToController.class);
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
         "y", new BoxSpace(-2048, 2048, 1),
         "z", new BoxSpace(-30_000_000, 30_000_000, 1),
@@ -106,7 +105,7 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
      * @return 完整默认参数空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 
@@ -118,7 +117,7 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
      */
     @Override
     public boolean contains(ProtoSwimTo component) {
-        return component != null && ((DictSpace) this.space()).containsFields(Map.of(
+        return component != null && this.space().containsFields(Map.of(
             "x", new double[] { component.getX() },
             "y", new double[] { component.getY() },
             "z", new double[] { component.getZ() },

@@ -16,7 +16,6 @@ import io.github.mousemeya.gymcraft.gym.observation.SpatialObservationSpaces;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoBlockView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoInterestingBlocks;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
@@ -45,7 +44,7 @@ public class InterestingBlocksObservationCreator extends AbstractObservationComp
 
     /** @return 按 protobuf 字段构造的结构化默认空间，构造器会填入固定坐标边界 */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return new DictSpace(Map.of("blocks", new SequenceSpace<>(
             SpatialObservationSpaces.viewSpace(ProtoBlockView.getDescriptor()), DEFAULT_MAX_BLOCKS)));
     }
@@ -88,7 +87,7 @@ public class InterestingBlocksObservationCreator extends AbstractObservationComp
         var interesting = mob.getData(ModAttachments.INTERESTING_BLOCKS);
         // 兴趣与元素空间过滤通过后复用同一视图，不再二次构建 protobuf。
         for (var block : NearbyBlockScanner.scan(mob, this.bounds(), this.maxVisited,
-                this.resultSpace().maxLength(), state -> interesting.contains(state.getBlock()),
+                this.blocksSpace().maxLength(), state -> interesting.contains(state.getBlock()),
                 InterestingBlocksObservationCreator::view, this::accepts)) {
             builder.addBlocks(block);
         }
@@ -110,13 +109,13 @@ public class InterestingBlocksObservationCreator extends AbstractObservationComp
     }
 
     /** @return 当前空间中本组件的结果列表及数量上限 */
-    private SequenceSpace<Map<String, Object>> resultSpace() {
-        return SpatialObservationSpaces.sequence(this.space(), "blocks");
+    private SequenceSpace<Map<String, Object>> blocksSpace() {
+        return this.space().dictSequence("blocks");
     }
 
     /** @return 本组件当前元素空间的绝对坐标边界 */
     private CoordinateSpaces.Bounds bounds() {
-        return SpatialObservationSpaces.bounds(this.resultSpace().elementSpace());
+        return CoordinateSpaces.bounds(this.blocksSpace().dictElement());
     }
 
     /**
@@ -124,7 +123,7 @@ public class InterestingBlocksObservationCreator extends AbstractObservationComp
      * @return 是否满足当前元素的所有字段约束
      */
     private boolean accepts(Message view) {
-        return this.resultSpace().elementSpace().contains(SpatialObservationSpaces.value(view));
+        return this.blocksSpace().elementSpace().contains(SpatialObservationSpaces.value(view));
     }
 
     /**

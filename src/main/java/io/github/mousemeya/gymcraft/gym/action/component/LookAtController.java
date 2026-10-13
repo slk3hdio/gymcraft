@@ -25,7 +25,6 @@ import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoLookAt;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
  * 注视目标动作组件 —— 将 Agent 的当前视线瞬时对准实体、掉落物或方块。
@@ -42,7 +41,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 public class LookAtController extends AbstractActionComponentController<ProtoLookAt> implements EnvironmentRegionAware {
 
     /** 动作空间沿用现有 oneof 组件的扁平字段表达。 */
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
         "y", new BoxSpace(-2048, 2048, 1),
         "z", new BoxSpace(-30_000_000, 30_000_000, 1),
@@ -74,7 +73,7 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
      * @return 扁平化的坐标与实体 ID 空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 
@@ -94,7 +93,7 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
                 && this.containsEntityId(component.getEntity().getEntityId());
             case ITEM -> component.getItem().getEntityId() > 0
                 && this.containsEntityId(component.getItem().getEntityId());
-            case BLOCK -> ((DictSpace) this.space()).containsFields(Map.of(
+            case BLOCK -> this.space().containsFields(Map.of(
                 "x", new double[] { component.getBlock().getX() },
                 "y", new double[] { component.getBlock().getY() },
                 "z", new double[] { component.getBlock().getZ() }
@@ -155,7 +154,7 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
      * @return ID 是否位于空间边界内
      */
     private boolean containsEntityId(int entityId) {
-        return ((DictSpace) this.space()).containsFields(Map.of(
+        return this.space().containsFields(Map.of(
             "entity_id", new double[] { entityId }
         ));
     }
@@ -301,7 +300,7 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
      * @return 是否落在本组件当前坐标空间
      */
     private boolean containsTarget(double x, double y, double z) {
-        return ((DictSpace) this.space()).containsFields(Map.of(
+        return this.space().containsFields(Map.of(
             "x", new double[] {x}, "y", new double[] {y}, "z", new double[] {z}));
     }
 

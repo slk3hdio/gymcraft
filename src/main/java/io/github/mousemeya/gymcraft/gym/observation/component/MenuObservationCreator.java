@@ -31,7 +31,6 @@ import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoSlotView;
 import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
@@ -55,7 +54,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 public class MenuObservationCreator extends AbstractObservationComponentCreator<ProtoMenuObservation> {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.ofEntries(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.ofEntries(
         Map.entry("open", new BooleanSpace()),
         Map.entry("session_id", new BoxSpace(0, Long.MAX_VALUE, 1)),
         Map.entry("menu_type", new TextSpace()),
@@ -74,7 +73,7 @@ public class MenuObservationCreator extends AbstractObservationComponentCreator<
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 

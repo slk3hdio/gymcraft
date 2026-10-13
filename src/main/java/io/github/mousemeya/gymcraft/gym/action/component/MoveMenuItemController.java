@@ -75,7 +75,7 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
         "repeat", new BoxSpace(0, Integer.MAX_VALUE, 1)
     ));
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "session_id", new BoxSpace(0, Long.MAX_VALUE, 1),
         "moves", new SequenceSpace<>(MOVE_SPACE, Integer.MAX_VALUE)
     ));
@@ -91,7 +91,7 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 

@@ -12,7 +12,6 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoJump;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
  * 跳跃组件 —— 瞬时动作，命令 Mob 立即跳一次。
@@ -22,7 +21,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class JumpController extends AbstractActionComponentController<ProtoJump> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of()); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of()); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
     public JumpController(Mob mob) {
         super(mob);
@@ -34,7 +33,7 @@ public class JumpController extends AbstractActionComponentController<ProtoJump>
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 

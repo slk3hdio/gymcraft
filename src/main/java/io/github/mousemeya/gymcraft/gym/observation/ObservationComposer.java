@@ -164,7 +164,11 @@ public class ObservationComposer {
         creator.setSpace(space);
     }
 
-    public McSpace<Map<String, Object>> getComponentSpace(String componentId) {
+    /**
+     * @param componentId 观测组件 ID
+     * @return 当前组件的字典空间；组件未安装时抛出异常
+     */
+    public DictSpace getComponentSpace(String componentId) {
         ObservationComponentCreator<?> creator = this.components.get(componentId);
         if (creator == null) {
             throw new IllegalArgumentException("Unknown observation component: " + componentId);

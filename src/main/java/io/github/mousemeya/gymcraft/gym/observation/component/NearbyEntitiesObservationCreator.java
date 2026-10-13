@@ -18,7 +18,6 @@ import io.github.mousemeya.gymcraft.gym.observation.SpatialObservationSpaces;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoEntityView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyEntities;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
 
 /**
@@ -43,7 +42,7 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
 
     /** @return 按 protobuf 字段构造的结构化默认空间，构造器会填入固定坐标边界 */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return new DictSpace(Map.of("entities", new SequenceSpace<>(
             SpatialObservationSpaces.viewSpace(ProtoEntityView.getDescriptor()), DEFAULT_MAX_ENTITIES)));
     }
@@ -60,11 +59,11 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
     @Override
     public ProtoNearbyEntities create(Mob mob) {
         var builder = ProtoNearbyEntities.newBuilder();
-        if (this.resultSpace().maxLength() == 0) {
+        if (this.entitiesSpace().maxLength() == 0) {
             return builder.build();
         }
         for (var entity : mob.level().getEntitiesOfClass(LivingEntity.class, this.bounds().queryBox(), e -> e != mob)) {
-            if (builder.getEntitiesCount() >= this.resultSpace().maxLength()) {
+            if (builder.getEntitiesCount() >= this.entitiesSpace().maxLength()) {
                 break;
             }
             var view = ProtoEntityView.newBuilder()
@@ -100,13 +99,13 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
     }
 
     /** @return 当前空间中本组件的结果列表及数量上限 */
-    private SequenceSpace<Map<String, Object>> resultSpace() {
-        return SpatialObservationSpaces.sequence(this.space(), "entities");
+    private SequenceSpace<Map<String, Object>> entitiesSpace() {
+        return this.space().dictSequence("entities");
     }
 
     /** @return 本组件当前元素空间的绝对坐标边界 */
     private CoordinateSpaces.Bounds bounds() {
-        return SpatialObservationSpaces.bounds(this.resultSpace().elementSpace());
+        return CoordinateSpaces.bounds(this.entitiesSpace().dictElement());
     }
 
     /**
@@ -114,7 +113,7 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
      * @return 是否满足当前元素的所有字段约束
      */
     private boolean accepts(Message view) {
-        return this.resultSpace().elementSpace().contains(SpatialObservationSpaces.value(view));
+        return this.entitiesSpace().elementSpace().contains(SpatialObservationSpaces.value(view));
     }
 
     /**

@@ -34,7 +34,6 @@ import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentSlot;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
  * 拾取掉落物动作组件 —— 按实体 ID 寻路到 {@link ItemEntity} 并把物品收入 Mob 统一物品栏。
@@ -58,7 +57,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
     /** 默认寻路速度修正值。 */
     public static final double DEFAULT_SPEED = 1.0;
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
         "x", new BoxSpace(-Double.MAX_VALUE, Double.MAX_VALUE, 1),
         "y", new BoxSpace(-Double.MAX_VALUE, Double.MAX_VALUE, 1),
@@ -112,7 +111,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
      * @return 完整默认参数空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 
@@ -124,7 +123,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
      */
     @Override
     public boolean contains(ProtoPickUpItem component) {
-        return component != null && ((DictSpace) this.space()).containsFields(Map.of(
+        return component != null && this.space().containsFields(Map.of(
             "entity_id", new double[] { component.getEntityId() }
         ));
     }
@@ -386,7 +385,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
      * @return 是否落在本组件当前坐标空间
      */
     private boolean containsTarget(double x, double y, double z) {
-        return ((DictSpace) this.space()).containsFields(Map.of(
+        return this.space().containsFields(Map.of(
             "x", new double[] {x}, "y", new double[] {y}, "z", new double[] {z}));
     }
 

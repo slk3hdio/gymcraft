@@ -16,7 +16,6 @@ import io.github.mousemeya.gymcraft.gym.observation.SpatialObservationSpaces;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoItemEntityView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyItems;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
 
 /**
@@ -41,7 +40,7 @@ public class NearbyItemsObservationCreator extends AbstractObservationComponentC
 
     /** @return 按 protobuf 字段构造的结构化默认空间，构造器会填入固定坐标边界 */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return new DictSpace(Map.of("items", new SequenceSpace<>(
             SpatialObservationSpaces.viewSpace(ProtoItemEntityView.getDescriptor()), DEFAULT_MAX_ITEMS)));
     }
@@ -58,13 +57,13 @@ public class NearbyItemsObservationCreator extends AbstractObservationComponentC
     @Override
     public ProtoNearbyItems create(Mob mob) {
         var builder = ProtoNearbyItems.newBuilder();
-        if (this.resultSpace().maxLength() == 0) {
+        if (this.itemsSpace().maxLength() == 0) {
             return builder.build();
         }
         var registries = mob.level().registryAccess();
         for (var entity : mob.level().getEntitiesOfClass(ItemEntity.class, this.bounds().queryBox(),
                 e -> !e.isRemoved() && !e.getItem().isEmpty())) {
-            if (builder.getItemsCount() >= this.resultSpace().maxLength()) {
+            if (builder.getItemsCount() >= this.itemsSpace().maxLength()) {
                 break;
             }
             var view = ProtoItemEntityView.newBuilder()
@@ -95,13 +94,13 @@ public class NearbyItemsObservationCreator extends AbstractObservationComponentC
     }
 
     /** @return 当前空间中本组件的结果列表及数量上限 */
-    private SequenceSpace<Map<String, Object>> resultSpace() {
-        return SpatialObservationSpaces.sequence(this.space(), "items");
+    private SequenceSpace<Map<String, Object>> itemsSpace() {
+        return this.space().dictSequence("items");
     }
 
     /** @return 本组件当前元素空间的绝对坐标边界 */
     private CoordinateSpaces.Bounds bounds() {
-        return SpatialObservationSpaces.bounds(this.resultSpace().elementSpace());
+        return CoordinateSpaces.bounds(this.itemsSpace().dictElement());
     }
 
     /**
@@ -109,7 +108,7 @@ public class NearbyItemsObservationCreator extends AbstractObservationComponentC
      * @return 是否满足当前元素的所有字段约束
      */
     private boolean accepts(Message view) {
-        return this.resultSpace().elementSpace().contains(SpatialObservationSpaces.value(view));
+        return this.itemsSpace().elementSpace().contains(SpatialObservationSpaces.value(view));
     }
 
     /**

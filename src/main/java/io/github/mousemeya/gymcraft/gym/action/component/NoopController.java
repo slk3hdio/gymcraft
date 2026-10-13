@@ -13,7 +13,6 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
  * 空动作组件 —— 智能体选择"什么都不做"时的占位动作。
@@ -23,7 +22,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class NoopController extends AbstractActionComponentController<ProtoNoop> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of()); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of()); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
 
     public NoopController(Mob mob) {
         super(mob);
@@ -35,7 +34,7 @@ public class NoopController extends AbstractActionComponentController<ProtoNoop>
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 

@@ -15,7 +15,6 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoDropItem;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
  * 丢出物品动作组件 —— 从 Agent 统一物品栏的指定 {@code slot_id} 取出物品，
@@ -27,7 +26,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class DropItemController extends AbstractActionComponentController<ProtoDropItem> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "slot_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
         "count", new BoxSpace(0, Integer.MAX_VALUE, 1)
     ));
@@ -57,7 +56,7 @@ public class DropItemController extends AbstractActionComponentController<ProtoD
      * @return 默认动作空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 

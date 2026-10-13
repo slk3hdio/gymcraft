@@ -17,7 +17,7 @@ import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
 /**
- * 空间观测的结构工具：将 protobuf 视图描述成字典空间，并以相同字段形状执行校验。
+ * 空间观测的结构工具：将 protobuf 视图及实际值映射到字典空间，并更新列表配置。
  * 仅供带坐标列表的观测组件使用；数值样本统一采用 BoxSpace 所需的 double 数组。
  */
 public final class SpatialObservationSpaces {
@@ -81,35 +81,17 @@ public final class SpatialObservationSpaces {
 
 
     /**
-     * @param space 组件空间
-     * @param listField 坐标列表字段名
-     * @return 已校验的结构化序列空间
-     */
-    @SuppressWarnings("unchecked")
-    public static SequenceSpace<Map<String, Object>> sequence(McSpace<Map<String, Object>> space, String listField) {
-        return (SequenceSpace<Map<String, Object>>) ((DictSpace) space).spaces().get(listField);
-    }
-
-    /**
-     * @param element 列表元素字典
-     * @return 直接读取当前元素空间的三个坐标轴
-     */
-    public static CoordinateSpaces.Bounds bounds(McSpace<Map<String, Object>> element) {
-        return CoordinateSpaces.bounds(element);
-    }
-
-    /**
      * @param space 原组件空间
      * @param listField 列表字段
      * @param region 方块区域
      * @param continuous 是否覆盖末端方块体积
      * @return 只替换坐标轴的空间
      */
-    public static DictSpace withRegion(McSpace<Map<String, Object>> space, String listField,
+    public static DictSpace withRegion(DictSpace space, String listField,
             BoundingBox region, boolean continuous) {
-        var sequence = sequence(space, listField);
-        var element = CoordinateSpaces.withRegion(sequence.elementSpace(), region, continuous);
-        var root = new LinkedHashMap<>(((DictSpace) space).spaces());
+        var sequence = space.dictSequence(listField);
+        var element = CoordinateSpaces.withRegion(sequence.dictElement(), region, continuous);
+        var root = new LinkedHashMap<>(space.spaces());
         root.put(listField, new SequenceSpace<>(element, sequence.maxLength()));
         return new DictSpace(root);
     }
@@ -120,12 +102,12 @@ public final class SpatialObservationSpaces {
      * @param maximum 新数量上限
      * @return 保留元素约束的新空间
      */
-    public static DictSpace withMaximum(McSpace<Map<String, Object>> space, String listField, int maximum) {
+    public static DictSpace withMaximum(DictSpace space, String listField, int maximum) {
         if (maximum <= 0) {
             throw new IllegalArgumentException("maximum must be positive, got: " + maximum);
         }
-        var root = new LinkedHashMap<>(((DictSpace) space).spaces());
-        root.put(listField, new SequenceSpace<>(sequence(space, listField).elementSpace(), maximum));
+        var root = new LinkedHashMap<>(space.spaces());
+        root.put(listField, new SequenceSpace<>(space.dictSequence(listField).elementSpace(), maximum));
         return new DictSpace(root);
     }
 }

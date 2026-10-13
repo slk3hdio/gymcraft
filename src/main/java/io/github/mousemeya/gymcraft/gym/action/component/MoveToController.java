@@ -27,7 +27,6 @@ import io.github.mousemeya.gymcraft.gym.action.navigation.NavigationPathProvider
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveTo;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
  * 寻路动作组件 —— 将实体导航到指定方块。
@@ -85,7 +84,7 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
      * @return 完整默认参数空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 
@@ -97,7 +96,7 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
      */
     @Override
     public boolean contains(ProtoMoveTo component) {
-        return component != null && ((DictSpace) this.space()).containsFields(Map.of(
+        return component != null && this.space().containsFields(Map.of(
             "x", new double[] { component.getX() },
             "y", new double[] { component.getY() },
             "z", new double[] { component.getZ() },

@@ -283,9 +283,9 @@ public final class SpatialActionGameTests {
      * @param hz 上界 Z
      * @return 保留其他参数的新空间
      */
-    private static McSpace<Map<String, Object>> withBounds(McSpace<Map<String, Object>> space,
+    private static DictSpace withBounds(DictSpace space,
         double lx, double ly, double lz, double hx, double hy, double hz) {
-        var fields = new LinkedHashMap<>(((DictSpace) space).spaces());
+        var fields = new LinkedHashMap<>(space.spaces());
         fields.put("x", new BoxSpace(lx, hx, 1));
         fields.put("y", new BoxSpace(ly, hy, 1));
         fields.put("z", new BoxSpace(lz, hz, 1));

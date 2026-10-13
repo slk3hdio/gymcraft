@@ -11,7 +11,6 @@ import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoSelfState;
 import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
 /**
@@ -22,7 +21,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * </p>
  */
 public class SelfStateObservationCreator extends AbstractObservationComponentCreator<ProtoSelfState> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.ofEntries(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.ofEntries(
         Map.entry("entity_type", new TextSpace()),
         Map.entry("uuid", new TextSpace()),
         Map.entry("health", new BoxSpace(0, 2048, 1)),
@@ -55,7 +54,7 @@ public class SelfStateObservationCreator extends AbstractObservationComponentCre
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 

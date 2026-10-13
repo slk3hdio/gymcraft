@@ -22,7 +22,6 @@ import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetAttackTarget;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -37,7 +36,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
  */
 public class SetAttackTargetController extends AbstractActionComponentController<ProtoSetAttackTarget> implements EnvironmentRegionAware {
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "target_uuid", new TextSpace(),
         "target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
         "x", new BoxSpace(-Double.MAX_VALUE, Double.MAX_VALUE, 1),
@@ -81,7 +80,7 @@ public class SetAttackTargetController extends AbstractActionComponentController
      * @return 完整默认参数空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 
@@ -95,11 +94,11 @@ public class SetAttackTargetController extends AbstractActionComponentController
     public boolean contains(ProtoSetAttackTarget component) {
         if (component == null) return false;
         if (component.getTargetEntityId() > 0 || component.getTargetUuid().isEmpty()) {
-            return ((DictSpace) this.space()).containsFields(Map.of(
+            return this.space().containsFields(Map.of(
                 "target_entity_id", new double[] { component.getTargetEntityId() }
             ));
         }
-        if (!((DictSpace) this.space()).containsFields(Map.of("target_uuid", component.getTargetUuid()))) return false;
+        if (!this.space().containsFields(Map.of("target_uuid", component.getTargetUuid()))) return false;
         try {
             UUID.fromString(component.getTargetUuid());
             return true;
@@ -307,7 +306,7 @@ public class SetAttackTargetController extends AbstractActionComponentController
      * @return 是否落在本组件当前坐标空间
      */
     private boolean containsTarget(double x, double y, double z) {
-        return ((DictSpace) this.space()).containsFields(Map.of(
+        return this.space().containsFields(Map.of(
             "x", new double[] {x}, "y", new double[] {y}, "z", new double[] {z}));
     }
 

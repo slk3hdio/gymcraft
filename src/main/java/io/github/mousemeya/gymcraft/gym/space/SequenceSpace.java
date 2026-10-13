@@ -37,6 +37,16 @@ public class SequenceSpace<T> implements McSpace<List<T>> {
         return this.elementSpace;
     }
 
+    /**
+     * @return 字典元素空间；元素不是字典时立即拒绝，不依赖调用方强转
+     */
+    public DictSpace dictElement() {
+        if (!(this.elementSpace instanceof DictSpace dict)) {
+            throw new IllegalArgumentException("sequence element must be DictSpace");
+        }
+        return dict;
+    }
+
     /** @return 序列允许的最大长度 */
     public int maxLength() {
         return this.maxLength;

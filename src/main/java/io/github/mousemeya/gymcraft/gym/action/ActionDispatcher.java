@@ -124,7 +124,7 @@ public class ActionDispatcher {
      * @param componentId 组件 ID
      * @return 组件空间
      */
-    public McSpace<Map<String, Object>> getComponentSpace(String componentId) {
+    public DictSpace getComponentSpace(String componentId) {
         ActionComponentController<?> controller = this.components.get(componentId);
         if (controller == null) {
             throw new IllegalArgumentException("Unknown action component: " + componentId);

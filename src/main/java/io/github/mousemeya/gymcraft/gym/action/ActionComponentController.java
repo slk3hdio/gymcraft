@@ -6,12 +6,13 @@ import com.google.protobuf.Message;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 
 
 /**
  * 动作组件接口 —— 每个 RL 动作类型的自描述单元。
  * <p>
- * 一个动作组件封装了 proto 类型、参数空间定义、采样、校验和执行逻辑。
+ * 一个动作组件封装了 proto 类型、参数字典空间定义、采样、校验和执行逻辑。
  * 所有动作组件均通过 NeoForge 自定义注册表 {@code action_components} 注册，
  * 调度层只通过注册表 ID 分发，不硬编码任何具体动作类型。
  * </p>
@@ -41,13 +42,13 @@ public interface ActionComponentController<T extends Message> {
     boolean supports();
 
     /** 
-     * @return 该动作参数的 Gymnasium 风格空间定义 
-     * <strong>注意：</strong> 如果是{@link io.github.mousemeya.gymcraft.gym.space.DictSpace}类型, 则键名必须和Proto代码中的原始字段名一致
+     * @return 该动作参数的 Gymnasium 风格字典空间定义
+     * <strong>注意：</strong> 字典键名必须和Proto代码中的原始字段名一致
      */
-    McSpace<Map<String, Object>> defaultSpace();
+    DictSpace defaultSpace();
 
     /** @return 该动作在当前环境实例中使用的参数空间（初始为 {@link #defaultSpace()}，可被环境级覆盖） */
-    McSpace<Map<String, Object>> space();
+    DictSpace space();
 
     /** 设置该动作在当前环境实例中使用的参数空间。 */
     void setSpace(McSpace<Map<String, Object>> space);

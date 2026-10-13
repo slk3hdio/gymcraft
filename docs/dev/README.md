@@ -112,6 +112,20 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 覆盖标记。通用基类通过 `SpaceUtils.validateSpaceStructure` 递归比较默认结构的字段、类型
 和 Box 维度；边界与序列长度可以改变。`DictSpace.containsFields` 仅验证实际分支提供的字段。
 
+动作与观测的 `space()`、`defaultSpace()` 及环境的组件空间读取入口返回具体 `DictSpace`。
+`setSpace` 保留原 `McSpace<Map<String, Object>>` 参数，结构校验通过后再替换配置。
+字段读取使用 `box(name)`、`dict(name)`、`sequence(name)` 或 `dictSequence(name)`；字段
+缺失或类型错误时抛出包含字段名的异常。结构化序列用 `dictElement()` 取得 `DictSpace`，例如：
+
+```java
+var items = creator.space().dictSequence("items");
+int limit = items.maxLength();
+BoxSpace x = items.dictElement().box("x");
+```
+
+序列的泛型参数表示元素样本类型，因此这里是 `SequenceSpace<Map<String, Object>>`，
+其元素空间是 `DictSpace`。泛型擦除所需的转换集中在受检 getter 中，组件无需自行强转。
+
 `move_to`、`swim_to`、`look_at`、`set_block`、`break_block`、`pick_up_item`、`attack_once`、
 `set_attack_target`、`open_menu` 和 `use_item` 的默认坐标边界来自 `baseline.region()`，
 与区域捕获开关无关。放置/破坏使用整数方块闭区间，其他组件覆盖完整区域方块体积；

@@ -73,6 +73,62 @@ public class DictSpace implements McSpace<Map<String, Object>> {
     }
 
     /**
+     * @param field 字段名
+     * @return 数值字段空间；字段缺失或类型不符时抛出包含字段名的异常
+     */
+    public BoxSpace box(String field) {
+        return this.requireField(field, BoxSpace.class);
+    }
+
+    /**
+     * @param field 字段名
+     * @return 嵌套字典空间；字段缺失或类型不符时抛出包含字段名的异常
+     */
+    public DictSpace dict(String field) {
+        return this.requireField(field, DictSpace.class);
+    }
+
+    /**
+     * @param field 字段名
+     * @return 序列空间；只保证列表结构，不推断元素类型
+     */
+    public SequenceSpace<?> sequence(String field) {
+        var child = this.spaces.get(field);
+        if (!(child instanceof SequenceSpace<?> sequence)) {
+            throw new IllegalArgumentException("field '" + field + "' must be SequenceSpace");
+        }
+        return sequence;
+    }
+
+    /**
+     * @param field 字段名
+     * @return 字典元素序列；在读取入口检查元素类型后保留 Map 样本类型
+     */
+    @SuppressWarnings("unchecked")
+    public SequenceSpace<Map<String, Object>> dictSequence(String field) {
+        var sequence = this.sequence(field);
+        if (!(sequence.elementSpace() instanceof DictSpace)) {
+            throw new IllegalArgumentException("field '" + field + "' must have DictSpace elements");
+        }
+        // DictSpace 的样本固定为 Map；泛型擦除导致的转换只在此受检入口执行。
+        return (SequenceSpace<Map<String, Object>>) sequence;
+    }
+
+    /**
+     * @param field 字段名
+     * @param type 要求的具体空间类型
+     * @param <S> 具体空间类型
+     * @return 已检查类型的字段空间；不存在或类型不符时立即拒绝
+     */
+    private <S extends McSpace<?>> S requireField(String field, Class<S> type) {
+        var child = this.spaces.get(field);
+        if (!type.isInstance(child)) {
+            throw new IllegalArgumentException("field '" + field + "' must be " + type.getSimpleName());
+        }
+        return type.cast(child);
+    }
+
+    /**
      * @param space 字段空间
      * @param value 字段值
      * @param <T> 字段空间接受的类型

@@ -18,7 +18,6 @@ import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUpdateInterestingBlocks;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
@@ -29,7 +28,7 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  */
 public class UpdateInterestingBlocksController extends AbstractActionComponentController<ProtoUpdateInterestingBlocks> {
     /** 动作允许任意长度的方块 ID 列表，实际集合由注册表中的方块类型自然限定。 */
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "add_block_ids", new SequenceSpace<>(new TextSpace(), Integer.MAX_VALUE),
         "remove_block_ids", new SequenceSpace<>(new TextSpace(), Integer.MAX_VALUE)
     ));
@@ -47,7 +46,7 @@ public class UpdateInterestingBlocksController extends AbstractActionComponentCo
 
     /** 返回批量增删字段的默认动作空间。 */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 

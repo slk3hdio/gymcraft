@@ -35,7 +35,6 @@ import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryTransaction;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 /**
@@ -45,7 +44,7 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  */
 public final class UseItemController extends AbstractActionComponentController<ProtoUseItem> implements EnvironmentRegionAware {
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "slot_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
         "y", new BoxSpace(-2048, 2048, 1),
@@ -92,7 +91,7 @@ public final class UseItemController extends AbstractActionComponentController<P
     @Override public Class<ProtoUseItem> protoType() { return ProtoUseItem.class; }
 
     /** @return 扁平化槽号与目标空间 */
-    @Override public McSpace<Map<String, Object>> defaultSpace() { return DEFAULT_SPACE; }
+    @Override public DictSpace defaultSpace() { return DEFAULT_SPACE; }
 
     /**
      * @param action 协议动作
@@ -110,7 +109,7 @@ public final class UseItemController extends AbstractActionComponentController<P
         } else if (action.hasEntity()) {
             values.put("entity_id", new double[] { action.getEntity().getEntityId() });
         }
-        return ((DictSpace) this.space()).containsFields(values);
+        return this.space().containsFields(values);
     }
 
     /**
@@ -443,7 +442,7 @@ public final class UseItemController extends AbstractActionComponentController<P
      * @return 是否落在本组件当前坐标空间
      */
     private boolean containsTarget(double x, double y, double z) {
-        return ((DictSpace) this.space()).containsFields(Map.of(
+        return this.space().containsFields(Map.of(
             "x", new double[] {x}, "y", new double[] {y}, "z", new double[] {z}));
     }
 

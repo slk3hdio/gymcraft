@@ -11,7 +11,6 @@ import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoDamageRecord;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoHealthLog;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
@@ -45,7 +44,7 @@ public class HealthLogObservationCreator extends AbstractObservationComponentCre
 
     /** 返回默认结果空间。 */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return buildSpace(DEFAULT_MAX_RECORDS);
     }
 
@@ -94,7 +93,7 @@ public class HealthLogObservationCreator extends AbstractObservationComponentCre
     }
 
     /** 构造与指定条数上限匹配的观测空间。 */
-    private static McSpace<Map<String, Object>> buildSpace(int maxRecords) {
+    private static DictSpace buildSpace(int maxRecords) {
         return new DictSpace(Map.of("damage_records", new SequenceSpace<>(new TextSpace(), maxRecords)));
     }
 

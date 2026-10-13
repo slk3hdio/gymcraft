@@ -10,7 +10,6 @@ import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoChatMessage;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoRecentChat;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
@@ -47,7 +46,7 @@ public class ChatObservationCreator extends AbstractObservationComponentCreator<
 
     /** 返回默认结果空间。 */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return buildSpace(DEFAULT_MAX_MESSAGES);
     }
 
@@ -89,7 +88,7 @@ public class ChatObservationCreator extends AbstractObservationComponentCreator<
     }
 
     /** 构造与指定单次返回上限匹配的观测空间。 */
-    private static McSpace<Map<String, Object>> buildSpace(int maxMessages) {
+    private static DictSpace buildSpace(int maxMessages) {
         return new DictSpace(Map.of("messages", new SequenceSpace<>(new TextSpace(), maxMessages)));
     }
 

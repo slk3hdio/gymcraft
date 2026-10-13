@@ -40,10 +40,8 @@ public final class CoordinateSpaces {
      * @param space 已通过组件默认结构校验的坐标字典
      * @return 读取该坐标字典声明的三个标量轴，不重复校验空间结构
      */
-    public static Bounds bounds(McSpace<Map<String, Object>> space) {
-        var dict = (DictSpace) space;
-        return new Bounds((BoxSpace) dict.spaces().get("x"), (BoxSpace) dict.spaces().get("y"),
-            (BoxSpace) dict.spaces().get("z"));
+    public static Bounds bounds(DictSpace space) {
+        return new Bounds(space.box("x"), space.box("y"), space.box("z"));
     }
 
     /**
@@ -52,8 +50,8 @@ public final class CoordinateSpaces {
      * @param continuous 是否覆盖末端方块体积
      * @return 保留其他字段的新字典
      */
-    public static DictSpace withRegion(McSpace<Map<String, Object>> space, BoundingBox region, boolean continuous) {
-        var fields = new LinkedHashMap<>(((DictSpace) space).spaces());
+    public static DictSpace withRegion(DictSpace space, BoundingBox region, boolean continuous) {
+        var fields = new LinkedHashMap<>(space.spaces());
         fields.put("x", new BoxSpace(region.minX(), upper(region.maxX(), continuous), 1));
         fields.put("y", new BoxSpace(region.minY(), upper(region.maxY(), continuous), 1));
         fields.put("z", new BoxSpace(region.minZ(), upper(region.maxZ(), continuous), 1));
@@ -76,7 +74,7 @@ public final class CoordinateSpaces {
      * @param z 目标 Z
      * @return 目标与三轴边界诊断字段
      */
-    public static Map<String, Object> details(McSpace<Map<String, Object>> space, double x, double y, double z) {
+    public static Map<String, Object> details(DictSpace space, double x, double y, double z) {
         var bounds = bounds(space);
         return Map.of("x", x, "y", y, "z", z,
             "low", new double[] {bounds.x().low()[0], bounds.y().low()[0], bounds.z().low()[0]},

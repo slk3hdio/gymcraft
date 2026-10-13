@@ -15,7 +15,6 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoStepMove;
 import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 /**
  * 单步移动控制组件 —— 在每个 tick 中直接操作 Mob 的姿态和位移。
@@ -25,7 +24,7 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class StepMoveController extends AbstractActionComponentController<ProtoStepMove> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "forward", new BoxSpace(-1, 1, 1),
         "strafe_right", new BoxSpace(-1, 1, 1),
         "yaw_delta", new BoxSpace(-180, 180, 1),
@@ -42,7 +41,7 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 

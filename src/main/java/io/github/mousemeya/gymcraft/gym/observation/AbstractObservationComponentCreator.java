@@ -5,6 +5,7 @@ import java.util.Map;
 import com.google.protobuf.Message;
 
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.SpaceUtils;
 
 /**
@@ -18,7 +19,7 @@ import io.github.mousemeya.gymcraft.gym.space.SpaceUtils;
  */
 public abstract class AbstractObservationComponentCreator<T extends Message> implements ObservationComponentCreator<T> {
     /** 当前环境实例使用的观测空间。 */
-    private McSpace<Map<String, Object>> space;
+    private DictSpace space;
 
     /** 创建组件实例，初始空间来自其默认定义。 */
     protected AbstractObservationComponentCreator() {
@@ -27,7 +28,7 @@ public abstract class AbstractObservationComponentCreator<T extends Message> imp
 
     /** @return 当前实例生效的空间 */
     @Override
-    public final McSpace<Map<String, Object>> space() {
+    public final DictSpace space() {
         return this.space;
     }
 
@@ -36,7 +37,7 @@ public abstract class AbstractObservationComponentCreator<T extends Message> imp
     public final void setSpace(McSpace<Map<String, Object>> space) {
         java.util.Objects.requireNonNull(space, "space");
         SpaceUtils.validateSpaceStructure(space, this.defaultSpace());
-        this.space = space;
+        this.space = (DictSpace) space;
     }
 
     /** @return 对应 protobuf 的默认观测消息 */

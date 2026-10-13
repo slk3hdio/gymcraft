@@ -17,7 +17,6 @@ import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSendChat;
 import io.github.mousemeya.gymcraft.gym.chat.RecentChatLog;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
 /**
@@ -30,7 +29,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  */
 public final class SendChatController extends AbstractActionComponentController<ProtoSendChat> {
     /** 单字段文本动作空间；精确的原版限制由 {@link #contains(ProtoSendChat)} 校验。 */
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "message", new TextSpace()
     ));
 
@@ -59,7 +58,7 @@ public final class SendChatController extends AbstractActionComponentController<
      * @return 默认动作空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 

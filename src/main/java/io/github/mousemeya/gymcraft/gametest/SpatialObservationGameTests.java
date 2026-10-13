@@ -84,6 +84,36 @@ public final class SpatialObservationGameTests {
         }
         assertTrue(helper, rejected, "inverted box must be rejected");
 
+        // 受检 getter 保留具体空间类型，动态字段错误在读取入口给出字段名。
+        var metadata = new DictSpace(Map.of());
+        var rows = new SequenceSpace<>(metadata, 3);
+        var fields = new DictSpace(Map.of("position", point, "metadata", metadata,
+            "rows", rows, "labels", new SequenceSpace<>(new TextSpace(), 2)));
+        assertTrue(helper, fields.box("position") == point && fields.dict("metadata") == metadata,
+            "typed accessors must return the original immutable spaces");
+        assertTrue(helper, fields.sequence("labels").maxLength() == 2
+            && fields.dictSequence("rows") == rows && fields.dictSequence("rows").dictElement() == metadata,
+            "sequence accessors must retain lengths and concrete element spaces");
+        Map<String, Runnable> invalidReads = Map.of(
+            "missing", () -> fields.box("missing"),
+            "position", () -> fields.dict("position"),
+            "metadata", () -> fields.sequence("metadata"),
+            "labels", () -> fields.dictSequence("labels"));
+        for (var entry : invalidReads.entrySet()) {
+            try {
+                entry.getValue().run();
+                helper.fail("invalid field accessor was accepted: " + entry.getKey());
+            } catch (IllegalArgumentException expected) {
+                assertTrue(helper, expected.getMessage().contains(entry.getKey()), "accessor error must identify the field");
+            }
+        }
+        try {
+            fields.sequence("labels").dictElement();
+            helper.fail("text sequence element was accepted as DictSpace");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(helper, expected.getMessage().contains("element"), "element accessor must report element type mismatch");
+        }
+
         // 五类组件都必须在 setSpace 时拒绝缺失字段、旧文本列表和二维坐标轴。
         List<ObservationComponentCreator<?>> creators = List.of(new NearbyEntitiesObservationCreator(mob),
             new NearbyItemsObservationCreator(mob), new NearbyBlocksObservationCreator(mob),
@@ -94,11 +124,11 @@ public final class SpatialObservationGameTests {
                 : creator instanceof NearbyItemsObservationCreator ? "items" : "blocks";
             var original = creator.space();
             rejectSpace(helper, creator, new DictSpace(Map.of()));
-            var root = new LinkedHashMap<>(((DictSpace) original).spaces());
+            var root = new LinkedHashMap<>(original.spaces());
             root.put(field, new SequenceSpace<>(new TextSpace(), 10));
             rejectSpace(helper, creator, new DictSpace(root));
-            var sequence = SpatialObservationSpaces.sequence(original, field);
-            var element = new LinkedHashMap<>(((DictSpace) sequence.elementSpace()).spaces());
+            var sequence = original.dictSequence(field);
+            var element = new LinkedHashMap<>(sequence.dictElement().spaces());
             element.put("x", new BoxSpace(0, 1, 2));
             root.put(field, new SequenceSpace<>(new DictSpace(element), 10));
             rejectSpace(helper, creator, new DictSpace(root));
@@ -138,21 +168,21 @@ public final class SpatialObservationGameTests {
         assertTrue(helper, items.contains(observed), "item output must satisfy its space");
 
         // 数量 setter 保留已有边界，直接覆盖序列长度为零则不返回结果。
-        var boundsBefore = SpatialObservationSpaces.bounds(SpatialObservationSpaces.sequence(items.space(), "items").elementSpace());
+        var boundsBefore = CoordinateSpaces.bounds(items.space().dictSequence("items").dictElement());
         items.setMaxItems(2);
         assertTrue(helper, items.create(mob).getItemsCount() <= 2, "item maximum must cap the output");
-        assertTrue(helper, boundsBefore.x() == SpatialObservationSpaces.bounds(
-            SpatialObservationSpaces.sequence(items.space(), "items").elementSpace()).x(), "maximum setter must preserve coordinate space");
-        var root = new LinkedHashMap<>(((DictSpace) items.space()).spaces());
-        var sequence = SpatialObservationSpaces.sequence(items.space(), "items");
-        var element = new LinkedHashMap<>(((DictSpace) sequence.elementSpace()).spaces());
-        var itemFields = new LinkedHashMap<>(((DictSpace) element.get("item")).spaces());
+        assertTrue(helper, boundsBefore.x() == CoordinateSpaces.bounds(
+            items.space().dictSequence("items").dictElement()).x(), "maximum setter must preserve coordinate space");
+        var root = new LinkedHashMap<>(items.space().spaces());
+        var sequence = items.space().dictSequence("items");
+        var element = new LinkedHashMap<>(sequence.dictElement().spaces());
+        var itemFields = new LinkedHashMap<>(items.space().dictSequence("items").dictElement().dict("item").spaces());
         itemFields.put("item_id", new TextSpace("minecraft:diamond"));
         element.put("item", new DictSpace(itemFields));
         root.put("items", new SequenceSpace<>(new DictSpace(element), 20));
         items.setSpace(new DictSpace(root));
         assertEquals(helper, 0, items.create(mob).getItemsCount(), "nested element constraints must filter apples");
-        root.put("items", new SequenceSpace<>(sequence.elementSpace(), 0));
+        root.put("items", new SequenceSpace<>(sequence.dictElement(), 0));
         items.setSpace(new DictSpace(root));
         assertEquals(helper, 0, items.create(mob).getItemsCount(), "zero maximum must return no items");
 
@@ -203,8 +233,8 @@ public final class SpatialObservationGameTests {
         assertEquals(helper, "minecraft:diamond_ore", interests.getBlocks(0).getBlockId(), "interest type must be retained");
         // WEST 比 EAST 先发现；被元素空间拒绝的候选不能占用唯一结果名额。
         level.setBlock(eye.west(), Blocks.GOLD_BLOCK.defaultBlockState(), 3);
-        var root = new LinkedHashMap<>(((DictSpace) blocks.space()).spaces());
-        var element = new LinkedHashMap<>(((DictSpace) SpatialObservationSpaces.sequence(blocks.space(), "blocks").elementSpace()).spaces());
+        var root = new LinkedHashMap<>(blocks.space().spaces());
+        var element = new LinkedHashMap<>(blocks.space().dictSequence("blocks").dictElement().spaces());
         element.put("block_id", new TextSpace("minecraft:diamond_ore"));
         root.put("blocks", new SequenceSpace<>(new DictSpace(element), 1));
         blocks.setSpace(new DictSpace(root));
@@ -349,8 +379,8 @@ public final class SpatialObservationGameTests {
             creator.setSpace(SpatialObservationSpaces.withRegion(creator.space(), "structures", new BoundingBox(center.above()), false));
             assertEquals(helper, 0, creator.create(mob).getStructuresCount(), "center outside Y bounds must be excluded");
             assertEquals(helper, before, visible.gymcraft$getVisibleChunkMap().size(), "structure scans must not load any chunks");
-            var root = new LinkedHashMap<>(((DictSpace) creator.space()).spaces());
-            root.put("structures", new SequenceSpace<>(SpatialObservationSpaces.sequence(creator.space(), "structures").elementSpace(), 0));
+            var root = new LinkedHashMap<>(creator.space().spaces());
+            root.put("structures", new SequenceSpace<>(creator.space().dictSequence("structures").dictElement(), 0));
             creator.setSpace(new DictSpace(root));
             assertEquals(helper, 0, creator.create(mob).getStructuresCount(), "zero structure maximum must return an empty list");
             helper.succeed();
@@ -403,9 +433,9 @@ public final class SpatialObservationGameTests {
      * @param maximum 数量上限
      * @return 保留其他字段的新空间
      */
-    private static DictSpace withBounds(McSpace<Map<String, Object>> space, String field, double[] low, double[] high, int maximum) {
-        var root = new LinkedHashMap<>(((DictSpace) space).spaces());
-        var element = new LinkedHashMap<>(((DictSpace) SpatialObservationSpaces.sequence(space, field).elementSpace()).spaces());
+    private static DictSpace withBounds(DictSpace space, String field, double[] low, double[] high, int maximum) {
+        var root = new LinkedHashMap<>(space.spaces());
+        var element = new LinkedHashMap<>(space.dictSequence(field).dictElement().spaces());
         String[] axes = {"x", "y", "z"};
         for (int i = 0; i < 3; i++) {
             element.put(axes[i], new BoxSpace(low[i], high[i], 1));
@@ -435,8 +465,7 @@ public final class SpatialObservationGameTests {
             String field = id.equals("world") ? "structures" : id.equals("nearby_entities") ? "entities"
                 : id.equals("nearby_items") ? "items" : "blocks";
             boolean continuous = id.equals("nearby_entities") || id.equals("nearby_items");
-            var bounds = SpatialObservationSpaces.bounds(SpatialObservationSpaces.sequence(
-                env.getObservationComponentSpace("gymcraft:" + id), field).elementSpace());
+            var bounds = CoordinateSpaces.bounds(env.getObservationComponentSpace("gymcraft:" + id).dictSequence(field).dictElement());
             assertEquals(helper, (double) region.minX(), bounds.x().low()[0], "region minimum must be used for " + id);
             assertEquals(helper, continuous ? Math.nextDown((double) region.maxX() + 1) : (double) region.maxX(),
                 bounds.x().high()[0], "region maximum must be used for " + id);

@@ -6,12 +6,13 @@ import com.google.protobuf.Message;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 
 
 /**
  * 观测组件接口 —— 每个 RL 观测维度的自描述单元。
  * <p>
- * 封装了 proto 类型、空间定义、构建、校验和采样逻辑。
+ * 封装了 proto 类型、字典空间定义、构建、校验和采样逻辑。
  * 所有观测组件均通过 NeoForge 自定义注册表 {@code observation_components} 注册。
  * </p>
  * <p>
@@ -24,11 +25,11 @@ public interface ObservationComponentCreator<T extends Message> {
     /** @return 对应的 Protobuf 消息类 */
     Class<T> protoType();
 
-    /** @return 该观测数据的 Gymnasium 风格空间定义 */
-    McSpace<Map<String, Object>> defaultSpace();
+    /** @return 该观测数据的 Gymnasium 风格字典空间定义 */
+    DictSpace defaultSpace();
 
     /** @return 该观测在当前环境实例中使用的观测空间（初始为 {@link #defaultSpace()}，可被环境级覆盖） */
-    McSpace<Map<String, Object>> space();
+    DictSpace space();
 
     /** 设置该观测在当前环境实例中使用的观测空间。 */
     void setSpace(McSpace<Map<String, Object>> space);

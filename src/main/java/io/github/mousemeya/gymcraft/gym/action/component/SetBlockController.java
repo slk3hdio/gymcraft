@@ -38,7 +38,6 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 
 /**
@@ -66,7 +65,7 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
     /** setBlock 标志位: UPDATE_NEIGHBORS | UPDATE_CLIENTS, 与常规方块放置一致。 */
     private static final int SET_BLOCK_FLAGS = 3;
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
         "y", new BoxSpace(-2048, 2048, 1),
         "z", new BoxSpace(-30_000_000, 30_000_000, 1),
@@ -122,7 +121,7 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
      * @return 完整默认参数空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public DictSpace defaultSpace() {
         return DEFAULT_SPACE;
     }
 
@@ -134,7 +133,7 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
      */
     @Override
     public boolean contains(ProtoSetBlock component) {
-        return component != null && ((DictSpace) this.space()).containsFields(Map.of(
+        return component != null && this.space().containsFields(Map.of(
             "x", new double[] { component.getX() },
             "y", new double[] { component.getY() },
             "z", new double[] { component.getZ() },
@@ -310,7 +309,7 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
      * @return 是否落在本组件当前坐标空间
      */
     private boolean containsTarget(double x, double y, double z) {
-        return ((DictSpace) this.space()).containsFields(Map.of(
+        return this.space().containsFields(Map.of(
             "x", new double[] {x}, "y", new double[] {y}, "z", new double[] {z}));
     }
 
