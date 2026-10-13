@@ -26,12 +26,6 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * structures 列表按绝对 space 过滤已加载结构的包围盒中心，范围不随受控实体移动。
  */
 public class WorldStateObservationCreator extends AbstractObservationComponentCreator<ProtoWorldState> implements EnvironmentRegionAware {
-    /** 默认区域是否已处理，含无区域的固定后备范围。 */
-    private boolean defaultsApplied;
-    /** 内部初始化及数量修改不记录为显式坐标覆盖。 */
-    private boolean applyingDefaults;
-    /** 调用方成功设置空间后，默认区域不得覆盖。 */
-    private boolean explicitSpace;
 
     /** 默认结构数量上限，可通过列表空间覆盖。 */
     public static final int MAX_STRUCTURES = 64;
@@ -87,41 +81,17 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
     }
 
 
-    /** @param region 环境默认区域；显式配置优先，无区域时保留创建位置的固定范围 */
+    /** @param region 构造期默认区域；无区域时保留创建位置的固定范围 */
     @Override
     public void initializeDefaultRegion(@Nullable BoundingBox region) {
-        if (this.defaultsApplied) {
-            return;
-        }
-        if (!this.explicitSpace && region != null) {
+        if (region != null) {
             this.applyDefaultRegion(region);
         }
-        this.defaultsApplied = true;
     }
 
     /** @param region 默认方块区域；本组件决定整数/连续坐标转换 */
     private void applyDefaultRegion(BoundingBox region) {
-        this.applyingDefaults = true;
-        try {
-            this.setSpace(SpatialObservationSpaces.withRegion(this.space(), "structures", region, false));
-        } finally {
-            this.applyingDefaults = false;
-        }
-    }
-
-    /** @param space 候选观测空间；校验本组件完整消息形状和坐标维度 */
-    @Override
-    protected void validateSpace(McSpace<Map<String, Object>> space) {
-        SpatialObservationSpaces.validate(space, ProtoWorldState.getDescriptor());
-        SpatialObservationSpaces.bounds(SpatialObservationSpaces.sequence(space, "structures").elementSpace());
-    }
-
-    /** 成功替换空间后记录显式覆盖，内部默认初始化和数量 setter 除外。 */
-    @Override
-    protected void onSpaceChanged() {
-        if (!this.applyingDefaults) {
-            this.explicitSpace = true;
-        }
+        this.setSpace(SpatialObservationSpaces.withRegion(this.space(), "structures", region, false));
     }
 
     /** @return 当前空间中本组件的结果列表及数量上限 */

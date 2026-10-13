@@ -37,17 +37,13 @@ public final class CoordinateSpaces {
     }
 
     /**
-     * @param space 含坐标的字典
-     * @return 已校验的一维三轴空间；缺字段或类型错误时立即拒绝
+     * @param space 已通过组件默认结构校验的坐标字典
+     * @return 读取该坐标字典声明的三个标量轴，不重复校验空间结构
      */
     public static Bounds bounds(McSpace<Map<String, Object>> space) {
-        if (!(space instanceof DictSpace dict)
-            || !(dict.spaces().get("x") instanceof BoxSpace x) || x.size() != 1
-            || !(dict.spaces().get("y") instanceof BoxSpace y) || y.size() != 1
-            || !(dict.spaces().get("z") instanceof BoxSpace z) || z.size() != 1) {
-            throw new IllegalArgumentException("x/y/z must be one-dimensional Box spaces");
-        }
-        return new Bounds(x, y, z);
+        var dict = (DictSpace) space;
+        return new Bounds((BoxSpace) dict.spaces().get("x"), (BoxSpace) dict.spaces().get("y"),
+            (BoxSpace) dict.spaces().get("z"));
     }
 
     /**
@@ -57,7 +53,6 @@ public final class CoordinateSpaces {
      * @return 保留其他字段的新字典
      */
     public static DictSpace withRegion(McSpace<Map<String, Object>> space, BoundingBox region, boolean continuous) {
-        bounds(space);
         var fields = new LinkedHashMap<>(((DictSpace) space).spaces());
         fields.put("x", new BoxSpace(region.minX(), upper(region.maxX(), continuous), 1));
         fields.put("y", new BoxSpace(region.minY(), upper(region.maxY(), continuous), 1));

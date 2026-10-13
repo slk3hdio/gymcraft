@@ -2,7 +2,6 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 
 import io.github.mousemeya.gymcraft.gym.component.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
-import io.github.mousemeya.gymcraft.gym.action.ActionSpaces;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import javax.annotation.Nullable;
 
@@ -41,12 +40,6 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class LookAtController extends AbstractActionComponentController<ProtoLookAt> implements EnvironmentRegionAware {
-    /** 默认区域是否已处理，含无区域情况。 */
-    private boolean defaultsApplied;
-    /** 内部初始化期间不记录为显式配置。 */
-    private boolean applyingDefaults;
-    /** 调用方成功设置空间后，默认区域不得覆盖。 */
-    private boolean explicitSpace;
 
     /** 动作空间沿用现有 oneof 组件的扁平字段表达。 */
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
@@ -101,7 +94,7 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
                 && this.containsEntityId(component.getEntity().getEntityId());
             case ITEM -> component.getItem().getEntityId() > 0
                 && this.containsEntityId(component.getItem().getEntityId());
-            case BLOCK -> ActionSpaces.containsFields(this.space(), Map.of(
+            case BLOCK -> ((DictSpace) this.space()).containsFields(Map.of(
                 "x", new double[] { component.getBlock().getX() },
                 "y", new double[] { component.getBlock().getY() },
                 "z", new double[] { component.getBlock().getZ() }
@@ -162,7 +155,7 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
      * @return ID 是否位于空间边界内
      */
     private boolean containsEntityId(int entityId) {
-        return ActionSpaces.containsFields(this.space(), Map.of(
+        return ((DictSpace) this.space()).containsFields(Map.of(
             "entity_id", new double[] { entityId }
         ));
     }
@@ -293,35 +286,11 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
     }
 
 
-    /** @param region 默认环境区域；没有区域时保留原空间，显式配置始终优先 */
+    /** @param region 构造期默认区域；环境先注入区域，再应用具体环境的空间配置 */
     @Override
     public void initializeDefaultRegion(@Nullable BoundingBox region) {
-        if (this.defaultsApplied) {
-            return;
-        }
-        if (!this.explicitSpace && region != null) {
-            this.applyingDefaults = true;
-            try {
-                this.setSpace(CoordinateSpaces.withRegion(this.space(), region, true));
-            } finally {
-                this.applyingDefaults = false;
-            }
-        }
-        this.defaultsApplied = true;
-    }
-
-    /** @param space 新动作空间；本组件校验全部字段及一维坐标轴 */
-    @Override
-    protected void validateSpace(McSpace<Map<String, Object>> space) {
-        ActionSpaces.validate(space, this.defaultSpace());
-        CoordinateSpaces.bounds(space);
-    }
-
-    /** 成功替换空间后记录调用方覆盖，默认初始化除外。 */
-    @Override
-    protected void onSpaceChanged() {
-        if (!this.applyingDefaults) {
-            this.explicitSpace = true;
+        if (region != null) {
+            this.setSpace(CoordinateSpaces.withRegion(this.space(), region, true));
         }
     }
 
@@ -332,7 +301,8 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
      * @return 是否落在本组件当前坐标空间
      */
     private boolean containsTarget(double x, double y, double z) {
-        return CoordinateSpaces.bounds(this.space()).contains(x, y, z);
+        return ((DictSpace) this.space()).containsFields(Map.of(
+            "x", new double[] {x}, "y", new double[] {y}, "z", new double[] {z}));
     }
 
     /**

@@ -9,7 +9,8 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  */
 public interface EnvironmentRegionAware {
     /**
-     * 用环境区域初始化组件的默认空间；显式配置优先，重复调用不重新初始化。
+     * 在环境构造期设置区域默认空间；随后由具体环境覆盖配置，reset 不调用此方法。
+     * 同一区域重复调用产生相同边界；调用方负责初始化顺序，不记录配置来源。
      * @param region 环境基线区域；null 时保留组件原有默认空间
      */
     void initializeDefaultRegion(@Nullable BoundingBox region);

@@ -12,6 +12,7 @@ import java.util.Map;
 public class DictSpace implements McSpace<Map<String, Object>> {
     private final Map<String, McSpace<?>> spaces;
 
+    /** @param spaces 字段名称及对应空间；构造后字段映射只读 */
     public DictSpace(Map<String, ? extends McSpace<?>> spaces) {
         if (spaces == null) {
             throw new IllegalArgumentException("spaces must not be null");
@@ -19,6 +20,7 @@ public class DictSpace implements McSpace<Map<String, Object>> {
         this.spaces = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(spaces));
     }
 
+    /** @return 各字段独立采样形成的完整字典 */
     @Override
     public Map<String, Object> sample() {
         var sample = new LinkedHashMap<String, Object>();
@@ -28,17 +30,31 @@ public class DictSpace implements McSpace<Map<String, Object>> {
         return sample;
     }
 
+    /** @param value 完整字段值；字段缺失、多余或值不合法时返回 false */
     @Override
     public boolean contains(Map<String, Object> value) {
         if (value == null || !value.keySet().equals(spaces.keySet())) return false;
-        for (var entry : spaces.entrySet()) {
-            if (!containsUnchecked(entry.getValue(), value.get(entry.getKey()))) {
+        return this.containsFields(value);
+    }
+
+    /**
+     * 仅验证所提供的字段，供 oneof 动作投影其实际分支使用。
+     *
+     * @param value 当前分支的字段值
+     * @return 所提供的字段是否均已声明并满足各自空间
+     */
+    public boolean containsFields(Map<String, Object> value) {
+        if (value == null) return false;
+        for (var entry : value.entrySet()) {
+            var child = spaces.get(entry.getKey());
+            if (child == null || !containsUnchecked(child, entry.getValue())) {
                 return false;
             }
         }
         return true;
     }
 
+    /** @return 包含各字段结构的空间描述 */
     @Override
     public Map<String, Object> serialize() {
         var serialized = new LinkedHashMap<String, Object>();
@@ -51,10 +67,17 @@ public class DictSpace implements McSpace<Map<String, Object>> {
         );
     }
 
+    /** @return 只读字段空间映射 */
     public Map<String, McSpace<?>> spaces() {
         return spaces;
     }
 
+    /**
+     * @param space 字段空间
+     * @param value 字段值
+     * @param <T> 字段空间接受的类型
+     * @return 类型及内容是否兼容
+     */
     @SuppressWarnings("unchecked")
     private static <T> boolean containsUnchecked(McSpace<T> space, Object value) {
         try {
@@ -62,5 +85,13 @@ public class DictSpace implements McSpace<Map<String, Object>> {
         } catch (ClassCastException e) {
             return false;
         }
+    }
+
+    /**
+     * @param component 字段名
+     * @return 对应字段空间；不存在时返回 null
+     */
+    public McSpace<?> getComponent(String component) {
+        return spaces.get(component);
     }
 }

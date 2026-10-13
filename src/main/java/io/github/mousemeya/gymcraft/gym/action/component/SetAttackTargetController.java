@@ -2,7 +2,6 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 
 import io.github.mousemeya.gymcraft.gym.component.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
-import io.github.mousemeya.gymcraft.gym.action.ActionSpaces;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import javax.annotation.Nullable;
 
@@ -37,12 +36,6 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
  * </p>
  */
 public class SetAttackTargetController extends AbstractActionComponentController<ProtoSetAttackTarget> implements EnvironmentRegionAware {
-    /** 默认区域是否已处理，含无区域情况。 */
-    private boolean defaultsApplied;
-    /** 内部初始化期间不记录为显式配置。 */
-    private boolean applyingDefaults;
-    /** 调用方成功设置空间后，默认区域不得覆盖。 */
-    private boolean explicitSpace;
 
     private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
         "target_uuid", new TextSpace(),
@@ -102,11 +95,11 @@ public class SetAttackTargetController extends AbstractActionComponentController
     public boolean contains(ProtoSetAttackTarget component) {
         if (component == null) return false;
         if (component.getTargetEntityId() > 0 || component.getTargetUuid().isEmpty()) {
-            return ActionSpaces.containsFields(this.space(), Map.of(
+            return ((DictSpace) this.space()).containsFields(Map.of(
                 "target_entity_id", new double[] { component.getTargetEntityId() }
             ));
         }
-        if (!ActionSpaces.containsFields(this.space(), Map.of("target_uuid", component.getTargetUuid()))) return false;
+        if (!((DictSpace) this.space()).containsFields(Map.of("target_uuid", component.getTargetUuid()))) return false;
         try {
             UUID.fromString(component.getTargetUuid());
             return true;
@@ -206,7 +199,7 @@ public class SetAttackTargetController extends AbstractActionComponentController
             return ActionState.completed("target died", targetDetails(target));
         }
         ActionState boundaryError = this.checkTargetEntity(target);
-        if (boundaryError != null || !this.contains(component)) {
+        if (boundaryError != null) {
             // 只释放仍属于此动作的目标和记忆，避免清掉后来替换的目标。
             if (mob.getTarget() == target) {
                 mob.setTarget(null);
@@ -216,7 +209,7 @@ public class SetAttackTargetController extends AbstractActionComponentController
                 && mob.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null) == target) {
                 mob.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
             }
-            return boundaryError != null ? boundaryError : ActionState.failed("invalid attack target payload");
+            return boundaryError;
         }
         if (!isValidTarget(mob, target)) {
             return ActionState.completed("target is no longer valid", targetDetails(target));
@@ -299,35 +292,11 @@ public class SetAttackTargetController extends AbstractActionComponentController
     }
 
 
-    /** @param region 默认环境区域；没有区域时保留原空间，显式配置始终优先 */
+    /** @param region 构造期默认区域；环境先注入区域，再应用具体环境的空间配置 */
     @Override
     public void initializeDefaultRegion(@Nullable BoundingBox region) {
-        if (this.defaultsApplied) {
-            return;
-        }
-        if (!this.explicitSpace && region != null) {
-            this.applyingDefaults = true;
-            try {
-                this.setSpace(CoordinateSpaces.withRegion(this.space(), region, true));
-            } finally {
-                this.applyingDefaults = false;
-            }
-        }
-        this.defaultsApplied = true;
-    }
-
-    /** @param space 新动作空间；本组件校验全部字段及一维坐标轴 */
-    @Override
-    protected void validateSpace(McSpace<Map<String, Object>> space) {
-        ActionSpaces.validate(space, this.defaultSpace());
-        CoordinateSpaces.bounds(space);
-    }
-
-    /** 成功替换空间后记录调用方覆盖，默认初始化除外。 */
-    @Override
-    protected void onSpaceChanged() {
-        if (!this.applyingDefaults) {
-            this.explicitSpace = true;
+        if (region != null) {
+            this.setSpace(CoordinateSpaces.withRegion(this.space(), region, true));
         }
     }
 
@@ -338,7 +307,8 @@ public class SetAttackTargetController extends AbstractActionComponentController
      * @return 是否落在本组件当前坐标空间
      */
     private boolean containsTarget(double x, double y, double z) {
-        return CoordinateSpaces.bounds(this.space()).contains(x, y, z);
+        return ((DictSpace) this.space()).containsFields(Map.of(
+            "x", new double[] {x}, "y", new double[] {y}, "z", new double[] {z}));
     }
 
     /**

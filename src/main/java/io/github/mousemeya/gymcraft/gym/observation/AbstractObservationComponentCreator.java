@@ -5,6 +5,7 @@ import java.util.Map;
 import com.google.protobuf.Message;
 
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.SpaceUtils;
 
 /**
  * 观测组件抽象基类 —— 承载各观测组件共用的字段与逻辑。
@@ -34,17 +35,8 @@ public abstract class AbstractObservationComponentCreator<T extends Message> imp
     @Override
     public final void setSpace(McSpace<Map<String, Object>> space) {
         java.util.Objects.requireNonNull(space, "space");
-        this.validateSpace(space);
+        SpaceUtils.validateSpaceStructure(space, this.defaultSpace());
         this.space = space;
-        this.onSpaceChanged();
-    }
-
-    /** 空间成功替换后的通知；组件可维护显式配置标记，默认不增加行为。 */
-    protected void onSpaceChanged() {
-    }
-
-    /** @param space 待应用的空间；子类可限制结构，默认不增加约束 */
-    protected void validateSpace(McSpace<Map<String, Object>> space) {
     }
 
     /** @return 对应 protobuf 的默认观测消息 */

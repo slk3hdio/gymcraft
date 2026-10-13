@@ -2,7 +2,6 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 
 import io.github.mousemeya.gymcraft.gym.component.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
-import io.github.mousemeya.gymcraft.gym.action.ActionSpaces;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 import java.util.Map;
@@ -35,20 +34,14 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * <p>
  * 坐标按方块位置解释，目标统一修正为方块中心的可站立点
  * （{@link MobNavigationTask#blockCenterTarget}），到达判定与距离诊断均使用修正后目标。
- * 参数空间包含坐标、速度修正值、停止距离和超时时间。
+ * 参数空间包含请求坐标和停止距离，速度由组件配置。
  * </p>
  */
 public class MoveToController extends AbstractActionComponentController<ProtoMoveTo> implements NavigationPathProvider, EnvironmentRegionAware {
-    /** 默认区域是否已处理，含无区域情况。 */
-    private boolean defaultsApplied;
-    /** 内部初始化期间不记录为显式配置。 */
-    private boolean applyingDefaults;
-    /** 调用方成功设置空间后，默认区域不得覆盖。 */
-    private boolean explicitSpace;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MoveToController.class);
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
+    private static final DictSpace DEFAULT_SPACE = new DictSpace(Map.of(
         "x", new BoxSpace(-30_000_000, 30_000_000, 1),
         "y", new BoxSpace(-2048, 2048, 1),
         "z", new BoxSpace(-30_000_000, 30_000_000, 1),
@@ -104,7 +97,7 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
      */
     @Override
     public boolean contains(ProtoMoveTo component) {
-        return component != null && ActionSpaces.containsFields(this.space(), Map.of(
+        return component != null && ((DictSpace) this.space()).containsFields(Map.of(
             "x", new double[] { component.getX() },
             "y", new double[] { component.getY() },
             "z", new double[] { component.getZ() },
@@ -125,17 +118,11 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
         }
-        // 请求坐标与方块中心都必须合法，先校验再启动导航或安装控制器。
-        if (!this.containsTarget(component.getX(), component.getY(), component.getZ())) {
-            return ActionApplyResult.none(this.outsideTarget(component.getX(), component.getY(), component.getZ()));
-        }
+        // 空间约束原始请求坐标；导航内部仍按所在方块修正目标。
         if (!this.contains(component)) {
             return ActionApplyResult.none(ActionState.failed("invalid navigation payload"));
         }
         Vec3 target = target(component);
-        if (!this.containsTarget(target.x, target.y, target.z)) {
-            return ActionApplyResult.none(this.outsideTarget(target.x, target.y, target.z));
-        }
         var policy = ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE)
             .eraseMemory(MemoryModuleType.WALK_TARGET)
@@ -179,16 +166,6 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
             return agentError;
         }
         Vec3 target = target(component);
-        // 运行中显式替换空间也立即生效，并释放本动作拥有的导航状态。
-        if (!this.containsTarget(component.getX(), component.getY(), component.getZ())
-            || !this.containsTarget(target.x, target.y, target.z) || !this.contains(component)) {
-            this.onInterrupt(component);
-            return !this.containsTarget(component.getX(), component.getY(), component.getZ())
-                ? this.outsideTarget(component.getX(), component.getY(), component.getZ())
-                : !this.containsTarget(target.x, target.y, target.z)
-                    ? this.outsideTarget(target.x, target.y, target.z)
-                    : ActionState.failed("invalid navigation payload");
-        }
         double stop = component.getStopDistance();
         double horizontalDist = horizontalDistance(mob, target);
         if (horizontalDist <= stop) {
@@ -274,56 +251,12 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
     }
 
 
-    /** @param region 默认环境区域；没有区域时保留原空间，显式配置始终优先 */
+    /** @param region 构造期默认区域；环境先注入区域，再应用具体环境的空间配置 */
     @Override
     public void initializeDefaultRegion(@Nullable BoundingBox region) {
-        if (this.defaultsApplied) {
-            return;
+        if (region != null) {
+            this.setSpace(CoordinateSpaces.withRegion(this.space(), region, true));
         }
-        if (!this.explicitSpace && region != null) {
-            this.applyingDefaults = true;
-            try {
-                this.setSpace(CoordinateSpaces.withRegion(this.space(), region, true));
-            } finally {
-                this.applyingDefaults = false;
-            }
-        }
-        this.defaultsApplied = true;
-    }
-
-    /** @param space 新动作空间；本组件校验全部字段及一维坐标轴 */
-    @Override
-    protected void validateSpace(McSpace<Map<String, Object>> space) {
-        ActionSpaces.validate(space, this.defaultSpace());
-        CoordinateSpaces.bounds(space);
-    }
-
-    /** 成功替换空间后记录调用方覆盖，默认初始化除外。 */
-    @Override
-    protected void onSpaceChanged() {
-        if (!this.applyingDefaults) {
-            this.explicitSpace = true;
-        }
-    }
-
-    /**
-     * @param x 目标 X
-     * @param y 目标 Y
-     * @param z 目标 Z
-     * @return 是否落在本组件当前坐标空间
-     */
-    private boolean containsTarget(double x, double y, double z) {
-        return CoordinateSpaces.bounds(this.space()).contains(x, y, z);
-    }
-
-    /**
-     * @param x 目标 X
-     * @param y 目标 Y
-     * @param z 目标 Z
-     * @return 本组件的越界失败及空间诊断
-     */
-    private ActionState outsideTarget(double x, double y, double z) {
-        return ActionState.failed("target outside action space", CoordinateSpaces.details(this.space(), x, y, z));
     }
 
     /**

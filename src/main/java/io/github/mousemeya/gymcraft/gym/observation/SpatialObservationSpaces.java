@@ -78,39 +78,7 @@ public final class SpatialObservationSpaces {
         return raw;
     }
 
-    /**
-     * @param space 候选空间
-     * @param descriptor 期望消息形状；字段缺失或类型不兼容时抛出异常
-     */
-    public static void validate(McSpace<?> space, Descriptor descriptor) {
-        if (!(space instanceof DictSpace dict)
-            || !dict.spaces().keySet().equals(descriptor.getFields().stream().map(FieldDescriptor::getName)
-                .collect(java.util.stream.Collectors.toSet()))) {
-            throw new IllegalArgumentException("Space must match protobuf fields: " + descriptor.getFullName());
-        }
-        for (FieldDescriptor field : descriptor.getFields()) {
-            McSpace<?> child = dict.spaces().get(field.getName());
-            if (field.isRepeated()) {
-                if (!(child instanceof SequenceSpace<?> sequence)) {
-                    throw new IllegalArgumentException("Expected sequence space: " + field.getFullName());
-                }
-                child = sequence.elementSpace();
-            }
-            if (field.getJavaType() == FieldDescriptor.JavaType.MESSAGE) {
-                validate(child, field.getMessageType());
-            } else {
-                boolean valid = switch (field.getJavaType()) {
-                    case BOOLEAN -> child instanceof BooleanSpace;
-                    case STRING, ENUM -> child instanceof TextSpace;
-                    case INT, LONG, FLOAT, DOUBLE -> child instanceof BoxSpace box && box.size() == 1;
-                    default -> false;
-                };
-                if (!valid) {
-                    throw new IllegalArgumentException("Invalid field space: " + field.getFullName());
-                }
-            }
-        }
-    }
+
 
     /**
      * @param space 组件空间

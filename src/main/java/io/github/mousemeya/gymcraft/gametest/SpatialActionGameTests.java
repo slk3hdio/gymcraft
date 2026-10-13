@@ -30,6 +30,8 @@ import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
+import io.github.mousemeya.gymcraft.gym.space.SpaceUtils;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 
@@ -42,7 +44,7 @@ public final class SpatialActionGameTests {
     private SpatialActionGameTests() {
     }
 
-    /** @param helper 测试上下文；验证共享接口、一次初始化、显式优先和非法空间原子性 */
+    /** @param helper 测试上下文；验证共享接口、幂等初始化、构造期覆盖和非法空间原子性 */
     public static void defaultsAndOverrides(GameTestHelper helper) {
         Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
         List<ActionComponentController<?>> components = List.of(new MoveToController(mob), new SwimToController(mob),
@@ -58,9 +60,15 @@ public final class SpatialActionGameTests {
             boolean blocks = component instanceof SetBlockController || component instanceof BreakBlockController;
             assertEquals(helper, blocks ? -4.0 : Math.nextDown(-3.0), bounds.y().high()[0], "single layer must retain block/volume semantics");
             assertTrue(helper, bounds.contains(-9, -4, -7), "minimum face must be closed");
+            aware.initializeDefaultRegion(region);
+            var repeated = CoordinateSpaces.bounds(component.space());
+            assertTrue(helper, java.util.Arrays.equals(bounds.x().low(), repeated.x().low())
+                && java.util.Arrays.equals(bounds.x().high(), repeated.x().high())
+                && java.util.Arrays.equals(bounds.y().low(), repeated.y().low())
+                && java.util.Arrays.equals(bounds.y().high(), repeated.y().high())
+                && java.util.Arrays.equals(bounds.z().low(), repeated.z().low())
+                && java.util.Arrays.equals(bounds.z().high(), repeated.z().high()), "same region must produce identical defaults");
             var initial = component.space();
-            aware.initializeDefaultRegion(new BoundingBox(0, 0, 0, 10, 10, 10));
-            assertTrue(helper, component.space() == initial, "region must initialize only once");
             try {
                 component.setSpace(new DictSpace(Map.of()));
                 helper.fail("missing coordinate space was accepted");
@@ -70,6 +78,20 @@ public final class SpatialActionGameTests {
             component.setSpace(withBounds(initial, -20, -20, -20, 20, 20, 20));
             assertTrue(helper, CoordinateSpaces.bounds(component.space()).contains(10, 10, 10), "explicit space may widen past baseline");
         }
+        // 通用校验读取默认结构，不要求坐标名为 x/y/z 或 Box 维度为一。
+        var template = new DictSpace(Map.of("targets", new SequenceSpace<>(
+            new DictSpace(Map.of("position", new BoxSpace(-1, 1, 3))), 2)));
+        var compatible = new DictSpace(Map.of("targets", new SequenceSpace<>(
+            new DictSpace(Map.of("position", new BoxSpace(-10, 10, 3))), 4)));
+        SpaceUtils.validateSpaceStructure(compatible, template);
+        try {
+            SpaceUtils.validateSpaceStructure(new DictSpace(Map.of("targets",
+                new SequenceSpace<>(new DictSpace(Map.of("position", new BoxSpace(-1, 1, 2))), 2))), template);
+            helper.fail("nested vector dimension mismatch was accepted");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(helper, compatible.containsFields(Map.of()), "unused branch fields need no placeholder");
+            assertTrue(helper, !compatible.containsFields(Map.of("unknown", "value")), "undeclared fields must be rejected");
+        }
         // 分发器只识别接口；普通动作没有区域初始化行为。
         var dispatcher = new ActionDispatcher(mob, List.of(ActionComponents.MOVE_TO.get(), ActionComponents.NOOP.get()));
         var noop = dispatcher.getComponent(ActionComponents.NOOP.get());
@@ -78,15 +100,14 @@ public final class SpatialActionGameTests {
         assertTrue(helper, noop.space() == untouched, "non-aware component must remain unchanged");
         assertEquals(helper, -9.0, CoordinateSpaces.bounds(dispatcher.getComponent(ActionComponents.MOVE_TO.get()).space()).x().low()[0], "dispatcher must inject via shared interface");
         var explicit = new LookAtController(mob);
-        explicit.setSpace(withBounds(explicit.space(), 11, 12, 13, 11, 12, 13));
         explicit.initializeDefaultRegion(region);
-        assertTrue(helper, CoordinateSpaces.bounds(explicit.space()).contains(11, 12, 13), "configuration before initialization must win");
+        explicit.setSpace(withBounds(explicit.space(), 11, 12, 13, 11, 12, 13));
+        assertTrue(helper, CoordinateSpaces.bounds(explicit.space()).contains(11, 12, 13), "environment configuration after initialization must win");
         var fallback = new PickUpItemController(mob);
         var fallbackSpace = fallback.space();
         fallback.initializeDefaultRegion(null);
         mob.setPos(mob.getX() + 1, mob.getY(), mob.getZ());
-        fallback.initializeDefaultRegion(region);
-        assertTrue(helper, fallback.space() == fallbackSpace, "missing region retains original default once and movement cannot recenter it");
+        assertTrue(helper, fallback.space() == fallbackSpace, "missing region retains original default and movement cannot recenter it");
         helper.succeed();
     }
 
@@ -114,9 +135,9 @@ public final class SpatialActionGameTests {
         var swim = new SwimToController(mob);
         move.initializeDefaultRegion(region);
         swim.initializeDefaultRegion(region);
-        outsideFailure(helper, move.apply(ProtoMoveTo.newBuilder().setX(outside.getX()).setY(outside.getY()).setZ(outside.getZ()).build()).initialState());
+        assertEquals(helper, ActionStatus.FAILED, move.apply(ProtoMoveTo.newBuilder().setX(outside.getX()).setY(outside.getY()).setZ(outside.getZ()).build()).initialState().status(), "outside navigation payload must fail");
         var originalControl = mob.getMoveControl();
-        outsideFailure(helper, swim.apply(ProtoSwimTo.newBuilder().setX(outside.getX()).setY(outside.getY()).setZ(outside.getZ()).build()).initialState());
+        assertEquals(helper, ActionStatus.FAILED, swim.apply(ProtoSwimTo.newBuilder().setX(outside.getX()).setY(outside.getY()).setZ(outside.getZ()).build()).initialState().status(), "outside navigation payload must fail");
         assertTrue(helper, move.currentPath() == null && swim.currentPath() == null && mob.getMoveControl() == originalControl, "outside navigation must not start or install controls");
         var look = new LookAtController(mob);
         look.initializeDefaultRegion(region);
@@ -167,7 +188,7 @@ public final class SpatialActionGameTests {
         helper.succeed();
     }
 
-    /** @param helper 测试上下文；验证六面闭区间、位置越界和持续动作空间变化后的清理 */
+    /** @param helper 测试上下文；验证六面闭区间、位置越界和移动实体出界后的清理 */
     public static void runningTargetsAreRechecked(GameTestHelper helper) {
         Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
         var look = new LookAtController(mob);
@@ -207,31 +228,23 @@ public final class SpatialActionGameTests {
         victim.setPos(region.maxX() + 1.01, y, z);
         outsideFailure(helper, target.tick(targetAction));
         assertTrue(helper, mob.getTarget() == null && mob.getNavigation().isDone(), "outside tracked target must be cleared");
+        // 静态导航只约束原始请求，单点范围不要求包含内部修正后的方块中心。
         var move = new MoveToController(mob);
-        move.initializeDefaultRegion(region);
-        var moveAction = ProtoMoveTo.newBuilder().setX(x + 2).setY(y).setZ(z).setStopDistance(0.1).build();
-        assertEquals(helper, ActionStatus.RUNNING, move.apply(moveAction).initialState().status(), "inside goal starts navigation");
-        move.setSpace(withBounds(move.space(), x, y, z, x, y, z));
-        outsideFailure(helper, move.tick(moveAction));
-        assertTrue(helper, move.currentPath() == null, "space replacement must cancel active navigation");
         var swim = new SwimToController(mob);
-        swim.initializeDefaultRegion(region);
-        var control = mob.getMoveControl();
-        var swimAction = ProtoSwimTo.newBuilder().setX(x + 2).setY(y).setZ(z).setStopDistance(0.1).build();
-        assertEquals(helper, ActionStatus.RUNNING, swim.apply(swimAction).initialState().status(), "inside swim starts navigation");
-        swim.setSpace(withBounds(swim.space(), x, y, z, x, y, z));
-        outsideFailure(helper, swim.tick(swimAction));
-        assertTrue(helper, swim.currentPath() == null && mob.getMoveControl() == control, "outside swim restores movement control");
-        var breaking = new BreakBlockController(mob);
-        BlockPos block = mob.blockPosition().east();
-        helper.getLevel().setBlock(block, Blocks.STONE.defaultBlockState(), 3);
-        breaking.initializeDefaultRegion(region);
-        var breakAction = ProtoBreakBlock.newBuilder().setX(block.getX()).setY(block.getY()).setZ(block.getZ()).setSlotId(EquipmentSlot.MAINHAND.getId()).build();
-        assertEquals(helper, ActionStatus.RUNNING, breaking.apply(breakAction).initialState().status(), "inside stone begins mining");
-        breaking.setSpace(withBounds(breaking.space(), x, y, z, x, y, z));
-        outsideFailure(helper, breaking.tick(breakAction));
-        assertTrue(helper, helper.getLevel().getBlockState(block).is(Blocks.STONE), "outside ongoing mining must preserve the block");
-        assertEquals(helper, ActionStatus.FAILED, breaking.tick(breakAction).status(), "mining state must be cleared");
+        var point = new BoundingBox(mob.blockPosition());
+        move.initializeDefaultRegion(point);
+        swim.initializeDefaultRegion(point);
+        double px = Math.nextDown((double) point.maxX() + 1);
+        double py = Math.nextDown((double) point.maxY() + 1);
+        double pz = Math.nextDown((double) point.maxZ() + 1);
+        var moveAction = ProtoMoveTo.newBuilder().setX(px).setY(py).setZ(pz).setStopDistance(128).build();
+        var swimAction = ProtoSwimTo.newBuilder().setX(px).setY(py).setZ(pz).setStopDistance(128).build();
+        assertEquals(helper, ActionStatus.COMPLETED, move.apply(moveAction).initialState().status(), "last block volume must accept fractional coordinates");
+        assertEquals(helper, ActionStatus.COMPLETED, swim.apply(swimAction).initialState().status(), "swim must use the same payload coordinates");
+        move.setSpace(withBounds(move.space(), px, py, pz, px, py, pz));
+        swim.setSpace(withBounds(swim.space(), px, py, pz, px, py, pz));
+        assertEquals(helper, ActionStatus.COMPLETED, move.apply(moveAction).initialState().status(), "normalized target need not fit payload space");
+        assertEquals(helper, ActionStatus.COMPLETED, swim.apply(swimAction).initialState().status(), "normalized swim target need not fit payload space");
         helper.succeed();
     }
 

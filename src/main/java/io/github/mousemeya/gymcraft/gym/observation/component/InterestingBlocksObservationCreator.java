@@ -25,12 +25,6 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  * 每个环境持有独立实例；坐标与结果上限从当前观测空间读取，移动和 reset 不改变边界。
  */
 public class InterestingBlocksObservationCreator extends AbstractObservationComponentCreator<ProtoInterestingBlocks> implements EnvironmentRegionAware {
-    /** 默认区域是否已处理，含无区域的固定后备范围。 */
-    private boolean defaultsApplied;
-    /** 内部初始化及数量修改不记录为显式坐标覆盖。 */
-    private boolean applyingDefaults;
-    /** 调用方成功设置空间后，默认区域不得覆盖。 */
-    private boolean explicitSpace;
 
     /** 默认结果数量上限。 */
     public static final int DEFAULT_MAX_BLOCKS = NearbyBlocksObservationCreator.DEFAULT_MAX_BLOCKS;
@@ -102,41 +96,17 @@ public class InterestingBlocksObservationCreator extends AbstractObservationComp
     }
 
 
-    /** @param region 环境默认区域；显式配置优先，无区域时保留创建位置的固定范围 */
+    /** @param region 构造期默认区域；无区域时保留创建位置的固定范围 */
     @Override
     public void initializeDefaultRegion(@Nullable BoundingBox region) {
-        if (this.defaultsApplied) {
-            return;
-        }
-        if (!this.explicitSpace && region != null) {
+        if (region != null) {
             this.applyDefaultRegion(region);
         }
-        this.defaultsApplied = true;
     }
 
     /** @param region 默认方块区域；本组件决定整数/连续坐标转换 */
     private void applyDefaultRegion(BoundingBox region) {
-        this.applyingDefaults = true;
-        try {
-            this.setSpace(SpatialObservationSpaces.withRegion(this.space(), "blocks", region, false));
-        } finally {
-            this.applyingDefaults = false;
-        }
-    }
-
-    /** @param space 候选观测空间；校验本组件完整消息形状和坐标维度 */
-    @Override
-    protected void validateSpace(McSpace<Map<String, Object>> space) {
-        SpatialObservationSpaces.validate(space, ProtoInterestingBlocks.getDescriptor());
-        SpatialObservationSpaces.bounds(SpatialObservationSpaces.sequence(space, "blocks").elementSpace());
-    }
-
-    /** 成功替换空间后记录显式覆盖，内部默认初始化和数量 setter 除外。 */
-    @Override
-    protected void onSpaceChanged() {
-        if (!this.applyingDefaults) {
-            this.explicitSpace = true;
-        }
+        this.setSpace(SpatialObservationSpaces.withRegion(this.space(), "blocks", region, false));
     }
 
     /** @return 当前空间中本组件的结果列表及数量上限 */
@@ -168,12 +138,7 @@ public class InterestingBlocksObservationCreator extends AbstractObservationComp
 
     /** @param maximum 本组件新结果上限；保留坐标与其他元素限制 */
     private void setMaximum(int maximum) {
-        this.applyingDefaults = true;
-        try {
-            this.setSpace(SpatialObservationSpaces.withMaximum(this.space(), "blocks", maximum));
-        } finally {
-            this.applyingDefaults = false;
-        }
+        this.setSpace(SpatialObservationSpaces.withMaximum(this.space(), "blocks", maximum));
     }
 
     /** 观测工厂：为每个 Mob 创建固定初始边界的独立组件。 */

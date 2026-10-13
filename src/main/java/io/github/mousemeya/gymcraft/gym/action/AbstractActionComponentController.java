@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.SpaceUtils;
 
 /**
  * 动作控制器抽象基类 —— 承载各动作共用的字段与逻辑。
@@ -54,7 +55,7 @@ public abstract class AbstractActionComponentController<T extends Message> imple
     }
 
     /**
-     * 替换绑定生物，保留组件当前空间及配置来源。
+     * 替换绑定生物，保留组件当前空间及其他配置。
      *
      * @param mob 受控生物
      */
@@ -74,25 +75,18 @@ public abstract class AbstractActionComponentController<T extends Message> imple
     }
 
     /**
-     * 先校验完整空间，再替换并通知；校验失败保留旧空间。
+     * 先校验完整空间，再替换；校验失败保留旧空间。
      *
      * @param space 候选参数空间
      */
     @Override
     public final void setSpace(McSpace<Map<String, Object>> space) {
         java.util.Objects.requireNonNull(space, "space");
-        this.validateSpace(space);
+        SpaceUtils.validateSpaceStructure(space, this.defaultSpace());
         this.space = space;
-        this.onSpaceChanged();
     }
 
-    /** @param space 候选参数空间；组件自行校验结构，默认不增加约束 */
-    protected void validateSpace(McSpace<Map<String, Object>> space) {
-    }
 
-    /** 空间成功替换后的通知；组件可维护配置来源，默认不增加行为。 */
-    protected void onSpaceChanged() {
-    }
 
     /** @return 是否支持指定实体类型 */
     public boolean supportEntity(Class<?> entityType) {
