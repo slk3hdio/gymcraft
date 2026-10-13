@@ -29,6 +29,7 @@ import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
 import net.minecraft.world.level.levelgen.structure.structures.BuriedTreasurePieces;
 
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
+import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnv;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.SpatialObservationSpaces;
@@ -39,6 +40,7 @@ import io.github.mousemeya.gymcraft.gym.observation.component.NearbyItemsObserva
 import io.github.mousemeya.gymcraft.gym.observation.component.WorldStateObservationCreator;
 import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
+import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
 import io.github.mousemeya.gymcraft.gym.space.CoordinateSpaces;
 import io.github.mousemeya.gymcraft.gym.space.DictSpace;
@@ -221,17 +223,40 @@ public final class SpatialObservationGameTests {
         helper.succeed();
     }
 
-    /** @param helper 测试上下文；验证挂载和场景区域优先、无区域后备范围及跨 reset 固定性 */
+    /** @param helper 测试上下文；经真实挂载工厂验证双关仍保留区域、无区域后备及 reset 固定性 */
     public static void defaultsFollowBaselineAndSurviveReset(GameTestHelper helper) {
         Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(3, 1, 3));
         BlockPos anchor = mob.blockPosition();
         var region = new BoundingBox(anchor.getX() - 1, anchor.getY(), anchor.getZ() - 1,
             anchor.getX() + 3, anchor.getY() + 1, anchor.getZ() + 2);
         var id = Identifier.fromNamespaceAndPath("gymcraft", "spatial_defaults_test");
-        var env = new SimpleMobEnv(id, mob, null, new AttachScope(region, false, false));
-        assertRegion(helper, env, region);
-        var encoded = ScenarioWorldCodec.encode(helper.getLevel(), "gymcraft:simple_mob", Map.of(), env.baselineSnapshot());
-        env.close();
+        // GUI 和命令均经 around 工厂创建作用域，不能用 new record 绕过双关退化的回归。
+        var scope = AttachScope.around(mob, 1, 3, 0, 1, 1, 2, false, false);
+        assertEquals(helper, region, scope.region(), "disabled capture flags must retain asymmetric activity bounds");
+        for (boolean blocks : new boolean[] {false, true}) {
+            for (boolean entities : new boolean[] {false, true}) {
+                var configured = AttachScope.around(mob, 1, 3, 0, 1, 1, 2, blocks, entities);
+                assertEquals(helper, region, configured.region(), "capture flags must not change region geometry");
+                assertEquals(helper, blocks, configured.captureBlocks(), "factory must preserve block capture flag");
+                assertEquals(helper, entities, configured.captureEntities(), "factory must preserve entity capture flag");
+            }
+        }
+        var guiDefaults = AttachScope.around(mob, 0, 0, AttachScope.MAX_HEIGHT, AttachScope.MAX_HEIGHT, 0, 0, false, false);
+        assertTrue(helper, guiDefaults.region() != null, "GUI default vertical range must survive disabled capture flags");
+        assertEquals(helper, helper.getLevel().getMinY(), guiDefaults.region().minY(), "GUI defaults cover minimum build height");
+        assertEquals(helper, helper.getLevel().getMaxY() - 1, guiDefaults.region().maxY(), "GUI defaults cover maximum build height");
+        assertTrue(helper, AttachScope.around(mob, 2, false, false).region() != null, "cube factory must also preserve activity-only bounds");
+        assertTrue(helper, AttachScope.around(mob, 0, false, false) == AttachScope.AGENT_ONLY, "all-zero scope retains agent-only semantics");
+        var env = (SimpleMobEnv) EnvManager.attach("gymcraft:simple_mob", mob, scope);
+        ScenarioStore.LoadedScenario encoded;
+        try {
+            assertRegion(helper, env, region);
+            assertTrue(helper, env.baselineSnapshot().blocks() == null && env.baselineSnapshot().entities() == null,
+                "activity-only bounds must not enable either world snapshot");
+            encoded = ScenarioWorldCodec.encode(helper.getLevel(), "gymcraft:simple_mob", Map.of(), env.baselineSnapshot());
+        } finally {
+            EnvManager.close(mob.getUUID());
+        }
         var scenarioEnv = new SimpleMobEnv(id, mob, encoded);
         assertRegion(helper, scenarioEnv, scenarioEnv.baselineSnapshot().region());
         scenarioEnv.close();
@@ -242,7 +267,10 @@ public final class SpatialObservationGameTests {
         mob.setPos(mob.getX() + 1, mob.getY(), mob.getZ());
         assertEquals(helper, fallbackJson, ProtoJson.toJson(fallback.getObservationSpace().serialize()), "fallback must remain fixed after movement");
         fallback.close();
-        var resetEnv = new SimpleMobEnv(id, mob, null, new AttachScope(region, false, false));
+        var resetEnv = new SimpleMobEnv(id, mob, null, scope);
+        BlockPos marker = anchor.east(2);
+        helper.getLevel().setBlock(marker, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
+        var retainedItem = spawnItem(helper, new double[] {anchor.getX() + 2.5, anchor.getY() + 0.5, anchor.getZ() + 1.5});
         var custom = withBounds(resetEnv.getObservationComponentSpace("gymcraft:nearby_items"), "items",
             new double[] {-12, -5, -9}, new double[] {-12, -5, -9}, 2);
         resetEnv.setObservationComponentSpace("gymcraft:nearby_items", custom);
@@ -271,6 +299,9 @@ public final class SpatialObservationGameTests {
                 tested.join();
                 assertEquals(helper, expectedJson, ProtoJson.toJson(resetEnv.getObservationSpace().serialize()), "reset must preserve absolute spaces");
                 assertEquals(helper, expectedActions, ProtoJson.toJson(resetEnv.getActionSpace().serialize()), "reset must preserve action overrides and derived coordinate JSON");
+                assertTrue(helper, helper.getLevel().getBlockState(marker).is(Blocks.GOLD_BLOCK), "activity-only reset must not restore region blocks");
+                assertTrue(helper, helper.getLevel().getEntity(retainedItem.getUUID()) == retainedItem,
+                    "activity-only reset must not clear or rebuild region entities");
                 var replaced = (Mob) helper.getLevel().getEntity(mob.getUUID());
                 assertTrue(helper, replaced != null && replaced != mob, "reset must replace the agent without replacing component bounds");
             } finally {

@@ -10,6 +10,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * 挂载已有 Mob 时声明的状态作用域：环境占用区域（以 agent 方块位置为锚、六个方向
  * 各自独立延伸的方块盒）与区域内容捕获开关。方块快照与实体快照完全独立——区域由
  * {@link EnvStateSnapshot} 自持，不依附于方块快照。
+ * 捕获开关只决定快照内容，不取消显式范围；双关仍可用该区域初始化动作与观测空间。
  * <p>
  * 仅用于 {@code EnvManager.attach} 挂载路径；从场景创建时区域与开关由场景文件
  * 决定，本类型不参与。
@@ -42,12 +43,12 @@ public record AttachScope(@Nullable BoundingBox region, boolean captureBlocks, b
      * @param south 向南(+Z)延伸距离（格）
      * @param captureBlocks 是否捕获区域方块快照
      * @param captureEntities 是否捕获区域实体快照
-     * @return 挂载作用域；六方向距离全非正或两个开关全关时退化为 {@link #AGENT_ONLY}
+     * @return 挂载作用域；仅六方向距离全非正时退化为 {@link #AGENT_ONLY}，捕获开关不影响区域
      */
     public static AttachScope around(Mob mob, int west, int east, int down, int up, int north, int south,
             boolean captureBlocks, boolean captureEntities) {
-        if ((!captureBlocks && !captureEntities)
-            || (west <= 0 && east <= 0 && down <= 0 && up <= 0 && north <= 0 && south <= 0)) {
+        // 区域同时是动作与观测的默认边界，只圈活动范围时也必须保留。
+        if (west <= 0 && east <= 0 && down <= 0 && up <= 0 && north <= 0 && south <= 0) {
             return AGENT_ONLY;
         }
         BlockPos anchor = mob.blockPosition();
@@ -70,7 +71,7 @@ public record AttachScope(@Nullable BoundingBox region, boolean captureBlocks, b
      * @param radius 立方体半径（格），超过 {@link #MAX_RADIUS} 会被钳制
      * @param captureBlocks 是否捕获区域方块快照
      * @param captureEntities 是否捕获区域实体快照
-     * @return 挂载作用域；半径非正或两个开关全关时退化为 {@link #AGENT_ONLY}
+     * @return 挂载作用域；仅半径非正时退化为 {@link #AGENT_ONLY}，双关仍保留立方体范围
      */
     public static AttachScope around(Mob mob, int radius, boolean captureBlocks, boolean captureEntities) {
         return around(mob, radius, radius, radius, radius, radius, radius, captureBlocks, captureEntities);

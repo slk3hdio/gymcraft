@@ -114,6 +114,9 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 `move_to`、`swim_to`、`look_at`、`set_block`、`break_block`、`pick_up_item`、`attack_once`、
 `set_attack_target`、`open_menu` 和 `use_item` 的默认坐标边界来自 `baseline.region()`，
 与区域捕获开关无关。放置/破坏使用整数方块闭区间，其他组件覆盖完整区域方块体积；
+工具界面和命令通过 `AttachScope.around` 保留所设区域，即使两个捕获开关都关闭也可只圈活动
+范围而不管理世界快照；只有六方向延伸距离全非正时工厂才返回 `AGENT_ONLY`。界面的默认
+垂直范围为完整建筑高度，因此水平全零、双关仍产生一列有效区域。
 没有区域时保留原动作空间。区域只用于初始化，运行时以组件当前 space 为准：
 显式 `setSpace` 可收窄或放宽边界，移动、reset 和实体替换均不会重新初始化。
 
