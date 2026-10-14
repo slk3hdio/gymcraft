@@ -2,11 +2,15 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.Map;
 
+import javax.annotation.Nullable;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 
+import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
@@ -31,22 +35,12 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * {@code BlockState#getMenuProvider} 解析）、实体（网络实体 ID，菜单实体/商人/马）
  * 或自身背包。实际打开语义（候选验证、旧会话替换、会话 ID 分配）全部由
  * {@link LogicalMenuSessions#open} 承载，本控制器只负责 proto → {@link OpenMenuTarget}
- * 转换与结果上报。该动作为瞬时动作，应用后立即返回终态。
+ * 转换与结果上报。该动作为瞬时动作，应用后立即返回终态。实现了
+ * {@link EnvironmentRegionAware}：环境区域非空时方块目标坐标空间收紧到区域边界。
  * </p>
  */
-public class OpenMenuController extends AbstractActionComponentController<ProtoOpenMenu> {
-    private static final McSpace<ProtoOpenMenu> DEFAULT_SPACE = MessageSpace.<ProtoOpenMenu>builder(ProtoOpenMenu.getDescriptor())
-        .message("block", MessageSpace.<ProtoBlockMenuTarget>builder(ProtoBlockMenuTarget.getDescriptor())
-            .range("x", -30_000_000, 30_000_000)
-            .range("y", -2048, 2048)
-            .range("z", -30_000_000, 30_000_000)
-            .build())
-        .message("entity", MessageSpace.<ProtoEntityMenuTarget>builder(ProtoEntityMenuTarget.getDescriptor())
-            .range("entity_id", 0, Integer.MAX_VALUE)
-            .build())
-        .message("self", MessageSpace.of(ProtoSelfMenuTarget.getDescriptor()))
-        .requiredOneof("target")
-        .build();
+public class OpenMenuController extends AbstractActionComponentController<ProtoOpenMenu>
+    implements EnvironmentRegionAware {
 
     public OpenMenuController(Mob mob) {
         super(mob);
@@ -59,7 +53,51 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
 
     @Override
     public McSpace<ProtoOpenMenu> defaultSpace() {
-        return DEFAULT_SPACE;
+        return buildSpace(null);
+    }
+
+    /** 接受环境区域（构造期一次性推送）：非空时方块目标坐标空间收紧到区域边界。 */
+    @Override
+    public void setEnvironmentRegion(@Nullable BoundingBox region) {
+        this.setSpace(buildSpace(region));
+    }
+
+    /**
+     * 构造目标空间：区域非空时 {@code block} 分支 x/y/z 收紧到区域闭区间边界，
+     * 实体/自身分支与 oneof 要求不随区域变化。
+     *
+     * @param region 环境区域；null 表示无区域约束
+     * @return 动作参数空间
+     */
+    private static McSpace<ProtoOpenMenu> buildSpace(@Nullable BoundingBox region) {
+        return MessageSpace.<ProtoOpenMenu>builder(ProtoOpenMenu.getDescriptor())
+            .message("block", blockTargetSpace(region))
+            .message("entity", MessageSpace.<ProtoEntityMenuTarget>builder(ProtoEntityMenuTarget.getDescriptor())
+                .range("entity_id", 0, Integer.MAX_VALUE)
+                .build())
+            .message("self", MessageSpace.of(ProtoSelfMenuTarget.getDescriptor()))
+            .requiredOneof("target")
+            .build();
+    }
+
+    /**
+     * 构造方块目标分支的坐标空间：区域非空时收紧到区域边界，否则全球默认范围。
+     *
+     * @param region 环境区域；null 表示无区域约束
+     * @return 方块目标消息空间
+     */
+    private static MessageSpace<ProtoBlockMenuTarget> blockTargetSpace(@Nullable BoundingBox region) {
+        var builder = MessageSpace.<ProtoBlockMenuTarget>builder(ProtoBlockMenuTarget.getDescriptor());
+        if (region != null) {
+            builder.range("x", region.minX(), region.maxX())
+                .range("y", region.minY(), region.maxY())
+                .range("z", region.minZ(), region.maxZ());
+        } else {
+            builder.range("x", -30_000_000, 30_000_000)
+                .range("y", -2048, 2048)
+                .range("z", -30_000_000, 30_000_000);
+        }
+        return builder.build();
     }
 
     @Override

@@ -70,7 +70,7 @@ public final class IronMiningEnv extends AbstractMcEnv {
      * @param scenario 完整场景；null 表示仅捕获 agent，状态范围不含方块及周围实体
      */
     public IronMiningEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
-        this(envTypeId, mob, scenario, AttachScope.AGENT_ONLY);
+        this(envTypeId, mob, scenario, new AttachScope(null, false, false));
     }
 
     /**

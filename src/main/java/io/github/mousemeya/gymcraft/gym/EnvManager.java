@@ -51,7 +51,7 @@ public final class EnvManager {
      * @return 注册完成的环境；同 Mob 上原环境会被关闭
      */
     public static McEnv attach(String envType, Mob mob) {
-        return attach(envType, mob, AttachScope.AGENT_ONLY);
+        return attach(envType, mob, new AttachScope(null, false, false));
     }
 
     /**
@@ -81,7 +81,7 @@ public final class EnvManager {
         McEnvFactory factory = factory(id);
         Mob mob = spawnAgent(loaded.definition(), level, pos);
         try {
-            resetScenario(register(id, factory, mob, loaded, AttachScope.AGENT_ONLY));
+            resetScenario(register(id, factory, mob, loaded, new AttachScope(null, false, false)));
             return mob;
         } catch (RuntimeException error) {
             mob.discard();

@@ -5,7 +5,10 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Predicate;
+
+import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -13,10 +16,16 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+
+import io.github.mousemeya.gymcraft.gym.space.FieldConstraint;
+import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 附近可见方块扫描器 —— 从 Mob 眼睛所在空间执行有界 BFS，并返回符合过滤条件的可见表面方块。
- * 调用方负责提供半径、遍历上限、结果上限和过滤器；扫描器保持发现顺序并对多面可见方块去重。
+ * 调用方负责提供扫描范围（固定绝对世界坐标 {@link BoundingBox}，null 表示无界）、遍历上限、
+ * 结果上限和过滤器；扫描器保持发现顺序并对多面可见方块去重。
  */
 public final class NearbyBlockScanner {
     /** 扫描结果 —— 保存方块坐标、状态以及到扫描中心的方块距离。 */
@@ -28,24 +37,71 @@ public final class NearbyBlockScanner {
     }
 
     /**
-     * 扫描指定 Mob 附近符合条件的可见表面方块。
+     * 从消息空间读回扫描范围 —— 取序列字段嵌套空间中 x/y/z 的区间约束（绝对坐标）。
+     *
+     * @param space 组件当前的消息空间（如 ProtoNearbyBlocks 对应空间）
+     * @param blocksField 方块视图序列字段名（其元素为带 x/y/z 的方块视图消息）
+     * @return 由嵌套空间 x/y/z 区间换算的闭区间方块盒；字段无嵌套空间或任一轴缺少
+     *         区间约束（即环境未声明绝对范围、扫描无界）时为 {@link Optional#empty()}
+     */
+    public static Optional<BoundingBox> scanBoundsOf(McSpace<?> space, String blocksField) {
+        var blockView = space.nestedOf(blocksField);
+        if (blockView.isEmpty()) {
+            return Optional.empty();
+        }
+        var x = blockView.get().rangeOf("x");
+        var y = blockView.get().rangeOf("y");
+        var z = blockView.get().rangeOf("z");
+        if (x.isEmpty() || y.isEmpty() || z.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new BoundingBox(
+            rangeBound(x.get(), true), rangeBound(y.get(), true), rangeBound(z.get(), true),
+            rangeBound(x.get(), false), rangeBound(y.get(), false), rangeBound(z.get(), false)));
+    }
+
+    /**
+     * 读取方块视图空间单轴区间约束的端点。
+     *
+     * @param range 区间约束
+     * @param low true 取下界，false 取上界
+     * @return 端点值（方块坐标为整数，非整数界向内收紧：下界上取整、上界下取整）
+     */
+    private static int rangeBound(FieldConstraint.Range range, boolean low) {
+        return low ? (int) Math.ceil(range.low()) : (int) Math.floor(range.high());
+    }
+
+    /**
+     * 扫描固定绝对范围内符合条件的可见表面方块。
+     * <p>
+     * 范围不随 Mob 位置变化：BFS 仍从 Mob 眼睛所在空间方块出发；声明了绝对范围
+     * （{@code bounds} 非 null）时搜索盒固定在世界坐标区间上，眼睛不在区间内
+     * （Agent 已走出观测区域）直接返回空列表；未声明范围（null，默认空间即如此）时
+     * 无边界扫描全世界，实际覆盖由 {@code maxVisited} 遍历预算约束。
+     * </p>
      *
      * @param mob 扫描中心所属的 Agent
-     * @param radius 球形搜索半径
+     * @param bounds 扫描范围（绝对世界坐标闭区间方块盒）；null 表示无界（全世界）
      * @param maxVisited 最多访问的可穿过空间节点数
      * @param maxBlocks 最多返回的匹配方块数
      * @param filter 方块状态过滤器，只有通过过滤的表面方块才计入结果上限
-     * @return 按 BFS 发现顺序排列的去重扫描结果
+     * @return 按 BFS 发现顺序排列的去重扫描结果；声明了范围且眼睛不在范围内时为空列表
      */
     public static List<ScannedBlock> scan(
         Mob mob,
-        int radius,
+        @Nullable BoundingBox bounds,
         int maxVisited,
         int maxBlocks,
         Predicate<BlockState> filter
     ) {
         Level level = mob.level();
         BlockPos center = BlockPos.containing(mob.getEyePosition());
+        // 绝对搜索盒（含边界），Mob 位置不影响边界；无界时为 null，跳过边界判断
+        BoundingBox searchBox = bounds;
+        // 声明了范围但眼睛不在其中：Agent 已离开观测区域，无可扫描的连通空间
+        if (searchBox != null && !searchBox.isInside(center)) {
+            return List.of();
+        }
         var queue = new ArrayDeque<BlockPos>();
         var visited = new HashSet<Long>();
         var visibleBlocks = new LinkedHashMap<Long, ScannedBlock>();
@@ -59,7 +115,7 @@ public final class NearbyBlockScanner {
 
             for (Direction direction : Direction.values()) {
                 BlockPos next = airPos.relative(direction);
-                if (!withinRadius(center, next, radius)) {
+                if (searchBox != null && !searchBox.isInside(next)) {
                     continue;
                 }
 
@@ -105,11 +161,6 @@ public final class NearbyBlockScanner {
             }
         }
         return false;
-    }
-
-    /** 判断候选方块是否位于球形搜索半径内。 */
-    private static boolean withinRadius(BlockPos center, BlockPos pos, int radius) {
-        return center.distSqr(pos) <= (double) radius * radius;
     }
 
     /** 计算候选方块到扫描中心的欧氏距离。 */

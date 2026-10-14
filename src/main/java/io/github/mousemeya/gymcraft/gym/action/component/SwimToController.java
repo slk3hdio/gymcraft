@@ -12,9 +12,11 @@ import net.minecraft.world.entity.ai.control.LookControl;
 import net.minecraft.world.entity.ai.control.MoveControl;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
+import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
@@ -42,17 +44,12 @@ import io.github.mousemeya.gymcraft.mixin.MobMoveControlAccessor;
  * move_to 等价。动作期间临时把 Mob 的移动控制器替换为 {@link SwimMoveControl}
  * （水中按俯仰角做原版平滑三维游泳，海豚/青蛙同款；陆地完全委托原控制器，
  * 动作结束/打断时恢复），不上浮切换游泳 pose，保持命中箱与眼高稳定。
+ * 实现了 {@link EnvironmentRegionAware}：环境区域非空时目标坐标空间收紧到区域边界。
  * </p>
  */
-public class SwimToController extends AbstractActionComponentController<ProtoSwimTo> implements NavigationPathProvider {
+public class SwimToController extends AbstractActionComponentController<ProtoSwimTo>
+    implements NavigationPathProvider, EnvironmentRegionAware {
     private static final Logger LOGGER = LoggerFactory.getLogger(SwimToController.class);
-
-    private static final McSpace<ProtoSwimTo> DEFAULT_SPACE = MessageSpace.<ProtoSwimTo>builder(ProtoSwimTo.getDescriptor())
-        .range("x", -30_000_000, 30_000_000)
-        .range("y", -2048, 2048)
-        .range("z", -30_000_000, 30_000_000)
-        .range("stop_distance", 0, 128)
-        .build();
 
     /** 默认寻路速度修正值。 */
     public static final double DEFAULT_SPEED = 1.0;
@@ -91,7 +88,35 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
 
     @Override
     public McSpace<ProtoSwimTo> defaultSpace() {
-        return DEFAULT_SPACE;
+        return buildSpace(null);
+    }
+
+    /** 接受环境区域（构造期一次性推送）：非空时目标坐标空间收紧到区域边界。 */
+    @Override
+    public void setEnvironmentRegion(@Nullable BoundingBox region) {
+        this.setSpace(buildSpace(region));
+    }
+
+    /**
+     * 构造目标坐标空间：区域非空时 x/y/z 收紧到区域闭区间边界，否则全球默认范围。
+     *
+     * @param region 环境区域；null 表示无区域约束
+     * @return 动作参数空间
+     */
+    private static McSpace<ProtoSwimTo> buildSpace(@Nullable BoundingBox region) {
+        var builder = MessageSpace.<ProtoSwimTo>builder(ProtoSwimTo.getDescriptor());
+        if (region != null) {
+            builder.range("x", region.minX(), region.maxX())
+                .range("y", region.minY(), region.maxY())
+                .range("z", region.minZ(), region.maxZ());
+        } else {
+            builder.range("x", -30_000_000, 30_000_000)
+                .range("y", -2048, 2048)
+                .range("z", -30_000_000, 30_000_000);
+        }
+        return builder
+            .range("stop_distance", 0, 128)
+            .build();
     }
 
     @Override

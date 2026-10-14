@@ -3,6 +3,8 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import javax.annotation.Nullable;
+
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -10,8 +12,10 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 
+import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
@@ -31,27 +35,14 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * 掉落物目标只接受有效的 {@link ItemEntity}，注视其包围盒中心；方块目标只需位于
  * 已加载区块，空气也可作为目标，注视对应方块坐标中心。动作会同步实体朝向、俯仰角和头部朝向，
  * 同时向 {@code LookControl} 写入同一目标，避免当前实体 tick 把视线立即复位。
+ * 实现了 {@link EnvironmentRegionAware}：环境区域非空时方块目标坐标空间收紧到区域边界。
  * </p>
  * <p>
  * 该动作为瞬时动作，应用后立即返回终态；不限制注视距离，也不要求目标可见。
  * </p>
  */
-public class LookAtController extends AbstractActionComponentController<ProtoLookAt> {
-    /** 按 oneof 分支声明嵌套约束；{@code target} oneof 必须设置分支。 */
-    private static final McSpace<ProtoLookAt> DEFAULT_SPACE = MessageSpace.<ProtoLookAt>builder(ProtoLookAt.getDescriptor())
-        .message("block", MessageSpace.<ProtoLookAtBlockTarget>builder(ProtoLookAtBlockTarget.getDescriptor())
-            .range("x", -30_000_000, 30_000_000)
-            .range("y", -2048, 2048)
-            .range("z", -30_000_000, 30_000_000)
-            .build())
-        .message("entity", MessageSpace.<ProtoLookAtEntityTarget>builder(ProtoLookAtEntityTarget.getDescriptor())
-            .range("entity_id", 1, Integer.MAX_VALUE)
-            .build())
-        .message("item", MessageSpace.<ProtoLookAtItemTarget>builder(ProtoLookAtItemTarget.getDescriptor())
-            .range("entity_id", 1, Integer.MAX_VALUE)
-            .build())
-        .requiredOneof("target")
-        .build();
+public class LookAtController extends AbstractActionComponentController<ProtoLookAt>
+    implements EnvironmentRegionAware {
 
     /**
      * 创建绑定指定 Agent 的注视动作控制器。
@@ -72,14 +63,56 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
         return ProtoLookAt.class;
     }
 
-    /**
-     * 返回默认动作空间。
-     *
-     * @return 按 oneof 分支嵌套声明的坐标与实体 ID 空间
-     */
+    /** 按 oneof 分支声明嵌套约束；{@code target} oneof 必须设置分支。 */
     @Override
     public McSpace<ProtoLookAt> defaultSpace() {
-        return DEFAULT_SPACE;
+        return buildSpace(null);
+    }
+
+    /** 接受环境区域（构造期一次性推送）：非空时方块目标坐标空间收紧到区域边界。 */
+    @Override
+    public void setEnvironmentRegion(@Nullable BoundingBox region) {
+        this.setSpace(buildSpace(region));
+    }
+
+    /**
+     * 构造目标空间：区域非空时 {@code block} 分支 x/y/z 收紧到区域闭区间边界，
+     * 实体/掉落物分支与 oneof 要求不随区域变化。
+     *
+     * @param region 环境区域；null 表示无区域约束
+     * @return 动作参数空间
+     */
+    private static McSpace<ProtoLookAt> buildSpace(@Nullable BoundingBox region) {
+        return MessageSpace.<ProtoLookAt>builder(ProtoLookAt.getDescriptor())
+            .message("block", blockTargetSpace(region))
+            .message("entity", MessageSpace.<ProtoLookAtEntityTarget>builder(ProtoLookAtEntityTarget.getDescriptor())
+                .range("entity_id", 1, Integer.MAX_VALUE)
+                .build())
+            .message("item", MessageSpace.<ProtoLookAtItemTarget>builder(ProtoLookAtItemTarget.getDescriptor())
+                .range("entity_id", 1, Integer.MAX_VALUE)
+                .build())
+            .requiredOneof("target")
+            .build();
+    }
+
+    /**
+     * 构造方块目标分支的坐标空间：区域非空时收紧到区域边界，否则全球默认范围。
+     *
+     * @param region 环境区域；null 表示无区域约束
+     * @return 方块目标消息空间
+     */
+    private static MessageSpace<ProtoLookAtBlockTarget> blockTargetSpace(@Nullable BoundingBox region) {
+        var builder = MessageSpace.<ProtoLookAtBlockTarget>builder(ProtoLookAtBlockTarget.getDescriptor());
+        if (region != null) {
+            builder.range("x", region.minX(), region.maxX())
+                .range("y", region.minY(), region.maxY())
+                .range("z", region.minZ(), region.maxZ());
+        } else {
+            builder.range("x", -30_000_000, 30_000_000)
+                .range("y", -2048, 2048)
+                .range("z", -30_000_000, 30_000_000);
+        }
+        return builder.build();
     }
 
     /**

@@ -12,6 +12,7 @@ import javax.annotation.Nullable;
 
 import com.google.protobuf.Message;
 
+import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
@@ -98,12 +99,12 @@ public abstract class AbstractMcEnv implements McEnv {
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents
     ) {
         this(envTypeId, mob, actionComponentFactories, observationComponents, List.of(),
-            null, AttachScope.AGENT_ONLY);
+            null, new AttachScope(null, false, false));
     }
 
     /**
      * 创建环境的主构造器：显式场景源在构造期解码为完整基线，区域和实体管理由文件决定；
-     * 未提供场景时按挂载作用域现场捕获基线（{@link AttachScope#AGENT_ONLY} 只捕获 agent）；
+     * 未提供场景时按挂载作用域现场捕获基线（region 为 null 的空作用域只捕获 agent）；
      * 不加载任何默认或内置场景。
      *
      * @param envTypeId 环境类型注册 ID
@@ -139,6 +140,8 @@ public abstract class AbstractMcEnv implements McEnv {
             // 场景源的 preset options 作为首次 reset 的默认值（当次 reset options 覆盖 preset）
             this.scenarioPresetOptions = ScenarioWorldCodec.options(scenarioSource.definition());
         }
+        // 基线区域确定后一次性推送给区域感知组件（区域随基线不可变，reset 不重推）
+        this.pushEnvironmentRegion();
         this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
         NeoForge.EVENT_BUS.register(this.agentRuntime);
     }
@@ -290,6 +293,24 @@ public abstract class AbstractMcEnv implements McEnv {
     @Nullable
     public final BoundingBox stateRegion() {
         return this.baseline.region();
+    }
+
+    /**
+     * 向实现了 {@link EnvironmentRegionAware} 的动作/观测组件推送环境区域
+     * （构造期基线确定后调用一次；区域可为 null 即空区域，组件保持自身默认范围）。
+     */
+    private void pushEnvironmentRegion() {
+        BoundingBox region = this.baseline.region();
+        this.actionController.forEachComponent(controller -> {
+            if (controller instanceof EnvironmentRegionAware aware) {
+                aware.setEnvironmentRegion(region);
+            }
+        });
+        this.observationCreator.forEachComponent(creator -> {
+            if (creator instanceof EnvironmentRegionAware aware) {
+                aware.setEnvironmentRegion(region);
+            }
+        });
     }
 
     /**

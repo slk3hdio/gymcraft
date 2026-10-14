@@ -10,9 +10,11 @@ import org.slf4j.LoggerFactory;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
+import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
@@ -29,18 +31,13 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * <p>
  * 坐标按方块位置解释，目标统一修正为方块中心的可站立点
  * （{@link MobNavigationTask#blockCenterTarget}），到达判定与距离诊断均使用修正后目标。
- * 参数空间包含坐标、速度修正值、停止距离和超时时间。
+ * 参数空间包含坐标、速度修正值、停止距离和超时时间。实现了
+ * {@link EnvironmentRegionAware}：环境区域非空时目标坐标空间收紧到区域边界。
  * </p>
  */
-public class MoveToController extends AbstractActionComponentController<ProtoMoveTo> implements NavigationPathProvider {
+public class MoveToController extends AbstractActionComponentController<ProtoMoveTo>
+    implements NavigationPathProvider, EnvironmentRegionAware {
     private static final Logger LOGGER = LoggerFactory.getLogger(MoveToController.class);
-
-    private static final McSpace<ProtoMoveTo> DEFAULT_SPACE = MessageSpace.<ProtoMoveTo>builder(ProtoMoveTo.getDescriptor())
-        .range("x", -30_000_000, 30_000_000)
-        .range("y", -2048, 2048)
-        .range("z", -30_000_000, 30_000_000)
-        .range("stop_distance", 0, 128)
-        .build();
 
     /** 默认寻路速度修正值。 */
     public static final double DEFAULT_SPEED = 1.0;
@@ -70,7 +67,35 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
 
     @Override
     public McSpace<ProtoMoveTo> defaultSpace() {
-        return DEFAULT_SPACE;
+        return buildSpace(null);
+    }
+
+    /** 接受环境区域（构造期一次性推送）：非空时目标坐标空间收紧到区域边界。 */
+    @Override
+    public void setEnvironmentRegion(@Nullable BoundingBox region) {
+        this.setSpace(buildSpace(region));
+    }
+
+    /**
+     * 构造目标坐标空间：区域非空时 x/y/z 收紧到区域闭区间边界，否则全球默认范围。
+     *
+     * @param region 环境区域；null 表示无区域约束
+     * @return 动作参数空间
+     */
+    private static McSpace<ProtoMoveTo> buildSpace(@Nullable BoundingBox region) {
+        var builder = MessageSpace.<ProtoMoveTo>builder(ProtoMoveTo.getDescriptor());
+        if (region != null) {
+            builder.range("x", region.minX(), region.maxX())
+                .range("y", region.minY(), region.maxY())
+                .range("z", region.minZ(), region.maxZ());
+        } else {
+            builder.range("x", -30_000_000, 30_000_000)
+                .range("y", -2048, 2048)
+                .range("z", -30_000_000, 30_000_000);
+        }
+        return builder
+            .range("stop_distance", 0, 128)
+            .build();
     }
 
     @Override

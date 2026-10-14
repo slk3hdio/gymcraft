@@ -2,6 +2,8 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.Map;
 
+import javax.annotation.Nullable;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,9 +23,11 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 
+import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
@@ -48,22 +52,17 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * 匹配物品在其他槽位时先自动与主手交换）,放置成功消耗 1 个物品,
  * 并按玩家放置语义检查待放置方块的碰撞形状是否被自己或其他实体遮挡；
  * 成功后附带 Mob 挥手动作与放置音效。该动作为瞬时动作,应用后立即返回终态。
+ * 实现了 {@link EnvironmentRegionAware}：环境区域非空时目标坐标空间收紧到区域边界。
  * </p>
  */
-public class SetBlockController extends AbstractActionComponentController<ProtoSetBlock> {
+public class SetBlockController extends AbstractActionComponentController<ProtoSetBlock>
+    implements EnvironmentRegionAware {
     private static final Logger LOGGER = LoggerFactory.getLogger(SetBlockController.class);
 
     /** 原版生存模式默认方块交互距离 ({@code Attributes.BLOCK_INTERACTION_RANGE} 默认值)。 */
     public static final double DEFAULT_REACH_DISTANCE = 4.5;
     /** setBlock 标志位: UPDATE_NEIGHBORS | UPDATE_CLIENTS, 与常规方块放置一致。 */
     private static final int SET_BLOCK_FLAGS = 3;
-
-    private static final McSpace<ProtoSetBlock> DEFAULT_SPACE = MessageSpace.<ProtoSetBlock>builder(ProtoSetBlock.getDescriptor())
-        .range("x", -30_000_000, 30_000_000)
-        .range("y", -2048, 2048)
-        .range("z", -30_000_000, 30_000_000)
-        .text("block")
-        .build();
 
     /** 当前环境实例的方块交互距离（默认 4.5，可用 {@link #setReachDistance} 覆盖）。 */
     private double reachDistance = DEFAULT_REACH_DISTANCE;
@@ -95,7 +94,35 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
 
     @Override
     public McSpace<ProtoSetBlock> defaultSpace() {
-        return DEFAULT_SPACE;
+        return buildSpace(null);
+    }
+
+    /** 接受环境区域（构造期一次性推送）：非空时目标坐标空间收紧到区域边界。 */
+    @Override
+    public void setEnvironmentRegion(@Nullable BoundingBox region) {
+        this.setSpace(buildSpace(region));
+    }
+
+    /**
+     * 构造目标坐标空间：区域非空时 x/y/z 收紧到区域闭区间边界，否则全球默认范围。
+     *
+     * @param region 环境区域；null 表示无区域约束
+     * @return 动作参数空间
+     */
+    private static McSpace<ProtoSetBlock> buildSpace(@Nullable BoundingBox region) {
+        var builder = MessageSpace.<ProtoSetBlock>builder(ProtoSetBlock.getDescriptor());
+        if (region != null) {
+            builder.range("x", region.minX(), region.maxX())
+                .range("y", region.minY(), region.maxY())
+                .range("z", region.minZ(), region.maxZ());
+        } else {
+            builder.range("x", -30_000_000, 30_000_000)
+                .range("y", -2048, 2048)
+                .range("z", -30_000_000, 30_000_000);
+        }
+        return builder
+            .text("block")
+            .build();
     }
 
     @Override
