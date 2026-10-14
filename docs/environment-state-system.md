@@ -6,7 +6,7 @@
 
 设计边界（与需求方确认）：
 
-- reset 基线恒存在：场景环境在构造期从场景文件（内置资产或手动 `env load`）解码出完整基线，挂载环境在构造期按 `AttachScope` 现场捕获（默认 `AGENT_ONLY` 空区域）——不存在"基线未冻结"分支；任意时点快照由场景存档系统按需捕获（`captureCurrentState`）
+- reset 基线恒存在：场景环境在构造期从场景文件（内置资产或手动 `env load`）解码出完整基线，挂载环境在构造期按 `AttachScope` 现场捕获（区域与捕获开关相互独立；六方向全零时为空区域，仅捕获 agent）——不存在"基线未冻结"分支；任意时点快照由场景存档系统按需捕获（`captureCurrentState`）
 - 内存保存：快照以 NBT/注册表引用组织，不落盘，环境 close 即丢弃
 - 任务环境的场景搭建代码全部删除，场景布局以显式提供的场景文件为唯一权威
 
@@ -52,7 +52,7 @@ EnvStateSnapshot                     // 一份完整基线（gym/state/EnvStateS
     attach（指定环境 ID 与已有 Mob，不读取场景）
         → 按挂载作用域当场捕获基线（AttachScope：区域（以 Mob 方块位置为锚、
           六方向各自延伸）+ 方块/实体捕获开关；
-          AGENT_ONLY = 空区域仅捕获 agent）（EnvStateSnapshot.capture）
+          区域为 null 时仅捕获 agent）（EnvStateSnapshot.capture）
     两条路径都产出不可变 EnvStateSnapshot（自持生效范围），不依赖环境任何回调
 reset            runtime 清理动作管线 → 组件 release 自清会话（菜单/消费）→
                   AbstractMcEnv.resetEnvironment 编排：基线快照恢复自身
@@ -82,7 +82,7 @@ close             runtime 组件 release → AgentMobLifecycle 撤销附件作�
 - `iron_golem_warden`：Warden 来自资产实体（含虚弱效果，随 NBT 往返），UUID 由 `RegionEntitySnapshot.of` 解码时重分配、运行期经 `wardenUuid()` 从基线懒解析；`DIG_COOLDOWN` 脑记忆不随 NBT 序列化，每次 reset 由 `repinWarden` 重新注入
 - `parkour_mob`：单区域、不管理实体（平台层 + 训练柱，高度与资产一致）；布局选项（`block`/`block_count`/`target_height`）随硬编码场景一并删除——需要不同布局时经 `env save/load` 自制场景
 
-空作用域挂载（`AttachScope.AGENT_ONLY`）时 `scopeAabb()` 返回 null，任务环境跳过区域扫描、越界与场景资源丢失判定；
+空作用域挂载（`AttachScope.region()` 为 null）时 `scopeAabb()` 返回 null，任务环境跳过区域扫描、越界与场景资源丢失判定；
 跳搭环境不设置目标高度，战斗环境不改写周围铁傀儡的 AI。通用动作与观测仍可访问世界，
 空状态范围仅限定保存和恢复的对象；携带区域的挂载作用域会让任务环境启用对应的区域判定。
 

@@ -99,12 +99,12 @@ public abstract class AbstractMcEnv implements McEnv {
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents
     ) {
         this(envTypeId, mob, actionComponentFactories, observationComponents, List.of(),
-            null, AttachScope.AGENT_ONLY);
+            null, new AttachScope(null, false, false));
     }
 
     /**
      * 创建环境的主构造器：显式场景源在构造期解码为完整基线，区域和实体管理由文件决定；
-     * 未提供场景时按挂载作用域现场捕获基线（{@link AttachScope#AGENT_ONLY} 只捕获 agent）；
+     * 未提供场景时按挂载作用域现场捕获基线（region 为 null 的空作用域只捕获 agent）；
      * 不加载任何默认或内置场景。
      *
      * @param envTypeId 环境类型注册 ID

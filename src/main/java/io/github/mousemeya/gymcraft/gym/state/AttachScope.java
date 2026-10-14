@@ -8,8 +8,9 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 /**
  * 挂载已有 Mob 时声明的状态作用域：环境占用区域（以 agent 方块位置为锚、六个方向
- * 各自独立延伸的方块盒）与区域内容捕获开关。方块快照与实体快照完全独立——区域由
- * {@link EnvStateSnapshot} 自持，不依附于方块快照。
+ * 各自独立延伸的方块盒）与区域内容捕获开关。区域与捕获开关相互独立——区域由
+ * {@link EnvStateSnapshot} 自持并决定组件动作/观测边界，两个开关全关时区域仍然保留
+ * （只圈活动范围、不做世界快照的配置）；无区域（region 为 null）时开关无意义。
  * <p>
  * 仅用于 {@code EnvManager.attach} 挂载路径；从场景创建时区域与开关由场景文件
  * 决定，本类型不参与。
@@ -24,8 +25,6 @@ public record AttachScope(@Nullable BoundingBox region, boolean captureBlocks, b
     public static final int MAX_RADIUS = 32;
     /** 垂直方向延伸距离参数上限；实际按世界建筑高度精确钳制。 */
     public static final int MAX_HEIGHT = 4096;
-    /** 空作用域：只捕获 agent，不管理世界方块与周围实体。 */
-    public static final AttachScope AGENT_ONLY = new AttachScope(null, false, false);
 
     /**
      * 以 Mob 当前方块位置为锚构造六方向独立延伸的作用域。距离按轴分组、先负后正：
@@ -42,13 +41,13 @@ public record AttachScope(@Nullable BoundingBox region, boolean captureBlocks, b
      * @param south 向南(+Z)延伸距离（格）
      * @param captureBlocks 是否捕获区域方块快照
      * @param captureEntities 是否捕获区域实体快照
-     * @return 挂载作用域；六方向距离全非正或两个开关全关时退化为 {@link #AGENT_ONLY}
+     * @return 挂载作用域；捕获开关不影响区域。六方向距离全非正时无区域可占用，
+     *         退化为不捕获任何内容的空作用域（region=null 且开关失效）
      */
     public static AttachScope around(Mob mob, int west, int east, int down, int up, int north, int south,
             boolean captureBlocks, boolean captureEntities) {
-        if ((!captureBlocks && !captureEntities)
-            || (west <= 0 && east <= 0 && down <= 0 && up <= 0 && north <= 0 && south <= 0)) {
-            return AGENT_ONLY;
+        if (west <= 0 && east <= 0 && down <= 0 && up <= 0 && north <= 0 && south <= 0) {
+            return new AttachScope(null, false, false);
         }
         BlockPos anchor = mob.blockPosition();
         // 垂直方向钳到建筑高度内的可达距离，区域天然不越出世界。
@@ -70,7 +69,7 @@ public record AttachScope(@Nullable BoundingBox region, boolean captureBlocks, b
      * @param radius 立方体半径（格），超过 {@link #MAX_RADIUS} 会被钳制
      * @param captureBlocks 是否捕获区域方块快照
      * @param captureEntities 是否捕获区域实体快照
-     * @return 挂载作用域；半径非正或两个开关全关时退化为 {@link #AGENT_ONLY}
+     * @return 挂载作用域；捕获开关不影响区域，半径非正时退化为空作用域
      */
     public static AttachScope around(Mob mob, int radius, boolean captureBlocks, boolean captureEntities) {
         return around(mob, radius, radius, radius, radius, radius, radius, captureBlocks, captureEntities);

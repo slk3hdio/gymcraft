@@ -16,7 +16,7 @@ import net.minecraft.world.phys.AABB;
  * </p>
  * <p>
  * 语义约定：区域是硬边界——生效范围 = 组件声明范围 ∩ 区域；{@code null} 区域
- * （AGENT_ONLY 空区域）表示组件保持自身默认范围。区域推送是默认值，环境子类
+ * （空区域挂载）表示组件保持自身默认范围。区域推送是默认值，环境子类
  * 构造体中再调 {@code setSpace}/setter 为显式覆盖（后写者赢）。
  * </p>
  */
@@ -26,7 +26,7 @@ public interface EnvironmentRegionAware {
      * 接受环境区域边界并限制自身相关范围（环境构造期一次性调用，此后不变）。
      *
      * @param region 环境区域（绝对世界坐标闭区间方块盒）；null 表示空区域
-     *               （AGENT_ONLY），实现应保持自身默认范围
+     *               挂载，实现应保持自身默认范围
      */
     void setEnvironmentRegion(@Nullable BoundingBox region);
 
