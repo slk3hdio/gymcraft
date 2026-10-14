@@ -2,6 +2,7 @@ package io.github.mousemeya.gymcraft.gametest;
 
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertEquals;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
+import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.infoJson;
 
 import java.util.List;
 import java.util.Map;
@@ -146,7 +147,7 @@ public final class IronMiningEnvGameTests {
                 StepResponse tablePlaced = step(env, "gymcraft:set_block", ProtoSetBlock.newBuilder()
                     .setX(tablePos.getX()).setY(tablePos.getY()).setZ(tablePos.getZ())
                     .setBlock("minecraft:crafting_table").build());
-                if (tablePlaced.getInfo().contains("\"status\":\"failed\"")) {
+                if (infoJson(tablePlaced.getInfo()).contains("\"status\":\"failed\"")) {
                     throw new IllegalStateException("crafting table placement failed: " + tablePlaced.getInfo());
                 }
                 long tableSession = openBlock(env, tablePos);
@@ -194,7 +195,7 @@ public final class IronMiningEnvGameTests {
                 StepResponse response = finalResponse.get();
                 assertTrue(helper, response != null, "tool progression did not finish");
                 assertTrue(helper, response.getTerminated(), "raw iron pickup did not terminate successfully");
-                assertTrue(helper, response.getInfo().contains("\"success\":true"), "success info missing: " + response.getInfo());
+                assertTrue(helper, infoJson(response.getInfo()).contains("\"success\":true"), "success info missing: " + response.getInfo());
                 Mob current = (Mob) helper.getLevel().getEntity(originalMob.getUUID());
                 assertTrue(helper, AgentInventoryLayout.resolve(current).slots().stream()
                     .anyMatch(slot -> slot.getItem().is(Items.RAW_IRON)), "raw iron is not in Agent inventory");

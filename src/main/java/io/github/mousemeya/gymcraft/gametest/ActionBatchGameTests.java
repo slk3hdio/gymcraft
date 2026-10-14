@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
+import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.infoJson;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.spawnAgent;
 
 /**
@@ -47,7 +48,7 @@ public final class ActionBatchGameTests {
             try {
                 assertTrue(helper, failure.get() == null && response.get() != null,
                     "serial batch did not finish: " + failure.get());
-                String info = response.get().getInfo();
+                String info = infoJson(response.get().getInfo());
                 assertTrue(helper, info.contains("\"total_count\":3"), "total count missing: " + info);
                 assertTrue(helper, info.contains("\"completed_count\":3"), "completed count missing: " + info);
                 assertTrue(helper, count(info, "\"component_id\":\"gymcraft:noop\"") == 3,
@@ -87,13 +88,13 @@ public final class ActionBatchGameTests {
             try {
                 assertTrue(helper, failure.get() == null && failed.get() != null && empty.get() != null,
                     "failure/empty batch did not finish: " + failure.get());
-                String failedInfo = failed.get().getInfo();
+                String failedInfo = infoJson(failed.get().getInfo());
                 assertTrue(helper, failedInfo.contains("\"total_count\":2"), "failed total missing: " + failedInfo);
                 assertTrue(helper, failedInfo.contains("\"completed_count\":0"), "failed count wrong: " + failedInfo);
                 assertTrue(helper, failedInfo.contains("\"stopped_index\":0"), "stop index wrong: " + failedInfo);
                 assertTrue(helper, !failedInfo.contains("\"index\":1"),
                     "action after failure was executed: " + failedInfo);
-                String emptyInfo = empty.get().getInfo();
+                String emptyInfo = infoJson(empty.get().getInfo());
                 assertTrue(helper, emptyInfo.contains("action batch completed as noop"), "empty noop missing: " + emptyInfo);
                 assertTrue(helper, emptyInfo.contains("\"total_count\":0"), "empty total count wrong: " + emptyInfo);
                 helper.succeed();

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import random
 from collections import defaultdict
@@ -101,10 +100,9 @@ def train(args: argparse.Namespace) -> None:
             total_reward = 0.0
             for _ in range(args.max_steps):
                 action_index = choose_action(q_table[state], args.epsilon, rng)
-                obs, reward, terminated, truncated, raw_info = env.step(
+                obs, reward, terminated, truncated, info = env.step(
                     make_action(actions[action_index], obs, args.block)
                 )
-                info = json.loads(raw_info)
                 remaining = int(info.get("remaining_blocks", 0))
                 next_state = encode_state(obs, remaining, origin_x, origin_z, base_y)
                 future = 0.0 if terminated or truncated else max(q_table[next_state])

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -29,11 +28,11 @@ class GymCraftEnvLike(Protocol):
         *,
         seed: int | None = None,
         options: Mapping[str, Any] | None = None,
-    ) -> tuple[Observation, str]:
-        """重置底层环境并返回解包观测与 JSON info。"""
+    ) -> tuple[Observation, dict[str, Any]]:
+        """重置底层环境并返回解包观测与 info 字典。"""
         ...
 
-    def step(self, action: ActionBatch) -> tuple[Observation, float, bool, bool, str]:
+    def step(self, action: ActionBatch) -> tuple[Observation, float, bool, bool, dict[str, Any]]:
         """执行有序动作批次并返回 Gymnasium 五元组。"""
         ...
 
@@ -183,9 +182,6 @@ class LLMGymCraftEnv:
         )
 
     @staticmethod
-    def _decode_info(raw_info: str) -> dict[str, Any]:
-        """把底层 JSON info 转为字典，并拒绝非对象 JSON。"""
-        decoded = json.loads(raw_info) if raw_info else {}
-        if not isinstance(decoded, dict):
-            raise ValueError("Environment info must be a JSON object")
-        return decoded
+    def _decode_info(raw_info: Mapping[str, Any]) -> dict[str, Any]:
+        """把底层 info 规整为字典（Struct 解包结果即字典，直接复制）。"""
+        return dict(raw_info)

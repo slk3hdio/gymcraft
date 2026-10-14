@@ -193,7 +193,7 @@ public abstract class AbstractMcEnv implements McEnv {
             seed, options == null ? Map.of() : options, this::resetEnvironment);
         return ResetResponse.newBuilder()
             .setObservation(result.observation())
-            .setInfo(ProtoJson.toJson(this.createResetInfo()))
+            .setInfo(ProtoJson.toStruct(this.createResetInfo()))
             .build();
     }
 
@@ -212,7 +212,7 @@ public abstract class AbstractMcEnv implements McEnv {
             .setReward(this.computeReward(result.observation()))
             .setTerminated(this.isTerminated(result.observation()))
             .setTruncated(this.isTruncated(result.observation()))
-            .setInfo(ProtoJson.toJson(info))
+            .setInfo(ProtoJson.toStruct(info))
             .build();
     }
 

@@ -10,7 +10,6 @@ protobuf/gRPC 返回的观测。可选坐标参数用于验证可见表面与完
 from __future__ import annotations
 
 import argparse
-import json
 from typing import cast
 
 from gymcraft.client import GymCraftEnv
@@ -94,8 +93,7 @@ def step(env: GymCraftEnv, action: ActionBatch, label: str, expected: str) -> Ob
     返回:
         本步返回并已解包的完整观测。
     """
-    observation, reward, terminated, truncated, raw_info = env.step(action)
-    info = json.loads(raw_info)
+    observation, reward, terminated, truncated, info = env.step(action)
     header = observation["header"]
     print(
         f"{label}: status={header.last_action_status} description={header.last_action_description!r} "
@@ -167,8 +165,8 @@ def main() -> None:
             raise RuntimeError(f"remote env does not expose {OBS_INTERESTING_BLOCKS}")
         print(f"connected entity={args.entity_uuid} address={args.address}")
 
-        observation, raw_reset_info = env.reset()
-        print(f"initial reset info={json.loads(raw_reset_info)}")
+        observation, reset_info = env.reset()
+        print(f"initial reset info={reset_info}")
         if interesting_blocks(observation).blocks:
             raise AssertionError("reset did not start with an empty interesting block attachment")
 
@@ -204,8 +202,8 @@ def main() -> None:
             raise AssertionError("LLM formatter omitted interesting_blocks")
         print("llm_observation:\n" + formatted)
 
-        observation, raw_reset_info = env.reset()
-        print(f"final reset info={json.loads(raw_reset_info)}")
+        observation, reset_info = env.reset()
+        print(f"final reset info={reset_info}")
         if interesting_blocks(observation).blocks:
             raise AssertionError("reset retained the runtime interesting block attachment")
         print("PASS interesting_blocks end-to-end debug")

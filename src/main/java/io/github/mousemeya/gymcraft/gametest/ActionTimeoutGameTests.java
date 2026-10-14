@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
+import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.infoJson;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.spawnAgent;
 
 /**
@@ -54,7 +55,7 @@ public final class ActionTimeoutGameTests {
             try {
                 assertTrue(helper, failure.get() == null, "timeout raised: " + failure.get());
                 assertTrue(helper, response.get() != null, "timeout did not finish");
-                String info = response.get().getInfo();
+                String info = infoJson(response.get().getInfo());
                 assertTrue(helper, info.contains("\"status\":\"failed\""), "timeout status missing: " + info);
                 assertTrue(helper, info.contains("action batch timeout"), "timeout description missing: " + info);
                 assertTrue(helper, info.contains("\"elapsed_ticks\":2"), "timeout tick count missing: " + info);

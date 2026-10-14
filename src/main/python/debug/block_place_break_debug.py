@@ -18,7 +18,6 @@ iteration when --place-pos is not given).
 from __future__ import annotations
 
 import argparse
-import json
 import math
 from collections.abc import Iterable
 from typing import Any, cast
@@ -130,8 +129,7 @@ def parse_pos(raw: list[int] | None) -> Pos | None:
 
 
 def step_and_print(env: GymCraftEnv, label: str, action: ActionBatch) -> tuple[Any, bool]:
-    obs, reward, terminated, truncated, raw_info = env.step(action)
-    info = json.loads(raw_info)
+    obs, reward, terminated, truncated, info = env.step(action)
     print(f"{label} reward={reward:+.3f} term={terminated} trunc={truncated}")
     print_header(label, obs, info)
     return obs, obs["header"].last_action_status == "COMPLETED"
@@ -174,8 +172,8 @@ def main() -> None:
             obs, _, _, _, _ = env.step(single_action(ACTION_NOOP, noop_pb2.ProtoNoop()))
             print("no_reset: skipped reset; obtained observation via noop step")
         else:
-            obs, raw_reset_info = env.reset()
-            print(f"reset info={json.loads(raw_reset_info)}")
+            obs, reset_info = env.reset()
+            print(f"reset info={reset_info}")
         print_header("connect", obs)
         print_self(obs)
         occupied = print_nearby_blocks(obs, args.limit)

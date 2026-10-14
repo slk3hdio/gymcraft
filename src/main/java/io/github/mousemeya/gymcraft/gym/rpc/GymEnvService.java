@@ -85,7 +85,7 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
                 responseObserver.onNext(ConnectResponse.newBuilder()
                         .setSessionId(session.id())
                         .setEntityUuid(entityUuid.toString())
-                        .setMetadata(ProtoJson.toJson(env.getMetadata()))
+                        .setMetadata(ProtoJson.toStruct(env.getMetadata()))
                         .setActionSpace(env.getActionSpace().toSpec())
                         .setObservationSpace(env.getObservationSpace().toSpec())
                         .build());
@@ -121,7 +121,7 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
             try {
                 ResetResponse response = session.env().reset(
                         request.hasSeed() ? request.getSeed() : null,
-                        ProtoJson.fromJson(request.getOptions()));
+                        ProtoJson.fromStruct(request.getOptions()));
                 responseObserver.onNext(response);
                 responseObserver.onCompleted();
             } catch (IllegalArgumentException e) {

@@ -9,7 +9,6 @@ candidate block, and repeatedly sends move_to targeting the center above that bl
 from __future__ import annotations
 
 import argparse
-import json
 import math
 from typing import Any, cast
 
@@ -91,8 +90,7 @@ def main() -> None:
         if OBS_NEARBY_BLOCKS not in observation_keys:
             raise RuntimeError(f"remote env does not expose {OBS_NEARBY_BLOCKS}")
 
-        obs, raw_reset_info = env.reset()
-        reset_info = json.loads(raw_reset_info)
+        obs, reset_info = env.reset()
         print(f"reset info={reset_info}")
         pos = print_self("reset", obs)
 
@@ -118,8 +116,7 @@ def main() -> None:
 
         previous = pos
         for step_idx in range(args.steps):
-            obs, reward, terminated, truncated, raw_info = env.step(action)
-            info = json.loads(raw_info)
+            obs, reward, terminated, truncated, info = env.step(action)
             pos = print_self(f"step={step_idx}", obs)
             moved = horizontal_distance(previous, pos)
             dist = horizontal_distance(pos, target)

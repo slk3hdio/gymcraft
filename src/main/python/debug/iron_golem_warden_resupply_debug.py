@@ -15,6 +15,7 @@ from typing import Any, cast
 import uuid
 
 import grpc
+from google.protobuf.json_format import MessageToDict
 from mcrcon import MCRcon  # type: ignore[import-untyped]
 
 from gymcraft.client import GymCraftEnv, make_step_request, unpack_observation
@@ -93,7 +94,7 @@ class ResupplyE2E:
                   "description": response.observation.header.last_action_description,
                   "terminated": response.terminated, "truncated": response.truncated,
                   "elapsed_game_ticks": response.observation.header.game_tick - tick_before,
-                  "info": json.loads(response.info)}
+                  "info": MessageToDict(response.info)}
         self.steps.append(result)
         if expected is not None:
             self.require(result["status"] == expected, str(result))

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import unittest
 from collections.abc import Mapping
@@ -181,16 +180,16 @@ class FakeEnv:
         *,
         seed: int | None = None,
         options: Mapping[str, Any] | None = None,
-    ) -> tuple[Observation, str]:
+    ) -> tuple[Observation, dict[str, Any]]:
         """返回固定首帧观测。"""
-        return _observation(), json.dumps({"seed": seed})
+        return _observation(), {"seed": seed}
 
-    def step(self, action: ActionBatch) -> tuple[Observation, float, bool, bool, str]:
+    def step(self, action: ActionBatch) -> tuple[Observation, float, bool, bool, dict[str, Any]]:
         """记录动作并返回成功 transition。"""
         self.step_calls += 1
         self.last_action = action
         info = {"action_state": {"status": "completed", "description": "ok", "details": {}}}
-        return _observation(2), 1.5, False, False, json.dumps(info)
+        return _observation(2), 1.5, False, False, info
 
     def close(self) -> None:
         """Fake 环境无需释放资源。"""

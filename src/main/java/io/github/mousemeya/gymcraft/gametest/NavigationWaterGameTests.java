@@ -1,6 +1,7 @@
 package io.github.mousemeya.gymcraft.gametest;
 
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
+import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.infoJson;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.spawnAgent;
 
 import java.util.List;
@@ -58,7 +59,7 @@ public final class NavigationWaterGameTests {
             try {
                 assertTrue(helper, failure.get() == null, "water crossing raised: " + failure.get());
                 assertTrue(helper, response.get() != null, "water crossing did not finish");
-                assertTrue(helper, response.get().getInfo().contains("\"status\":\"completed\""),
+                assertTrue(helper, infoJson(response.get().getInfo()).contains("\"status\":\"completed\""),
                     "swim_to across water failed: " + response.get().getInfo());
                 helper.succeed();
             } finally {

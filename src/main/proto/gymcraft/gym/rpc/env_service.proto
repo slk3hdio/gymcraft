@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gymcraft.gym.rpc;
 
+import "google/protobuf/struct.proto";
 import "gymcraft/gym/action/action.proto";
 import "gymcraft/gym/observation/observation.proto";
 import "gymcraft/gym/space/space_spec.proto";
@@ -25,7 +26,7 @@ message ConnectRequest {
 message ConnectResponse {
   string session_id = 1;
   string entity_uuid = 2;
-  string metadata = 3;
+  google.protobuf.Struct metadata = 3;
   reserved 4, 5;
   reserved "action_space_json", "observation_space_json";
   // 结构化空间描述（按组件注册 ID 有序排列），替代旧的 JSON 字符串字段。
@@ -36,12 +37,12 @@ message ConnectResponse {
 message ResetRequest {
   string session_id = 1;
   optional int32 seed = 2;
-  string options = 3;
+  google.protobuf.Struct options = 3;
 }
 
 message ResetResponse {
   gymcraft.gym.observation.ProtoMcObservation observation = 1;
-  string info = 2;
+  google.protobuf.Struct info = 2;
 }
 
 message StepRequest {
@@ -60,7 +61,7 @@ message StepResponse {
   double reward = 2;
   bool terminated = 3;
   bool truncated = 4;
-  string info = 5; // 详细信息的JSON字符串表示
+  google.protobuf.Struct info = 5; // 详细信息（键值结构，嵌套对象原生保留）
 }
 
 message CloseSessionRequest {

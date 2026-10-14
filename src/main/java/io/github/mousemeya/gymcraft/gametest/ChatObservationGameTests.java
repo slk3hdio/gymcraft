@@ -2,6 +2,7 @@ package io.github.mousemeya.gymcraft.gametest;
 
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertEquals;
+import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.infoJson;
 
 import java.util.HashMap;
 import java.util.List;
@@ -185,8 +186,8 @@ public final class ChatObservationGameTests {
             try {
                 assertTrue(helper, failure.get() == null, "send chat action failed: " + failure.get());
                 assertTrue(helper, response.get() != null, "send chat action did not return a response");
-                assertTrue(helper, response.get().getInfo().contains("chat message sent"),
-                    "send chat action did not complete: " + response.get().getInfo());
+                assertTrue(helper, infoJson(response.get().getInfo()).contains("chat message sent"),
+                    "send chat action did not complete: " + infoJson(response.get().getInfo()));
                 ProtoRecentChat chat = unpack(response.get());
                 assertTrue(helper, chat != null && chat.getMessagesList().stream().anyMatch(message ->
                         message.getSender().equals("Gym Agent")

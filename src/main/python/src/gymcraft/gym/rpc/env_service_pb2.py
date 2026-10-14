@@ -22,12 +22,13 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 from gymcraft.gym.action import action_pb2 as gymcraft_dot_gym_dot_action_dot_action__pb2
 from gymcraft.gym.observation import observation_pb2 as gymcraft_dot_gym_dot_observation_dot_observation__pb2
 from gymcraft.gym.space import space_spec_pb2 as gymcraft_dot_gym_dot_space_dot_space__spec__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\"gymcraft/gym/rpc/env_service.proto\x12\x10gymcraft.gym.rpc\x1a gymcraft/gym/action/action.proto\x1a*gymcraft/gym/observation/observation.proto\x1a#gymcraft/gym/space/space_spec.proto\"%\n\x0e\x43onnectRequest\x12\x13\n\x0b\x65ntity_uuid\x18\x01 \x01(\t\"\x8c\x02\n\x0f\x43onnectResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x13\n\x0b\x65ntity_uuid\x18\x02 \x01(\t\x12\x10\n\x08metadata\x18\x03 \x01(\t\x12@\n\x0c\x61\x63tion_space\x18\x06 \x01(\x0b\x32*.gymcraft.gym.space.ProtoComponentSpaceSet\x12\x45\n\x11observation_space\x18\x07 \x01(\x0b\x32*.gymcraft.gym.space.ProtoComponentSpaceSetJ\x04\x08\x04\x10\x05J\x04\x08\x05\x10\x06R\x11\x61\x63tion_space_jsonR\x16observation_space_json\"O\n\x0cResetRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\x04seed\x18\x02 \x01(\x05H\x00\x88\x01\x01\x12\x0f\n\x07options\x18\x03 \x01(\tB\x07\n\x05_seed\"`\n\rResetResponse\x12\x41\n\x0bobservation\x18\x01 \x01(\x0b\x32,.gymcraft.gym.observation.ProtoMcObservation\x12\x0c\n\x04info\x18\x02 \x01(\t\"}\n\x0bStepRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x33\n\x07\x61\x63tions\x18\x03 \x03(\x0b\x32\".gymcraft.gym.action.ProtoMcAction\x12\x17\n\x0ftimeout_seconds\x18\x04 \x01(\x02J\x04\x08\x02\x10\x03R\x06\x61\x63tion\"\x96\x01\n\x0cStepResponse\x12\x41\n\x0bobservation\x18\x01 \x01(\x0b\x32,.gymcraft.gym.observation.ProtoMcObservation\x12\x0e\n\x06reward\x18\x02 \x01(\x01\x12\x12\n\nterminated\x18\x03 \x01(\x08\x12\x11\n\ttruncated\x18\x04 \x01(\x08\x12\x0c\n\x04info\x18\x05 \x01(\t\")\n\x13\x43loseSessionRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"&\n\x14\x43loseSessionResponse\x12\x0e\n\x06\x63losed\x18\x01 \x01(\x08\"\x19\n\x17ListEnvironmentsRequest\"K\n\x0f\x45nvironmentInfo\x12\x13\n\x0b\x65ntity_uuid\x18\x01 \x01(\t\x12\x10\n\x08\x65nv_type\x18\x02 \x01(\t\x12\x11\n\tconnected\x18\x03 \x01(\x08\"S\n\x18ListEnvironmentsResponse\x12\x37\n\x0c\x65nvironments\x18\x01 \x03(\x0b\x32!.gymcraft.gym.rpc.EnvironmentInfo2\xba\x03\n\rGymEnvService\x12N\n\x07\x43onnect\x12 .gymcraft.gym.rpc.ConnectRequest\x1a!.gymcraft.gym.rpc.ConnectResponse\x12H\n\x05Reset\x12\x1e.gymcraft.gym.rpc.ResetRequest\x1a\x1f.gymcraft.gym.rpc.ResetResponse\x12\x45\n\x04Step\x12\x1d.gymcraft.gym.rpc.StepRequest\x1a\x1e.gymcraft.gym.rpc.StepResponse\x12]\n\x0c\x43loseSession\x12%.gymcraft.gym.rpc.CloseSessionRequest\x1a&.gymcraft.gym.rpc.CloseSessionResponse\x12i\n\x10ListEnvironments\x12).gymcraft.gym.rpc.ListEnvironmentsRequest\x1a*.gymcraft.gym.rpc.ListEnvironmentsResponseB?\n*io.github.mousemeya.gymcraft.gym.rpc.protoB\x0f\x45nvServiceProtoP\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\"gymcraft/gym/rpc/env_service.proto\x12\x10gymcraft.gym.rpc\x1a\x1cgoogle/protobuf/struct.proto\x1a gymcraft/gym/action/action.proto\x1a*gymcraft/gym/observation/observation.proto\x1a#gymcraft/gym/space/space_spec.proto\"%\n\x0e\x43onnectRequest\x12\x13\n\x0b\x65ntity_uuid\x18\x01 \x01(\t\"\xa5\x02\n\x0f\x43onnectResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x13\n\x0b\x65ntity_uuid\x18\x02 \x01(\t\x12)\n\x08metadata\x18\x03 \x01(\x0b\x32\x17.google.protobuf.Struct\x12@\n\x0c\x61\x63tion_space\x18\x06 \x01(\x0b\x32*.gymcraft.gym.space.ProtoComponentSpaceSet\x12\x45\n\x11observation_space\x18\x07 \x01(\x0b\x32*.gymcraft.gym.space.ProtoComponentSpaceSetJ\x04\x08\x04\x10\x05J\x04\x08\x05\x10\x06R\x11\x61\x63tion_space_jsonR\x16observation_space_json\"h\n\x0cResetRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\x04seed\x18\x02 \x01(\x05H\x00\x88\x01\x01\x12(\n\x07options\x18\x03 \x01(\x0b\x32\x17.google.protobuf.StructB\x07\n\x05_seed\"y\n\rResetResponse\x12\x41\n\x0bobservation\x18\x01 \x01(\x0b\x32,.gymcraft.gym.observation.ProtoMcObservation\x12%\n\x04info\x18\x02 \x01(\x0b\x32\x17.google.protobuf.Struct\"}\n\x0bStepRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x33\n\x07\x61\x63tions\x18\x03 \x03(\x0b\x32\".gymcraft.gym.action.ProtoMcAction\x12\x17\n\x0ftimeout_seconds\x18\x04 \x01(\x02J\x04\x08\x02\x10\x03R\x06\x61\x63tion\"\xaf\x01\n\x0cStepResponse\x12\x41\n\x0bobservation\x18\x01 \x01(\x0b\x32,.gymcraft.gym.observation.ProtoMcObservation\x12\x0e\n\x06reward\x18\x02 \x01(\x01\x12\x12\n\nterminated\x18\x03 \x01(\x08\x12\x11\n\ttruncated\x18\x04 \x01(\x08\x12%\n\x04info\x18\x05 \x01(\x0b\x32\x17.google.protobuf.Struct\")\n\x13\x43loseSessionRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"&\n\x14\x43loseSessionResponse\x12\x0e\n\x06\x63losed\x18\x01 \x01(\x08\"\x19\n\x17ListEnvironmentsRequest\"K\n\x0f\x45nvironmentInfo\x12\x13\n\x0b\x65ntity_uuid\x18\x01 \x01(\t\x12\x10\n\x08\x65nv_type\x18\x02 \x01(\t\x12\x11\n\tconnected\x18\x03 \x01(\x08\"S\n\x18ListEnvironmentsResponse\x12\x37\n\x0c\x65nvironments\x18\x01 \x03(\x0b\x32!.gymcraft.gym.rpc.EnvironmentInfo2\xba\x03\n\rGymEnvService\x12N\n\x07\x43onnect\x12 .gymcraft.gym.rpc.ConnectRequest\x1a!.gymcraft.gym.rpc.ConnectResponse\x12H\n\x05Reset\x12\x1e.gymcraft.gym.rpc.ResetRequest\x1a\x1f.gymcraft.gym.rpc.ResetResponse\x12\x45\n\x04Step\x12\x1d.gymcraft.gym.rpc.StepRequest\x1a\x1e.gymcraft.gym.rpc.StepResponse\x12]\n\x0c\x43loseSession\x12%.gymcraft.gym.rpc.CloseSessionRequest\x1a&.gymcraft.gym.rpc.CloseSessionResponse\x12i\n\x10ListEnvironments\x12).gymcraft.gym.rpc.ListEnvironmentsRequest\x1a*.gymcraft.gym.rpc.ListEnvironmentsResponseB?\n*io.github.mousemeya.gymcraft.gym.rpc.protoB\x0f\x45nvServiceProtoP\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,28 +36,28 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'gymcraft.gym.rpc.env_servic
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n*io.github.mousemeya.gymcraft.gym.rpc.protoB\017EnvServiceProtoP\001'
-  _globals['_CONNECTREQUEST']._serialized_start=171
-  _globals['_CONNECTREQUEST']._serialized_end=208
-  _globals['_CONNECTRESPONSE']._serialized_start=211
-  _globals['_CONNECTRESPONSE']._serialized_end=479
-  _globals['_RESETREQUEST']._serialized_start=481
-  _globals['_RESETREQUEST']._serialized_end=560
-  _globals['_RESETRESPONSE']._serialized_start=562
-  _globals['_RESETRESPONSE']._serialized_end=658
-  _globals['_STEPREQUEST']._serialized_start=660
-  _globals['_STEPREQUEST']._serialized_end=785
-  _globals['_STEPRESPONSE']._serialized_start=788
-  _globals['_STEPRESPONSE']._serialized_end=938
-  _globals['_CLOSESESSIONREQUEST']._serialized_start=940
-  _globals['_CLOSESESSIONREQUEST']._serialized_end=981
-  _globals['_CLOSESESSIONRESPONSE']._serialized_start=983
-  _globals['_CLOSESESSIONRESPONSE']._serialized_end=1021
-  _globals['_LISTENVIRONMENTSREQUEST']._serialized_start=1023
-  _globals['_LISTENVIRONMENTSREQUEST']._serialized_end=1048
-  _globals['_ENVIRONMENTINFO']._serialized_start=1050
-  _globals['_ENVIRONMENTINFO']._serialized_end=1125
-  _globals['_LISTENVIRONMENTSRESPONSE']._serialized_start=1127
-  _globals['_LISTENVIRONMENTSRESPONSE']._serialized_end=1210
-  _globals['_GYMENVSERVICE']._serialized_start=1213
-  _globals['_GYMENVSERVICE']._serialized_end=1655
+  _globals['_CONNECTREQUEST']._serialized_start=201
+  _globals['_CONNECTREQUEST']._serialized_end=238
+  _globals['_CONNECTRESPONSE']._serialized_start=241
+  _globals['_CONNECTRESPONSE']._serialized_end=534
+  _globals['_RESETREQUEST']._serialized_start=536
+  _globals['_RESETREQUEST']._serialized_end=640
+  _globals['_RESETRESPONSE']._serialized_start=642
+  _globals['_RESETRESPONSE']._serialized_end=763
+  _globals['_STEPREQUEST']._serialized_start=765
+  _globals['_STEPREQUEST']._serialized_end=890
+  _globals['_STEPRESPONSE']._serialized_start=893
+  _globals['_STEPRESPONSE']._serialized_end=1068
+  _globals['_CLOSESESSIONREQUEST']._serialized_start=1070
+  _globals['_CLOSESESSIONREQUEST']._serialized_end=1111
+  _globals['_CLOSESESSIONRESPONSE']._serialized_start=1113
+  _globals['_CLOSESESSIONRESPONSE']._serialized_end=1151
+  _globals['_LISTENVIRONMENTSREQUEST']._serialized_start=1153
+  _globals['_LISTENVIRONMENTSREQUEST']._serialized_end=1178
+  _globals['_ENVIRONMENTINFO']._serialized_start=1180
+  _globals['_ENVIRONMENTINFO']._serialized_end=1255
+  _globals['_LISTENVIRONMENTSRESPONSE']._serialized_start=1257
+  _globals['_LISTENVIRONMENTSRESPONSE']._serialized_end=1340
+  _globals['_GYMENVSERVICE']._serialized_start=1343
+  _globals['_GYMENVSERVICE']._serialized_end=1785
 # @@protoc_insertion_point(module_scope)

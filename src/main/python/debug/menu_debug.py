@@ -19,7 +19,6 @@ Notes:
 from __future__ import annotations
 
 import argparse
-import json
 from typing import Any, cast
 
 from gymcraft.client import GymCraftEnv, single_action
@@ -54,8 +53,7 @@ def action_state(info: dict[str, Any]) -> dict[str, Any]:
 
 
 def step_and_report(env: GymCraftEnv, label: str, action: ActionBatch) -> tuple[Any, dict[str, Any]]:
-    obs, _, _, _, raw_info = env.step(action)
-    info = json.loads(raw_info)
+    obs, _, _, _, info = env.step(action)
     state = action_state(info)
     print(
         f"{label} status={state.get('status', '?')} "
@@ -213,8 +211,8 @@ def main() -> None:
         if missing:
             print(f"warning: action space is missing menu components: {missing}")
 
-        obs, raw_reset_info = env.reset()
-        print(f"reset info={json.loads(raw_reset_info)}")
+        obs, reset_info = env.reset()
+        print(f"reset info={reset_info}")
         print_menu("reset", menu_observation(obs))
 
         # 1. Self inventory menu

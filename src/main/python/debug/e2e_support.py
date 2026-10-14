@@ -159,7 +159,7 @@ class E2ESuite:
             "status": obs["header"].last_action_status,
             "description": obs["header"].last_action_description,
             "elapsed_game_ticks": obs["header"].game_tick - tick_before,
-            "info": json.loads(raw_info),
+            "info": raw_info,
         }
         self.results.append(result)
         if expected is not None:

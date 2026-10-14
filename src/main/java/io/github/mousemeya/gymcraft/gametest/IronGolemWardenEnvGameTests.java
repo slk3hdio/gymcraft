@@ -2,6 +2,7 @@ package io.github.mousemeya.gymcraft.gametest;
 
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertEquals;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
+import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.infoJson;
 
 import java.util.Map;
 import java.util.List;
@@ -174,15 +175,15 @@ public final class IronGolemWardenEnvGameTests {
             try {
                 assertTrue(helper, failure.get() == null, "golem victory test failed: " + failure.get());
                 StepResponse golemSpawn = golemStep.get();
-                assertTrue(helper, golemSpawn != null && golemSpawn.getInfo().contains("\"golem_spawned\":\"achieved\""),
+                assertTrue(helper, golemSpawn != null && infoJson(golemSpawn.getInfo()).contains("\"golem_spawned\":\"achieved\""),
                     "golem_spawned milestone missing: " + (golemSpawn == null ? "no step" : golemSpawn.getInfo()));
                 // 30 伤害后 70 生命，铁锭治疗 +25。
                 assertEquals(helper, 95.0F, healthAfterHeal.get(), "iron ingot did not heal the golem by 25");
                 StepResponse victory = victoryStep.get();
                 assertTrue(helper, victory != null && victory.getTerminated(), "warden kill did not terminate");
-                assertTrue(helper, victory.getInfo().contains("\"success\":true"),
+                assertTrue(helper, infoJson(victory.getInfo()).contains("\"success\":true"),
                     "success info missing: " + (victory == null ? "no step" : victory.getInfo()));
-                assertTrue(helper, victory.getInfo().contains("\"golem_healed_at_least_once\":\"achieved\""),
+                assertTrue(helper, infoJson(victory.getInfo()).contains("\"golem_healed_at_least_once\":\"achieved\""),
                     "golem_healed milestone missing: " + (victory == null ? "no step" : victory.getInfo()));
                 assertTrue(helper, victory.getReward() >= 10.0, "warden_slain reward missing");
                 // nearby_entities 观测必须携带血量字段，供客户端直接读取 Warden 状态。

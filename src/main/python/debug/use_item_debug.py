@@ -16,6 +16,7 @@ from typing import Any, cast
 import uuid
 
 import grpc
+from google.protobuf.json_format import MessageToDict
 from mcrcon import MCRcon  # type: ignore[import-untyped]
 
 from gymcraft.client import GymCraftEnv, make_step_request, single_action, unpack_observation
@@ -110,7 +111,7 @@ class UseItemE2E:
                   "description": response.observation.header.last_action_description,
                   "elapsed_seconds": round(time.monotonic() - started, 3),
                   "elapsed_game_ticks": response.observation.header.game_tick - tick_before,
-                  "info": json.loads(response.info)}
+                  "info": MessageToDict(response.info)}
         self.steps.append(result)
         self.require(result["status"] == expected, str(result))
         return result

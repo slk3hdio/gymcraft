@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -75,12 +76,9 @@ def _format_last_actions(observation: Observation) -> list[str]:
     return lines
 
 
-def _decode_info(raw_info: str) -> dict[str, Any]:
-    """把底层 JSON info 转为字典；info 仅用于调试与批次摘要，非对象 JSON 直接拒绝。"""
-    decoded = json.loads(raw_info) if raw_info else {}
-    if not isinstance(decoded, dict):
-        raise ValueError("Environment info must be a JSON object")
-    return decoded
+def _decode_info(raw_info: Mapping[str, Any]) -> dict[str, Any]:
+    """把底层 info 规整为字典（Struct 解包结果即字典）；info 仅用于调试与批次摘要。"""
+    return dict(raw_info)
 
 
 @_SERVER.tool(

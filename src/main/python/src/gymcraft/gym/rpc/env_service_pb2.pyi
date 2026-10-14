@@ -1,3 +1,4 @@
+from google.protobuf import struct_pb2 as _struct_pb2
 from gymcraft.gym.action import action_pb2 as _action_pb2
 from gymcraft.gym.observation import observation_pb2 as _observation_pb2
 from gymcraft.gym.space import space_spec_pb2 as _space_spec_pb2
@@ -24,10 +25,10 @@ class ConnectResponse(_message.Message):
     OBSERVATION_SPACE_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     entity_uuid: str
-    metadata: str
+    metadata: _struct_pb2.Struct
     action_space: _space_spec_pb2.ProtoComponentSpaceSet
     observation_space: _space_spec_pb2.ProtoComponentSpaceSet
-    def __init__(self, session_id: _Optional[str] = ..., entity_uuid: _Optional[str] = ..., metadata: _Optional[str] = ..., action_space: _Optional[_Union[_space_spec_pb2.ProtoComponentSpaceSet, _Mapping]] = ..., observation_space: _Optional[_Union[_space_spec_pb2.ProtoComponentSpaceSet, _Mapping]] = ...) -> None: ...
+    def __init__(self, session_id: _Optional[str] = ..., entity_uuid: _Optional[str] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., action_space: _Optional[_Union[_space_spec_pb2.ProtoComponentSpaceSet, _Mapping]] = ..., observation_space: _Optional[_Union[_space_spec_pb2.ProtoComponentSpaceSet, _Mapping]] = ...) -> None: ...
 
 class ResetRequest(_message.Message):
     __slots__ = ("session_id", "seed", "options")
@@ -36,16 +37,16 @@ class ResetRequest(_message.Message):
     OPTIONS_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     seed: int
-    options: str
-    def __init__(self, session_id: _Optional[str] = ..., seed: _Optional[int] = ..., options: _Optional[str] = ...) -> None: ...
+    options: _struct_pb2.Struct
+    def __init__(self, session_id: _Optional[str] = ..., seed: _Optional[int] = ..., options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class ResetResponse(_message.Message):
     __slots__ = ("observation", "info")
     OBSERVATION_FIELD_NUMBER: _ClassVar[int]
     INFO_FIELD_NUMBER: _ClassVar[int]
     observation: _observation_pb2.ProtoMcObservation
-    info: str
-    def __init__(self, observation: _Optional[_Union[_observation_pb2.ProtoMcObservation, _Mapping]] = ..., info: _Optional[str] = ...) -> None: ...
+    info: _struct_pb2.Struct
+    def __init__(self, observation: _Optional[_Union[_observation_pb2.ProtoMcObservation, _Mapping]] = ..., info: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class StepRequest(_message.Message):
     __slots__ = ("session_id", "actions", "timeout_seconds")
@@ -68,8 +69,8 @@ class StepResponse(_message.Message):
     reward: float
     terminated: bool
     truncated: bool
-    info: str
-    def __init__(self, observation: _Optional[_Union[_observation_pb2.ProtoMcObservation, _Mapping]] = ..., reward: _Optional[float] = ..., terminated: _Optional[bool] = ..., truncated: _Optional[bool] = ..., info: _Optional[str] = ...) -> None: ...
+    info: _struct_pb2.Struct
+    def __init__(self, observation: _Optional[_Union[_observation_pb2.ProtoMcObservation, _Mapping]] = ..., reward: _Optional[float] = ..., terminated: _Optional[bool] = ..., truncated: _Optional[bool] = ..., info: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class CloseSessionRequest(_message.Message):
     __slots__ = ("session_id",)

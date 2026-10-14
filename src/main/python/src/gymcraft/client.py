@@ -7,6 +7,8 @@ from typing import Any, Tuple, TypeVar, cast
 import grpc
 import gymnasium as gym
 from google.protobuf import message
+from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.struct_pb2 import Struct
 
 from gymcraft.gym.action.action_pb2 import ProtoMcAction
 from gymcraft.gym.observation.components.chat_pb2 import ProtoRecentChat
@@ -75,25 +77,25 @@ class GymCraftEnv(gym.Env[Any, Any]):
         response = self.stub.Connect(ConnectRequest(entity_uuid=entity_uuid))
         self.session_id = response.session_id
         self.entity_uuid = response.entity_uuid
-        self.remote_metadata = json.loads(response.metadata)
+        self.remote_metadata = MessageToDict(response.metadata)
         # 动作/观测空间为结构化 proto 消息（ProtoComponentSpaceSet），按组件声明顺序排列。
         self.action_space_spec: ProtoComponentSpaceSet = response.action_space
         self.observation_space_spec: ProtoComponentSpaceSet = response.observation_space
 
-    # gymnasium 约定 info 为 dict，本环境按 proto 直接透传 info 的 JSON 字符串。
-    def reset(self, *, seed: int | None = None, options: Mapping[str, Any] | None = None) -> Tuple[Observation, str]:  # type: ignore[override]  # noqa: E501
+    # info 以 protobuf Struct 传输，客户端直接解包为 dict（gymnasium 约定）。
+    def reset(self, *, seed: int | None = None, options: Mapping[str, Any] | None = None) -> Tuple[Observation, dict[str, Any]]:  # noqa: E501
         super().reset(seed=seed)
         request = ResetRequest(session_id=self.session_id)
         if seed is not None:
             request.seed = seed
-        request.options = json.dumps(options or {})
+        ParseDict(dict(options or {}), request.options)
 
         response = self.stub.Reset(request)
         assert isinstance(response, ResetResponse)
-        return unpack_observation(response.observation), response.info
+        return unpack_observation(response.observation), MessageToDict(response.info)
 
-    # gymnasium 约定 info 为 dict，本环境按 proto 直接透传 info 的 JSON 字符串。
-    def step(self, action: ActionBatch) -> Tuple[Observation, float, bool, bool, str]:  # type: ignore[override]  # noqa: E501
+    # info 以 protobuf Struct 传输，客户端直接解包为 dict（gymnasium 约定）。
+    def step(self, action: ActionBatch) -> Tuple[Observation, float, bool, bool, dict[str, Any]]:  # noqa: E501
         request = make_step_request(self.session_id, action)
         response = self.stub.Step(request)
         assert isinstance(response, StepResponse)
@@ -102,7 +104,7 @@ class GymCraftEnv(gym.Env[Any, Any]):
             response.reward,
             response.terminated,
             response.truncated,
-            response.info,
+            MessageToDict(response.info),
         )
 
     def close(self) -> None:

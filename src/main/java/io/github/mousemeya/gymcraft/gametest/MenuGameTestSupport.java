@@ -2,6 +2,8 @@ package io.github.mousemeya.gymcraft.gametest;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
+
+import com.google.protobuf.Struct;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.network.Filterable;
@@ -17,6 +19,7 @@ import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.entity.LecternBlockEntity;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
+import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
 import io.github.mousemeya.gymcraft.gym.action.component.ClickMenuButtonController;
 import io.github.mousemeya.gymcraft.gym.action.component.CloseMenuController;
 import io.github.mousemeya.gymcraft.gym.action.component.MoveMenuItemController;
@@ -52,6 +55,20 @@ public final class MenuGameTestSupport {
         if (!java.util.Objects.equals(expected, actual)) {
             helper.fail(message + " (expected=" + expected + " actual=" + actual + ")");
         }
+    }
+
+    /**
+     * 将 {@link Struct} 形式的 info 转回紧凑 JSON 字符串，供 contains 断言使用。
+     * <p>
+     * 数字字段经 {@code Double} 往返会带小数尾（如 {@code "total_count":3.0}），
+     * 现有断言均为前缀子串匹配，不受影响。
+     * </p>
+     *
+     * @param info step/reset 响应中的 info Struct
+     * @return 紧凑 JSON 字符串
+     */
+    public static String infoJson(Struct info) {
+        return ProtoJson.toJson(ProtoJson.fromStruct(info));
     }
 
     /** 生成一个无自主 AI 的测试 Mob（带 3x3 石头地板，避免掉落/游荡干扰）。 */

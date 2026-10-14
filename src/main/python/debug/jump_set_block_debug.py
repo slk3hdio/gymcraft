@@ -9,7 +9,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import math
 from typing import Any, cast
 
@@ -51,8 +50,7 @@ def step_and_report(env: GymCraftEnv, label: str, action: ActionBatch) -> Any:
     返回:
         该动作返回的观测；环境终止时抛出异常。
     """
-    obs, reward, terminated, truncated, raw_info = env.step(action)
-    info = json.loads(raw_info)
+    obs, reward, terminated, truncated, info = env.step(action)
     state = self_state(obs)
     print(
         f"{label}: pos=({state.x:.3f}, {state.y:.3f}, {state.z:.3f}) "
@@ -142,8 +140,8 @@ def main() -> None:
         if ACTION_SET_BLOCK not in action_keys:
             raise RuntimeError(f"remote env does not expose {ACTION_SET_BLOCK}")
 
-        obs, raw_reset_info = env.reset(options={"disable_vanilla_ai": True})
-        print(f"reset info={json.loads(raw_reset_info)}")
+        obs, reset_info = env.reset(options={"disable_vanilla_ai": True})
+        print(f"reset info={reset_info}")
         placed_count = 0
         while True:
             obs = wait_for_ground(env, obs, args.max_wait_ticks)

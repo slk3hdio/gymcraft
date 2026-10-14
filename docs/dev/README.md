@@ -144,7 +144,8 @@ noop 推进一个 tick，单动作正常执行，多动作批次则在执行任�
 | `Step` | 提交动作，返回观测、奖励、terminated、truncated 和 info |
 | `CloseSession` | 释放独占会话 |
 
-动作和观测使用 protobuf；`options`、`metadata` 与 `info` 使用 JSON 字符串。
+动作和观测使用 protobuf；`options`、`metadata` 与 `info` 使用 `google.protobuf.Struct`
+（`map<string, Value>`），客户端直接得到嵌套键值字典，无需 JSON 字符串二次编解码。
 实体在 RUNNING 动作期间死亡时，当前 `Step` 会立即返回 `terminated=true` 和 `entity died`；
 实体在动作间死亡时，则由下一次 `Step` 返回同一终态。两种情况都不会把正常 episode 终态
 映射为 gRPC `FAILED_PRECONDITION`。
