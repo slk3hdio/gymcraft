@@ -1,6 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.space;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -118,11 +119,7 @@ public final class MessageSpace<T extends Message> implements McSpace<T> {
             if (field.hasPresence() && !message.hasField(field)) {
                 continue;
             }
-            FieldConstraint constraint = this.constraints.get(field.getName());
-            if (constraint == null) {
-                constraint = inferredDefault(field);
-            }
-            if (!constraint.validateValue(message.getField(field))) {
+            if (!this.resolve(field).validateValue(message.getField(field))) {
                 return false;
             }
         }
@@ -133,18 +130,62 @@ public final class MessageSpace<T extends Message> implements McSpace<T> {
     public ProtoSpaceSpec spec() {
         ProtoSpaceSpec.Builder spec = ProtoSpaceSpec.newBuilder().setMessageType(this.descriptor.getFullName());
         for (FieldDescriptor field : this.descriptor.getFields()) {
-            FieldConstraint constraint = this.constraints.get(field.getName());
-            if (constraint == null) {
-                constraint = inferredDefault(field);
-            }
             spec.addFields(ProtoFieldEntry.newBuilder()
                 .setName(field.getName())
-                .setSpec(toSpec(constraint)));
+                .setSpec(toSpec(this.resolve(field))));
         }
         for (OneofDescriptor oneof : this.requiredOneofs) {
             spec.addRequiredOneofs(oneof.getName());
         }
         return spec.build();
+    }
+
+    /**
+     * 获取消息内各字段的约束目录（即各组成部分的合法值范围）。
+     * <p>
+     * 覆盖 Descriptor 的全部字段：显式声明的返回声明约束，其余按 descriptor 推导默认约束
+     * （与 {@link #spec()} 输出一致）；嵌套空间不展开，需要时经
+     * {@link FieldConstraint.Nested#space()} 递归查询。每次调用重建映射，适合构造期
+     * 或低频查询，热路径请自行缓存。
+     * </p>
+     *
+     * @return 字段名 → 约束的有序映射（按 Descriptor 字段声明顺序，不可变）
+     */
+    @Override
+    public Map<String, FieldConstraint> constraints() {
+        Map<String, FieldConstraint> result = new LinkedHashMap<>();
+        for (FieldDescriptor field : this.descriptor.getFields()) {
+            result.put(field.getName(), this.resolve(field));
+        }
+        return Collections.unmodifiableMap(result);
+    }
+
+    /**
+     * 获取单个字段的约束。
+     *
+     * @param field 字段名（须存在于本空间的消息类型）
+     * @return 该字段的约束（未显式声明时为按 descriptor 推导的默认约束）
+     * @throws IllegalArgumentException 字段不存在时抛出
+     */
+    @Override
+    public FieldConstraint constraintOf(String field) {
+        FieldDescriptor fd = this.descriptor.findFieldByName(field);
+        if (fd == null) {
+            throw new IllegalArgumentException(
+                "unknown field '" + field + "' on " + this.descriptor.getFullName());
+        }
+        return this.resolve(fd);
+    }
+
+    /**
+     * 解析字段约束：优先取显式声明，否则按 descriptor 推导默认。
+     *
+     * @param field 字段描述符
+     * @return 该字段的生效约束
+     */
+    private FieldConstraint resolve(FieldDescriptor field) {
+        FieldConstraint constraint = this.constraints.get(field.getName());
+        return constraint != null ? constraint : inferredDefault(field);
     }
 
     /**
