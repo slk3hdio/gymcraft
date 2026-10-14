@@ -31,10 +31,8 @@ import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 设置方块动作组件 —— 以 /setblock 方式在指定位置放置方块。
@@ -60,12 +58,12 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
     /** setBlock 标志位: UPDATE_NEIGHBORS | UPDATE_CLIENTS, 与常规方块放置一致。 */
     private static final int SET_BLOCK_FLAGS = 3;
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "x", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "y", new BoxSpace(-2048, 2048, 1),
-        "z", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "block", new TextSpace()
-    ));
+    private static final McSpace<ProtoSetBlock> DEFAULT_SPACE = MessageSpace.<ProtoSetBlock>builder(ProtoSetBlock.getDescriptor())
+        .range("x", -30_000_000, 30_000_000)
+        .range("y", -2048, 2048)
+        .range("z", -30_000_000, 30_000_000)
+        .text("block")
+        .build();
 
     /** 当前环境实例的方块交互距离（默认 4.5，可用 {@link #setReachDistance} 覆盖）。 */
     private double reachDistance = DEFAULT_REACH_DISTANCE;
@@ -96,18 +94,8 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoSetBlock> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoSetBlock component) {
-        return component != null && this.space().contains(Map.of(
-            "x", new double[] { component.getX() },
-            "y", new double[] { component.getY() },
-            "z", new double[] { component.getZ() },
-            "block", component.getBlock()
-        ));
     }
 
     @Override

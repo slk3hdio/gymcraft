@@ -12,15 +12,17 @@ import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoBlockMenuTarget;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoEntityMenuTarget;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoOpenMenu;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSelfMenuTarget;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
 import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
 import io.github.mousemeya.gymcraft.gym.menu.MenuTypeUtil;
 import io.github.mousemeya.gymcraft.gym.menu.session.OpenMenuTarget;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 打开菜单动作组件 —— 为 Agent 打开指定目标的逻辑菜单会话。
@@ -33,12 +35,18 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class OpenMenuController extends AbstractActionComponentController<ProtoOpenMenu> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "x", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "y", new BoxSpace(-2048, 2048, 1),
-        "z", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
-    ));
+    private static final McSpace<ProtoOpenMenu> DEFAULT_SPACE = MessageSpace.<ProtoOpenMenu>builder(ProtoOpenMenu.getDescriptor())
+        .message("block", MessageSpace.<ProtoBlockMenuTarget>builder(ProtoBlockMenuTarget.getDescriptor())
+            .range("x", -30_000_000, 30_000_000)
+            .range("y", -2048, 2048)
+            .range("z", -30_000_000, 30_000_000)
+            .build())
+        .message("entity", MessageSpace.<ProtoEntityMenuTarget>builder(ProtoEntityMenuTarget.getDescriptor())
+            .range("entity_id", 0, Integer.MAX_VALUE)
+            .build())
+        .message("self", MessageSpace.of(ProtoSelfMenuTarget.getDescriptor()))
+        .requiredOneof("target")
+        .build();
 
     public OpenMenuController(Mob mob) {
         super(mob);
@@ -50,37 +58,8 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoOpenMenu> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoOpenMenu component) {
-        if (component == null) {
-            return false;
-        }
-        // oneof 未使用的字段按 0 校验（恒在界内），与 SetAttackTargetController 的双字段风格一致
-        return switch (component.getTargetCase()) {
-            case BLOCK -> this.space().contains(Map.of(
-                "x", new double[] { component.getBlock().getX() },
-                "y", new double[] { component.getBlock().getY() },
-                "z", new double[] { component.getBlock().getZ() },
-                "entity_id", new double[] { 0 }
-            ));
-            case ENTITY -> this.space().contains(Map.of(
-                "x", new double[] { 0 },
-                "y", new double[] { 0 },
-                "z", new double[] { 0 },
-                "entity_id", new double[] { component.getEntity().getEntityId() }
-            ));
-            case SELF -> this.space().contains(Map.of(
-                "x", new double[] { 0 },
-                "y", new double[] { 0 },
-                "z", new double[] { 0 },
-                "entity_id", new double[] { 0 }
-            ));
-            case TARGET_NOT_SET -> false;
-        };
     }
 
     @Override

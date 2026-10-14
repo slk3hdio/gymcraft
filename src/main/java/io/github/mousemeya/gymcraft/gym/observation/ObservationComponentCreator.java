@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.observation;
 
-import java.util.Map;
-
 import com.google.protobuf.Message;
 import net.minecraft.world.entity.Mob;
 
@@ -24,20 +22,29 @@ public interface ObservationComponentCreator<T extends Message> {
     /** @return 对应的 Protobuf 消息类 */
     Class<T> protoType();
 
-    /** @return 该观测数据的 Gymnasium 风格空间定义 */
-    McSpace<Map<String, Object>> defaultSpace();
+    /**
+     * @return 该观测数据的空间定义
+     * <strong>注意：</strong> 空间的 Descriptor 必须与本组件的 proto 消息类型一致，
+     * 字段约束名必须和 proto 原始字段名一致。
+     */
+    McSpace<T> defaultSpace();
 
     /** @return 该观测在当前环境实例中使用的观测空间（初始为 {@link #defaultSpace()}，可被环境级覆盖） */
-    McSpace<Map<String, Object>> space();
+    McSpace<T> space();
 
-    /** 设置该观测在当前环境实例中使用的观测空间。 */
-    void setSpace(McSpace<Map<String, Object>> space);
+    /** 设置该观测在当前环境实例中使用的观测空间（descriptor 必须与组件 proto 类型一致）。 */
+    void setSpace(McSpace<T> space);
 
     /** @return 观测数据的默认样本 */
     T sample();
 
-    /** @return 给定观测值是否通过该实例观测空间的合法性校验 */
-    boolean contains(T component);
+    /**
+     * 校验给定观测值是否通过该实例观测空间的合法性校验。
+     * 默认实现委托给当前空间（Descriptor 类型识别 + 字段约束校验）。
+     */
+    default boolean contains(T component) {
+        return this.space().contains(component);
+    }
 
     /** 从当前 Mob 的游戏状态构建实时观测数据。 */
     T create(Mob mob);

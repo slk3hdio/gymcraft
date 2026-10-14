@@ -17,10 +17,9 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUpdateInterestingBlocks;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.FieldConstraint;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 /**
@@ -29,10 +28,10 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  */
 public class UpdateInterestingBlocksController extends AbstractActionComponentController<ProtoUpdateInterestingBlocks> {
     /** 动作允许任意长度的方块 ID 列表，实际集合由注册表中的方块类型自然限定。 */
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "add_block_ids", new SequenceSpace<>(new TextSpace(), Integer.MAX_VALUE),
-        "remove_block_ids", new SequenceSpace<>(new TextSpace(), Integer.MAX_VALUE)
-    ));
+    private static final McSpace<ProtoUpdateInterestingBlocks> DEFAULT_SPACE = MessageSpace.<ProtoUpdateInterestingBlocks>builder(ProtoUpdateInterestingBlocks.getDescriptor())
+        .repeated("add_block_ids", new FieldConstraint.Text(null), Integer.MAX_VALUE)
+        .repeated("remove_block_ids", new FieldConstraint.Text(null), Integer.MAX_VALUE)
+        .build();
 
     /** 创建绑定到指定 Mob 的更新控制器。 */
     public UpdateInterestingBlocksController(Mob mob) {
@@ -47,17 +46,8 @@ public class UpdateInterestingBlocksController extends AbstractActionComponentCo
 
     /** 返回批量增删字段的默认动作空间。 */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoUpdateInterestingBlocks> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    /** 判断消息结构是否落在当前动作空间内。 */
-    @Override
-    public boolean contains(ProtoUpdateInterestingBlocks component) {
-        return component != null && this.space().contains(Map.of(
-            "add_block_ids", component.getAddBlockIdsList(),
-            "remove_block_ids", component.getRemoveBlockIdsList()
-        ));
     }
 
     /** 校验整批输入并原子更新 Mob 的兴趣集合。 */

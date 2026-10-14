@@ -25,9 +25,8 @@ import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuAdapter;
 import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuAdapters;
 import io.github.mousemeya.gymcraft.gym.menu.adapter.MenuButtonView;
 import io.github.mousemeya.gymcraft.gym.menu.MenuTypeUtil;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 菜单按钮动作组件 —— 经 {@link MenuAdapter} 执行当前会话菜单的按钮（计划 1.4/11 节）。
@@ -45,10 +44,10 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 public class ClickMenuButtonController extends AbstractActionComponentController<ProtoClickMenuButton> {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "session_id", new BoxSpace(0, Long.MAX_VALUE, 1),
-        "button_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
-    ));
+    private static final McSpace<ProtoClickMenuButton> DEFAULT_SPACE = MessageSpace.<ProtoClickMenuButton>builder(ProtoClickMenuButton.getDescriptor())
+        .range("session_id", 0, Long.MAX_VALUE)
+        .range("button_id", 0, Integer.MAX_VALUE)
+        .build();
 
     public ClickMenuButtonController(Mob mob) {
         super(mob);
@@ -60,16 +59,8 @@ public class ClickMenuButtonController extends AbstractActionComponentController
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoClickMenuButton> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoClickMenuButton component) {
-        return component != null && this.space().contains(Map.of(
-            "session_id", new double[] { component.getSessionId() },
-            "button_id", new double[] { component.getButtonId() }
-        ));
     }
 
     @Override

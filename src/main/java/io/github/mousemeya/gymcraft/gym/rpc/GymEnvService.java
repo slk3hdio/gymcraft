@@ -58,8 +58,9 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
      * <ul>
      *   <li>{@code session_id} —— 后续 RPC 调用需携带的会话标识</li>
      *   <li>{@code metadata} —— 环境元数据（如环境类型、绑定实体等）</li>
-     *   <li>{@code action_space_json} / {@code observation_space_json} —— 动作/观测空间描述（JSON），
-     *       客户端据此构建 Gymnasium Space 对象</li>
+     *   <li>{@code action_space} / {@code observation_space} —— 动作/观测空间描述
+     *       （结构化 proto，{@code gymcraft.gym.space.ProtoComponentSpaceSet}）；
+     *       客户端据此进行动作参数的本地预检</li>
      * </ul>
      * </p>
      *
@@ -85,8 +86,8 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
                         .setSessionId(session.id())
                         .setEntityUuid(entityUuid.toString())
                         .setMetadata(ProtoJson.toJson(env.getMetadata()))
-                        .setActionSpaceJson(ProtoJson.toJson(env.getActionSpace().serialize()))
-                        .setObservationSpaceJson(ProtoJson.toJson(env.getObservationSpace().serialize()))
+                        .setActionSpace(env.getActionSpace().toSpec())
+                        .setObservationSpace(env.getObservationSpace().toSpec())
                         .build());
                 responseObserver.onCompleted();
             } catch (IllegalStateException e) {

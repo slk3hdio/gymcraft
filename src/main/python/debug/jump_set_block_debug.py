@@ -134,7 +134,7 @@ def main() -> None:
 
     env = GymCraftEnv(args.entity_uuid, address=args.address)
     try:
-        action_keys = set(env.action_space_spec.get("spaces", {}))
+        action_keys = {component.component_id for component in env.action_space_spec.components}
         if ACTION_JUMP not in action_keys:
             raise RuntimeError(f"remote env does not expose {ACTION_JUMP}")
         if ACTION_NOOP not in action_keys:

@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -40,7 +41,7 @@ import io.github.mousemeya.gymcraft.gym.observation.component.WorldStateObservat
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoRecentChat;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoWorldState;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.proto.ProtoFieldEntry;
 
 /**
  * gymcraft:chat 与 gymcraft:world 观测组件测试 —— 验证广播捕获、私发过滤、窗口裁剪、
@@ -248,11 +249,13 @@ public final class ChatObservationGameTests {
                     (s.getX() >> 4) == (absPos.getX() >> 4) && (s.getZ() >> 4) == (absPos.getZ() >> 4));
                 assertTrue(helper, !ownChunkHasStructure,
                     "unexpected nearby structures in own chunk: " + state.getStructuresList());
-                // 观测空间：新增字段必须进入默认 DictSpace，否则空间校验会拒绝观测
-                var spaceKeys = ((DictSpace) new WorldStateObservationCreator().space()).spaces().keySet();
-                assertTrue(helper, spaceKeys.contains("biome"), "biome missing from world state default space");
-                assertTrue(helper, spaceKeys.contains("structure"), "structure missing from world state default space");
-                assertTrue(helper, spaceKeys.contains("structures"), "structures missing from world state default space");
+                // 观测空间：新增字段必须进入默认空间的 spec，否则空间校验会拒绝观测
+                var spaceFields = new WorldStateObservationCreator().space().spec().getFieldsList().stream()
+                    .map(ProtoFieldEntry::getName)
+                    .collect(Collectors.toSet());
+                assertTrue(helper, spaceFields.contains("biome"), "biome missing from world state default space");
+                assertTrue(helper, spaceFields.contains("structure"), "structure missing from world state default space");
+                assertTrue(helper, spaceFields.contains("structures"), "structures missing from world state default space");
                 helper.succeed();
             } finally {
                 env.close();

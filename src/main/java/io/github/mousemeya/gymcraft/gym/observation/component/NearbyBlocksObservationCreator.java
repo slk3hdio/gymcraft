@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Map;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Mob;
@@ -10,10 +8,9 @@ import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponent
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoBlockView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyBlocks;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.FieldConstraint;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 附近方块观测组件 —— 从 Mob 视点所在连通空间查找周围可见表面方块。
@@ -23,7 +20,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * 中大量扫描天空空气。
  * </p>
  * <p>
- * 默认值可通过环境构造期 setter 覆盖（调用后同步重建观测空间）：
+ * 默认值可通过环境构造期 setter 覆盖（数量上限 setter 会同步重建观测空间）：
  * {@link #setRadius(int)}（搜索半径，默认 8）、{@link #setMaxBlocks(int)}
  * （返回方块数上限，默认 128）、{@link #setMaxVisited(int)}（遍历节点数上限，默认 256）。
  * </p>
@@ -52,16 +49,11 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoNearbyBlocks> defaultSpace() {
         return buildSpace(DEFAULT_MAX_BLOCKS);
     }
 
-    @Override
-    public boolean contains(ProtoNearbyBlocks component) {
-        return component != null && component.getBlocksCount() <= this.maxBlocks;
-    }
-
-    /** 设置搜索半径（必须为正数），并重建观测空间。 */
+    /** 设置搜索半径（必须为正数；不影响观测空间）。 */
     public void setRadius(int radius) {
         if (radius <= 0) {
             throw new IllegalArgumentException("radius must be positive, got: " + radius);
@@ -102,10 +94,11 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
         return builder.build();
     }
 
-    private static McSpace<Map<String, Object>> buildSpace(int maxBlocks) {
-        return new DictSpace(Map.of(
-            "blocks", new SequenceSpace<>(new TextSpace(), maxBlocks)
-        )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    /** 构造与指定结果上限匹配的观测空间（数量上限落在 blocks 的长度约束上）。 */
+    private static MessageSpace<ProtoNearbyBlocks> buildSpace(int maxBlocks) {
+        return MessageSpace.<ProtoNearbyBlocks>builder(ProtoNearbyBlocks.getDescriptor())
+            .repeated("blocks", new FieldConstraint.Nested(MessageSpace.of(ProtoBlockView.getDescriptor())), maxBlocks)
+            .build();
     }
 
     /**

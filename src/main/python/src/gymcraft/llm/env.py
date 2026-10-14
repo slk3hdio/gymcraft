@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from gymcraft.gym.space.space_spec_pb2 import ProtoComponentSpaceSet
 from gymcraft.llm.actions import ActionDslParser, ActionParseError, encode_action_batch
 from gymcraft.llm.context import ContextAssembler, ConversationHistory
 from gymcraft.llm.observations import ObservationFormatConfig, ObservationTextFormatter, format_transition_result
@@ -18,7 +19,10 @@ from gymcraft.type_info import ActionBatch, Observation
 class GymCraftEnvLike(Protocol):
     """描述 LLM wrapper 对底层 GymCraft 环境的最小依赖。"""
 
-    action_space_spec: dict[str, Any]
+    @property
+    def action_space_spec(self) -> ProtoComponentSpaceSet | None:
+        """Connect 返回的结构化动作空间；``None`` 表示空间未知（开放全部动作）。"""
+        ...
 
     def reset(
         self,

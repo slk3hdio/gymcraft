@@ -5,7 +5,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.mojang.logging.LogUtils;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.ComponentSpaceSet;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Mob;
@@ -90,31 +90,45 @@ public class ActionDispatcher {
         }
     }
 
-    /** @return 以组件 ID 为键的可选动作空间目录 */
-    public McSpace<Map<String, Object>> space() {
+    /** @return 以组件 ID 为键的有序动作空间目录 */
+    public ComponentSpaceSet space() {
         var spaces = new LinkedHashMap<String, McSpace<?>>();
         for (var entry : this.components.entrySet()) {
             spaces.put(entry.getKey(), entry.getValue().space());
         }
-        return new DictSpace(spaces);
+        return new ComponentSpaceSet(spaces);
     }
 
-    /** @param componentId 组件 ID @param space 新空间 */
-    public void setComponentSpace(String componentId, McSpace<Map<String, Object>> space) {
+    /**
+     * 设置指定组件的参数空间（descriptor 与组件 proto 类型不一致时由 controller 抛错）。
+     *
+     * @param componentId 组件 ID
+     * @param space 新空间
+     */
+    public void setComponentSpace(String componentId, McSpace<? extends Message> space) {
         ActionComponentController<?> controller = this.components.get(componentId);
         if (controller == null) {
             throw new IllegalArgumentException("Unknown action component: " + componentId);
         }
-        controller.setSpace(space);
+        setSpaceUnchecked(controller, space);
     }
 
     /** @param componentId 组件 ID @return 组件空间 */
-    public McSpace<Map<String, Object>> getComponentSpace(String componentId) {
+    public McSpace<? extends Message> getComponentSpace(String componentId) {
         ActionComponentController<?> controller = this.components.get(componentId);
         if (controller == null) {
             throw new IllegalArgumentException("Unknown action component: " + componentId);
         }
         return controller.space();
+    }
+
+    /** 通配捕获桥接：descriptor 一致性由 {@code controller.setSpace} 校验。 */
+    @SuppressWarnings("unchecked")
+    private static <T extends Message> void setSpaceUnchecked(
+        ActionComponentController<T> controller,
+        McSpace<? extends Message> space
+    ) {
+        controller.setSpace((McSpace<T>) space);
     }
 
     /**

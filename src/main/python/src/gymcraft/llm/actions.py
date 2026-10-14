@@ -6,11 +6,16 @@ import math
 import re
 import shlex
 import uuid
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, cast
 
 from google.protobuf.message import Message as ProtoMessage
 
+from gymcraft.gym.space.space_spec_pb2 import (
+    ProtoComponentSpaceSet,
+    ProtoFieldSpec,
+    ProtoSpaceSpec,
+)
 from gymcraft.gym.action.components import (
     attack_once_pb2,
     break_block_pb2,
@@ -105,15 +110,19 @@ class ActionDslParser:
 
     def __init__(
         self,
-        action_space_spec: Mapping[str, Any] | None = None,
+        action_space_spec: ProtoComponentSpaceSet | None = None,
         *,
         default_timeout_seconds: float = 10.0,
         max_timeout_seconds: float = 60.0,
     ) -> None:
-        """绑定可选的实时动作空间，并设置动作批次超时边界。"""
+        """绑定可选的实时动作空间，并设置动作批次超时边界。
+
+        ``action_space_spec`` 为 ``None`` 表示空间未知（离线用法），开放全部
+        已知组件；传入 ``ProtoComponentSpaceSet`` 时按组件声明裁剪可用动作并做字段级预检。
+        """
         if default_timeout_seconds <= 0 or default_timeout_seconds > max_timeout_seconds:
             raise ValueError("default_timeout_seconds must be positive and no greater than max_timeout_seconds")
-        self.action_space_spec = action_space_spec or {}
+        self.action_space_spec = action_space_spec
         self.default_timeout_seconds = default_timeout_seconds
         self.max_timeout_seconds = max_timeout_seconds
         self._builders: dict[str, Callable[[Sequence[str], str, int], ParsedAction]] = {
@@ -261,10 +270,10 @@ class ActionDslParser:
         return set(self._available_component_sequence())
 
     def _available_component_sequence(self) -> list[str]:
-        """保留 Connect 动作空间中组件的声明顺序。"""
-        spaces = self.action_space_spec.get("spaces")
-        if isinstance(spaces, Mapping):
-            return [str(key) for key in spaces]
+        """保留 Connect 动作空间中组件的声明顺序；无空间描述时开放全部已知组件。"""
+        spec = self.action_space_spec
+        if spec is not None:
+            return [component.component_id for component in spec.components]
         return [self._component_for_command(name) for name in self._builders]
 
     def _ensure_available(self, component_id: str, line_number: int) -> None:
@@ -273,68 +282,62 @@ class ActionDslParser:
             raise ActionParseError(f"The current environment does not support {component_id}", line_number)
 
     def _validate_space(self, action: ParsedAction, line_number: int) -> None:
-        """根据 Connect 返回的实时空间校验数值边界。"""
-        root_spaces = self.action_space_spec.get("spaces")
-        if not isinstance(root_spaces, Mapping):
+        """根据 Connect 返回的结构化空间对动作负载做预检（与服务端校验语义一致）。"""
+        spec = self.action_space_spec
+        if spec is None:
             return
-        component_space = root_spaces.get(action.component_id)
-        if not isinstance(component_space, Mapping):
+        component_space = next(
+            (component.space for component in spec.components if component.component_id == action.component_id),
+            None,
+        )
+        if component_space is None:
             return
-        field_spaces = component_space.get("spaces")
-        if not isinstance(field_spaces, Mapping):
-            return
-        for field, value in self._component_values(action).items():
-            field_space = field_spaces.get(field)
-            if not isinstance(field_space, Mapping) or field_space.get("type") != "box":
+        self._validate_message(action.payload, component_space, line_number)
+
+    def _validate_message(self, payload: ProtoMessage, space: ProtoSpaceSpec, line_number: int, prefix: str = "") -> None:
+        """逐字段对照 ``ProtoSpaceSpec`` 校验消息。
+
+        与服务端 ``MessageSpace`` 语义一致：有 presence 的字段（proto3 optional /
+        oneof 分支 / 消息字段）未设置时跳过；``required_oneofs`` 声明的组必须设置分支。
+        """
+        descriptor = payload.DESCRIPTOR
+        for oneof_name in space.required_oneofs:
+            if payload.WhichOneof(oneof_name) is None:
+                raise ActionParseError(f"oneof {prefix}{oneof_name} must be set", line_number)
+        for entry in space.fields:
+            field_descriptor = descriptor.fields_by_name.get(entry.name)
+            if field_descriptor is None:
                 continue
-            low = field_space.get("low")
-            high = field_space.get("high")
-            if (
-                isinstance(low, list)
-                and isinstance(high, list)
-                and low
-                and high
-                and isinstance(value, (int, float))
-                and not isinstance(value, bool)
-                and not (float(low[0]) <= float(value) <= float(high[0]))
-            ):
+            if field_descriptor.has_presence and not payload.HasField(entry.name):
+                continue
+            self._validate_value(prefix + entry.name, getattr(payload, entry.name), entry.spec, line_number)
+
+    def _validate_value(self, path: str, value: Any, spec: ProtoFieldSpec, line_number: int) -> None:
+        """按字段约束种类校验单个值；嵌套消息递归、repeated 查长度上限并逐元素校验。"""
+        kind = spec.WhichOneof("kind")
+        if kind == "range":
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                return
+            low, high = spec.range.low, spec.range.high
+            if not math.isfinite(value) or not (low <= value <= high):
+                raise ActionParseError(f"{path}={value} is outside [{low:g}, {high:g}]", line_number)
+        elif kind == "text":
+            pattern = spec.text.pattern
+            if pattern and re.fullmatch(pattern, str(value)) is None:
+                raise ActionParseError(f"{path}={value!r} does not match pattern {pattern!r}", line_number)
+        elif kind == "repeated":
+            if spec.repeated.HasField("max_length") and len(value) > spec.repeated.max_length:
                 raise ActionParseError(
-                    f"{field}={value} is outside [{low[0]}, {high[0]}]",
+                    f"{path} has {len(value)} elements, exceeding max length {spec.repeated.max_length}",
                     line_number,
                 )
-
-    def _component_values(self, action: ParsedAction) -> dict[str, Any]:
-        """把 oneof 等 protobuf 结构展开成服务端空间使用的字段字典。"""
-        payload = action.payload
-        if action.component_id == ACTION_OPEN_MENU:
-            open_payload = cast(open_menu_pb2.ProtoOpenMenu, payload)
-            target = open_payload.WhichOneof("target")
-            if target == "block":
-                return {"x": open_payload.block.x, "y": open_payload.block.y, "z": open_payload.block.z, "entity_id": 0}
-            if target == "entity":
-                return {"x": 0, "y": 0, "z": 0, "entity_id": open_payload.entity.entity_id}
-            return {"x": 0, "y": 0, "z": 0, "entity_id": 0}
-        if action.component_id == ACTION_LOOK_AT:
-            look_payload = cast(look_at_pb2.ProtoLookAt, payload)
-            target = look_payload.WhichOneof("target")
-            if target == "block":
-                return {"x": look_payload.block.x, "y": look_payload.block.y, "z": look_payload.block.z, "entity_id": 0}
-            if target == "entity":
-                return {"x": 0, "y": 0, "z": 0, "entity_id": look_payload.entity.entity_id}
-            if target == "item":
-                return {"x": 0, "y": 0, "z": 0, "entity_id": look_payload.item.entity_id}
-            return {"x": 0, "y": 0, "z": 0, "entity_id": 0}
-        if action.component_id == ACTION_USE_ITEM:
-            use_payload = cast(use_item_pb2.ProtoUseItem, payload)
-            return {"slot_id": use_payload.slot_id, "x": use_payload.block.x,
-                    "y": use_payload.block.y, "z": use_payload.block.z,
-                    "entity_id": use_payload.entity.entity_id}
-        fields: dict[str, Any] = {}
-        for descriptor, value in payload.ListFields():
-            fields[descriptor.name] = value
-        for descriptor in payload.DESCRIPTOR.fields:
-            fields.setdefault(descriptor.name, getattr(payload, descriptor.name))
-        return fields
+            for index, element in enumerate(value):
+                self._validate_value(f"{path}[{index}]", element, spec.repeated.element, line_number)
+        elif kind == "message":
+            self._validate_message(value, spec.message.space, line_number, prefix=f"{path}.")
+        elif isinstance(value, (int, float)) and not isinstance(value, bool) and not math.isfinite(value):
+            # any / 未声明种类：仅拒绝非有限数值（与服务端 Unconstrained 一致）。
+            raise ActionParseError(f"{path} must be finite", line_number)
 
     def _parse_noop(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
         """解析无参数 noop 命令。"""

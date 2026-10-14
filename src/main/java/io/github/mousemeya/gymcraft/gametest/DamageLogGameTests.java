@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -27,7 +28,7 @@ import io.github.mousemeya.gymcraft.gym.observation.component.HealthLogObservati
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoHealthLog;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.proto.ProtoFieldEntry;
 
 /**
  * gymcraft:health_log 观测组件测试 —— 验证伤害事件写入、增量消费语义、
@@ -125,9 +126,11 @@ public final class DamageLogGameTests {
                 // reset 后：新实体日志归零
                 assertEquals(helper, 0, unpack(afterReset.get()).getDamageRecordsCount(),
                     "reset must clear damage log");
-                // 观测空间：damage_records 字段必须进入默认 DictSpace
-                var spaceKeys = ((DictSpace) new HealthLogObservationCreator().space()).spaces().keySet();
-                assertTrue(helper, spaceKeys.contains("damage_records"),
+                // 观测空间：damage_records 字段必须进入默认空间的 spec
+                var spaceFields = new HealthLogObservationCreator().space().spec().getFieldsList().stream()
+                    .map(ProtoFieldEntry::getName)
+                    .collect(Collectors.toSet());
+                assertTrue(helper, spaceFields.contains("damage_records"),
                     "damage_records missing from health log default space");
                 helper.succeed();
             } finally {

@@ -15,10 +15,8 @@ import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetAttackTarget;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
@@ -30,10 +28,10 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
  * </p>
  */
 public class SetAttackTargetController extends AbstractActionComponentController<ProtoSetAttackTarget> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "target_uuid", new TextSpace(),
-        "target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
-    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private static final McSpace<ProtoSetAttackTarget> DEFAULT_SPACE = MessageSpace.<ProtoSetAttackTarget>builder(ProtoSetAttackTarget.getDescriptor())
+        .text("target_uuid")
+        .range("target_entity_id", 0, Integer.MAX_VALUE)
+        .build();
 
     public SetAttackTargetController(Mob mob) {
         super(mob);
@@ -51,16 +49,20 @@ public class SetAttackTargetController extends AbstractActionComponentController
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoSetAttackTarget> defaultSpace() {
         return DEFAULT_SPACE;
     }
 
+    /**
+     * 在空间校验之上补充 target_uuid 的 UUID 格式检查（空间只能约束文本形态，
+     * 非空时必须可解析为 UUID）。
+     *
+     * @param component 待校验动作
+     * @return 空间通过且 UUID 合法（或为空）时为 true
+     */
     @Override
     public boolean contains(ProtoSetAttackTarget component) {
-        if (component == null || !this.space().contains(Map.of(
-            "target_uuid", component.getTargetUuid(),
-            "target_entity_id", new double[] { component.getTargetEntityId() }
-        ))) {
+        if (!this.space().contains(component)) {
             return false;
         }
         if (component.getTargetUuid().isEmpty()) return true;

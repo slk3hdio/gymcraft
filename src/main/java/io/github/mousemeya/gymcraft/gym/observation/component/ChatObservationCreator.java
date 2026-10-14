@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Map;
-
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.chat.RecentChatLog;
@@ -9,10 +7,9 @@ import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponent
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoChatMessage;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoRecentChat;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.FieldConstraint;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 最近聊天观测组件 —— 返回自上次观测以来聊天栏的新增消息（{@code gymcraft:chat}）。
@@ -47,14 +44,8 @@ public class ChatObservationCreator extends AbstractObservationComponentCreator<
 
     /** 返回默认结果空间。 */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoRecentChat> defaultSpace() {
         return buildSpace(DEFAULT_MAX_MESSAGES);
-    }
-
-    /** 判断结果条数是否落在当前配置的上限内。 */
-    @Override
-    public boolean contains(ProtoRecentChat component) {
-        return component != null && component.getMessagesCount() <= this.maxMessages;
     }
 
     /**
@@ -88,9 +79,11 @@ public class ChatObservationCreator extends AbstractObservationComponentCreator<
         return builder.build();
     }
 
-    /** 构造与指定单次返回上限匹配的观测空间。 */
-    private static McSpace<Map<String, Object>> buildSpace(int maxMessages) {
-        return new DictSpace(Map.of("messages", new SequenceSpace<>(new TextSpace(), maxMessages)));
+    /** 构造与指定单次返回上限匹配的观测空间（条数上限落在 messages 的长度约束上）。 */
+    private static MessageSpace<ProtoRecentChat> buildSpace(int maxMessages) {
+        return MessageSpace.<ProtoRecentChat>builder(ProtoRecentChat.getDescriptor())
+            .repeated("messages", new FieldConstraint.Nested(MessageSpace.of(ProtoChatMessage.getDescriptor())), maxMessages)
+            .build();
     }
 
     /** 观测工厂 —— 为每个环境创建独立配置的生成器。 */

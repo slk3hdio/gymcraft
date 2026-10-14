@@ -80,8 +80,8 @@ def main() -> None:
 
     env = GymCraftEnv(args.entity_uuid, address=args.address)
     try:
-        action_keys = set(env.action_space_spec.get("spaces", {}).keys())
-        observation_keys = set(env.observation_space_spec.get("spaces", {}).keys())
+        action_keys = {component.component_id for component in env.action_space_spec.components}
+        observation_keys = {component.component_id for component in env.observation_space_spec.components}
         print(f"connected entity={args.entity_uuid} address={args.address}")
         print(f"action_keys={sorted(action_keys)}")
         print(f"observation_keys={sorted(observation_keys)}")

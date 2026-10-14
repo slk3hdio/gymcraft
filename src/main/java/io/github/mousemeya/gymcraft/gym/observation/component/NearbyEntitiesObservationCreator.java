@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Map;
-
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -12,10 +10,9 @@ import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponent
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoEntityView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyEntities;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.FieldConstraint;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 附近实体观测组件 —— 扫描 Mob 周围指定半径内的所有 {@link LivingEntity}。
@@ -24,7 +21,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * 使用 AABB 批量查询 {@code level.getEntitiesOfClass()}。
  * </p>
  * <p>
- * 默认值可通过环境构造期 setter 覆盖（调用后同步重建观测空间）：
+ * 默认值可通过环境构造期 setter 覆盖（数量上限 setter 会同步重建观测空间）：
  * {@link #setRadius(int)}（扫描半径，默认 16）、{@link #setMaxEntities(int)}
  * （实体数上限，默认 512）。
  * </p>
@@ -49,13 +46,8 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoNearbyEntities> defaultSpace() {
         return buildSpace(DEFAULT_MAX_ENTITIES);
-    }
-
-    @Override
-    public boolean contains(ProtoNearbyEntities component) {
-        return component != null && component.getEntitiesCount() <= this.maxEntities;
     }
 
     /** 设置扫描半径（必须为正数）。 */
@@ -98,10 +90,11 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
         return builder.build();
     }
 
-    private static McSpace<Map<String, Object>> buildSpace(int maxEntities) {
-        return new DictSpace(Map.of(
-            "entities", new SequenceSpace<>(new TextSpace(), maxEntities)
-        )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    /** 构造与指定实体数上限匹配的观测空间（数量上限落在 entities 的长度约束上）。 */
+    private static MessageSpace<ProtoNearbyEntities> buildSpace(int maxEntities) {
+        return MessageSpace.<ProtoNearbyEntities>builder(ProtoNearbyEntities.getDescriptor())
+            .repeated("entities", new FieldConstraint.Nested(MessageSpace.of(ProtoEntityView.getDescriptor())), maxEntities)
+            .build();
     }
 
     /**

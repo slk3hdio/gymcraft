@@ -26,12 +26,13 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItem;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItemBlockTarget;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItemEntityTarget;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryTransaction;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 /**
@@ -40,13 +41,17 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  * 瞬时交互通过独立玩家桥接，食物药水由 Mob 原版 tick 消费；不执行目标自身交互。
  */
 public final class UseItemController extends AbstractActionComponentController<ProtoUseItem> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "slot_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
-        "x", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "y", new BoxSpace(-2048, 2048, 1),
-        "z", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
-    ));
+    private static final McSpace<ProtoUseItem> DEFAULT_SPACE = MessageSpace.<ProtoUseItem>builder(ProtoUseItem.getDescriptor())
+        .range("slot_id", 0, Integer.MAX_VALUE)
+        .message("block", MessageSpace.<ProtoUseItemBlockTarget>builder(ProtoUseItemBlockTarget.getDescriptor())
+            .range("x", -30_000_000, 30_000_000)
+            .range("y", -2048, 2048)
+            .range("z", -30_000_000, 30_000_000)
+            .build())
+        .message("entity", MessageSpace.<ProtoUseItemEntityTarget>builder(ProtoUseItemEntityTarget.getDescriptor())
+            .range("entity_id", 1, Integer.MAX_VALUE)
+            .build())
+        .build();
     private double blockReachDistance = 4.5;
     private double entityReachDistance = 3.0;
     private ActionState state = ActionState.failed("use item has not started");
@@ -86,23 +91,18 @@ public final class UseItemController extends AbstractActionComponentController<P
     /** @return 对应协议类型 */
     @Override public Class<ProtoUseItem> protoType() { return ProtoUseItem.class; }
 
-    /** @return 扁平化槽号与目标空间 */
-    @Override public McSpace<Map<String, Object>> defaultSpace() { return DEFAULT_SPACE; }
+    /** @return 槽号与 oneof 目标分支的嵌套动作空间 */
+    @Override public McSpace<ProtoUseItem> defaultSpace() { return DEFAULT_SPACE; }
 
     /**
+     * 在空间校验之上补充 slot_id 的 presence 检查（proto3 optional 未设置时空间跳过校验，
+     * 而本动作必须显式指定槽号）；oneof 目标分支未设置时空间自动跳过，缺省即自身使用。
+     *
      * @param action 协议动作
-     * @return 是否显式指定槽号且数值有效
+     * @return 空间通过且 slot_id 已显式设置时为 true
      */
     @Override public boolean contains(ProtoUseItem action) {
-        return action != null && action.hasSlotId()
-            && (!action.hasEntity() || action.getEntity().getEntityId() > 0)
-            && this.space().contains(Map.of(
-                "slot_id", new double[] { action.getSlotId() },
-                "x", new double[] { action.getBlock().getX() },
-                "y", new double[] { action.getBlock().getY() },
-                "z", new double[] { action.getBlock().getZ() },
-                "entity_id", new double[] { action.getEntity().getEntityId() }
-            ));
+        return this.space().contains(action) && action.hasSlotId();
     }
 
     /**

@@ -1,19 +1,14 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Map;
-
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoStructureLocation;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoWorldState;
-import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.FieldConstraint;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 世界状态观测组件 —— 获取 Mob 所在维度的全局环境信息与当前位置信息。
@@ -34,15 +29,15 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
     /** 附近结构数量上限（观测空间约束）。 */
     public static final int MAX_STRUCTURES = 64;
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "day_time", new BoxSpace(0, Long.MAX_VALUE, 1),
-        "raining", new BooleanSpace(),
-        "thundering", new BooleanSpace(),
-        "dimension", new TextSpace(),
-        "biome", new TextSpace(),
-        "structure", new TextSpace(),
-        "structures", new SequenceSpace<>(new TextSpace(), MAX_STRUCTURES)
-    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    /**
+     * 默认观测空间：day_time 非负，附近结构数量不超过 {@link #MAX_STRUCTURES}；
+     * 天气/维度/群系/结构等标量字段按 descriptor 推导默认约束。
+     */
+    private static final MessageSpace<ProtoWorldState> DEFAULT_SPACE = MessageSpace
+        .<ProtoWorldState>builder(ProtoWorldState.getDescriptor())
+        .range("day_time", 0, Long.MAX_VALUE)
+        .repeated("structures", new FieldConstraint.Nested(MessageSpace.of(ProtoStructureLocation.getDescriptor())), MAX_STRUCTURES)
+        .build();
 
     /** 当前环境实例的附近结构扫描半径（单位：区块）。 */
     private int structureChunkRadius = DEFAULT_STRUCTURE_CHUNK_RADIUS;
@@ -56,14 +51,8 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoWorldState> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoWorldState component) {
-        return component != null && component.getDayTime() >= 0
-            && component.getStructuresCount() <= MAX_STRUCTURES;
     }
 
     /** 设置附近结构扫描半径（单位：区块，必须为正数）。 */

@@ -30,15 +30,15 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveTo;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.gym.state.RegionBlockSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
@@ -138,25 +138,24 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      * <p>
      * move_to 使用实体坐标，边界直接取 {@link #scopeAabb()}；set_block 使用方块坐标，
      * 边界为场地覆盖的方块列（上界比 arenaBounds 小 1）。use_item/look_at 保持默认空间：
-     * 二者的 contains 对非方块目标以 (0,0,0) 占位坐标做空间校验（DictSpace 要求键集合
-     * 精确匹配），收紧坐标界会在场地远离世界原点时误伤实体交互（如铁锭治疗傀儡）。
+     * 本环境只收紧导航与放置坐标，不限制注视与物品使用目标。
      * </p>
      */
     private void restrictActionSpacesToArena() {
         AABB arena = this.scopeAabb();
         if (arena == null) return;
-        this.actionComponent(ActionComponents.MOVE_TO.get()).setSpace(new DictSpace(Map.of(
-            "x", new BoxSpace(arena.minX, arena.maxX, 1),
-            "y", new BoxSpace(arena.minY, arena.maxY, 1),
-            "z", new BoxSpace(arena.minZ, arena.maxZ, 1),
-            "stop_distance", new BoxSpace(0, 128, 1)
-        )));
-        this.actionComponent(ActionComponents.SET_BLOCK.get()).setSpace(new DictSpace(Map.of(
-            "x", new BoxSpace(arena.minX, arena.maxX - 1, 1),
-            "y", new BoxSpace(arena.minY, arena.maxY - 1, 1),
-            "z", new BoxSpace(arena.minZ, arena.maxZ - 1, 1),
-            "block", new TextSpace()
-        )));
+        this.actionComponent(ActionComponents.MOVE_TO.get()).setSpace(MessageSpace.<ProtoMoveTo>builder(ProtoMoveTo.getDescriptor())
+            .range("x", arena.minX, arena.maxX)
+            .range("y", arena.minY, arena.maxY)
+            .range("z", arena.minZ, arena.maxZ)
+            .range("stop_distance", 0, 128)
+            .build());
+        this.actionComponent(ActionComponents.SET_BLOCK.get()).setSpace(MessageSpace.<ProtoSetBlock>builder(ProtoSetBlock.getDescriptor())
+            .range("x", arena.minX, arena.maxX - 1)
+            .range("y", arena.minY, arena.maxY - 1)
+            .range("z", arena.minZ, arena.maxZ - 1)
+            .text("block")
+            .build());
     }
 
     /**

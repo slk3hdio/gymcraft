@@ -159,8 +159,8 @@ def main() -> None:
 
     env = GymCraftEnv(args.entity_uuid, address=args.address)
     try:
-        action_keys = set(env.action_space_spec.get("spaces", {}))
-        observation_keys = set(env.observation_space_spec.get("spaces", {}))
+        action_keys = {component.component_id for component in env.action_space_spec.components}
+        observation_keys = {component.component_id for component in env.observation_space_spec.components}
         if ACTION_UPDATE_INTERESTING_BLOCKS not in action_keys:
             raise RuntimeError(f"remote env does not expose {ACTION_UPDATE_INTERESTING_BLOCKS}")
         if OBS_INTERESTING_BLOCKS not in observation_keys:

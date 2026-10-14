@@ -3,8 +3,30 @@
 import unittest
 
 from gymcraft.gym.action.components.use_item_pb2 import ProtoUseItem
+from gymcraft.gym.space.space_spec_pb2 import (
+    ProtoComponentSpace,
+    ProtoComponentSpaceSet,
+    ProtoFieldEntry,
+    ProtoFieldSpec,
+    ProtoMessageSpec,
+    ProtoRangeSpec,
+    ProtoSpaceSpec,
+)
 from gymcraft.llm import ActionDslParser, ActionParseError, encode_action_batch
 from gymcraft.type_info import ACTION_USE_ITEM
+
+
+def _range_entry(name: str, low: float, high: float) -> ProtoFieldEntry:
+    """构造数值闭区间约束的字段项。"""
+    return ProtoFieldEntry(name=name, spec=ProtoFieldSpec(range=ProtoRangeSpec(low=low, high=high)))
+
+
+def _message_entry(name: str, fields: list[ProtoFieldEntry]) -> ProtoFieldEntry:
+    """构造嵌套消息约束的字段项。"""
+    return ProtoFieldEntry(
+        name=name,
+        spec=ProtoFieldSpec(message=ProtoMessageSpec(space=ProtoSpaceSpec(fields=fields))),
+    )
 
 
 class UseItemTests(unittest.TestCase):
@@ -38,14 +60,22 @@ class UseItemTests(unittest.TestCase):
                 ActionDslParser().parse(f"```gymcraft-action\n/use_item {suffix}\n```")
 
     def test_dynamic_space_and_help(self) -> None:
-        """动作目录公开语法，oneof 在动态空间检查前正确展平。"""
+        """动作目录公开语法，结构化空间对 oneof 目标嵌套字段做边界预检。"""
         parser = ActionDslParser()
         self.assertIn("/use_item <slot_id>", parser.command_reference())
-        constrained = ActionDslParser({"spaces": {ACTION_USE_ITEM: {"spaces": {
-            "slot_id": {"type": "box", "low": [0], "high": [8]},
-            "x": {"type": "box", "low": [0], "high": [2]},
-            "entity_id": {"type": "box", "low": [0], "high": [10]},
-        }}}})
+        constrained = ActionDslParser(ProtoComponentSpaceSet(components=[
+            ProtoComponentSpace(
+                component_id=ACTION_USE_ITEM,
+                space=ProtoSpaceSpec(
+                    message_type="gymcraft.gym.action.components.ProtoUseItem",
+                    fields=[
+                        _range_entry("slot_id", 0, 8),
+                        _message_entry("block", [_range_entry("x", 0, 2)]),
+                        _message_entry("entity", [_range_entry("entity_id", 0, 10)]),
+                    ],
+                ),
+            ),
+        ]))
         constrained.parse("```gymcraft-action\n/use_item 8 block 1 2 3\n```")
         for command in ("9", "0 block 3 2 1", "0 entity 11"):
             with self.subTest(command=command), self.assertRaises(ActionParseError):

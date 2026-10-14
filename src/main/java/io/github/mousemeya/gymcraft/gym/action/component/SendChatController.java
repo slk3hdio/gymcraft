@@ -16,9 +16,8 @@ import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSendChat;
 import io.github.mousemeya.gymcraft.gym.chat.RecentChatLog;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 聊天发送动作 —— 以受控 Mob 的显示名称向服务器聊天栏广播纯文本消息。
@@ -30,9 +29,9 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  */
 public final class SendChatController extends AbstractActionComponentController<ProtoSendChat> {
     /** 单字段文本动作空间；精确的原版限制由 {@link #contains(ProtoSendChat)} 校验。 */
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "message", new TextSpace()
-    ));
+    private static final McSpace<ProtoSendChat> DEFAULT_SPACE = MessageSpace.<ProtoSendChat>builder(ProtoSendChat.getDescriptor())
+        .text("message")
+        .build();
 
     /**
      * 创建绑定到指定 Mob 的聊天发送控制器。
@@ -59,19 +58,19 @@ public final class SendChatController extends AbstractActionComponentController<
      * @return 默认动作空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoSendChat> defaultSpace() {
         return DEFAULT_SPACE;
     }
 
     /**
-     * 校验消息非空、长度不超限且仅包含原版聊天允许字符。
+     * 在空间校验之上补充原版聊天限制：消息非空白、长度不超限且仅包含允许字符。
      *
      * @param component 待校验动作
      * @return 合法时为 true
      */
     @Override
     public boolean contains(ProtoSendChat component) {
-        if (component == null || !this.space().contains(Map.of("message", component.getMessage()))) {
+        if (!this.space().contains(component)) {
             return false;
         }
         String message = component.getMessage();

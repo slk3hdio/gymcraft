@@ -29,6 +29,7 @@ from gymcraft.gym.rpc.env_service_pb2 import (
     StepResponse,
 )
 from gymcraft.gym.rpc.env_service_pb2_grpc import GymEnvServiceStub
+from gymcraft.gym.space.space_spec_pb2 import ProtoComponentSpaceSet
 from gymcraft.type_info import (
     Action,
     ActionBatch,
@@ -75,8 +76,9 @@ class GymCraftEnv(gym.Env[Any, Any]):
         self.session_id = response.session_id
         self.entity_uuid = response.entity_uuid
         self.remote_metadata = json.loads(response.metadata)
-        self.action_space_spec = json.loads(response.action_space_json)
-        self.observation_space_spec = json.loads(response.observation_space_json)
+        # 动作/观测空间为结构化 proto 消息（ProtoComponentSpaceSet），按组件声明顺序排列。
+        self.action_space_spec: ProtoComponentSpaceSet = response.action_space
+        self.observation_space_spec: ProtoComponentSpaceSet = response.observation_space
 
     # gymnasium 约定 info 为 dict，本环境按 proto 直接透传 info 的 JSON 字符串。
     def reset(self, *, seed: int | None = None, options: Mapping[str, Any] | None = None) -> Tuple[Observation, str]:  # type: ignore[override]  # noqa: E501

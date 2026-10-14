@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 动作控制器抽象基类 —— 承载各动作共用的字段与逻辑。
@@ -27,7 +28,7 @@ public abstract class AbstractActionComponentController<T extends Message> imple
     /** 支持的实体类型列表（默认所有 {@link Mob} 及其子类）。 */
     private final Collection<Class<?>> supportedEntities;
     /** 当前环境实例使用的参数空间。 */
-    private McSpace<Map<String, Object>> space;
+    private McSpace<T> space;
     /** 当前控制器绑定的目标 Mob（reset 后可能被运行时替换）。 */
     private Mob mob;
 
@@ -54,12 +55,17 @@ public abstract class AbstractActionComponentController<T extends Message> imple
     }
 
     @Override
-    public final McSpace<Map<String, Object>> space() {
+    public final McSpace<T> space() {
         return this.space;
     }
 
     @Override
-    public final void setSpace(McSpace<Map<String, Object>> space) {
+    public final void setSpace(McSpace<T> space) {
+        // Descriptor 类型识别：空间类型必须与组件 proto 消息类型一致
+        if (!space.descriptor().equals(MessageSpace.descriptorOf(this.protoType()))) {
+            throw new IllegalArgumentException("space descriptor mismatch for " + this.protoType().getName()
+                + ": got " + space.descriptor().getFullName());
+        }
         this.space = space;
     }
 

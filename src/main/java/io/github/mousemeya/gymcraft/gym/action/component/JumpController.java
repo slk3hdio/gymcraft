@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import java.util.Map;
-
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 
@@ -11,18 +9,18 @@ import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoJump;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 跳跃组件 —— 瞬时动作，命令 Mob 立即跳一次。
  * <p>
- * 参数空间为空字典。apply() 通过 {@code JumpControl.jump()} 提交跳跃意图，
+ * 参数空间为无字段的空消息。apply() 通过 {@code JumpControl.jump()} 提交跳跃意图，
  * 实际起跳由原版跳跃控制在 Mob 的下一个 tick 中于着地时执行。
  * </p>
  */
 public class JumpController extends AbstractActionComponentController<ProtoJump> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of()); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private static final McSpace<ProtoJump> DEFAULT_SPACE = MessageSpace.of(ProtoJump.getDescriptor());
 
     public JumpController(Mob mob) {
         super(mob);
@@ -34,13 +32,8 @@ public class JumpController extends AbstractActionComponentController<ProtoJump>
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoJump> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoJump component) {
-        return component != null && this.space().contains(Map.of());
     }
 
     @Override

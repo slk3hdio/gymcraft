@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Map;
-
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
@@ -28,12 +26,9 @@ import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMenuButton;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMenuObservation;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMenuProperty;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoSlotView;
-import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.FieldConstraint;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 菜单观测组件 —— 构建 {@link ProtoMenuObservation}，反映 Mob 当前逻辑菜单会话状态。
@@ -55,15 +50,14 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
 public class MenuObservationCreator extends AbstractObservationComponentCreator<ProtoMenuObservation> {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.ofEntries(
-        Map.entry("open", new BooleanSpace()),
-        Map.entry("session_id", new BoxSpace(0, Long.MAX_VALUE, 1)),
-        Map.entry("menu_type", new TextSpace()),
-        Map.entry("title", new TextSpace()),
-        Map.entry("slots", new SequenceSpace<>(new TextSpace(), 256)),
-        Map.entry("properties", new SequenceSpace<>(new TextSpace(), 64)),
-        Map.entry("buttons", new SequenceSpace<>(new TextSpace(), 64))
-    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    /** 默认观测空间：会话 ID 非负，槽位/属性/按钮数量分别不超过 256/64/64。 */
+    private static final MessageSpace<ProtoMenuObservation> DEFAULT_SPACE = MessageSpace
+        .<ProtoMenuObservation>builder(ProtoMenuObservation.getDescriptor())
+        .range("session_id", 0, Long.MAX_VALUE)
+        .repeated("slots", new FieldConstraint.Nested(MessageSpace.of(ProtoSlotView.getDescriptor())), 256)
+        .repeated("properties", new FieldConstraint.Nested(MessageSpace.of(ProtoMenuProperty.getDescriptor())), 64)
+        .repeated("buttons", new FieldConstraint.Nested(MessageSpace.of(ProtoMenuButton.getDescriptor())), 64)
+        .build();
 
     public MenuObservationCreator() {
     }
@@ -74,13 +68,8 @@ public class MenuObservationCreator extends AbstractObservationComponentCreator<
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoMenuObservation> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoMenuObservation component) {
-        return component != null;
     }
 
     @Override

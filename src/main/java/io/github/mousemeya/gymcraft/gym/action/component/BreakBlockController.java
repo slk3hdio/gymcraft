@@ -31,9 +31,8 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoBreakBlock;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 破坏方块动作组件 —— 让 Mob 用指定槽位的工具按原版规则挖掘指定方块。
@@ -69,12 +68,12 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     /** 默认挥手动画间隔（tick）。 */
     public static final int DEFAULT_SWING_INTERVAL_TICKS = 10;
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "x", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "y", new BoxSpace(-2048, 2048, 1),
-        "z", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "slot_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
-    ));
+    private static final McSpace<ProtoBreakBlock> DEFAULT_SPACE = MessageSpace.<ProtoBreakBlock>builder(ProtoBreakBlock.getDescriptor())
+        .range("x", -30_000_000, 30_000_000)
+        .range("y", -2048, 2048)
+        .range("z", -30_000_000, 30_000_000)
+        .range("slot_id", 0, Integer.MAX_VALUE)
+        .build();
     /** 当前环境实例的跨 tick 挖掘状态（仅服务端 tick 线程访问）。 */
     @Nullable
     private MiningState miningState;
@@ -133,18 +132,20 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoBreakBlock> defaultSpace() {
         return DEFAULT_SPACE;
     }
 
+    /**
+     * 在空间校验之上补充 slot_id 的 presence 检查（proto3 optional 未设置时空间跳过校验，
+     * 而本动作必须显式指定工具槽位）。
+     *
+     * @param component 待校验动作
+     * @return 空间通过且 slot_id 已显式设置时为 true
+     */
     @Override
     public boolean contains(ProtoBreakBlock component) {
-        return component != null && component.hasSlotId() && this.space().contains(Map.of(
-            "x", new double[] { component.getX() },
-            "y", new double[] { component.getY() },
-            "z", new double[] { component.getZ() },
-            "slot_id", new double[] { component.getSlotId() }
-        ));
+        return this.space().contains(component) && component.hasSlotId();
     }
 
     @Override

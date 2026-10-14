@@ -18,7 +18,7 @@ import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoActionFeedback;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoObservationHeader;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.ComponentSpaceSet;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 
 
@@ -139,27 +139,44 @@ public class ObservationComposer {
         return value == null ? "" : String.valueOf(value);
     }
 
-    public McSpace<Map<String, Object>> space() {
+    /** @return 以组件 ID 为键的有序观测空间目录 */
+    public ComponentSpaceSet space() {
         var spaces = new LinkedHashMap<String, McSpace<?>>();
         for (var entry : this.components.entrySet()) {
             spaces.put(entry.getKey(), entry.getValue().space());
         }
-        return new DictSpace(spaces);
+        return new ComponentSpaceSet(spaces);
     }
 
-    public void setComponentSpace(String componentId, McSpace<Map<String, Object>> space) {
+    /**
+     * 设置指定组件的观测空间（descriptor 与组件 proto 类型不一致时由 creator 抛错）。
+     *
+     * @param componentId 组件 ID
+     * @param space 新空间
+     */
+    public void setComponentSpace(String componentId, McSpace<? extends Message> space) {
         ObservationComponentCreator<?> creator = this.components.get(componentId);
         if (creator == null) {
             throw new IllegalArgumentException("Unknown observation component: " + componentId);
         }
-        creator.setSpace(space);
+        setSpaceUnchecked(creator, space);
     }
 
-    public McSpace<Map<String, Object>> getComponentSpace(String componentId) {
+    /** @param componentId 组件 ID @return 组件空间 */
+    public McSpace<? extends Message> getComponentSpace(String componentId) {
         ObservationComponentCreator<?> creator = this.components.get(componentId);
         if (creator == null) {
             throw new IllegalArgumentException("Unknown observation component: " + componentId);
         }
         return creator.space();
+    }
+
+    /** 通配捕获桥接：descriptor 一致性由 {@code creator.setSpace} 校验。 */
+    @SuppressWarnings("unchecked")
+    private static <T extends Message> void setSpaceUnchecked(
+        ObservationComponentCreator<T> creator,
+        McSpace<? extends Message> space
+    ) {
+        creator.setSpace((McSpace<T>) space);
     }
 }

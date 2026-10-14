@@ -18,9 +18,8 @@ import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoAttackOnce;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 
 
@@ -32,9 +31,9 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class AttackOnceController extends AbstractActionComponentController<ProtoAttackOnce> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of( //统一使用McSpace<Map<String, Object>>
-        "target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
-    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private static final McSpace<ProtoAttackOnce> DEFAULT_SPACE = MessageSpace.<ProtoAttackOnce>builder(ProtoAttackOnce.getDescriptor())
+        .range("target_entity_id", 0, Integer.MAX_VALUE)
+        .build();
 
     public AttackOnceController(Mob mob) {
         super(mob);
@@ -52,13 +51,8 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoAttackOnce> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoAttackOnce component) {
-        return component != null && this.space().contains(Map.of("target_entity_id", new double[] { component.getTargetEntityId() }));
     }
 
     @Override

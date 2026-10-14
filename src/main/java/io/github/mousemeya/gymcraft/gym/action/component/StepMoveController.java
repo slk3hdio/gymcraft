@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import java.util.Map;
-
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -12,10 +10,8 @@ import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoStepMove;
-import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 单步移动控制组件 —— 在每个 tick 中直接操作 Mob 的姿态和位移。
@@ -25,12 +21,12 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class StepMoveController extends AbstractActionComponentController<ProtoStepMove> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "forward", new BoxSpace(-1, 1, 1),
-        "strafe_right", new BoxSpace(-1, 1, 1),
-        "yaw_delta", new BoxSpace(-180, 180, 1),
-        "jump", new BooleanSpace()
-    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private static final McSpace<ProtoStepMove> DEFAULT_SPACE = MessageSpace.<ProtoStepMove>builder(ProtoStepMove.getDescriptor())
+        .range("forward", -1, 1)
+        .range("strafe_right", -1, 1)
+        .range("yaw_delta", -180, 180)
+        .bool("jump")
+        .build();
 
     public StepMoveController(Mob mob) {
         super(mob);
@@ -42,18 +38,8 @@ public class StepMoveController extends AbstractActionComponentController<ProtoS
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoStepMove> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoStepMove component) {
-        return component != null && this.space().contains(Map.of(
-            "forward", new double[] { component.getForward() },
-            "strafe_right", new double[] { component.getStrafeRight() },
-            "yaw_delta", new double[] { component.getYawDelta() },
-            "jump", component.getJump()
-        ));
     }
 
     @Override

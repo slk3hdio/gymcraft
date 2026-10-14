@@ -13,9 +13,8 @@ import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoDropItem;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 丢出物品动作组件 —— 从 Agent 统一物品栏的指定 {@code slot_id} 取出物品，
@@ -27,10 +26,10 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class DropItemController extends AbstractActionComponentController<ProtoDropItem> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "slot_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
-        "count", new BoxSpace(0, Integer.MAX_VALUE, 1)
-    ));
+    private static final McSpace<ProtoDropItem> DEFAULT_SPACE = MessageSpace.<ProtoDropItem>builder(ProtoDropItem.getDescriptor())
+        .range("slot_id", 0, Integer.MAX_VALUE)
+        .range("count", 0, Integer.MAX_VALUE)
+        .build();
 
     /**
      * 创建绑定指定 Agent 的丢出物品控制器。
@@ -57,22 +56,8 @@ public class DropItemController extends AbstractActionComponentController<ProtoD
      * @return 默认动作空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoDropItem> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    /**
-     * 校验 protobuf 中的静态数值范围；动态槽位边界由 {@link #apply} 校验。
-     *
-     * @param component 待校验动作
-     * @return 参数是否位于默认或环境覆盖后的空间内
-     */
-    @Override
-    public boolean contains(ProtoDropItem component) {
-        return component != null && this.space().contains(Map.of(
-            "slot_id", new double[] { component.getSlotId() },
-            "count", new double[] { component.getCount() }
-        ));
     }
 
     /**

@@ -1,10 +1,9 @@
 package io.github.mousemeya.gymcraft.gym.observation;
 
-import java.util.Map;
-
 import com.google.protobuf.Message;
 
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 观测组件抽象基类 —— 承载各观测组件共用的字段与逻辑。
@@ -17,19 +16,24 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  */
 public abstract class AbstractObservationComponentCreator<T extends Message> implements ObservationComponentCreator<T> {
     /** 当前环境实例使用的观测空间。 */
-    private McSpace<Map<String, Object>> space;
+    private McSpace<T> space;
 
     protected AbstractObservationComponentCreator() {
         this.space = this.defaultSpace();
     }
 
     @Override
-    public final McSpace<Map<String, Object>> space() {
+    public final McSpace<T> space() {
         return this.space;
     }
 
     @Override
-    public final void setSpace(McSpace<Map<String, Object>> space) {
+    public final void setSpace(McSpace<T> space) {
+        // Descriptor 类型识别：空间类型必须与组件 proto 消息类型一致
+        if (!space.descriptor().equals(MessageSpace.descriptorOf(this.protoType()))) {
+            throw new IllegalArgumentException("space descriptor mismatch for " + this.protoType().getName()
+                + ": got " + space.descriptor().getFullName());
+        }
         this.space = space;
     }
 

@@ -82,7 +82,10 @@ class UseItemE2E:
         assert match is not None
         self.entity_uuid = match.group()
         self.env = GymCraftEnv(self.entity_uuid, self.address)
-        self.require(ACTION_USE_ITEM in self.env.action_space_spec["spaces"], "use_item not advertised by Connect")
+        self.require(
+            any(component.component_id == ACTION_USE_ITEM for component in self.env.action_space_spec.components),
+            "use_item not advertised by Connect",
+        )
         self.parser = ActionDslParser(self.env.action_space_spec)
         response_reset = cast(ResetResponse, self.env.stub.Reset(ResetRequest(session_id=self.env.session_id), timeout=15))
         self.observation = unpack_observation(response_reset.observation)
@@ -233,7 +236,7 @@ class UseItemE2E:
         """动作级超时通过 RPC 返回 FAILED，物品与主手完整归还。"""
         self.equip("offhand", "minecraft:apple", 3)
         result = self.step("/timeout 0.1\n/use_item 5", "FAILED")
-        self.require("action timeout" in result["description"], str(result))
+        self.require("action batch timeout" in result["description"], str(result))
         self.slot(5, "minecraft:apple", 3)
         self.slot(0, "minecraft:stick", 1)
 

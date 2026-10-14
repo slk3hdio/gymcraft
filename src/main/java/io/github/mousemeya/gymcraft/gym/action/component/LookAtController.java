@@ -18,9 +18,11 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoLookAt;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoLookAtBlockTarget;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoLookAtEntityTarget;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoLookAtItemTarget;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 注视目标动作组件 —— 将 Agent 的当前视线瞬时对准实体、掉落物或方块。
@@ -35,13 +37,21 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class LookAtController extends AbstractActionComponentController<ProtoLookAt> {
-    /** 动作空间沿用现有 oneof 组件的扁平字段表达。 */
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "x", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "y", new BoxSpace(-2048, 2048, 1),
-        "z", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)
-    ));
+    /** 按 oneof 分支声明嵌套约束；{@code target} oneof 必须设置分支。 */
+    private static final McSpace<ProtoLookAt> DEFAULT_SPACE = MessageSpace.<ProtoLookAt>builder(ProtoLookAt.getDescriptor())
+        .message("block", MessageSpace.<ProtoLookAtBlockTarget>builder(ProtoLookAtBlockTarget.getDescriptor())
+            .range("x", -30_000_000, 30_000_000)
+            .range("y", -2048, 2048)
+            .range("z", -30_000_000, 30_000_000)
+            .build())
+        .message("entity", MessageSpace.<ProtoLookAtEntityTarget>builder(ProtoLookAtEntityTarget.getDescriptor())
+            .range("entity_id", 1, Integer.MAX_VALUE)
+            .build())
+        .message("item", MessageSpace.<ProtoLookAtItemTarget>builder(ProtoLookAtItemTarget.getDescriptor())
+            .range("entity_id", 1, Integer.MAX_VALUE)
+            .build())
+        .requiredOneof("target")
+        .build();
 
     /**
      * 创建绑定指定 Agent 的注视动作控制器。
@@ -65,37 +75,11 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
     /**
      * 返回默认动作空间。
      *
-     * @return 扁平化的坐标与实体 ID 空间
+     * @return 按 oneof 分支嵌套声明的坐标与实体 ID 空间
      */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoLookAt> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    /**
-     * 校验 oneof 目标是否已设置且字段位于动作空间内。
-     *
-     * @param component 注视动作负载
-     * @return 负载结构与数值是否有效
-     */
-    @Override
-    public boolean contains(ProtoLookAt component) {
-        if (component == null) {
-            return false;
-        }
-        return switch (component.getTargetCase()) {
-            case ENTITY -> component.getEntity().getEntityId() > 0
-                && this.containsEntityId(component.getEntity().getEntityId());
-            case ITEM -> component.getItem().getEntityId() > 0
-                && this.containsEntityId(component.getItem().getEntityId());
-            case BLOCK -> this.space().contains(Map.of(
-                "x", new double[] { component.getBlock().getX() },
-                "y", new double[] { component.getBlock().getY() },
-                "z", new double[] { component.getBlock().getZ() },
-                "entity_id", new double[] { 0 }
-            ));
-            case TARGET_NOT_SET -> false;
-        };
     }
 
     /**
@@ -134,21 +118,6 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
     @Override
     public ActionState tick(ProtoLookAt component) {
         return ActionState.completed("look at applied");
-    }
-
-    /**
-     * 按扁平动作空间校验实体 ID。
-     *
-     * @param entityId 网络实体 ID
-     * @return ID 是否位于空间边界内
-     */
-    private boolean containsEntityId(int entityId) {
-        return this.space().contains(Map.of(
-            "x", new double[] { 0 },
-            "y", new double[] { 0 },
-            "z", new double[] { 0 },
-            "entity_id", new double[] { entityId }
-        ));
     }
 
     /**

@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Map;
-
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.phys.AABB;
@@ -10,10 +8,9 @@ import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponent
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoItemEntityView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoNearbyItems;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.FieldConstraint;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 附近掉落物观测组件 —— 扫描 Mob 周围指定半径内的所有 {@link ItemEntity}。
@@ -23,7 +20,7 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * 使用 AABB 批量查询 {@code level.getEntitiesOfClass()}。
  * </p>
  * <p>
- * 默认值可通过环境构造期 setter 覆盖（调用后同步重建观测空间）：
+ * 默认值可通过环境构造期 setter 覆盖（数量上限 setter 会同步重建观测空间）：
  * {@link #setRadius(int)}（扫描半径，默认 16）、{@link #setMaxItems(int)}
  * （掉落物数上限，默认 512）。
  * </p>
@@ -48,13 +45,8 @@ public class NearbyItemsObservationCreator extends AbstractObservationComponentC
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoNearbyItems> defaultSpace() {
         return buildSpace(DEFAULT_MAX_ITEMS);
-    }
-
-    @Override
-    public boolean contains(ProtoNearbyItems component) {
-        return component != null && component.getItemsCount() <= this.maxItems;
     }
 
     /** 设置扫描半径（必须为正数）。 */
@@ -95,10 +87,11 @@ public class NearbyItemsObservationCreator extends AbstractObservationComponentC
         return builder.build();
     }
 
-    private static McSpace<Map<String, Object>> buildSpace(int maxItems) {
-        return new DictSpace(Map.of(
-            "items", new SequenceSpace<>(new TextSpace(), maxItems)
-        )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    /** 构造与指定掉落物数上限匹配的观测空间（数量上限落在 items 的长度约束上）。 */
+    private static MessageSpace<ProtoNearbyItems> buildSpace(int maxItems) {
+        return MessageSpace.<ProtoNearbyItems>builder(ProtoNearbyItems.getDescriptor())
+            .repeated("items", new FieldConstraint.Nested(MessageSpace.of(ProtoItemEntityView.getDescriptor())), maxItems)
+            .build();
     }
 
     /**

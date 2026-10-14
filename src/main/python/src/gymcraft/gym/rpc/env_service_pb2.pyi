@@ -1,5 +1,6 @@
 from gymcraft.gym.action import action_pb2 as _action_pb2
 from gymcraft.gym.observation import observation_pb2 as _observation_pb2
+from gymcraft.gym.space import space_spec_pb2 as _space_spec_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -15,18 +16,18 @@ class ConnectRequest(_message.Message):
     def __init__(self, entity_uuid: _Optional[str] = ...) -> None: ...
 
 class ConnectResponse(_message.Message):
-    __slots__ = ("session_id", "entity_uuid", "metadata", "action_space_json", "observation_space_json")
+    __slots__ = ("session_id", "entity_uuid", "metadata", "action_space", "observation_space")
     SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     ENTITY_UUID_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
-    ACTION_SPACE_JSON_FIELD_NUMBER: _ClassVar[int]
-    OBSERVATION_SPACE_JSON_FIELD_NUMBER: _ClassVar[int]
+    ACTION_SPACE_FIELD_NUMBER: _ClassVar[int]
+    OBSERVATION_SPACE_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     entity_uuid: str
     metadata: str
-    action_space_json: str
-    observation_space_json: str
-    def __init__(self, session_id: _Optional[str] = ..., entity_uuid: _Optional[str] = ..., metadata: _Optional[str] = ..., action_space_json: _Optional[str] = ..., observation_space_json: _Optional[str] = ...) -> None: ...
+    action_space: _space_spec_pb2.ProtoComponentSpaceSet
+    observation_space: _space_spec_pb2.ProtoComponentSpaceSet
+    def __init__(self, session_id: _Optional[str] = ..., entity_uuid: _Optional[str] = ..., metadata: _Optional[str] = ..., action_space: _Optional[_Union[_space_spec_pb2.ProtoComponentSpaceSet, _Mapping]] = ..., observation_space: _Optional[_Union[_space_spec_pb2.ProtoComponentSpaceSet, _Mapping]] = ...) -> None: ...
 
 class ResetRequest(_message.Message):
     __slots__ = ("session_id", "seed", "options")

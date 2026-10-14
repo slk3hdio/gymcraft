@@ -16,6 +16,7 @@ from gymcraft.gym.action.components import (
     update_interesting_blocks_pb2,
 )
 from gymcraft.client import make_action, make_step_request
+from gymcraft.gym.space.space_spec_pb2 import ProtoComponentSpace, ProtoComponentSpaceSet, ProtoSpaceSpec
 from gymcraft.gym.observation.common import block_view_pb2, entity_view_pb2, item_entity_view_pb2, item_stack_view_pb2
 from gymcraft.gym.observation.components import (
     chat_pb2,
@@ -170,8 +171,8 @@ class FakeEnv:
     """记录 step 次数并返回确定性 GymCraft 五元组。"""
 
     def __init__(self) -> None:
-        """初始化开放全部动作的空空间描述。"""
-        self.action_space_spec: dict[str, Any] = {}
+        """初始化不含空间描述（None = 开放全部动作）的假环境。"""
+        self.action_space_spec: ProtoComponentSpaceSet | None = None
         self.step_calls = 0
         self.last_action: ActionBatch | None = None
 
@@ -246,7 +247,9 @@ class ActionDslParserTests(unittest.TestCase):
 
     def test_action_space_filters_commands(self) -> None:
         """实时动作空间只声明 jump 时，其余命令不应可用。"""
-        parser = ActionDslParser({"type": "dict", "spaces": {ACTION_JUMP: {"type": "dict", "spaces": {}}}})
+        parser = ActionDslParser(ProtoComponentSpaceSet(components=[
+            ProtoComponentSpace(component_id=ACTION_JUMP, space=ProtoSpaceSpec()),
+        ]))
         self.assertEqual(["jump"], parser.available_action_names())
         with self.assertRaises(ActionParseError):
             parser.parse("```gymcraft-action\n/noop\n```")

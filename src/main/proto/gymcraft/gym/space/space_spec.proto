@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package gymcraft.gym.space;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.space.proto";
+option java_outer_classname = "SpaceSpecProto";
+
+// 单个消息类型的结构化空间描述：字段约束经 Protobuf Descriptor 校验后生成，
+// 随 Connect 响应下发给客户端，供动作参数的本地预检与 UI 展示。
+message ProtoSpaceSpec {
+  // 被描述消息的完整 proto 类型名（如 gymcraft.gym.action.ProtoStepMove）。
+  string message_type = 1;
+  // 逐字段约束，按 Descriptor 字段声明顺序排列。
+  repeated ProtoFieldEntry fields = 2;
+  // 必须设置的 oneof 组名（未设置任一分支时消息不合法）。
+  repeated string required_oneofs = 3;
+}
+
+// 命名字段约束条目（用 repeated 而非 map 以保留声明顺序）。
+message ProtoFieldEntry {
+  string name = 1;
+  ProtoFieldSpec spec = 2;
+}
+
+// 字段级约束；kind 与字段的 proto 类型在服务端构造期已校验匹配。
+message ProtoFieldSpec {
+  oneof kind {
+    ProtoRangeSpec range = 1;
+    ProtoTextSpec text = 2;
+    ProtoBoolSpec bool = 3;
+    ProtoRepeatedSpec repeated = 4;
+    ProtoMessageSpec message = 5;
+    // 无约束（按 descriptor 类型推导的默认字段，仅保证数值有限）。
+    ProtoAnySpec any = 6;
+  }
+}
+
+// 数值字段约束：[low, high] 闭区间，两端均为有限值。
+message ProtoRangeSpec {
+  double low = 1;
+  double high = 2;
+}
+
+// 文本字段约束；pattern 为空表示无正则限制。
+message ProtoTextSpec {
+  string pattern = 1;
+}
+
+// 布尔字段约束（当前无附加参数，仅占位）。
+message ProtoBoolSpec {
+}
+
+// repeated 字段约束：长度上限与逐元素约束。
+message ProtoRepeatedSpec {
+  // 长度上限；缺省表示不限制。
+  optional uint32 max_length = 1;
+  ProtoFieldSpec element = 2;
+}
+
+// 嵌套消息字段约束：递归描述子消息结构。
+message ProtoMessageSpec {
+  ProtoSpaceSpec space = 1;
+}
+
+// 无约束占位（oneof 成员必须非空消息）。
+message ProtoAnySpec {
+}
+
+// 组件空间目录：组件注册 ID 到其空间描述的有序列表（保留声明顺序）。
+message ProtoComponentSpaceSet {
+  repeated ProtoComponentSpace components = 1;
+}
+
+message ProtoComponentSpace {
+  string component_id = 1;
+  ProtoSpaceSpec space = 2;
+}

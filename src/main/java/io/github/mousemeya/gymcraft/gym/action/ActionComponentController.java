@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.action;
 
-import java.util.Map;
-
 import com.google.protobuf.Message;
 import net.minecraft.world.entity.Mob;
 
@@ -40,23 +38,30 @@ public interface ActionComponentController<T extends Message> {
     /** @return 是否支持当前绑定的实体实例 */
     boolean supports();
 
-    /** 
-     * @return 该动作参数的 Gymnasium 风格空间定义 
-     * <strong>注意：</strong> 如果是{@link io.github.mousemeya.gymcraft.gym.space.DictSpace}类型, 则键名必须和Proto代码中的原始字段名一致
+    /**
+     * @return 该动作参数的空间定义
+     * <strong>注意：</strong> 空间的 Descriptor 必须与本组件的 proto 消息类型一致，
+     * 字段约束名必须和 proto 原始字段名一致（{@link io.github.mousemeya.gymcraft.gym.space.MessageSpace}
+     * Builder 在声明时校验）。
      */
-    McSpace<Map<String, Object>> defaultSpace();
+    McSpace<T> defaultSpace();
 
     /** @return 该动作在当前环境实例中使用的参数空间（初始为 {@link #defaultSpace()}，可被环境级覆盖） */
-    McSpace<Map<String, Object>> space();
+    McSpace<T> space();
 
-    /** 设置该动作在当前环境实例中使用的参数空间。 */
-    void setSpace(McSpace<Map<String, Object>> space);
+    /** 设置该动作在当前环境实例中使用的参数空间（descriptor 必须与组件 proto 类型一致）。 */
+    void setSpace(McSpace<T> space);
 
     /** @return 动作参数的默认/安全样本 */
     T sample();
 
-    /** @return 给定参数是否通过该实例参数空间的合法性校验 */
-    boolean contains(T component);
+    /**
+     * 校验给定参数是否通过该实例参数空间的合法性校验。
+     * 默认实现委托给当前空间（Descriptor 类型识别 + 字段约束校验）。
+     */
+    default boolean contains(T component) {
+        return this.space().contains(component);
+    }
 
     /** 将动作应用到绑定的 Mob 实体上，并返回对应的控制策略。 */
     ActionApplyResult apply(T component) throws Exception;

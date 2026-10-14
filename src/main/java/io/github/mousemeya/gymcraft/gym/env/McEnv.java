@@ -3,7 +3,7 @@ package io.github.mousemeya.gymcraft.gym.env;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
-import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.ComponentSpaceSet;
 import java.util.List;
 import java.util.Map;
 
@@ -31,11 +31,11 @@ public interface McEnv {
     StepResponse step(List<ProtoMcAction> actions, float timeoutSeconds);
 
     // --- 核心属性 ---
-    /** 返回动作空间 */
-    McSpace<Map<String, Object>> getActionSpace();
+    /** 返回动作空间目录（组件 ID → 消息空间，有序） */
+    ComponentSpaceSet getActionSpace();
 
-    /** 返回观测空间 */
-    McSpace<Map<String, Object>> getObservationSpace();
+    /** 返回观测空间目录（组件 ID → 消息空间，有序） */
+    ComponentSpaceSet getObservationSpace();
 
     /** 环境的元数据，如渲染模式 */
     Map<String, Object> getMetadata();

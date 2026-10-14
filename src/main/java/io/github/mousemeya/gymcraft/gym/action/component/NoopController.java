@@ -1,7 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import java.util.Map;
-
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -12,18 +10,18 @@ import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 空动作组件 —— 智能体选择"什么都不做"时的占位动作。
  * <p>
- * 参数空间为空字典，apply() 是空实现。在 McActionSpace.sample() 中
- * 被选为默认采样输出。
+ * 参数空间为无字段的空消息；apply() 只提交抑制自主行为的控制策略，
+ * 不驱动任何移动或注视。
  * </p>
  */
 public class NoopController extends AbstractActionComponentController<ProtoNoop> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of()); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private static final McSpace<ProtoNoop> DEFAULT_SPACE = MessageSpace.of(ProtoNoop.getDescriptor());
 
     public NoopController(Mob mob) {
         super(mob);
@@ -35,13 +33,8 @@ public class NoopController extends AbstractActionComponentController<ProtoNoop>
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoNoop> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoNoop component) {
-        return component != null && this.space().contains(Map.of());
     }
 
     @Override

@@ -1,6 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
+import io.github.mousemeya.gymcraft.gym.space.FieldConstraint;
 import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -25,14 +25,14 @@ import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveMenuItem;
+import io.github.mousemeya.gymcraft.gym.action.proto.Move;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentSlot;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
 import io.github.mousemeya.gymcraft.gym.menu.session.SessionSlot;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 按 moves 数组顺序执行移动，失败停止且不回滚已完成项。
@@ -68,17 +68,17 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 public class MoveMenuItemController extends AbstractActionComponentController<ProtoMoveMenuItem> {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    private static final McSpace<Map<String, Object>> MOVE_SPACE = new DictSpace(Map.of(
-        "source_slot_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
-        "target_slot_id", new BoxSpace(0, Integer.MAX_VALUE, 1),
-        "count", new BoxSpace(0, Integer.MAX_VALUE, 1),
-        "repeat", new BoxSpace(0, Integer.MAX_VALUE, 1)
-    ));
+    private static final MessageSpace<Move> MOVE_SPACE = MessageSpace.<Move>builder(Move.getDescriptor())
+        .range("source_slot_id", 0, Integer.MAX_VALUE)
+        .range("target_slot_id", 0, Integer.MAX_VALUE)
+        .range("count", 0, Integer.MAX_VALUE)
+        .range("repeat", 0, Integer.MAX_VALUE)
+        .build();
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "session_id", new BoxSpace(0, Long.MAX_VALUE, 1),
-        "moves", new SequenceSpace<>(MOVE_SPACE, Integer.MAX_VALUE)
-    ));
+    private static final McSpace<ProtoMoveMenuItem> DEFAULT_SPACE = MessageSpace.<ProtoMoveMenuItem>builder(ProtoMoveMenuItem.getDescriptor())
+        .range("session_id", 0, Long.MAX_VALUE)
+        .repeated("moves", new FieldConstraint.Nested(MOVE_SPACE), Integer.MAX_VALUE)
+        .build();
 
     /** @param mob 执行移动的受控生物。 */
     public MoveMenuItemController(Mob mob) {
@@ -91,22 +91,19 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoMoveMenuItem> defaultSpace() {
         return DEFAULT_SPACE;
     }
 
-    /** @return 非空移动数组是否符合动作空间约束。 */
+    /**
+     * 在空间校验之上补充 moves 非空检查（空间只约束元素与长度上限，动作要求至少一项移动）。
+     *
+     * @param component 顺序移动请求
+     * @return 空间通过且移动数组非空时为 true
+     */
     @Override
     public boolean contains(ProtoMoveMenuItem component) {
-        return component != null && component.getMovesCount() > 0 && this.space().contains(Map.of(
-            "session_id", new double[] { component.getSessionId() },
-            "moves", component.getMovesList().stream().map(move -> Map.<String, Object>of(
-                "source_slot_id", new double[] { move.getSourceSlotId() },
-                "target_slot_id", new double[] { move.getTargetSlotId() },
-                "count", new double[] { move.getCount() },
-                "repeat", new double[] { move.getRepeat() }
-            )).toList()
-        ));
+        return this.space().contains(component) && component.getMovesCount() > 0;
     }
 
     /** @param component 顺序移动请求；@return 失败停止且不回滚的执行结果。 */
@@ -196,7 +193,7 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
      * @param component 单项参数，保留 repeat 的数量截断语义
      * @return 本项结果和实际副作用标记
      */
-    private ActionApplyResult applyMove(LogicalMenuSession session, io.github.mousemeya.gymcraft.gym.action.proto.Move component) {
+    private ActionApplyResult applyMove(LogicalMenuSession session, Move component) {
         Mob mob = this.mob();
         int sourceSlotId = component.getSourceSlotId();
         int targetSlotId = component.getTargetSlotId();

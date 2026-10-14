@@ -21,9 +21,8 @@ import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.navigation.MobNavigationTask;
 import io.github.mousemeya.gymcraft.gym.action.navigation.NavigationPathProvider;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveTo;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 寻路动作组件 —— 将实体导航到指定方块。
@@ -36,12 +35,12 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 public class MoveToController extends AbstractActionComponentController<ProtoMoveTo> implements NavigationPathProvider {
     private static final Logger LOGGER = LoggerFactory.getLogger(MoveToController.class);
 
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "x", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "y", new BoxSpace(-2048, 2048, 1),
-        "z", new BoxSpace(-30_000_000, 30_000_000, 1),
-        "stop_distance", new BoxSpace(0, 128, 1)
-    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    private static final McSpace<ProtoMoveTo> DEFAULT_SPACE = MessageSpace.<ProtoMoveTo>builder(ProtoMoveTo.getDescriptor())
+        .range("x", -30_000_000, 30_000_000)
+        .range("y", -2048, 2048)
+        .range("z", -30_000_000, 30_000_000)
+        .range("stop_distance", 0, 128)
+        .build();
 
     /** 默认寻路速度修正值。 */
     public static final double DEFAULT_SPEED = 1.0;
@@ -70,18 +69,8 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoMoveTo> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoMoveTo component) {
-        return component != null && this.space().contains(Map.of(
-            "x", new double[] { component.getX() },
-            "y", new double[] { component.getY() },
-            "z", new double[] { component.getZ() },
-            "stop_distance", new double[] { component.getStopDistance() }
-        ));
     }
 
     @Override

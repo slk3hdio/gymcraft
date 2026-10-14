@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Map;
 import java.util.Set;
 
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -11,10 +10,9 @@ import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponent
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoBlockView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoInterestingBlocks;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.FieldConstraint;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 /**
@@ -41,14 +39,8 @@ public class InterestingBlocksObservationCreator extends AbstractObservationComp
 
     /** 返回默认结果空间。 */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoInterestingBlocks> defaultSpace() {
         return buildSpace(NearbyBlocksObservationCreator.DEFAULT_MAX_BLOCKS);
-    }
-
-    /** 判断结果数量是否落在当前配置的上限内。 */
-    @Override
-    public boolean contains(ProtoInterestingBlocks component) {
-        return component != null && component.getBlocksCount() <= this.maxBlocks;
     }
 
     /** 设置球形搜索半径。 */
@@ -98,9 +90,11 @@ public class InterestingBlocksObservationCreator extends AbstractObservationComp
         return builder.build();
     }
 
-    /** 构造与指定结果上限匹配的观测空间。 */
-    private static McSpace<Map<String, Object>> buildSpace(int maxBlocks) {
-        return new DictSpace(Map.of("blocks", new SequenceSpace<>(new TextSpace(), maxBlocks)));
+    /** 构造与指定结果上限匹配的观测空间（数量上限落在 blocks 的长度约束上）。 */
+    private static MessageSpace<ProtoInterestingBlocks> buildSpace(int maxBlocks) {
+        return MessageSpace.<ProtoInterestingBlocks>builder(ProtoInterestingBlocks.getDescriptor())
+            .repeated("blocks", new FieldConstraint.Nested(MessageSpace.of(ProtoBlockView.getDescriptor())), maxBlocks)
+            .build();
     }
 
     /** 观测工厂 —— 为每个环境创建独立配置的生成器。 */

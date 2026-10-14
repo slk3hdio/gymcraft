@@ -44,6 +44,7 @@ PROTO_FILES = [
     "gymcraft/gym/observation/components/menu.proto",
     "gymcraft/gym/observation/components/chat.proto",
     "gymcraft/gym/observation/components/health_log.proto",
+    "gymcraft/gym/space/space_spec.proto",
     "gymcraft/gym/rpc/env_service.proto",
 ]
 

@@ -4,6 +4,7 @@ package gymcraft.gym.rpc;
 
 import "gymcraft/gym/action/action.proto";
 import "gymcraft/gym/observation/observation.proto";
+import "gymcraft/gym/space/space_spec.proto";
 
 option java_multiple_files = true;
 option java_package = "io.github.mousemeya.gymcraft.gym.rpc.proto";
@@ -25,8 +26,11 @@ message ConnectResponse {
   string session_id = 1;
   string entity_uuid = 2;
   string metadata = 3;
-  string action_space_json = 4;
-  string observation_space_json = 5;
+  reserved 4, 5;
+  reserved "action_space_json", "observation_space_json";
+  // 结构化空间描述（按组件注册 ID 有序排列），替代旧的 JSON 字符串字段。
+  gymcraft.gym.space.ProtoComponentSpaceSet action_space = 6;
+  gymcraft.gym.space.ProtoComponentSpaceSet observation_space = 7;
 }
 
 message ResetRequest {

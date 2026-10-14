@@ -12,9 +12,8 @@ import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoCloseMenu;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSessions;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 关闭菜单动作组件 —— 显式关闭 Agent 当前的逻辑菜单会话。
@@ -26,9 +25,9 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
  * </p>
  */
 public class CloseMenuController extends AbstractActionComponentController<ProtoCloseMenu> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.of(
-        "session_id", new BoxSpace(0, Long.MAX_VALUE, 1)
-    ));
+    private static final McSpace<ProtoCloseMenu> DEFAULT_SPACE = MessageSpace.<ProtoCloseMenu>builder(ProtoCloseMenu.getDescriptor())
+        .range("session_id", 0, Long.MAX_VALUE)
+        .build();
 
     public CloseMenuController(Mob mob) {
         super(mob);
@@ -40,15 +39,8 @@ public class CloseMenuController extends AbstractActionComponentController<Proto
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoCloseMenu> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoCloseMenu component) {
-        return component != null && this.space().contains(Map.of(
-            "session_id", new double[] { component.getSessionId() }
-        ));
     }
 
     @Override

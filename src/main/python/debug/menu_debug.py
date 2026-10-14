@@ -205,7 +205,7 @@ def main() -> None:
 
     env = GymCraftEnv(args.entity_uuid, address=args.address)
     try:
-        action_keys = set(env.action_space_spec.get("spaces", {}).keys())
+        action_keys = {component.component_id for component in env.action_space_spec.components}
         print(f"connected entity={args.entity_uuid} address={args.address}")
         print(f"action_keys={sorted(action_keys)}")
         required = {ACTION_OPEN_MENU, ACTION_CLOSE_MENU, ACTION_MOVE_MENU_ITEM, ACTION_CLICK_MENU_BUTTON}

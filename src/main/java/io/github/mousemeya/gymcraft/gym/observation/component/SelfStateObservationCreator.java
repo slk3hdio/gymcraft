@@ -1,18 +1,14 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
-import java.util.Map;
-
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoItemStackView;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoSelfState;
-import io.github.mousemeya.gymcraft.gym.space.BooleanSpace;
-import io.github.mousemeya.gymcraft.gym.space.BoxSpace;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
  * 自身状态观测组件 —— 构建 {@link ProtoSelfState}，包含 Mob 实体的基础属性快照。
@@ -22,29 +18,26 @@ import io.github.mousemeya.gymcraft.gym.space.TextSpace;
  * </p>
  */
 public class SelfStateObservationCreator extends AbstractObservationComponentCreator<ProtoSelfState> {
-    private static final McSpace<Map<String, Object>> DEFAULT_SPACE = new DictSpace(Map.ofEntries(
-        Map.entry("entity_type", new TextSpace()),
-        Map.entry("uuid", new TextSpace()),
-        Map.entry("health", new BoxSpace(0, 2048, 1)),
-        Map.entry("max_health", new BoxSpace(0, 2048, 1)),
-        Map.entry("position", new BoxSpace(new double[] {-30_000_000, -2048, -30_000_000}, new double[] {30_000_000, 2048, 30_000_000})),
-        Map.entry("velocity", new BoxSpace(-1024, 1024, 3)),
-        Map.entry("yaw", new BoxSpace(-360, 360, 1)),
-        Map.entry("pitch", new BoxSpace(-180, 180, 1)),
-        Map.entry("on_ground", new BooleanSpace()),
-        Map.entry("in_water", new BooleanSpace()),
-        Map.entry("in_lava", new BooleanSpace()),
-        Map.entry("alive", new BooleanSpace()),
-        Map.entry("navigating", new BooleanSpace()),
-        Map.entry("at_target", new BooleanSpace()),
-        Map.entry("target_entity_id", new BoxSpace(0, Integer.MAX_VALUE, 1)),
-        Map.entry("control_mode", new TextSpace()),
-        Map.entry("main_hand_item", new DictSpace(Map.of(
-            "item_id", new TextSpace(),
-            "count", new BoxSpace(0, Integer.MAX_VALUE, 1),
-            "nbt", new TextSpace()
-        )))
-    )); // TODO: 使用Message.getDescriptorForType()获取字段元数据以自动生成默认空间
+    /**
+     * 默认观测空间：生命值与坐标/速度/姿态限幅沿用旧手工空间的数值区间，
+     * 布尔与文本字段按 descriptor 推导默认约束，主手持物递归无约束嵌套空间
+     * （空手不设置该字段，presence 语义下自动跳过校验）。
+     */
+    private static final MessageSpace<ProtoSelfState> DEFAULT_SPACE = MessageSpace
+        .<ProtoSelfState>builder(ProtoSelfState.getDescriptor())
+        .range("health", 0, 2048)
+        .range("max_health", 0, 2048)
+        .range("x", -30_000_000, 30_000_000)
+        .range("y", -2048, 2048)
+        .range("z", -30_000_000, 30_000_000)
+        .range("vx", -1024, 1024)
+        .range("vy", -1024, 1024)
+        .range("vz", -1024, 1024)
+        .range("yaw", -360, 360)
+        .range("pitch", -180, 180)
+        .range("target_entity_id", 0, Integer.MAX_VALUE)
+        .message("main_hand_item", MessageSpace.of(ProtoItemStackView.getDescriptor()))
+        .build();
 
     public SelfStateObservationCreator() {
     }
@@ -55,23 +48,8 @@ public class SelfStateObservationCreator extends AbstractObservationComponentCre
     }
 
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoSelfState> defaultSpace() {
         return DEFAULT_SPACE;
-    }
-
-    @Override
-    public boolean contains(ProtoSelfState component) {
-        return component != null
-            && component.getHealth() >= 0
-            && component.getMaxHealth() >= 0
-            && Double.isFinite(component.getX())
-            && Double.isFinite(component.getY())
-            && Double.isFinite(component.getZ())
-            && Double.isFinite(component.getVx())
-            && Double.isFinite(component.getVy())
-            && Double.isFinite(component.getVz())
-            && Float.isFinite(component.getYaw())
-            && Float.isFinite(component.getPitch());
     }
 
     @Override

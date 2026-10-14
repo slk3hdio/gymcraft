@@ -1,7 +1,6 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
 import java.util.List;
-import java.util.Map;
 
 import net.minecraft.world.entity.Mob;
 
@@ -10,10 +9,9 @@ import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponent
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoDamageRecord;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoHealthLog;
-import io.github.mousemeya.gymcraft.gym.space.DictSpace;
+import io.github.mousemeya.gymcraft.gym.space.FieldConstraint;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
-import io.github.mousemeya.gymcraft.gym.space.SequenceSpace;
-import io.github.mousemeya.gymcraft.gym.space.TextSpace;
+import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 /**
@@ -45,14 +43,8 @@ public class HealthLogObservationCreator extends AbstractObservationComponentCre
 
     /** 返回默认结果空间。 */
     @Override
-    public McSpace<Map<String, Object>> defaultSpace() {
+    public McSpace<ProtoHealthLog> defaultSpace() {
         return buildSpace(DEFAULT_MAX_RECORDS);
-    }
-
-    /** 判断结果条数是否落在当前配置的上限内。 */
-    @Override
-    public boolean contains(ProtoHealthLog component) {
-        return component != null && component.getDamageRecordsCount() <= this.maxRecords;
     }
 
     /**
@@ -93,9 +85,11 @@ public class HealthLogObservationCreator extends AbstractObservationComponentCre
         return builder.build();
     }
 
-    /** 构造与指定条数上限匹配的观测空间。 */
-    private static McSpace<Map<String, Object>> buildSpace(int maxRecords) {
-        return new DictSpace(Map.of("damage_records", new SequenceSpace<>(new TextSpace(), maxRecords)));
+    /** 构造与指定条数上限匹配的观测空间（条数上限落在 damage_records 的长度约束上）。 */
+    private static MessageSpace<ProtoHealthLog> buildSpace(int maxRecords) {
+        return MessageSpace.<ProtoHealthLog>builder(ProtoHealthLog.getDescriptor())
+            .repeated("damage_records", new FieldConstraint.Nested(MessageSpace.of(ProtoDamageRecord.getDescriptor())), maxRecords)
+            .build();
     }
 
     /** 观测工厂 —— 为每个环境创建独立配置的生成器。 */
