@@ -17,9 +17,11 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
+import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerActor;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerService;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
@@ -58,9 +60,11 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * <p>
  * 要求生物具备手持能力（{@link Mob#canHoldItem}）。挖掘为多 tick 动作:进度在
  * {@link #tick} 中推进,被新动作打断时 {@link #onInterrupt} 清理进度与裂纹动画。
+ * 实现了 {@link EnvironmentRegionAware}：环境区域非空时目标坐标空间收紧到区域边界。
  * </p>
  */
-public class BreakBlockController extends AbstractActionComponentController<ProtoBreakBlock> {
+public class BreakBlockController extends AbstractActionComponentController<ProtoBreakBlock>
+    implements EnvironmentRegionAware {
     private static final Logger LOGGER = LoggerFactory.getLogger(BreakBlockController.class);
 
     /** 原版生存模式默认方块交互距离 ({@code Attributes.BLOCK_INTERACTION_RANGE} 默认值)。 */
@@ -68,12 +72,6 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     /** 默认挥手动画间隔（tick）。 */
     public static final int DEFAULT_SWING_INTERVAL_TICKS = 10;
 
-    private static final McSpace<ProtoBreakBlock> DEFAULT_SPACE = MessageSpace.<ProtoBreakBlock>builder(ProtoBreakBlock.getDescriptor())
-        .range("x", -30_000_000, 30_000_000)
-        .range("y", -2048, 2048)
-        .range("z", -30_000_000, 30_000_000)
-        .range("slot_id", 0, Integer.MAX_VALUE)
-        .build();
     /** 当前环境实例的跨 tick 挖掘状态（仅服务端 tick 线程访问）。 */
     @Nullable
     private MiningState miningState;
@@ -133,7 +131,35 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
 
     @Override
     public McSpace<ProtoBreakBlock> defaultSpace() {
-        return DEFAULT_SPACE;
+        return buildSpace(null);
+    }
+
+    /** 接受环境区域（构造期一次性推送）：非空时目标坐标空间收紧到区域边界。 */
+    @Override
+    public void setEnvironmentRegion(@Nullable BoundingBox region) {
+        this.setSpace(buildSpace(region));
+    }
+
+    /**
+     * 构造目标坐标空间：区域非空时 x/y/z 收紧到区域闭区间边界，否则全球默认范围。
+     *
+     * @param region 环境区域；null 表示无区域约束
+     * @return 动作参数空间
+     */
+    private static McSpace<ProtoBreakBlock> buildSpace(@Nullable BoundingBox region) {
+        var builder = MessageSpace.<ProtoBreakBlock>builder(ProtoBreakBlock.getDescriptor());
+        if (region != null) {
+            builder.range("x", region.minX(), region.maxX())
+                .range("y", region.minY(), region.maxY())
+                .range("z", region.minZ(), region.maxZ());
+        } else {
+            builder.range("x", -30_000_000, 30_000_000)
+                .range("y", -2048, 2048)
+                .range("z", -30_000_000, 30_000_000);
+        }
+        return builder
+            .range("slot_id", 0, Integer.MAX_VALUE)
+            .build();
     }
 
     /**

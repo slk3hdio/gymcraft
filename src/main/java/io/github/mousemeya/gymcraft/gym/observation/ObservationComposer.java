@@ -43,6 +43,15 @@ public class ObservationComposer {
     }
 
     /**
+     * 按注册顺序对全部观测组件执行操作（如环境构造期推送区域）。
+     *
+     * @param action 逐组件执行的操作
+     */
+    public void forEachComponent(java.util.function.Consumer<ObservationComponentCreator<?>> action) {
+        this.components.values().forEach(action);
+    }
+
+    /**
      * 按工厂注册 id 获取当前环境的组件 creator 实例，并通过工厂类型令牌校验具体类型。
      *
      * @param factory 目标观测组件工厂

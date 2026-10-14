@@ -90,6 +90,15 @@ public class ActionDispatcher {
         }
     }
 
+    /**
+     * 按注册顺序对全部动作组件执行操作（如环境构造期推送区域）。
+     *
+     * @param action 逐组件执行的操作
+     */
+    public void forEachComponent(java.util.function.Consumer<ActionComponentController<?>> action) {
+        this.components.values().forEach(action);
+    }
+
     /** @return 以组件 ID 为键的有序动作空间目录 */
     public ComponentSpaceSet space() {
         var spaces = new LinkedHashMap<String, McSpace<?>>();

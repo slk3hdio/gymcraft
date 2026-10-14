@@ -17,9 +17,11 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
@@ -39,19 +41,10 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  * 按 Agent 槽号使用物品；外部目标先校验距离和视线，再转向并执行原版持物交互入口。
  * 目标不接受直接交互的物品（如投掷物）回退为面向目标的普通使用。
  * 瞬时交互通过独立玩家桥接，食物药水由 Mob 原版 tick 消费；不执行目标自身交互。
+ * 实现了 {@link EnvironmentRegionAware}：环境区域非空时方块目标坐标空间收紧到区域边界。
  */
-public final class UseItemController extends AbstractActionComponentController<ProtoUseItem> {
-    private static final McSpace<ProtoUseItem> DEFAULT_SPACE = MessageSpace.<ProtoUseItem>builder(ProtoUseItem.getDescriptor())
-        .range("slot_id", 0, Integer.MAX_VALUE)
-        .message("block", MessageSpace.<ProtoUseItemBlockTarget>builder(ProtoUseItemBlockTarget.getDescriptor())
-            .range("x", -30_000_000, 30_000_000)
-            .range("y", -2048, 2048)
-            .range("z", -30_000_000, 30_000_000)
-            .build())
-        .message("entity", MessageSpace.<ProtoUseItemEntityTarget>builder(ProtoUseItemEntityTarget.getDescriptor())
-            .range("entity_id", 1, Integer.MAX_VALUE)
-            .build())
-        .build();
+public final class UseItemController extends AbstractActionComponentController<ProtoUseItem>
+    implements EnvironmentRegionAware {
     private double blockReachDistance = 4.5;
     private double entityReachDistance = 3.0;
     private ActionState state = ActionState.failed("use item has not started");
@@ -92,7 +85,50 @@ public final class UseItemController extends AbstractActionComponentController<P
     @Override public Class<ProtoUseItem> protoType() { return ProtoUseItem.class; }
 
     /** @return 槽号与 oneof 目标分支的嵌套动作空间 */
-    @Override public McSpace<ProtoUseItem> defaultSpace() { return DEFAULT_SPACE; }
+    @Override public McSpace<ProtoUseItem> defaultSpace() { return buildSpace(null); }
+
+    /** 接受环境区域（构造期一次性推送）：非空时方块目标坐标空间收紧到区域边界。 */
+    @Override
+    public void setEnvironmentRegion(@Nullable BoundingBox region) {
+        this.setSpace(buildSpace(region));
+    }
+
+    /**
+     * 构造动作空间：区域非空时 {@code block} 分支 x/y/z 收紧到区域闭区间边界，
+     * 槽号与实体分支不随区域变化。
+     *
+     * @param region 环境区域；null 表示无区域约束
+     * @return 动作参数空间
+     */
+    private static McSpace<ProtoUseItem> buildSpace(@Nullable BoundingBox region) {
+        return MessageSpace.<ProtoUseItem>builder(ProtoUseItem.getDescriptor())
+            .range("slot_id", 0, Integer.MAX_VALUE)
+            .message("block", blockTargetSpace(region))
+            .message("entity", MessageSpace.<ProtoUseItemEntityTarget>builder(ProtoUseItemEntityTarget.getDescriptor())
+                .range("entity_id", 1, Integer.MAX_VALUE)
+                .build())
+            .build();
+    }
+
+    /**
+     * 构造方块目标分支的坐标空间：区域非空时收紧到区域边界，否则全球默认范围。
+     *
+     * @param region 环境区域；null 表示无区域约束
+     * @return 方块目标消息空间
+     */
+    private static MessageSpace<ProtoUseItemBlockTarget> blockTargetSpace(@Nullable BoundingBox region) {
+        var builder = MessageSpace.<ProtoUseItemBlockTarget>builder(ProtoUseItemBlockTarget.getDescriptor());
+        if (region != null) {
+            builder.range("x", region.minX(), region.maxX())
+                .range("y", region.minY(), region.maxY())
+                .range("z", region.minZ(), region.maxZ());
+        } else {
+            builder.range("x", -30_000_000, 30_000_000)
+                .range("y", -2048, 2048)
+                .range("z", -30_000_000, 30_000_000);
+        }
+        return builder.build();
+    }
 
     /**
      * 在空间校验之上补充 slot_id 的 presence 检查（proto3 optional 未设置时空间跳过校验，
