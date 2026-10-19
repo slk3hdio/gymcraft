@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal, TypeAlias, TypedDict
+from dataclasses import dataclass, field
+from typing import Any, Literal, TypeAlias, TypedDict
 
 from google.protobuf.message import Message as ProtoMessage
+
+from gymcraft.type_info import Observation
 
 
 JsonScalar: TypeAlias = str | int | float | bool | None
@@ -59,10 +61,28 @@ class ParsedAgentResponse:
     batch: ParsedActionBatch
 
 
+# 一步 step 的完整结构化结果；观测原样保留，文本渲染推迟到上下文组装时进行。
+@dataclass(frozen=True)
+class TurnResult:
+    """记录一次环境推进（或原地纠错）的完整结果，供 ContextAssembler 按需渲染。"""
+
+    # 是否真实调用了底层环境的 step（格式错误原地反馈时为 False）。
+    advanced: bool
+    reward: float
+    terminated: bool
+    truncated: bool
+    # 底层 info 字典（批次摘要等，仅用于调试与摘要渲染）。
+    info: dict[str, Any] = field(default_factory=dict)
+    # 本步产生的新观测；advanced=False（观测未变化）时为 None。
+    observation: Observation | None = None
+    # 动作解析错误文本（advanced=False 时携带）。
+    error: str | None = None
+
+
 # 历史缓冲中的一轮模型输出和环境反馈。
 @dataclass(frozen=True)
 class ConversationTurn:
-    """表示上下文历史里的一对 assistant/result 消息。"""
+    """表示上下文历史里的一对 assistant/result 消息；result 保留结构化结果。"""
 
     assistant_text: str
-    result_text: str
+    result: TurnResult

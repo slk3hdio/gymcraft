@@ -10,7 +10,6 @@ MCP 服务器时被导入，包的正常使用不依赖 mcp。
 from __future__ import annotations
 
 import argparse
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -19,23 +18,22 @@ from mcp.server.mcpserver import MCPServer
 
 from gymcraft import GymCraftEnv, list_environments
 from gymcraft.llm.actions import ActionDslParser, ActionParseError, encode_action_batch, wrap_commands
-from gymcraft.llm.observations import ObservationTextFormatter, format_transition_result
+from gymcraft.llm.context import FIELD_LAST_ACTIONS, ContextAssembler, ObservationFormatConfig
+from gymcraft.llm.types import TurnResult
 from gymcraft.type_info import Observation
 
 # 未连接时的统一提示，避免每个工具重复拼装文案。
 _NO_SESSION_MSG = "尚无活跃连接，请先调用 gymcraft_connect。"
 
-# 观测格式化器无会话状态，模块级共享一个默认配置实例。
-_FORMATTER = ObservationTextFormatter()
-
 
 # 单会话状态：MCP 工具集只服务一个环境实例，复连前必须 close。
 @dataclass
 class _EnvSession:
-    """持有底层 gRPC 环境、动作 DSL 解析器和最新观测文本缓存。"""
+    """持有底层 gRPC 环境、动作 DSL 解析器、上下文组装器和最新观测文本缓存。"""
 
     env: GymCraftEnv | None = None
     parser: ActionDslParser | None = None
+    assembler: ContextAssembler | None = None
     observation_text: str = ""
     done: bool = False
 
@@ -53,27 +51,18 @@ _SERVER = MCPServer(
 )
 
 
-def _require_session() -> tuple[GymCraftEnv, ActionDslParser]:
-    """返回已连接的环境与动作解析器，未连接时抛 RuntimeError。"""
-    if _SESSION.env is None or _SESSION.parser is None:
+def _require_session() -> tuple[GymCraftEnv, ActionDslParser, ContextAssembler]:
+    """返回已连接的环境、动作解析器与上下文组装器，未连接时抛 RuntimeError。"""
+    if _SESSION.env is None or _SESSION.parser is None or _SESSION.assembler is None:
         raise RuntimeError(_NO_SESSION_MSG)
-    return _SESSION.env, _SESSION.parser
+    return _SESSION.env, _SESSION.parser, _SESSION.assembler
 
 
 def _cache_observation(observation: Observation) -> None:
-    """把最新观测格式化为文本并写入会话缓存，供 get_observation 返回。"""
-    _SESSION.observation_text = _FORMATTER.format(observation)
-
-
-def _format_last_actions(observation: Observation) -> list[str]:
-    """把观测 header 的逐项动作反馈渲染为文本行（与观测 formatter 的 header 段一致）。"""
-    lines: list[str] = []
-    for entry in observation["header"].last_actions:
-        description = json.dumps(entry.description, ensure_ascii=False)
-        lines.append(
-            f"last_action[{entry.index}] {entry.component_id} status={entry.status.lower()} description={description}"
-        )
-    return lines
+    """把最新观测全字段格式化为文本并写入会话缓存，供 get_observation 返回。"""
+    if _SESSION.assembler is None:
+        raise RuntimeError(_NO_SESSION_MSG)
+    _SESSION.observation_text = _SESSION.assembler.render_observation(observation, full=True)
 
 
 def _decode_info(raw_info: Mapping[str, Any]) -> dict[str, Any]:
@@ -115,6 +104,12 @@ def gymcraft_connect(entity_uuid: str, address: str = "localhost:50051") -> str:
         return f"connect 失败: {type(exc).__name__}: {exc}"
     _SESSION.env = env
     _SESSION.parser = ActionDslParser(env.action_space_spec)
+    # 动作执行结果只渲染批次摘要与逐项动作反馈（反馈位仅保留 last_actions），
+    # 其余观测字段经 get_observation 的全字段渲染返回。
+    _SESSION.assembler = ContextAssembler(
+        _SESSION.parser,
+        config=ObservationFormatConfig(feedback_fields=(FIELD_LAST_ACTIONS,)),
+    )
     _SESSION.observation_text = ""
     _SESSION.done = False
     return (
@@ -131,7 +126,7 @@ def gymcraft_connect(entity_uuid: str, address: str = "localhost:50051") -> str:
 def gymcraft_reset(disable_vanilla_ai: bool = True) -> str:
     """复位底层环境并缓存首条观测；返回简短确认，观测经 get_observation 获取。"""
     try:
-        env, _parser = _require_session()
+        env, _parser, _assembler = _require_session()
     except RuntimeError as exc:
         return str(exc)
     try:
@@ -153,7 +148,7 @@ def gymcraft_reset(disable_vanilla_ai: bool = True) -> str:
 def gymcraft_execute_action(actions: str) -> str:
     """解析并提交动作批次，缓存新观测，返回批次摘要与逐项动作反馈。"""
     try:
-        env, parser = _require_session()
+        env, parser, assembler = _require_session()
     except RuntimeError as exc:
         return str(exc)
     if _SESSION.done:
@@ -170,8 +165,16 @@ def gymcraft_execute_action(actions: str) -> str:
         return f"step 失败: {type(exc).__name__}: {exc}"
     _cache_observation(observation)
     _SESSION.done = terminated or truncated
-    lines = [format_transition_result(reward, terminated, truncated, info)]
-    lines.extend(_format_last_actions(observation))
+    # 组装器反馈位仅含 last_actions：输出批次摘要 + 逐项动作反馈（与历史形状一致）
+    result = TurnResult(
+        advanced=True,
+        reward=reward,
+        terminated=terminated,
+        truncated=truncated,
+        info=info,
+        observation=observation,
+    )
+    lines = [assembler.render_turn_result(result)]
     lines.append("观测已更新但不随动作返回；调用 gymcraft_get_observation 获取当前观测。")
     if _SESSION.done:
         lines.append("[回合已结束，请调用 gymcraft_reset 开始新回合]")
@@ -189,7 +192,7 @@ def gymcraft_execute_action(actions: str) -> str:
 def gymcraft_get_observation(refresh: bool = False) -> str:
     """返回缓存的观测文本；refresh=true 时先执行 /noop 刷新缓存。"""
     try:
-        env, parser = _require_session()
+        env, parser, _assembler = _require_session()
     except RuntimeError as exc:
         return str(exc)
     if not _SESSION.observation_text:
@@ -226,6 +229,7 @@ def gymcraft_close() -> str:
     finally:
         _SESSION.env = None
         _SESSION.parser = None
+        _SESSION.assembler = None
         _SESSION.observation_text = ""
         _SESSION.done = False
     return "连接已关闭。"

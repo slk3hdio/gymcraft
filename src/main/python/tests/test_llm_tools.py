@@ -36,9 +36,8 @@ from gymcraft.llm import (
     LLMEnvConfig,
     LLMGymCraftEnv,
     ObservationFormatConfig,
-    ObservationTextFormatter,
+    TurnResult,
     encode_action_batch,
-    format_transition_result,
     render_chat_transcript,
 )
 from gymcraft.type_info import (
@@ -48,10 +47,16 @@ from gymcraft.type_info import (
     ACTION_SET_BLOCK,
     ACTION_SEND_CHAT,
     ACTION_UPDATE_INTERESTING_BLOCKS,
+    OBS_MENU,
     Action,
     ActionBatch,
     Observation,
 )
+
+
+def _turn_result(observation: Observation | None = None) -> TurnResult:
+    """构造一个最小的已推进 TurnResult，供历史与渲染测试复用。"""
+    return TurnResult(advanced=True, reward=1.0, terminated=False, truncated=False, info={}, observation=observation)
 
 
 def _observation(tick: int = 1) -> Observation:
@@ -376,12 +381,13 @@ class ObservationAndContextTests(unittest.TestCase):
 
     def test_observation_is_compact_and_reports_omissions(self) -> None:
         """裁剪后的文本应保留最近目标并报告省略数量。"""
-        formatter = ObservationTextFormatter(
-            ObservationFormatConfig(
+        assembler = ContextAssembler(
+            ActionDslParser(),
+            config=ObservationFormatConfig(
                 max_entities=1, max_blocks=1, max_interesting_blocks=1, max_chat_messages=2
-            )
+            ),
         )
-        text = formatter.format(_observation())
+        text = assembler.render_observation(_observation(), full=True)
         self.assertIn("entities: total=2 shown=1 omitted=1", text)
         self.assertIn("entity_id=2 entity_type=minecraft:cow", text)
         self.assertNotIn("entity_id=1 entity_type=minecraft:skeleton", text)
@@ -432,8 +438,8 @@ class ObservationAndContextTests(unittest.TestCase):
                 ),
             ],
         )
-        formatter = ObservationTextFormatter(ObservationFormatConfig(max_structures=1))
-        text = formatter.format(observation)
+        assembler = ContextAssembler(ActionDslParser(), config=ObservationFormatConfig(max_structures=1))
+        text = assembler.render_observation(observation, full=True)
         self.assertIn("structures: total=2 shown=1 omitted=1", text)
         self.assertIn("- structure_id=minecraft:ruined_portal x=10 y=64 z=0 distance=5", text)
         self.assertNotIn("shipwreck", text)
@@ -446,7 +452,7 @@ class ObservationAndContextTests(unittest.TestCase):
             dimension="minecraft:overworld",
             biome="minecraft:ocean",
         )
-        text = ObservationTextFormatter().format(observation)
+        text = ContextAssembler(ActionDslParser()).render_observation(observation, full=True)
         self.assertIn("biome=minecraft:ocean structure=none", text)
 
     def test_context_keeps_raw_assistant_text(self) -> None:
@@ -454,10 +460,10 @@ class ObservationAndContextTests(unittest.TestCase):
         parser = ActionDslParser()
         history = ConversationHistory(max_turns=1)
         raw = "我要等待。\n```gymcraft-action\n/noop\n```"
-        history.add(raw, "[action-result] advanced=true")
+        history.add(raw, _turn_result(_observation()))
         context = ContextAssembler(parser).build(
             task="测试任务",
-            observation_text="[observation] tick=2",
+            observation=_observation(2),
             history=history.snapshot(),
             turn_index=1,
         )
@@ -467,20 +473,20 @@ class ObservationAndContextTests(unittest.TestCase):
     def test_history_collapses_full_batch_instead_of_rolling(self) -> None:
         """历史满载后的下一轮应清空整批，而不是逐轮淘汰最旧内容。"""
         history = ConversationHistory(max_turns=3)
-        history.add("assistant-1", "result-1")
-        history.add("assistant-2", "result-2")
-        history.add("assistant-3", "result-3")
+        history.add("assistant-1", _turn_result())
+        history.add("assistant-2", _turn_result())
+        history.add("assistant-3", _turn_result())
         self.assertEqual(
             ["assistant-1", "assistant-2", "assistant-3"],
             [turn.assistant_text for turn in history.snapshot()],
         )
 
-        history.add("assistant-4", "result-4")
+        history.add("assistant-4", _turn_result())
         self.assertEqual(
             ["assistant-4"],
             [turn.assistant_text for turn in history.snapshot()],
         )
-        history.add("assistant-5", "result-5")
+        history.add("assistant-5", _turn_result())
         self.assertEqual(
             ["assistant-4", "assistant-5"],
             [turn.assistant_text for turn in history.snapshot()],
@@ -489,7 +495,7 @@ class ObservationAndContextTests(unittest.TestCase):
     def test_zero_capacity_history_stays_empty(self) -> None:
         """零容量配置应继续禁用历史记录。"""
         history = ConversationHistory(max_turns=0)
-        history.add("assistant", "result")
+        history.add("assistant", _turn_result())
         self.assertEqual((), history.snapshot())
 
     def test_defaults_limit_entities_and_blocks_to_ten(self) -> None:
@@ -528,7 +534,8 @@ class ObservationAndContextTests(unittest.TestCase):
                 },
             }
         }
-        text = format_transition_result(1.0, False, False, info)
+        result = TurnResult(advanced=True, reward=1.0, terminated=False, truncated=False, info=info)
+        text = ContextAssembler(ActionDslParser()).render_turn_result(result)
         self.assertIn("status=completed", text)
         self.assertIn('"action batch completed (2/2)"', text)
         # 逐项反馈由观测 header.last_actions 承载，action-result 不展开 info 明细
@@ -536,7 +543,7 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertNotIn("block broken", text)
 
     def test_header_lists_per_action_feedback(self) -> None:
-        """观测 header 应逐项输出上批动作的状态与描述。"""
+        """反馈位应逐项输出上批动作的状态与描述（来自观测 header）。"""
         observation = _observation()
         observation["header"] = ProtoObservationHeader(
             schema_version=1,
@@ -559,7 +566,8 @@ class ObservationAndContextTests(unittest.TestCase):
                 ),
             ],
         )
-        text = ObservationTextFormatter().format(observation)
+        assembler = ContextAssembler(ActionDslParser())
+        text = assembler.render_turn_result(_turn_result(observation))
         self.assertIn('last_action[0] gymcraft:break_block status=completed description="block broken"', text)
         self.assertIn('last_action[1] gymcraft:noop status=failed description="agent is dead"', text)
 
@@ -577,24 +585,42 @@ class ObservationAndContextTests(unittest.TestCase):
             ),
         )
         observation["gymcraft:self"] = held
-        text = ObservationTextFormatter().format(observation)
+        assembler = ContextAssembler(ActionDslParser())
+        text = assembler.render_observation(observation, full=True)
         self.assertIn("main_hand=minecraft:iron_pickaxex1", text)
 
         observation["gymcraft:self"] = self_pb2.ProtoSelfState(entity_type="minecraft:zombie")
-        text = ObservationTextFormatter().format(observation)
+        text = assembler.render_observation(observation, full=True)
         self.assertIn("main_hand=empty", text)
 
     def test_action_result_without_actions_keeps_summary_only(self) -> None:
         """无逐项明细（单动作/空批次）时不渲染 action 行，只保留摘要。"""
-        text = format_transition_result(
-            1.0,
-            False,
-            False,
-            {"action_state": {"status": "completed", "description": "ok", "details": {"secret": 1}}},
+        result = TurnResult(
+            advanced=True,
+            reward=1.0,
+            terminated=False,
+            truncated=False,
+            info={"action_state": {"status": "completed", "description": "ok", "details": {"secret": 1}}},
         )
+        text = ContextAssembler(ActionDslParser()).render_turn_result(result)
         self.assertIn("status=completed", text)
         self.assertNotIn("action[0]", text)
         self.assertNotIn("secret", text)
+
+    def test_action_error_result_renders_correction_hint(self) -> None:
+        """格式错误的原地反馈应渲染错误文本与剩余纠正次数。"""
+        result = TurnResult(
+            advanced=False,
+            reward=0.0,
+            terminated=False,
+            truncated=False,
+            info={"remaining_retries": 2},
+            error="missing gymcraft-action block",
+        )
+        text = ContextAssembler(ActionDslParser()).render_turn_result(result)
+        self.assertIn("[action-error] advanced=false", text)
+        self.assertIn("missing gymcraft-action block", text)
+        self.assertIn("Remaining correction attempts=2", text)
 
     def test_rendered_transcript_has_no_role_prefixes(self) -> None:
         """展平消息时不应在 observation 等标志前添加 [user]。"""
@@ -614,11 +640,81 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertIsNone(re.search(r"[一-龥]", assembler.system_prompt))
         context = assembler.build(
             task="Explore safely.",
-            observation_text="[observation] game_tick=3",
+            observation=_observation(3),
             history=(),
             turn_index=0,
         )
-        self.assertEqual("[observation] game_tick=3", context["messages"][-1]["content"])
+        self.assertIn("[observation] game_tick=3", context["messages"][-1]["content"])
+        self.assertEqual(1, sum("[observation]" in message["content"] for message in context["messages"]))
+
+    def test_default_placement_splits_feedback_and_current_state(self) -> None:
+        """默认配置下历史反馈含 last_actions/chat/health_log，最新观测消息不含这些字段。"""
+        assembler = ContextAssembler(ActionDslParser())
+        history = ConversationHistory(max_turns=4)
+        history.add("raw", _turn_result(_observation()))
+        context = assembler.build(
+            task="任务",
+            observation=_observation(2),
+            history=history.snapshot(),
+            turn_index=1,
+        )
+        result_message = context["messages"][3]["content"]
+        self.assertIn("[action-result] advanced=true", result_message)
+        self.assertIn("last_action_status=completed", result_message)
+        self.assertIn("new chat(since last observation)", result_message)
+        self.assertIn("recent damage: unavailable", result_message)
+
+        current_message = context["messages"][-1]["content"]
+        self.assertIn("[observation] game_tick=2", current_message)
+        self.assertNotIn("last_action_status", current_message)
+        self.assertNotIn("new chat", current_message)
+        self.assertNotIn("recent damage", current_message)
+        # 状态位字段仍在最新观测消息中
+        self.assertIn("self: entity_type=minecraft:zombie", current_message)
+        self.assertIn("entities: total=2", current_message)
+
+    def test_custom_feedback_fields_move_components(self) -> None:
+        """自定义 feedback_fields 应把指定组件挪入反馈位，其余回到状态位。"""
+        assembler = ContextAssembler(
+            ActionDslParser(),
+            config=ObservationFormatConfig(feedback_fields=(OBS_MENU,)),
+        )
+        history = ConversationHistory(max_turns=4)
+        history.add("raw", _turn_result(_observation()))
+        context = assembler.build(
+            task="任务",
+            observation=_observation(2),
+            history=history.snapshot(),
+            turn_index=1,
+        )
+        result_message = context["messages"][3]["content"]
+        self.assertIn("menu: unavailable", result_message)
+        self.assertNotIn("new chat", result_message)
+
+        current_message = context["messages"][-1]["content"]
+        self.assertIn("new chat(since last observation)", current_message)
+        self.assertIn("last_action_status=completed", current_message)
+        self.assertNotIn("menu:", current_message)
+
+    def test_full_observation_renders_all_fields(self) -> None:
+        """reset 首轮（full_observation=True）应同时渲染反馈位与状态位字段。"""
+        assembler = ContextAssembler(ActionDslParser())
+        context = assembler.build(
+            task="任务",
+            observation=_observation(),
+            history=(),
+            turn_index=0,
+            full_observation=True,
+        )
+        current_message = context["messages"][-1]["content"]
+        self.assertIn("last_action_status=completed", current_message)
+        self.assertIn("new chat(since last observation)", current_message)
+        self.assertIn("self: entity_type=minecraft:zombie", current_message)
+
+    def test_unknown_feedback_field_is_rejected(self) -> None:
+        """feedback_fields 中的未知字段名应在配置校验时抛错。"""
+        with self.assertRaises(ValueError):
+            ObservationFormatConfig(feedback_fields=("gymcraft:not_a_field",))
 
 
 # LLM 环境编排和非法输出恢复测试。

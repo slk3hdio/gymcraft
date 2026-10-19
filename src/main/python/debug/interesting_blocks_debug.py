@@ -20,7 +20,7 @@ from gymcraft.gym.observation.components.interesting_blocks_pb2 import (
     ProtoInterestingBlocks,
 )
 from gymcraft.client import single_action
-from gymcraft.llm import ActionDslParser, ObservationTextFormatter, encode_action_batch
+from gymcraft.llm import ActionDslParser, ContextAssembler, encode_action_batch
 from gymcraft.type_info import (
     ACTION_UPDATE_INTERESTING_BLOCKS,
     OBS_INTERESTING_BLOCKS,
@@ -197,7 +197,7 @@ def main() -> None:
                 raise AssertionError(f"removed block types are still observed: {sorted(removed_ids)}")
             print_interesting("after_remove", observation)
 
-        formatted = ObservationTextFormatter().format(observation)
+        formatted = ContextAssembler(ActionDslParser()).render_observation(observation, full=True)
         if "interesting_blocks:" not in formatted:
             raise AssertionError("LLM formatter omitted interesting_blocks")
         print("llm_observation:\n" + formatted)

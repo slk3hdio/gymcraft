@@ -8,9 +8,8 @@ from typing import Any, Protocol
 
 from gymcraft.gym.space.space_spec_pb2 import ProtoComponentSpaceSet
 from gymcraft.llm.actions import ActionDslParser, ActionParseError, encode_action_batch
-from gymcraft.llm.context import ContextAssembler, ConversationHistory
-from gymcraft.llm.observations import ObservationFormatConfig, ObservationTextFormatter, format_transition_result
-from gymcraft.llm.types import LLMContext
+from gymcraft.llm.context import ContextAssembler, ConversationHistory, ObservationFormatConfig
+from gymcraft.llm.types import LLMContext, TurnResult
 from gymcraft.type_info import ActionBatch, Observation
 
 
@@ -62,7 +61,11 @@ class LLMEnvConfig:
 
 # 只负责串联独立工具组件的 LLM GymCraft wrapper。
 class LLMGymCraftEnv:
-    """接收模型原始文本并返回下一轮通用 Chat Completions 上下文。"""
+    """接收模型原始文本并返回下一轮通用 Chat Completions 上下文。
+
+    观测与动作结果以结构化形式保留（``TurnResult`` + 观测原文），
+    文本渲染与反馈位/状态位划分统一由 ``ContextAssembler`` 在组装时完成。
+    """
 
     def __init__(
         self,
@@ -71,7 +74,6 @@ class LLMGymCraftEnv:
         task: str,
         config: LLMEnvConfig | None = None,
         action_parser: ActionDslParser | None = None,
-        observation_formatter: ObservationTextFormatter | None = None,
         context_assembler: ContextAssembler | None = None,
         history: ConversationHistory | None = None,
     ) -> None:
@@ -86,10 +88,9 @@ class LLMGymCraftEnv:
             default_timeout_seconds=self.config.default_timeout_seconds,
             max_timeout_seconds=self.config.max_timeout_seconds,
         )
-        self.observation_formatter = observation_formatter or ObservationTextFormatter(self.config.observation)
-        self.context_assembler = context_assembler or ContextAssembler(self.action_parser)
+        self.context_assembler = context_assembler or ContextAssembler(self.action_parser, config=self.config.observation)
         self.history = history or ConversationHistory(self.config.history_turns)
-        self._observation_text = ""
+        self._observation: Observation | None = None
         self._turn_index = 0
         self._invalid_attempts = 0
         self._needs_reset = True
@@ -111,10 +112,11 @@ class LLMGymCraftEnv:
         self._turn_index = 0
         self._invalid_attempts = 0
         self._needs_reset = False
-        self._observation_text = self.observation_formatter.format(observation)
+        self._observation = observation
         info = self._decode_info(raw_info)
         info["advanced"] = True
-        return self._build_context(), info
+        # 首轮渲染全部字段（含反馈位），避免 chat/health_log 等增量内容在首步丢失
+        return self._build_context(full_observation=True), info
 
     def step(self, response_text: str) -> tuple[LLMContext, float, bool, bool, dict[str, Any]]:
         """解析并提交模型回复；格式错误时不调用底层环境并原地反馈。"""
@@ -135,9 +137,16 @@ class LLMGymCraftEnv:
                 "assistant_narrative": parsed.narrative,
             }
         )
-        result_text = format_transition_result(reward, terminated, truncated, info)
-        self.history.add(response_text, result_text)
-        self._observation_text = self.observation_formatter.format(observation)
+        result = TurnResult(
+            advanced=True,
+            reward=reward,
+            terminated=terminated,
+            truncated=truncated,
+            info=info,
+            observation=observation,
+        )
+        self.history.add(response_text, result)
+        self._observation = observation
         self._turn_index += 1
         self._invalid_attempts = 0
         self._needs_reset = terminated or truncated
@@ -157,12 +166,17 @@ class LLMGymCraftEnv:
         self._invalid_attempts += 1
         truncated = self._invalid_attempts > self.config.max_invalid_retries
         remaining = max(0, self.config.max_invalid_retries - self._invalid_attempts + 1)
-        result_text = (
-            "[action-error] advanced=false\n"
-            f"{error}\n"
-            f"The observation is unchanged. Correct the action format. Remaining correction attempts={remaining}"
+        # 观测未变化：结构化结果不携带新观测，仅记录错误与剩余纠正次数
+        result = TurnResult(
+            advanced=False,
+            reward=0.0,
+            terminated=False,
+            truncated=truncated,
+            info={"invalid_attempts": self._invalid_attempts, "remaining_retries": remaining},
+            observation=None,
+            error=str(error),
         )
-        self.history.add(response_text, result_text)
+        self.history.add(response_text, result)
         self._needs_reset = truncated
         info: dict[str, Any] = {
             "advanced": False,
@@ -172,13 +186,16 @@ class LLMGymCraftEnv:
         }
         return self._build_context(), 0.0, False, truncated, info
 
-    def _build_context(self) -> LLMContext:
+    def _build_context(self, *, full_observation: bool = False) -> LLMContext:
         """委托 ContextAssembler 使用当前状态创建模型输入。"""
+        if self._observation is None:
+            raise RuntimeError("The environment must be reset before building the context")
         return self.context_assembler.build(
             task=self.task,
-            observation_text=self._observation_text,
+            observation=self._observation,
             history=self.history.snapshot(),
             turn_index=self._turn_index,
+            full_observation=full_observation,
         )
 
     @staticmethod
