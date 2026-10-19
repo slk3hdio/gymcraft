@@ -85,6 +85,8 @@ public abstract class AbstractMcEnv implements McEnv {
     private final EnvStateSnapshot baseline;
     /** 受控实体生命周期：附件访问作用域与 reset 实体替换。 */
     private final AgentMobLifecycle mobLifecycle;
+    /** 运行时抗卸载守卫：强加载区域与 agent 所在区块，close 时精确释放。 */
+    private final EnvChunkGuard chunkGuard;
 
     @Override
     public String getRegisterId() {
@@ -133,9 +135,27 @@ public abstract class AbstractMcEnv implements McEnv {
         if (!(mob.level() instanceof ServerLevel level)) {
             throw new IllegalArgumentException("GymCraft environments require a server-level Mob: " + envTypeId);
         }
-        this.baseline = scenarioSource == null
-            ? EnvStateSnapshot.capture(level, mob, scope.region(), scope.captureBlocks(), scope.captureEntities())
-            : ScenarioWorldCodec.decode(level, scenarioSource, mob);
+        // 抗卸载守卫紧随 level 校验创建；tick 事件只发生在服务端线程，构造完成前不会触发，
+        // mob 经 Supplier 延迟取值（此时尚无 agentRuntime）是安全的。
+        this.chunkGuard = new EnvChunkGuard(level, this.envId, () -> this.mob());
+        try {
+            if (scenarioSource == null) {
+                // 挂载路径：先强加载区域区块再现场捕获基线（capture 要求区块已加载）
+                this.chunkGuard.forceRegion(scope.region());
+                this.baseline = EnvStateSnapshot.capture(
+                    level, mob, scope.region(), scope.captureBlocks(), scope.captureEntities());
+            } else {
+                // 场景路径：decode 不触碰世界，先解码出基线区域再强加载，
+                // 保证首个 reset 物化场景时区块已加载
+                EnvStateSnapshot decoded = ScenarioWorldCodec.decode(level, scenarioSource, mob);
+                this.chunkGuard.forceRegion(decoded.region());
+                this.baseline = decoded;
+            }
+        } catch (RuntimeException error) {
+            // 基线创建失败：释放已强加载的区块票，避免半成品环境泄漏
+            this.chunkGuard.release();
+            throw error;
+        }
         if (scenarioSource != null) {
             // 场景源的 preset options 作为首次 reset 的默认值（当次 reset options 覆盖 preset）
             this.scenarioPresetOptions = ScenarioWorldCodec.options(scenarioSource.definition());
@@ -144,6 +164,8 @@ public abstract class AbstractMcEnv implements McEnv {
         this.pushEnvironmentRegion();
         this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
         NeoForge.EVENT_BUS.register(this.agentRuntime);
+        // 初始跟随：立即强加载当前 agent 所在区块（此后由 tick 回调跟随迁移）
+        this.chunkGuard.followAgentNow();
     }
 
     /**
@@ -277,6 +299,8 @@ public abstract class AbstractMcEnv implements McEnv {
         // 先撤销本环境的可视化订阅（内部转交服务端线程，捕获实例防止误删同 UUID 新环境的订阅）。
         VisualizationService.close(this.mob(), this);
         this.agentRuntime.clear();
+        // 区块票先于附件清算释放：guard 自身幂等，且不依赖清算结果
+        this.chunkGuard.release();
         // 附件访问权必须在组件释放清算完成后撤销（清算经物品栏布局读取背包附件）。
         this.mobLifecycle.deactivate(this.mob());
         NeoForge.EVENT_BUS.unregister(this.agentRuntime);
