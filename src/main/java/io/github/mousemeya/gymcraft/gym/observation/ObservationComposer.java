@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
+import net.minecraft.util.profiling.Profiler;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoActionFeedback;
@@ -99,7 +100,7 @@ public class ObservationComposer {
             .setHeader(headerBuilder.build());
 
         for (var entry : this.components.entrySet()) {
-            try {
+            try (var zone = Profiler.get().zone("obs_" + entry.getKey())) {
                 builder.putComponents(entry.getKey(), Any.pack(entry.getValue().create(mob)));
             } catch (RuntimeException e) {
                 LOGGER.warn("Failed to create observation component {}: {}", entry.getKey(), e.getMessage());

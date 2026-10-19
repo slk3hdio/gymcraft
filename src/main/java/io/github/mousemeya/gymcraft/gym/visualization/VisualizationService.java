@@ -17,6 +17,7 @@ import java.util.UUID;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.profiling.Profiler;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
@@ -359,17 +360,19 @@ public final class VisualizationService {
      * @param event 服务端 tick 事件
      */
     public static void onTick(ServerTickEvent.Post event) {
-        var iterator = SUBSCRIPTIONS.values().iterator();
-        while (iterator.hasNext()) {
-            Subscription s = iterator.next();
-            if (validMob(s) == null) {
-                if (!s.player.hasDisconnected()) sendReply(s.player,
-                    new VisualSubscribePayload(s.request, s.agent, true), VisualFrame.Kind.CLEAR,
-                    "message.gymcraft.visual.subscription_expired");
-                iterator.remove();
+        try (var zone = Profiler.get().zone("gymcraft_visualization_tick")) {
+            var iterator = SUBSCRIPTIONS.values().iterator();
+            while (iterator.hasNext()) {
+                Subscription s = iterator.next();
+                if (validMob(s) == null) {
+                    if (!s.player.hasDisconnected()) sendReply(s.player,
+                        new VisualSubscribePayload(s.request, s.agent, true), VisualFrame.Kind.CLEAR,
+                        "message.gymcraft.visual.subscription_expired");
+                    iterator.remove();
+                }
             }
+            ACTIONS.keySet().removeIf(agent -> SUBSCRIPTIONS.values().stream().noneMatch(s -> s.agent.equals(agent)));
         }
-        ACTIONS.keySet().removeIf(agent -> SUBSCRIPTIONS.values().stream().noneMatch(s -> s.agent.equals(agent)));
     }
 
     /**

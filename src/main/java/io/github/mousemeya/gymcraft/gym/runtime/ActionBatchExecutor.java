@@ -9,6 +9,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.visualization.VisualizationService;
+import net.minecraft.util.profiling.Profiler;
 import net.minecraft.world.entity.Mob;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -171,7 +172,11 @@ final class ActionBatchExecutor {
             batch.activeAction = batch.actions.get(batch.nextIndex);
             // apply 前缓存执行前几何；瞬时动作（破坏/拾取等）的终态反馈需要它。
             VisualizationService.beforeAction(this.mob, batch.activeAction);
-            ActionApplyResult result = this.actionController.apply(batch.activeAction);
+            ActionApplyResult result;
+            try (var zone = Profiler.get()
+                .zone("action_apply_" + batch.activeAction.getComponentId())) {
+                result = this.actionController.apply(batch.activeAction);
+            }
             batch.activeState = result.initialState();
             // apply 完成立即强制推送初始状态（绕过节流）；终态由 finishActiveAction 统一推送。
             if (!batch.activeState.isTerminal()) {
@@ -293,7 +298,9 @@ final class ActionBatchExecutor {
                 "elapsed_ticks", batch.elapsedTicks
             ));
         }
-        return this.actionController.tick(batch.activeAction);
+        try (var zone = Profiler.get().zone("action_tick_" + batch.activeAction.getComponentId())) {
+            return this.actionController.tick(batch.activeAction);
+        }
     }
 
     /** @param batch 当前批次 @return 是否已耗尽共享超时 */
