@@ -8,6 +8,7 @@ import java.util.Set;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.util.profiling.Profiler;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import net.neoforged.neoforge.event.ServerChatEvent;
@@ -94,7 +95,9 @@ public final class ChatCapture {
      * @param event 服务端 tick 后事件
      */
     public static void onServerTickPost(ServerTickEvent.Post event) {
-        flushPending();
+        try (var zone = Profiler.get().zone("gymcraft_chat_capture")) {
+            flushPending();
+        }
     }
 
     /**

@@ -62,6 +62,9 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("state_item_cleanup", () -> EnvStateGameTests::itemEntitiesClearedAcrossResets);
         TEST_FUNCTIONS.register("state_warden_no_dig", () -> EnvStateGameTests::wardenBaselineResetKeepsSurfaced);
 
+        // ===== 环境运行时抗卸载（EnvChunkGuard） =====
+        TEST_FUNCTIONS.register("chunk_guard_region_forced_and_released", () -> EnvChunkGuardGameTests::attachForcesRegionChunksAndCloseReleases);
+
         // ===== 场景存档（docs/environment-scenarios.md） =====
         TEST_FUNCTIONS.register("scenario_parkour_round_trip", () -> ScenarioGameTests::parkourSaveSpawnRoundTrip);
         TEST_FUNCTIONS.register("scenario_warden_relocation", () -> ScenarioGameTests::wardenRelocation);

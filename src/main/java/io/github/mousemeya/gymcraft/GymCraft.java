@@ -12,6 +12,7 @@ import io.github.mousemeya.gymcraft.command.GymCraftCommands;
 import io.github.mousemeya.gymcraft.gametest.GymCraftGameTests;
 import io.github.mousemeya.gymcraft.gym.chat.ChatCapture;
 import io.github.mousemeya.gymcraft.gym.entity.PlayerSimTargetingHooks;
+import io.github.mousemeya.gymcraft.gym.env.EnvChunkGuard;
 import io.github.mousemeya.gymcraft.gym.health.DamageLogHooks;
 import io.github.mousemeya.gymcraft.gym.rpc.GymCraftRpcServer;
 import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
@@ -75,6 +76,8 @@ public class GymCraft {
     public GymCraft(IEventBus modEventBus, ModContainer modContainer) {
         modEventBus.addListener(RegistryKeys::register);
         modEventBus.addListener(GymCraftNetwork::register);
+        // 环境区块票控制器（抗卸载）：不注册则 forceChunk 抛错，持久票在世界加载时被丢弃
+        modEventBus.addListener(EnvChunkGuard::registerController);
         // 可视化服务：每 tick 回收失效订阅，停服时清空静态状态防止跨世界泄漏。
         NeoForge.EVENT_BUS.addListener(io.github.mousemeya.gymcraft.gym.visualization.VisualizationService::onTick);
         NeoForge.EVENT_BUS.addListener(io.github.mousemeya.gymcraft.gym.visualization.VisualizationService::onStopping);

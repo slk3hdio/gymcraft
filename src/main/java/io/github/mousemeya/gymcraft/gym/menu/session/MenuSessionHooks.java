@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import net.minecraft.util.profiling.Profiler;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
@@ -92,9 +93,11 @@ public final class MenuSessionHooks {
      * @param event 服务端 tick 后事件
      */
     public static void onServerTickPost(ServerTickEvent.Post event) {
-        PendingClose pending;
-        while ((pending = PENDING_CLOSES.poll()) != null) {
-            closeFor(pending.mob(), pending.reason());
+        try (var zone = Profiler.get().zone("gymcraft_menu_session_tick")) {
+            PendingClose pending;
+            while ((pending = PENDING_CLOSES.poll()) != null) {
+                closeFor(pending.mob(), pending.reason());
+            }
         }
     }
 
