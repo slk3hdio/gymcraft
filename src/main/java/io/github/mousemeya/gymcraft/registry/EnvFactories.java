@@ -45,6 +45,12 @@ public final class EnvFactories {
         IronGolemWardenEnv.Factory::new
     );
 
+    /** 单区块天然地形中完成工具链并做出铁镐的采矿任务环境。 */
+    public static final DeferredHolder<McEnvFactory, McEnvFactory> MINING = REGISTRY.register(
+        "mining",
+        MiningEnv.Factory::new
+    );
+
     public static final DeferredHolder<McEnvFactory, McEnvFactory> GENERAL = REGISTRY.register(
             "general",
             GeneralEnv.Factory::new

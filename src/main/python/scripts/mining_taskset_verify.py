@@ -1,7 +1,7 @@
 """采矿任务集已存场景的抽样端到端验证。
 
 用法:
-    uv run python debug/mining_taskset_verify.py \\
+    uv run python scripts/mining_taskset_verify.py \\
         --server-properties ../../../run/server.properties \\
         --manifest ../../../run/gymcraft/scenarios/mining_taskset_manifest.json \\
         --sample 2
@@ -18,13 +18,17 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
 from mcrcon import MCRcon  # type: ignore[import-untyped]
 
-from e2e_support import read_server_properties
+# scripts/ 与 debug/ 平级：把 debug/ 加入模块搜索路径以复用 e2e_support
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "debug"))
+
+from e2e_support import read_server_properties  # noqa: E402
 from gymcraft.client import GymCraftEnv, list_environments
 
 # 验证锚点起始坐标（远离采样区域，避免覆盖任务集世界内容）。

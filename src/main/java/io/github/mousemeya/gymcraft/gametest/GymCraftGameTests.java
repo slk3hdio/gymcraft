@@ -83,6 +83,8 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("iron_mining_progression", () -> IronMiningEnvGameTests::completeToolProgression);
         TEST_FUNCTIONS.register("iron_golem_warden_reset_restore", () -> IronGolemWardenEnvGameTests::resetMaterializesScenario);
         TEST_FUNCTIONS.register("iron_golem_warden_victory", () -> IronGolemWardenEnvGameTests::golemSpawnHealAndVictory);
+        TEST_FUNCTIONS.register("mining_milestone_rewards", () -> MiningEnvGameTests::milestoneRewards);
+        TEST_FUNCTIONS.register("mining_max_steps_truncation", () -> MiningEnvGameTests::maxStepsTruncation);
 
         // ===== PlayerSim 受控实体 =====
         TEST_FUNCTIONS.register("player_sim_profile", () -> PlayerSimGameTests::playerSimHasPlayerLikeProfile);

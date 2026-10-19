@@ -1,7 +1,7 @@
 """按区块批量构建采矿任务集：扫描、筛选并保存合格区块环境。
 
 用法:
-    uv run python debug/mining_taskset_build.py \\
+    uv run python scripts/mining_taskset_build.py \\
         --server-properties ../../../run/server.properties \\
         --scenarios-dir ../../../run/gymcraft/scenarios \\
         --manifest <manifest.json>
@@ -25,13 +25,17 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
 from mcrcon import MCRcon  # type: ignore[import-untyped]
 
-from e2e_support import read_server_properties
+# scripts/ 与 debug/ 平级：把 debug/ 加入模块搜索路径以复用 e2e_support
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "debug"))
+
+from e2e_support import read_server_properties  # noqa: E402
 
 # 采样范围：以出生点为中心的 16×16 区块（区块坐标 [-8, 8)）。
 CHUNK_MIN = -8
@@ -46,8 +50,8 @@ MIN_IRON_ORES = 1
 SCENARIO_PREFIX = "mining"
 # 强加载后等待区块真正可用的通用超时（秒）。
 CHUNK_LOAD_DEADLINE_SECONDS = 20.0
-# 环境类型：通用环境（含全部动作/观测组件，无场景硬编码依赖）。
-ENV_TYPE = "gymcraft:general"
+# 环境类型：采矿任务专用环境（含里程碑奖励与终态判定）。
+ENV_TYPE = "gymcraft:mining"
 
 # count_blocks 指令反馈格式："count=<N>"。
 COUNT_PATTERN = re.compile(r"count=(\d+)")

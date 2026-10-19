@@ -1025,7 +1025,7 @@ public final class ScenarioGameTests {
         Thread.startVirtualThread(() -> {
             try {
                 // 每种工厂都走同一个挂载入口，并执行 reset 与 step 以覆盖空范围分支。
-                for (String name : List.of("simple_mob", "general", "parkour_mob", "iron_mining", "iron_golem_warden")) {
+                for (String name : List.of("simple_mob", "general", "parkour_mob", "iron_mining", "iron_golem_warden", "mining")) {
                     AtomicReference<McEnv> ref = new AtomicReference<>();
                     runOnServer(helper, () -> {
                         Mob mob = (Mob) helper.getLevel().getEntity(original.getUUID());
