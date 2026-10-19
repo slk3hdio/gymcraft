@@ -3,6 +3,7 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryTransaction;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
+import net.minecraft.util.profiling.Profiler;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
@@ -84,8 +85,10 @@ public final class UseItemConsumption {
      */
     @SubscribeEvent
     public void onServerTick(ServerTickEvent.Post event) {
-        if (this.mob.isRemoved() || !this.mob.isUsingItem()) {
-            this.close();
+        try (var zone = Profiler.get().zone("gymcraft_use_item_tick")) {
+            if (this.mob.isRemoved() || !this.mob.isUsingItem()) {
+                this.close();
+            }
         }
     }
 

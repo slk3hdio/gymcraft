@@ -179,22 +179,28 @@ public class AgentRuntime {
 
     /** 在 tick 线程中清理动作管线、转发组件释放，执行环境侧重置并重绑定实体。 */
     private RuntimeStepResult resetOnServerTick(ResetRequest request) {
-        this.actionExecutor.interrupt("interrupted by reset");
-        this.completeQueuedActions("interrupted by reset");
-        this.actionExecutor.clearState();
-        // 组件自我释放跨动作会话状态（菜单会话、消费会话），作用于待替换的旧实体
-        this.actionController.releaseComponents("reset");
+        var profiler = Profiler.get();
+        try (var gymcraftZone = profiler.zone("gymcraft_reset")) {
+            this.actionExecutor.interrupt("interrupted by reset");
+            this.completeQueuedActions("interrupted by reset");
+            this.actionExecutor.clearState();
+            // 组件自我释放跨动作会话状态（菜单会话、消费会话），作用于待替换的旧实体
+            this.actionController.releaseComponents("reset");
 
-        Mob oldMob = this.mob;
-        Mob restoredMob = request.handler().reset(oldMob, request.seed(), request.options());
-        LOGGER.info("GymCraft runtime reset restore entity old={} new={}", oldMob.getUUID(), restoredMob.getUUID());
+            Mob oldMob = this.mob;
+            Mob restoredMob;
+            try (var envZone = profiler.zone("reset_environment")) {
+                restoredMob = request.handler().reset(oldMob, request.seed(), request.options());
+            }
+            LOGGER.info("GymCraft runtime reset restore entity old={} new={}", oldMob.getUUID(), restoredMob.getUUID());
 
-        this.mob = restoredMob;
-        this.actionExecutor.setMob(restoredMob);
-        // 通知可视化代次提升：客户端收到后丢弃旧观测与反馈图形，等待 reset 快照。
-        VisualizationService.reset(restoredMob);
-        ActionState state = ActionState.completed("reset");
-        return new RuntimeStepResult(this.observationCreator.create(restoredMob, state), state);
+            this.mob = restoredMob;
+            this.actionExecutor.setMob(restoredMob);
+            // 通知可视化代次提升：客户端收到后丢弃旧观测与反馈图形，等待 reset 快照。
+            VisualizationService.reset(restoredMob);
+            ActionState state = ActionState.completed("reset");
+            return new RuntimeStepResult(this.observationCreator.create(restoredMob, state), state);
+        }
     }
 
     /** 在受控实体 Pre 事件启动批次或下一个动作。 */

@@ -24,6 +24,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.util.profiling.Profiler;
 import net.neoforged.neoforge.common.NeoForge;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
@@ -353,8 +354,19 @@ public abstract class AbstractMcEnv implements McEnv {
      * @return 重建后已加入世界的实体
      */
     private Mob resetEnvironment(Mob currentMob, Integer seed, Map<String, Object> options) {
-        Mob newMob = this.mobLifecycle.replace(currentMob, this.baseline.restoreForReset(currentMob));
-        this.resetAgent(newMob, seed, options);
+        var profiler = Profiler.get();
+        // 基线恢复（场景环境在此物化结构）与实体替换是 reset 的两个重头，分别计时便于归因
+        Mob restored;
+        try (var zone = profiler.zone("reset_baseline_restore")) {
+            restored = this.baseline.restoreForReset(currentMob);
+        }
+        Mob newMob;
+        try (var zone = profiler.zone("reset_mob_replace")) {
+            newMob = this.mobLifecycle.replace(currentMob, restored);
+        }
+        try (var zone = profiler.zone("reset_agent")) {
+            this.resetAgent(newMob, seed, options);
+        }
         return newMob;
     }
 
