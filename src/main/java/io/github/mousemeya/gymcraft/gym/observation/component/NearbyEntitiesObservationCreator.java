@@ -1,5 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
+import java.util.Optional;
+
 import javax.annotation.Nullable;
 
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -27,8 +29,9 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * <p>
  * 默认值可通过环境构造期 setter 覆盖（数量上限 setter 会同步重建观测空间）：
  * {@link #setRadius(int)}（扫描半径，默认 16）、{@link #setMaxEntities(int)}
- * （实体数上限，默认 512）。实现了 {@link EnvironmentRegionAware}：环境区域是
- * 硬边界，查询盒钳制到区域内（半径只在区域内生效），Agent 走出区域后观测为空。
+ * （实体数上限，默认 512）。实现了 {@link EnvironmentRegionAware}：环境区域边界
+ * 写入观测空间（实体元素 x/y/z 区间），查询盒钳制到该边界内（半径只在边界内生效），
+ * Agent 走出边界后观测为空；组件不另存区域字段。
  * </p>
  */
 public class NearbyEntitiesObservationCreator extends AbstractObservationComponentCreator<ProtoNearbyEntities>
@@ -42,8 +45,6 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
     private int radius = DEFAULT_RADIUS;
     /** 当前环境实例的实体数上限。 */
     private int maxEntities = DEFAULT_MAX_ENTITIES;
-    /** 环境区域（硬边界）；null 表示无区域约束。 */
-    private @Nullable BoundingBox region;
 
     public NearbyEntitiesObservationCreator() {
     }
@@ -55,10 +56,10 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
 
     @Override
     public McSpace<ProtoNearbyEntities> defaultSpace() {
-        return buildSpace(DEFAULT_MAX_ENTITIES);
+        return buildSpace(DEFAULT_MAX_ENTITIES, Optional.empty());
     }
 
-    /** 设置扫描半径（必须为正数；仅在环境区域内生效）。 */
+    /** 设置扫描半径（必须为正数；仅在空间声明的区域边界内生效）。 */
     public void setRadius(int radius) {
         if (radius <= 0) {
             throw new IllegalArgumentException("radius must be positive, got: " + radius);
@@ -66,19 +67,21 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
         this.radius = radius;
     }
 
-    /** 设置实体数上限（必须为正数），并重建观测空间。 */
+    /** 设置实体数上限（必须为正数），并重建观测空间（保留当前区域边界）。 */
     public void setMaxEntities(int maxEntities) {
         if (maxEntities <= 0) {
             throw new IllegalArgumentException("max_entities must be positive, got: " + maxEntities);
         }
         this.maxEntities = maxEntities;
-        this.setSpace(buildSpace(maxEntities));
+        this.setSpace(buildSpace(maxEntities, this.regionBounds()));
     }
 
-    /** 接受环境区域（构造期一次性推送）；null 表示无区域约束。 */
+    /** 接受环境区域（构造期一次性推送）：非空时把边界写入观测空间（实体元素 x/y/z 区间）。 */
     @Override
     public void setEnvironmentRegion(@Nullable BoundingBox region) {
-        this.region = region;
+        if (region != null) {
+            this.setSpace(buildSpace(this.maxEntities, Optional.of(region)));
+        }
     }
 
     @Override
@@ -87,10 +90,12 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
         var pos = mob.position();
         var aabb = new AABB(pos.x - this.radius, pos.y - this.radius, pos.z - this.radius,
             pos.x + this.radius, pos.y + this.radius, pos.z + this.radius);
-        if (this.region != null) {
-            AABB clamped = EnvironmentRegionAware.clampAabb(aabb, this.region);
+        // 查询盒钳制到空间声明的区域边界；无声明（默认空间）时不限制
+        var region = this.regionBounds();
+        if (region.isPresent()) {
+            AABB clamped = EnvironmentRegionAware.clampAabb(aabb, region.get());
             if (clamped == null) {
-                // 查询盒与环境区域无交集：Agent 已走出观测区域
+                // 查询盒与区域边界无交集：Agent 已走出观测区域
                 return builder.build();
             }
             aabb = clamped;
@@ -112,10 +117,45 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
         return builder.build();
     }
 
-    /** 构造与指定实体数上限匹配的观测空间（数量上限落在 entities 的长度约束上）。 */
-    private static MessageSpace<ProtoNearbyEntities> buildSpace(int maxEntities) {
+    /**
+     * 从当前观测空间读回区域边界（entities 元素的 x/y/z 区间，字段名为本组件
+     * proto 的坐标字段）。
+     *
+     * @return 空间声明的区域边界；空间未声明完整坐标区间时为 empty
+     */
+    private Optional<BoundingBox> regionBounds() {
+        return NearbyBlockScanner.scanBoundsOf(this.space(), "entities", "x", "y", "z");
+    }
+
+    /**
+     * 构造与指定区域边界及实体数上限匹配的观测空间。
+     *
+     * @param maxEntities 实体数上限（落在 entities 的长度约束上）
+     * @param bounds 区域边界（落在 entities 元素 x/y/z 的区间约束上；empty 表示不声明边界）
+     * @return 观测空间
+     */
+    private static MessageSpace<ProtoNearbyEntities> buildSpace(int maxEntities, Optional<BoundingBox> bounds) {
+        FieldConstraint element = bounds
+            .map(NearbyEntitiesObservationCreator::entityViewSpace)
+            .map(FieldConstraint.Nested::new)
+            .orElseGet(() -> new FieldConstraint.Nested(MessageSpace.of(ProtoEntityView.getDescriptor())));
         return MessageSpace.<ProtoNearbyEntities>builder(ProtoNearbyEntities.getDescriptor())
-            .repeated("entities", new FieldConstraint.Nested(MessageSpace.of(ProtoEntityView.getDescriptor())), maxEntities)
+            .repeated("entities", element, maxEntities)
+            .build();
+    }
+
+    /**
+     * 构造带 x/y/z 区间约束的实体视图嵌套空间（即区域边界的空间载体）。
+     * 实体坐标是实数，方块闭盒对应的实体坐标域为 [min, max + 1]。
+     *
+     * @param bounds 区域边界（方块坐标闭区间）
+     * @return 实体视图消息空间
+     */
+    private static MessageSpace<ProtoEntityView> entityViewSpace(BoundingBox bounds) {
+        return MessageSpace.<ProtoEntityView>builder(ProtoEntityView.getDescriptor())
+            .range("x", bounds.minX(), bounds.maxX() + 1.0)
+            .range("y", bounds.minY(), bounds.maxY() + 1.0)
+            .range("z", bounds.minZ(), bounds.maxZ() + 1.0)
             .build();
     }
 
