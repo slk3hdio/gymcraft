@@ -28,10 +28,11 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * <p>
  * 扫描范围与结果上限统一声明在观测空间上：范围即 {@code blocks} 元素消息 x/y/z 的区间约束
  * （固定绝对世界坐标，不随 Agent 位置漂移），结果上限即 {@code blocks} 的长度约束；组件扫描前
- * 从当前空间读回范围。实现了 {@link EnvironmentRegionAware}：生效范围 = 声明范围 ∩ 环境区域
- * （区域是硬边界，无交集时观测恒为空列表）。无环境区域且空间未声明 x/y/z 区间（默认空间即如此）
- * 时无边界扫描全世界（实际覆盖由遍历预算约束）；声明了范围且 Agent 眼睛已走出范围时，观测为
- * 空列表。环境构造期可经 setter 覆盖（均同步重建观测空间）：
+ * 从当前空间读回范围。实现了 {@link EnvironmentRegionAware}：环境构造期以区域重置扫描范围
+ * （直接写入空间，不另存区域字段）；显式 {@link #setScanBounds(BoundingBox)} 为后写覆盖。
+ * 空间未声明 x/y/z 区间（无环境区域的默认空间即如此）时无边界扫描全世界（实际覆盖由遍历预算
+ * 约束）；声明了范围且 Agent 眼睛已走出范围时，观测为空列表。环境构造期可经 setter 覆盖
+ * （均同步重建观测空间）：
  * {@link #setScanBounds(BoundingBox)}（绝对扫描范围）、
  * {@link #setMaxBlocks(int)}（返回方块数上限，默认 128）、
  * {@link #setMaxVisited(int)}（遍历节点数上限，默认 256，仅运行预算不入空间）。
@@ -39,9 +40,6 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  */
 public class NearbyBlocksObservationCreator extends AbstractObservationComponentCreator<ProtoNearbyBlocks>
     implements EnvironmentRegionAware {
-    /** 无界哨兵盒（与任何盒求交都得对方），用于统一"声明 ∩ 区域"的求交逻辑。 */
-    private static final BoundingBox UNBOUNDED = BoundingBox.infinite();
-
     /** 默认遍历节点数上限。 */
     public static final int DEFAULT_MAX_VISITED = 256;
     /** 默认返回方块数上限。 */
@@ -51,8 +49,6 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
     private int maxBlocks = DEFAULT_MAX_BLOCKS;
     /** 当前环境实例的遍历节点数上限。 */
     private int maxVisited = DEFAULT_MAX_VISITED;
-    /** 环境区域（硬边界）；null 表示无区域约束。 */
-    private @Nullable BoundingBox region;
 
     public NearbyBlocksObservationCreator() {
     }
@@ -89,24 +85,20 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
         this.maxVisited = maxVisited;
     }
 
-    /** 接受环境区域（构造期一次性推送）；null 表示无区域约束。 */
+    /** 接受环境区域（构造期一次性推送）：非空时以区域重置扫描范围（写入观测空间）。 */
     @Override
     public void setEnvironmentRegion(@Nullable BoundingBox region) {
-        this.region = region;
+        if (region != null) {
+            this.setScanBounds(region);
+        }
     }
 
     @Override
     public ProtoNearbyBlocks create(Mob mob) {
         var builder = ProtoNearbyBlocks.newBuilder();
-        var bounds = this.effectiveBounds();
-        if (bounds.isEmpty()) {
-            // 声明范围与环境区域无交集，恒无内容
-            return builder.build();
-        }
-        // 无界哨兵转 null，让扫描跳过边界判断（等价无边界扫描全世界）
-        BoundingBox effective = UNBOUNDED.equals(bounds.get()) ? null : bounds.get();
+        // 扫描范围即当前空间边界（含区域推送写入的）；未声明时无界扫描全世界
         for (var block : NearbyBlockScanner.scan(
-            mob, effective, this.maxVisited, this.maxBlocks, state -> true
+            mob, this.scanBounds().orElse(null), this.maxVisited, this.maxBlocks, state -> true
         )) {
             BlockPos pos = block.pos();
             builder.addBlocks(ProtoBlockView.newBuilder()
@@ -119,22 +111,13 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
     }
 
     /**
-     * 计算生效扫描范围：声明范围 ∩ 环境区域（任一缺失视为无界全域盒参与求交）。
+     * 从当前观测空间读回绝对扫描范围（blocks 元素的 x/y/z 区间，字段名为本组件
+     * proto 的坐标字段）。
      *
-     * @return 生效范围；empty 表示交集为空（恒无内容）
-     */
-    private Optional<BoundingBox> effectiveBounds() {
-        BoundingBox region = this.region == null ? UNBOUNDED : this.region;
-        return EnvironmentRegionAware.intersection(this.scanBounds().orElse(UNBOUNDED), region);
-    }
-
-    /**
-     * 从当前观测空间读回绝对扫描范围（blocks 元素 x/y/z 区间）。
-     *
-     * @return 当前空间的扫描范围；空间未声明完整 x/y/z 区间（无界）时为 empty
+     * @return 当前空间的扫描范围；空间未声明完整坐标区间（无界）时为 empty
      */
     private Optional<BoundingBox> scanBounds() {
-        return NearbyBlockScanner.scanBoundsOf(this.space(), "blocks");
+        return NearbyBlockScanner.scanBoundsOf(this.space(), "blocks", "x", "y", "z");
     }
 
     /**

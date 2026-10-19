@@ -37,21 +37,26 @@ public final class NearbyBlockScanner {
     }
 
     /**
-     * 从消息空间读回扫描范围 —— 取序列字段嵌套空间中 x/y/z 的区间约束（绝对坐标）。
+     * 从消息空间读回范围 —— 取序列字段嵌套空间中各坐标轴字段的区间约束（绝对坐标）。
+     * 坐标字段名由调用方（组件）提供，本方法不假定任何字段名约定。
      *
      * @param space 组件当前的消息空间（如 ProtoNearbyBlocks 对应空间）
-     * @param blocksField 方块视图序列字段名（其元素为带 x/y/z 的方块视图消息）
-     * @return 由嵌套空间 x/y/z 区间换算的闭区间方块盒；字段无嵌套空间或任一轴缺少
-     *         区间约束（即环境未声明绝对范围、扫描无界）时为 {@link Optional#empty()}
+     * @param sequenceField 序列字段名（其元素为带坐标字段的消息）
+     * @param xField x 轴坐标字段名
+     * @param yField y 轴坐标字段名
+     * @param zField z 轴坐标字段名
+     * @return 由嵌套空间坐标区间换算的闭区间方块盒；字段无嵌套空间或任一轴缺少
+     *         区间约束（即空间未声明绝对范围）时为 {@link Optional#empty()}
      */
-    public static Optional<BoundingBox> scanBoundsOf(McSpace<?> space, String blocksField) {
-        var blockView = space.nestedOf(blocksField);
-        if (blockView.isEmpty()) {
+    public static Optional<BoundingBox> scanBoundsOf(McSpace<?> space, String sequenceField,
+            String xField, String yField, String zField) {
+        var elementSpace = space.nestedOf(sequenceField);
+        if (elementSpace.isEmpty()) {
             return Optional.empty();
         }
-        var x = blockView.get().rangeOf("x");
-        var y = blockView.get().rangeOf("y");
-        var z = blockView.get().rangeOf("z");
+        var x = elementSpace.get().rangeOf(xField);
+        var y = elementSpace.get().rangeOf(yField);
+        var z = elementSpace.get().rangeOf(zField);
         if (x.isEmpty() || y.isEmpty() || z.isEmpty()) {
             return Optional.empty();
         }
