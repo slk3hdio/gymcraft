@@ -38,7 +38,8 @@ final class ActionBatchExecutor {
     private Mob mob;
     @Nullable
     private BatchExecution pendingBatch;
-    private boolean allowMultipleActions = true;
+    // 与 AbstractMcEnv.DEFAULT_MAX_ACTIONS_PER_STEP 保持一致；<=0 表示不限制
+    private int maxActionsPerStep = 9;
     private ActionControlPolicy activePolicy = ActionControlPolicy.none();
     private ActionControlPolicy betweenActionsPolicy = ActionControlPolicy.none();
 
@@ -135,9 +136,9 @@ final class ActionBatchExecutor {
             : ActionControlPolicy.none();
     }
 
-    /** @param allowMultipleActions 是否允许单个 step 包含多个动作 */
-    void setAllowMultipleActions(boolean allowMultipleActions) {
-        this.allowMultipleActions = allowMultipleActions;
+    /** @param maxActionsPerStep 单个 step 允许的最大动作数量，<=0 表示不限制 */
+    void setMaxActionsPerStep(int maxActionsPerStep) {
+        this.maxActionsPerStep = maxActionsPerStep;
     }
 
     /**
@@ -150,8 +151,9 @@ final class ActionBatchExecutor {
             throw new IllegalStateException("Cannot accept an action batch while another batch is running");
         }
         this.pendingBatch = new BatchExecution(request);
-        if (!this.allowMultipleActions && request.actions().size() > 1) {
-            this.pendingBatch.rejectionDescription = "multiple actions are disabled for this environment";
+        if (this.maxActionsPerStep > 0 && request.actions().size() > this.maxActionsPerStep) {
+            this.pendingBatch.rejectionDescription = "action count " + request.actions().size()
+                + " exceeds the per-step limit of " + this.maxActionsPerStep;
         }
         LOGGER.info("GymCraft runtime consume action batch entity={} count={} timeout={}",
             this.mob.getUUID(), request.actions().size(), request.timeoutSeconds());

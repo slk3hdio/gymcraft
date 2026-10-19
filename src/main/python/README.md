@@ -31,7 +31,7 @@ from gymcraft.gym.action.components import noop_pb2
 env = GymCraftEnv("entity-uuid-here")
 obs, reset_info = env.reset(options={
     "disable_vanilla_ai": True,
-    "allow_multiple_actions": True,
+    "max_actions_per_step": 9,
 })  # Disable vanilla AI only while waiting between actions; defaults to False.
 self_state = obs["gymcraft:self"]
 
@@ -46,7 +46,7 @@ env.close()
 
 `reset()` returns `(observation, info)` and `step()` returns `(observation, reward, terminated, truncated, info)` (Gymnasium-style). The observation is the unpacked `Observation` dict: a `header` plus component keys that are full registration ids such as `gymcraft:self`, `gymcraft:nearby_blocks`, `gymcraft:menu`. A step receives an ordered `ActionBatch`; each action has exactly one `component_id` and protobuf `payload`, and the server executes the list serially under one shared `timeout_seconds`. `make_action()` packs one action into `ProtoMcAction`, while `unpack_observation()` converts a raw `ProtoMcObservation` back to an `Observation`.
 
-`allow_multiple_actions` 默认为 `True`。在 reset options 中设为 `False` 后，每个 step 最多接受一个 action；多 action 批次会整体失败且不产生动作副作用，空批次 noop 仍可使用。
+`max_actions_per_step` 默认为 `9`，限制每个 step 最多接受的 action 数量；超限批次会整体失败且不产生动作副作用，空批次 noop 仍可使用。设为 `0` 或负数表示不限制。
 
 `gymcraft:update_interesting_blocks` 可通过 `add_block_ids` / `remove_block_ids` 批量维护当前 Agent 关注的方块类型；`gymcraft:interesting_blocks` 返回附近匹配类型的可见 `ProtoBlockView`。
 

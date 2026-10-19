@@ -67,8 +67,10 @@ import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
 public abstract class AbstractMcEnv implements McEnv {
     /** reset options：是否在 reset 后和相邻动作之间的空闲期禁用原版 AI。 */
     public static final String DISABLE_VANILLA_AI_OPTION = "disable_vanilla_ai";
-    /** reset options：是否允许单个 step 串行执行多个动作。 */
-    public static final String ALLOW_MULTIPLE_ACTIONS_OPTION = "allow_multiple_actions";
+    /** reset options：单个 step 允许的最大动作数量（<=0 不限制）。 */
+    public static final String MAX_ACTIONS_PER_STEP_OPTION = "max_actions_per_step";
+    /** {@link #MAX_ACTIONS_PER_STEP_OPTION} 缺省值。 */
+    public static final int DEFAULT_MAX_ACTIONS_PER_STEP = 9;
 
     protected final Identifier envTypeId;
     protected final UUID envId;
@@ -76,7 +78,7 @@ public abstract class AbstractMcEnv implements McEnv {
     protected final ObservationComposer observationCreator;
     protected final AgentRuntime agentRuntime;
     private boolean disableVanillaAi;
-    private boolean allowMultipleActions = true;
+    private int maxActionsPerStep = DEFAULT_MAX_ACTIONS_PER_STEP;
     private boolean closed;
     /** 场景存档注入的 preset options：合并进下一次 reset（当次 options 覆盖 preset），随后清空。 */
     private Map<String, Object> scenarioPresetOptions = Map.of();
@@ -284,7 +286,7 @@ public abstract class AbstractMcEnv implements McEnv {
             "entity_uuid", this.mob().getUUID().toString(),
             "entity_type", BuiltInRegistries.ENTITY_TYPE.getKey(this.mob().getType()).toString(),
             DISABLE_VANILLA_AI_OPTION, this.disableVanillaAi,
-            ALLOW_MULTIPLE_ACTIONS_OPTION, this.allowMultipleActions
+            MAX_ACTIONS_PER_STEP_OPTION, this.maxActionsPerStep
         );
     }
 
@@ -405,12 +407,12 @@ public abstract class AbstractMcEnv implements McEnv {
         }
         this.lastResetOptions = Collections.unmodifiableMap(new LinkedHashMap<>(effective));
         boolean requestedDisableVanillaAi = parseDisableVanillaAi(effective);
-        boolean requestedAllowMultipleActions = parseAllowMultipleActions(effective);
+        int requestedMaxActionsPerStep = parseMaxActionsPerStep(effective);
         this.resetMob(mob, seed, effective);
         this.agentRuntime.setDisableVanillaAi(requestedDisableVanillaAi);
-        this.agentRuntime.setAllowMultipleActions(requestedAllowMultipleActions);
+        this.agentRuntime.setMaxActionsPerStep(requestedMaxActionsPerStep);
         this.disableVanillaAi = requestedDisableVanillaAi;
-        this.allowMultipleActions = requestedAllowMultipleActions;
+        this.maxActionsPerStep = requestedMaxActionsPerStep;
     }
 
     /**
@@ -466,7 +468,7 @@ public abstract class AbstractMcEnv implements McEnv {
             "env_id", this.envId.toString(),
             "entity_uuid", this.mob().getUUID().toString(),
             DISABLE_VANILLA_AI_OPTION, this.disableVanillaAi,
-            ALLOW_MULTIPLE_ACTIONS_OPTION, this.allowMultipleActions
+            MAX_ACTIONS_PER_STEP_OPTION, this.maxActionsPerStep
         );
     }
 
@@ -475,9 +477,23 @@ public abstract class AbstractMcEnv implements McEnv {
         return parseBooleanOption(options, DISABLE_VANILLA_AI_OPTION, false);
     }
 
-    /** @param options reset 选项 @return 是否允许单个 step 执行多个动作 */
-    private static boolean parseAllowMultipleActions(Map<String, Object> options) {
-        return parseBooleanOption(options, ALLOW_MULTIPLE_ACTIONS_OPTION, true);
+    /**
+     * 读取 {@link #MAX_ACTIONS_PER_STEP_OPTION} 整数 reset 选项（gRPC 数字经
+     * {@code google.protobuf.Struct} 到达时为 {@link Double}）。
+     *
+     * @param options reset 选项
+     * @return 单个 step 允许的最大动作数量，<=0 表示不限制
+     */
+    private static int parseMaxActionsPerStep(Map<String, Object> options) {
+        Object value = options.get(MAX_ACTIONS_PER_STEP_OPTION);
+        if (value == null) {
+            return DEFAULT_MAX_ACTIONS_PER_STEP;
+        }
+        if (value instanceof Number number && number.doubleValue() == Math.rint(number.doubleValue())) {
+            return number.intValue();
+        }
+        throw new IllegalArgumentException(
+            "Reset option '" + MAX_ACTIONS_PER_STEP_OPTION + "' must be an integer");
     }
 
     /**

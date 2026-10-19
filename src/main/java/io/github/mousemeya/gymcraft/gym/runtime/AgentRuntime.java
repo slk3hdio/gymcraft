@@ -99,9 +99,9 @@ public class AgentRuntime {
         this.actionExecutor.setDisableVanillaAi(disableVanillaAi);
     }
 
-    /** @param allowMultipleActions 是否允许单个 step 包含多个动作 */
-    public void setAllowMultipleActions(boolean allowMultipleActions) {
-        this.actionExecutor.setAllowMultipleActions(allowMultipleActions);
+    /** @param maxActionsPerStep 单个 step 允许的最大动作数量，<=0 表示不限制 */
+    public void setMaxActionsPerStep(int maxActionsPerStep) {
+        this.actionExecutor.setMaxActionsPerStep(maxActionsPerStep);
     }
 
     /**
