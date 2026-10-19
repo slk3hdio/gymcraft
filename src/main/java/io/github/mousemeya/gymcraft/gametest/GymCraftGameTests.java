@@ -125,6 +125,9 @@ public final class GymCraftGameTests {
         // 混入咽喉守卫：容器开盖计数跨 recheck 存活（ContainerOpenersCounterMixin）
         TEST_FUNCTIONS.register("regression_chest_lid_count_survives_recheck", () -> MenuRegressionGameTests::chestLidCountSurvivesRecheck);
 
+        // ===== 调试指令 =====
+        TEST_FUNCTIONS.register("debug_count_blocks_by_tag", () -> DebugCommandGameTests::countBlocksByTag);
+
         // ===== 可视化 =====
         TEST_FUNCTIONS.register("visualization_runtime", () -> VisualizationGameTests::runtime);
     }

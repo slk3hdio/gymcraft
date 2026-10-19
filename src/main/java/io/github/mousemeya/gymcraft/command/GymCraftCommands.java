@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
@@ -24,13 +25,17 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.IdentifierArgument;
+import net.minecraft.commands.arguments.blocks.BlockPredicateArgument;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.commands.arguments.coordinates.Vec3Argument;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.block.state.pattern.BlockInWorld;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
@@ -46,6 +51,9 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
  * （不要求 reset 过）保存为服务器全局目录下的命名场景；{@code env load} 是唯一加载路径
  * ——生成场景自带的 agent 并以（缺省指令来源位置的）指定位置为锚完整加载（场景创建即自动
  * reset 物化）；{@code env list/delete} 管理场景文件。场景系统见 {@code gym/scenario} 包。</p>
+ *
+ * <p>{@code debug count_blocks <from> <to> <filter>} 统计包围盒内匹配过滤器
+ * （方块 ID 或 {@code #tag}）的方块数量，供任务集构建等批处理脚本经 RCON 做资源统计。</p>
  */
 public final class GymCraftCommands {
     /** delete 仅补全可删除的磁盘场景。 */
@@ -139,7 +147,13 @@ public final class GymCraftCommands {
                                 .then(Commands.argument("name", StringArgumentType.word())
                                         .suggests(SCENARIO_SUGGESTIONS)
                                         .executes(ctx -> deleteScenario(ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "name")))))));
+                                                StringArgumentType.getString(ctx, "name"))))))
+                .then(Commands.literal("debug")
+                        .then(Commands.literal("count_blocks")
+                                .then(Commands.argument("from", BlockPosArgument.blockPos())
+                                        .then(Commands.argument("to", BlockPosArgument.blockPos())
+                                                .then(Commands.argument("filter", BlockPredicateArgument.blockPredicate(event.getBuildContext()))
+                                                        .executes(GymCraftCommands::countBlocksCommand)))))));
     }
 
     /**
@@ -343,5 +357,59 @@ public final class GymCraftCommands {
             return 0;
         }
         return 1;
+    }
+
+    /**
+     * {@code /gymcraft debug count_blocks <from> <to> <filter>} 指令入口。
+     *
+     * <p>统计包围盒内匹配过滤器（方块 ID 或 {@code #tag}）的方块数量，
+     * 以 {@code count=<N>} 文本反馈（供 RCON 解析）。供任务集构建等批处理脚本
+     * 做服务端资源统计——观测组件的可见面 BFS 无法发现埋藏在实心方块下的矿石。</p>
+     *
+     * @param ctx 指令上下文
+     * @return 匹配方块数（超出 int 范围时按 int 上限截断）
+     * @throws CommandSyntaxException 过滤器参数解析失败时抛出
+     */
+    private static int countBlocksCommand(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerLevel level = ctx.getSource().getLevel();
+        BlockPos from = BlockPosArgument.getBlockPos(ctx, "from");
+        BlockPos to = BlockPosArgument.getBlockPos(ctx, "to");
+        Predicate<BlockInWorld> filter = BlockPredicateArgument.getBlockPredicate(ctx, "filter");
+        long count = countBlocks(level, from, to, filter);
+        int result = (int) Math.min(count, Integer.MAX_VALUE);
+        ctx.getSource().sendSuccess(() -> Component.literal("count=" + count), false);
+        return result;
+    }
+
+    /**
+     * 统计包围盒内匹配过滤器的方块数量（核心逻辑，GameTest 可直接调用）。
+     *
+     * <p>扫描前先同步加载包围盒覆盖的全部区块，之后逐位置求值过滤器；
+     * 包围盒两角不要求有序，垂直方向越界位置按空气处理（不匹配任何过滤器）。</p>
+     *
+     * @param level 目标世界
+     * @param from 包围盒一角
+     * @param to 包围盒对角
+     * @param filter 方块过滤器（如 {@code state -> state.is(BlockTags.LOGS)}）
+     * @return 匹配方块总数
+     */
+    public static long countBlocks(ServerLevel level, BlockPos from, BlockPos to, Predicate<BlockInWorld> filter) {
+        int minChunkX = Math.min(from.getX(), to.getX()) >> 4;
+        int maxChunkX = Math.max(from.getX(), to.getX()) >> 4;
+        int minChunkZ = Math.min(from.getZ(), to.getZ()) >> 4;
+        int maxChunkZ = Math.max(from.getZ(), to.getZ()) >> 4;
+        // 扫描依赖的区块先同步加载，避免逐位置 getBlockState 反复触发加载检查
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                level.getChunk(chunkX, chunkZ);
+            }
+        }
+        long count = 0;
+        for (BlockPos pos : BlockPos.betweenClosed(from, to)) {
+            if (filter.test(new BlockInWorld(level, pos, false))) {
+                count++;
+            }
+        }
+        return count;
     }
 }
