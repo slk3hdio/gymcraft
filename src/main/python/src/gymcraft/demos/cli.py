@@ -10,6 +10,7 @@ import sys
 DEMO_MODULES = {
     "parkour": "gymcraft.demos.parkour_q_learning",
     "llm-chat": "gymcraft.demos.llm_chat",
+    "llm-chat-parallel": "gymcraft.demos.llm_chat_parallel",
     "iron-mining": "gymcraft.demos.iron_mining",
     "iron-golem-warden": "gymcraft.demos.iron_golem_warden",
 }
