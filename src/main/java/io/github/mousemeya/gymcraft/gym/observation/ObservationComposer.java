@@ -71,6 +71,17 @@ public class ObservationComposer {
     }
 
     /**
+     * 按组件注册 ID 查找 creator 实例（只读）。
+     *
+     * @param componentId 组件注册 ID
+     * @return creator 实例；未注册时为 null
+     */
+    @Nullable
+    public ObservationComponentCreator<?> findComponent(String componentId) {
+        return this.components.get(componentId);
+    }
+
+    /**
      * 组装一次完整观测。
      *
      * <p>该观测同时用于 gRPC 返回与只读可视化：末尾把这份不可变快照交给可视化

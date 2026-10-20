@@ -1,7 +1,11 @@
 package io.github.mousemeya.gymcraft.gym.observation;
 
+import java.util.Map;
+import java.util.Set;
+
 import com.google.protobuf.Message;
 
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
@@ -14,12 +18,27 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  *
  * @param <T> 对应 Protobuf 消息类型
  */
-public abstract class AbstractObservationComponentCreator<T extends Message> implements ObservationComponentCreator<T> {
+public abstract class AbstractObservationComponentCreator<T extends Message> implements ObservationComponentCreator<T>, ComponentOptionAware {
     /** 当前环境实例使用的观测空间。 */
     private McSpace<T> space;
 
     protected AbstractObservationComponentCreator() {
         this.space = this.defaultSpace();
+    }
+
+    /** 默认不支持 reset options 参数覆盖；支持的组件覆盖本方法与 {@link #applyOptions}。 */
+    @Override
+    public Set<String> optionKeys() {
+        return Set.of();
+    }
+
+    /** 默认实现：传入非空参数映射即报错（reset fail-fast）。 */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        if (!options.isEmpty()) {
+            throw new IllegalArgumentException("Component '" + this.getClass().getSimpleName()
+                + "' does not support reset options: " + options.keySet());
+        }
     }
 
     @Override

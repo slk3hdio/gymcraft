@@ -2,6 +2,7 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.Map;
 import java.util.LinkedHashMap;
+import java.util.Set;
 import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -22,6 +23,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
@@ -30,6 +32,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItem;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItemBlockTarget;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItemEntityTarget;
+import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryTransaction;
@@ -45,6 +48,9 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  */
 public final class UseItemController extends AbstractActionComponentController<ProtoUseItem>
     implements EnvironmentRegionAware {
+    /** reset options 支持的参数键。 */
+    private static final Set<String> OPTION_KEYS = Set.of("block_reach_distance", "entity_reach_distance");
+
     private double blockReachDistance = 4.5;
     private double entityReachDistance = 3.0;
     private ActionState state = ActionState.failed("use item has not started");
@@ -78,6 +84,23 @@ public final class UseItemController extends AbstractActionComponentController<P
     private static void validateDistance(double distance) {
         if (!Double.isFinite(distance) || distance <= 0) {
             throw new IllegalArgumentException("reach distance must be positive and finite");
+        }
+    }
+
+    @Override
+    public Set<String> optionKeys() {
+        return OPTION_KEYS;
+    }
+
+    /** 应用 reset options 参数覆盖：{@code block_reach_distance}、{@code entity_reach_distance}（均为有限正数）。 */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
+        if (options.containsKey("block_reach_distance")) {
+            this.setBlockReachDistance(ResetOptionValues.doubleValue(options, "block_reach_distance"));
+        }
+        if (options.containsKey("entity_reach_distance")) {
+            this.setEntityReachDistance(ResetOptionValues.doubleValue(options, "entity_reach_distance"));
         }
     }
 

@@ -1,6 +1,8 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -12,6 +14,8 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
 
 import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
+import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoEntityView;
@@ -40,6 +44,8 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
     public static final int DEFAULT_RADIUS = 16;
     /** 默认实体数上限。 */
     public static final int DEFAULT_MAX_ENTITIES = 512;
+    /** reset options 支持的参数键。 */
+    private static final Set<String> OPTION_KEYS = Set.of("radius", "max_entities");
 
     /** 当前环境实例的扫描半径。 */
     private int radius = DEFAULT_RADIUS;
@@ -74,6 +80,23 @@ public class NearbyEntitiesObservationCreator extends AbstractObservationCompone
         }
         this.maxEntities = maxEntities;
         this.setSpace(buildSpace(maxEntities, this.regionBounds()));
+    }
+
+    @Override
+    public Set<String> optionKeys() {
+        return OPTION_KEYS;
+    }
+
+    /** 应用 reset options 参数覆盖：{@code radius}（正整数）、{@code max_entities}（正整数，重建观测空间）。 */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
+        if (options.containsKey("radius")) {
+            this.setRadius(ResetOptionValues.intValue(options, "radius"));
+        }
+        if (options.containsKey("max_entities")) {
+            this.setMaxEntities(ResetOptionValues.intValue(options, "max_entities"));
+        }
     }
 
     /** 接受环境区域（构造期一次性推送）：非空时把边界写入观测空间（实体元素 x/y/z 区间）。 */

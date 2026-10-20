@@ -1,8 +1,13 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
+import java.util.Map;
+import java.util.Set;
+
 import net.minecraft.world.entity.Mob;
 
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.chat.RecentChatLog;
+import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoChatMessage;
@@ -25,6 +30,8 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 public class ChatObservationCreator extends AbstractObservationComponentCreator<ProtoRecentChat> {
     /** 默认单次观测返回的消息条数上限。 */
     public static final int DEFAULT_MAX_MESSAGES = 16;
+    /** reset options 支持的参数键。 */
+    private static final Set<String> OPTION_KEYS = Set.of("max_messages");
 
     /** 当前环境实例的单次返回条数上限。 */
     private int maxMessages = DEFAULT_MAX_MESSAGES;
@@ -59,6 +66,20 @@ public class ChatObservationCreator extends AbstractObservationComponentCreator<
         }
         this.maxMessages = maxMessages;
         this.setSpace(buildSpace(maxMessages));
+    }
+
+    @Override
+    public Set<String> optionKeys() {
+        return OPTION_KEYS;
+    }
+
+    /** 应用 reset options 参数覆盖：{@code max_messages}（正整数，重建观测空间）。 */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
+        if (options.containsKey("max_messages")) {
+            this.setMaxMessages(ResetOptionValues.intValue(options, "max_messages"));
+        }
     }
 
     /** 从服务端共享缓冲读取上次观测以来的新消息并推进增量游标。 */

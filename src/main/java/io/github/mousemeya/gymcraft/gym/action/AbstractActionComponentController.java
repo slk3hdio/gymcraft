@@ -3,12 +3,14 @@ package io.github.mousemeya.gymcraft.gym.action;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.google.protobuf.Message;
 import javax.annotation.Nullable;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
@@ -24,7 +26,7 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  *
  * @param <T> 对应 Protobuf 消息类型，需继承 {@link com.google.protobuf.Message}
  */
-public abstract class AbstractActionComponentController<T extends Message> implements ActionComponentController<T> {
+public abstract class AbstractActionComponentController<T extends Message> implements ActionComponentController<T>, ComponentOptionAware {
     /** 支持的实体类型列表（默认所有 {@link Mob} 及其子类）。 */
     private final Collection<Class<?>> supportedEntities;
     /** 当前环境实例使用的参数空间。 */
@@ -87,6 +89,21 @@ public abstract class AbstractActionComponentController<T extends Message> imple
     @Override
     public boolean supports() {
         return this.supportEntity(this.mob.getClass());
+    }
+
+    /** 默认不支持 reset options 参数覆盖；支持的组件覆盖本方法与 {@link #applyOptions}。 */
+    @Override
+    public Set<String> optionKeys() {
+        return Set.of();
+    }
+
+    /** 默认实现：传入非空参数映射即报错（reset fail-fast）。 */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        if (!options.isEmpty()) {
+            throw new IllegalArgumentException("Component '" + this.getClass().getSimpleName()
+                + "' does not support reset options: " + options.keySet());
+        }
     }
 
     /**

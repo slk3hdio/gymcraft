@@ -1,9 +1,13 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import net.minecraft.world.entity.Mob;
 
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
+import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.health.DamageLog;
 import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
@@ -27,6 +31,8 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
 public class HealthLogObservationCreator extends AbstractObservationComponentCreator<ProtoHealthLog> {
     /** 默认单次观测返回的伤害条数上限。 */
     public static final int DEFAULT_MAX_RECORDS = 16;
+    /** reset options 支持的参数键。 */
+    private static final Set<String> OPTION_KEYS = Set.of("max_records");
 
     /** 当前环境实例的单次返回条数上限。 */
     private int maxRecords = DEFAULT_MAX_RECORDS;
@@ -58,6 +64,20 @@ public class HealthLogObservationCreator extends AbstractObservationComponentCre
         }
         this.maxRecords = maxRecords;
         this.setSpace(buildSpace(maxRecords));
+    }
+
+    @Override
+    public Set<String> optionKeys() {
+        return OPTION_KEYS;
+    }
+
+    /** 应用 reset options 参数覆盖：{@code max_records}（正整数，重建观测空间）。 */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
+        if (options.containsKey("max_records")) {
+            this.setMaxRecords(ResetOptionValues.intValue(options, "max_records"));
+        }
     }
 
     /** 从 Mob 附件取出上次观测以来的新增伤害记录（读后清空）。 */
