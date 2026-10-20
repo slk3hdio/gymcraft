@@ -12,7 +12,9 @@ import javax.annotation.Nullable;
 
 import com.google.protobuf.Message;
 
+import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.rpc.ProtoJson;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
@@ -69,6 +71,8 @@ public abstract class AbstractMcEnv implements McEnv {
     public static final String DISABLE_VANILLA_AI_OPTION = "disable_vanilla_ai";
     /** reset options：单个 step 允许的最大动作数量（<=0 不限制）。 */
     public static final String MAX_ACTIONS_PER_STEP_OPTION = "max_actions_per_step";
+    /** reset options：动作/观测组件的运行参数覆盖（组件 ID → 参数键值映射，见 {@link ComponentOptionAware}）。 */
+    public static final String COMPONENTS_OPTION = "components";
     /** {@link #MAX_ACTIONS_PER_STEP_OPTION} 缺省值。 */
     public static final int DEFAULT_MAX_ACTIONS_PER_STEP = 9;
 
@@ -396,7 +400,7 @@ public abstract class AbstractMcEnv implements McEnv {
         return newMob;
     }
 
-    /** 应用通用 reset 行为：合并场景 preset options、执行每回合逻辑、记录生效 options，最后提交动作间空闲期 AI 选项。 */
+    /** 应用通用 reset 行为：合并场景 preset options、应用组件参数覆盖、执行每回合逻辑、记录生效 options，最后提交动作间空闲期 AI 选项。 */
     protected final void resetAgent(Mob mob, Integer seed, Map<String, Object> options) {
         Map<String, Object> effective = options;
         if (!this.scenarioPresetOptions.isEmpty()) {
@@ -408,6 +412,7 @@ public abstract class AbstractMcEnv implements McEnv {
         this.lastResetOptions = Collections.unmodifiableMap(new LinkedHashMap<>(effective));
         boolean requestedDisableVanillaAi = parseDisableVanillaAi(effective);
         int requestedMaxActionsPerStep = parseMaxActionsPerStep(effective);
+        this.applyComponentOptions(effective);
         this.resetMob(mob, seed, effective);
         this.agentRuntime.setDisableVanillaAi(requestedDisableVanillaAi);
         this.agentRuntime.setMaxActionsPerStep(requestedMaxActionsPerStep);
@@ -475,6 +480,60 @@ public abstract class AbstractMcEnv implements McEnv {
     /** @param options reset 选项 @return 是否在动作间禁用原版 AI */
     private static boolean parseDisableVanillaAi(Map<String, Object> options) {
         return parseBooleanOption(options, DISABLE_VANILLA_AI_OPTION, false);
+    }
+
+    /**
+     * 应用 reset options 的 {@link #COMPONENTS_OPTION} 组件参数覆盖（fail-fast）。
+     * <p>
+     * 组件 ID 无命名空间时补 {@code gymcraft:} 前缀；先查动作组件再查观测组件，未命中、
+     * 参数值非映射、未知参数键或值非法一律抛 {@link IllegalArgumentException} 使本次 reset
+     * 失败。覆盖<b>跨 reset 持久</b>——组件实例随环境存活，未指定的参数保持当前值（不自动
+     * 回退构造期默认）。
+     * </p>
+     *
+     * @param options 已合并 preset 的生效 options
+     */
+    private void applyComponentOptions(Map<String, Object> options) {
+        Object components = options.get(COMPONENTS_OPTION);
+        if (components == null) {
+            return;
+        }
+        if (!(components instanceof Map<?, ?> componentOptions)) {
+            throw new IllegalArgumentException(
+                "Reset option '" + COMPONENTS_OPTION + "' must be a map of component id to option map");
+        }
+        for (var entry : componentOptions.entrySet()) {
+            if (!(entry.getKey() instanceof String rawId)) {
+                throw new IllegalArgumentException(
+                    "Reset option '" + COMPONENTS_OPTION + "' keys must be component id strings");
+            }
+            String componentId = rawId.indexOf(':') >= 0 ? rawId : GymCraft.MODID + ":" + rawId;
+            Object component = this.actionController.findComponent(componentId);
+            if (component == null) {
+                component = this.observationCreator.findComponent(componentId);
+            }
+            if (component == null) {
+                throw new IllegalArgumentException(
+                    "Reset option '" + COMPONENTS_OPTION + "' references unknown component: " + componentId);
+            }
+            if (!(component instanceof ComponentOptionAware aware)) {
+                throw new IllegalArgumentException(
+                    "Component '" + componentId + "' does not support reset options");
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> rawOptions)) {
+                throw new IllegalArgumentException("Reset option '" + COMPONENTS_OPTION
+                    + "' value for component '" + componentId + "' must be an option map");
+            }
+            var typed = new LinkedHashMap<String, Object>();
+            for (var option : rawOptions.entrySet()) {
+                if (!(option.getKey() instanceof String key)) {
+                    throw new IllegalArgumentException("Reset option '" + COMPONENTS_OPTION
+                        + "' option keys of component '" + componentId + "' must be strings");
+                }
+                typed.put(key, option.getValue());
+            }
+            aware.applyOptions(typed);
+        }
     }
 
     /**

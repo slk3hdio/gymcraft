@@ -56,6 +56,10 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("env_disable_vanilla_ai_maintained", () -> EnvAiGameTests::disableVanillaAiIsMaintained);
         TEST_FUNCTIONS.register("env_enable_vanilla_ai_uses_controller_policy", () -> EnvAiGameTests::enabledVanillaAiUsesControllerPolicy);
 
+        // ===== reset options：组件参数覆盖（components 键） =====
+        TEST_FUNCTIONS.register("component_options_apply_and_persist", () -> ComponentOptionsGameTests::componentsOptionAppliesAndPersists);
+        TEST_FUNCTIONS.register("component_options_reject_unknown", () -> ComponentOptionsGameTests::componentsOptionRejectsUnknown);
+
         // ===== 环境状态基线（docs/environment-state-system.md） =====
         TEST_FUNCTIONS.register("state_block_rollback", () -> EnvStateGameTests::blockRollbackAcrossResets);
         TEST_FUNCTIONS.register("state_entity_rollback", () -> EnvStateGameTests::entityRollbackAcrossResets);
