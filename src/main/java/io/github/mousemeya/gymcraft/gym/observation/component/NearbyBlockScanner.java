@@ -37,7 +37,7 @@ public final class NearbyBlockScanner {
     }
 
     /**
-     * 从消息空间读回范围 —— 取序列字段嵌套空间中各坐标轴字段的区间约束（绝对坐标）。
+     * 从消息空间读回范围 —— 取序列字段元素嵌套空间中各坐标轴字段的区间约束（绝对坐标）。
      * 坐标字段名由调用方（组件）提供，本方法不假定任何字段名约定。
      *
      * @param space 组件当前的消息空间（如 ProtoNearbyBlocks 对应空间）
@@ -45,12 +45,18 @@ public final class NearbyBlockScanner {
      * @param xField x 轴坐标字段名
      * @param yField y 轴坐标字段名
      * @param zField z 轴坐标字段名
-     * @return 由嵌套空间坐标区间换算的闭区间方块盒；字段无嵌套空间或任一轴缺少
-     *         区间约束（即空间未声明绝对范围）时为 {@link Optional#empty()}
+     * @return 由嵌套空间坐标区间换算的闭区间方块盒；序列字段缺失、元素无嵌套空间
+     *         或任一轴缺少区间约束（即空间未声明绝对范围）时为 {@link Optional#empty()}
      */
     public static Optional<BoundingBox> scanBoundsOf(McSpace<?> space, String sequenceField,
             String xField, String yField, String zField) {
-        var elementSpace = space.nestedOf(sequenceField);
+        // blocks 等坐标序列声明为 Repeated(element=Nested(...))：须先取序列约束再展开元素嵌套空间，
+        // 直接用 nestedOf 查序列字段永远落空（曾导致区域钳制静默失效、退化为无界扫描）
+        var elementSpace = space.repeatedOf(sequenceField)
+            .map(FieldConstraint.Repeated::element)
+            .flatMap(element -> element instanceof FieldConstraint.Nested nested
+                ? Optional.of(nested.space())
+                : Optional.empty());
         if (elementSpace.isEmpty()) {
             return Optional.empty();
         }

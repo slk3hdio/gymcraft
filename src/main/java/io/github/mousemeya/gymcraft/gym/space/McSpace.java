@@ -97,7 +97,9 @@ public interface McSpace<T extends Message> {
      * 获取嵌套消息字段的空间。
      * <p>
      * 嵌套空间不随 {@link #constraints()} 展开，需要读取子消息内各字段范围时经此逐层进入：
-     * {@code nestedOf("blocks").flatMap(s -> s.rangeOf("x"))}。
+     * {@code nestedOf("menu").flatMap(s -> s.rangeOf("x"))}。注意本方法只匹配直接声明为
+     * 嵌套消息的字段；序列字段（如 {@code blocks}）的元素嵌套空间须先经
+     * {@link #repeatedOf(String)} 取元素约束再展开。
      * </p>
      *
      * @param field 字段名（须存在于本空间的消息类型）
