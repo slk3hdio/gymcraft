@@ -84,5 +84,5 @@ class TurnResult:
 class ConversationTurn:
     """表示上下文历史里的一对 assistant/result 消息；result 保留结构化结果。"""
 
-    assistant_text: str
+    assistant_text: str # 模型的原始输出(包括action块和action块外的描述, 但不包括thinking内容)
     result: TurnResult

@@ -38,7 +38,7 @@ include = ["gymcraft", "gymcraft.*"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src/gymcraft", "debug", "scripts"]
+files = ["src/gymcraft", "debug"]
 exclude = ["src/gymcraft/gym/"]
 mypy_path = "src"
 

@@ -109,6 +109,7 @@ public final class MiningEnv extends AbstractMcEnv {
                 ObservationCreators.NEARBY_BLOCKS.get(),
                 ObservationCreators.INTERESTING_BLOCKS.get(),
                 ObservationCreators.NEARBY_ITEMS.get(),
+                ObservationCreators.HEALTH_LOG.get(),
                 ObservationCreators.MENU.get(),
                 ObservationCreators.WORLD.get()
             ),
