@@ -1,0 +1,84 @@
+# ============================================================
+# GymCraft Python 端总配置文件（示例模板）
+#
+# 用法：
+#   1. 复制本文件为 config.yaml 并按需修改；
+#   2. demo 加 --config config.yaml，或代码中 GymCraftConfig.load("config.yaml")。
+#
+# 取值优先级：CLI 显式参数 > 本配置文件 > 环境变量 / 内置默认。
+# 所有分区均可整段省略；分区内省略的键使用内置默认值。
+# 未知分区或分区内的未知键会在加载时报错（reset_options 除外，见下）。
+# 配置只覆盖 Python 端 env 框架；demo 专用参数（task、训练超参、trace、
+# max_trials、demo 循环 max_steps 等）不纳入配置，仍走 CLI。
+# ============================================================
+
+# gRPC 连接目标
+connection:
+  # GymCraft gRPC 地址（默认 localhost:50051）
+  address: "localhost:50051"
+  # 受控实体 UUID；可省略（null）。demo 的 CLI 位置参数优先于本值，两者都缺失时报错
+  entity_uuid: null
+
+# 原样透传给 env.reset(options=...) 的开放映射。
+# 本分区内容不在 Python 端校验（服务端是权威校验方），写错键会在 reset 时报错。
+# 已知通用键：
+#   disable_vanilla_ai: bool    动作间隔期间冻结原版 AI（默认 false）
+#   max_actions_per_step: int   每个 step 最多接受的动作数（默认 9，<=0 不限制）
+#   max_steps: int              单局最大步数（仅任务环境，如 iron_mining 默认 512）
+#   components:                 按组件 ID 覆盖组件运行参数，无命名空间时自动补
+#                               gymcraft: 前缀；覆盖跨 reset 持久。支持的参数键：
+#     move_to / swim_to:        speed（导航速度，默认 1.0）
+#     pick_up_item:             pickup_reach（默认 1.5）, speed（默认 1.0）
+#     break_block / set_block:  reach_distance（默认 4.5）
+#     use_item:                 block_reach_distance（默认 4.5）, entity_reach_distance（默认 3.0）
+#     nearby_entities:          radius（默认 16）, max_entities（默认 512）
+#     nearby_items:             radius（默认 16）, max_items（默认 512）
+#     nearby_blocks / interesting_blocks: max_blocks（默认 128）, max_visited（默认 256）
+#     world:                    structure_chunk_radius（默认 4）
+#     chat:                     max_messages（默认 16）
+#     health_log:               max_records（默认 16）
+reset_options:
+  disable_vanilla_ai: true
+  components:
+    move_to:
+      speed: 1.5
+    nearby_entities:
+      radius: 24
+      max_entities: 64
+
+# LLM 服务（Chat Completions 兼容端点）
+llm:
+  # 端点地址；null 时回退 LLM_BASE_URL / OPENAI_BASE_URL 环境变量
+  base_url: null
+  # 只写环境变量名，密钥本身不入文件；该变量未设置时回退 OPENAI_API_KEY
+  api_key_env: LLM_API_KEY
+  # 模型名；null 时回退 LLM_MODEL / OPENAI_MODEL 环境变量
+  model: null
+  # 透传给 chat.completions.create 的 extra_body；null 表示不传
+  extra_body:
+    thinking:
+      type: disabled
+  # 空回复/瞬时错误的总尝试次数（含首次，默认 3）
+  max_retries: 3
+  # 退避基准秒数，按 1x/2x/4x 递增（默认 1.0）
+  retry_delay: 1.0
+
+# LLM wrapper（对应 LLMEnvConfig 的标量字段）
+wrapper:
+  history_turns: 500            # 单批保留的完整历史轮数
+  default_timeout_seconds: 10.0 # 动作批次默认超时（秒）
+  max_timeout_seconds: 60.0     # 动作批次超时上限（秒）
+  max_invalid_retries: 2        # 允许的连续格式错误次数
+
+# 观测文本渲染（对应 ObservationFormatConfig 全部字段）
+observation:
+  float_precision: 2            # 浮点数小数位
+  max_entities: 10              # 附近实体最多渲染条数
+  max_blocks: 10                # 附近方块最多渲染条数
+  max_interesting_blocks: 10    # 感兴趣方块最多渲染条数
+  max_items: 10                 # 附近掉落物最多渲染条数
+  max_chat_messages: 16         # 聊天增量最多渲染条数
+  max_health_records: 16        # 伤害记录增量最多渲染条数
+  max_structures: 10            # 附近结构最多渲染条数
+  # 渲染进每步动作反馈（反馈位）的字段；其余字段只在最新观测（状态位）显示
+  feedback_fields: ["last_actions", "gymcraft:chat", "gymcraft:health_log"]

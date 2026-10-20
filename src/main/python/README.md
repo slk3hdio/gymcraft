@@ -105,6 +105,29 @@ uv run python debug/interesting_blocks_debug.py <entity_uuid> --add minecraft:di
 
 格式错误不会推进游戏状态。wrapper 会把错误和模型原文加入上下文，默认允许两次原地纠正，连续第三次非法输出会截断当前 rollout。服务端返回的 reward、terminated 和 truncated 不会被 Python 任务逻辑改写。
 
+## 配置文件
+
+连接、reset options（含 `components` 组件参数覆盖）、LLM 服务、LLM wrapper 与观测渲染参数可集中到一份 YAML 总配置文件。完整注释模板见 `config.example.yaml`；取值优先级为 **CLI 显式参数 > 配置文件 > 环境变量 / 内置默认**。demo 专用参数（task、训练超参、trace 等）不纳入配置，仍走 CLI。
+
+```python
+from gymcraft.config import GymCraftConfig
+
+config = GymCraftConfig.load("config.yaml")  # 文件为空或分区省略时用内置默认
+env = GymCraftEnv(config.connection.entity_uuid, address=config.connection.address)
+obs, info = env.reset(options=config.reset_options())
+
+# LLM 场景：转换为框架现有配置类型
+llm_env_config = config.llm_env_config()               # -> LLMEnvConfig
+observation_config = config.observation_format_config()  # -> ObservationFormatConfig
+api_key = config.llm.resolve_api_key()  # 读 llm.api_key_env 指定的环境变量，回退 OPENAI_API_KEY
+```
+
+`reset_options` 是开放映射，原样透传给 `env.reset(options=...)`（服务端为权威校验方）；其余分区的未知键或类型错误会在加载时报 `ValueError`。所有内置 demo 支持 `--config PATH`：
+
+```powershell
+gymcraft-demo iron-mining --config config.yaml --max-steps 64
+```
+
 ## Chat Completions 闭环 Demo
 
 从 PyPI 安装客户端后，demo 可通过统一命令直接运行：

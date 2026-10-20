@@ -8,6 +8,7 @@ from collections import defaultdict
 from typing import Any, cast
 
 from gymcraft.client import GymCraftEnv, single_action
+from gymcraft.config import ConnectionConfig, GymCraftConfig
 from gymcraft.gym.action.components import jump_pb2, noop_pb2, set_block_pb2, step_move_pb2
 from gymcraft.gym.observation.components import nearby_blocks_pb2, self_pb2
 from gymcraft.type_info import (
@@ -87,12 +88,7 @@ def train(args: argparse.Namespace) -> None:
     successes = 0
     try:
         for episode in range(args.episodes):
-            obs, _ = env.reset(options={
-                "disable_vanilla_ai": True,
-                "block": args.block,
-                "block_count": args.block_count,
-                "target_height": args.target_height,
-            })
+            obs, _ = env.reset(options=args.reset_options)
             assert OBS_SELF in obs
             initial = obs[OBS_SELF]
             origin_x, origin_z, base_y = math.floor(initial.x), math.floor(initial.z), initial.y
@@ -124,8 +120,9 @@ def train(args: argparse.Namespace) -> None:
 def main() -> None:
     """解析命令行参数并启动训练。"""
     parser = argparse.ArgumentParser(description="Train a mob to parkour upward with blocks")
-    parser.add_argument("entity_uuid")
-    parser.add_argument("--address", default="localhost:50051")
+    parser.add_argument("entity_uuid", nargs="?", help="受控实体 UUID（省略时取配置文件 connection.entity_uuid）")
+    parser.add_argument("--config", help="YAML 总配置文件路径（见 config.example.yaml）")
+    parser.add_argument("--address")
     parser.add_argument("--block", default="minecraft:stone")
     parser.add_argument("--block-count", type=int, default=32)
     parser.add_argument("--target-height", type=int, default=8)
@@ -137,6 +134,25 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--log-interval", type=int, default=10)
     args = parser.parse_args()
+
+    # 取值优先级：CLI 显式值 > 配置文件 > 内置默认；本 demo 不涉及 LLM 配置。
+    config = GymCraftConfig.load(args.config) if args.config else None
+    connection = config.connection if config else ConnectionConfig()
+    args.entity_uuid = args.entity_uuid or connection.entity_uuid
+    if not args.entity_uuid:
+        parser.error("请通过位置参数或配置文件 connection.entity_uuid 提供受控实体 UUID")
+    args.address = args.address or connection.address
+
+    # demo 专用键（方块/数量/目标高度）优先于配置文件中的同名列。
+    reset_options: dict[str, Any] = config.reset_options() if config else {}
+    reset_options.update({
+        "disable_vanilla_ai": True,
+        "block": args.block,
+        "block_count": args.block_count,
+        "target_height": args.target_height,
+    })
+    args.reset_options = reset_options
+
     if args.block_count < 1 or args.target_height < 1 or args.episodes < 1:
         parser.error("block-count, target-height and episodes must be positive")
     train(args)

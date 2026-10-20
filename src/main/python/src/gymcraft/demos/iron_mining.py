@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -12,6 +13,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 from gymcraft import GymCraftEnv
+from gymcraft.config import ConnectionConfig, GymCraftConfig, LLMServiceConfig
 from gymcraft.llm import LLMEnvConfig, LLMGymCraftEnv, ObservationFormatConfig, chat_completion_text
 
 
@@ -49,7 +51,7 @@ def run(args: argparse.Namespace) -> None:
     env = LLMGymCraftEnv(
         base_env,
         task=args.task,
-        config=LLMEnvConfig(observation=ObservationFormatConfig(max_blocks=20)),
+        config=args.llm_config,
     )
     trace_handle: TextIO | None = None
     try:
@@ -59,7 +61,7 @@ def run(args: argparse.Namespace) -> None:
             trace_handle = trace_path.open("w", encoding="utf-8")
         context, reset_info = env.reset(
             seed=args.seed,
-            options={"disable_vanilla_ai": True, "max_steps": args.max_steps},
+            options=args.reset_options,
         )
         write_trace(trace_handle, {"event": "reset", "context": context, "info": reset_info})
         for step_index in range(args.max_steps):
@@ -67,7 +69,9 @@ def run(args: argparse.Namespace) -> None:
                 client,
                 args.model,
                 context["messages"],
-                extra_body={"thinking": {"type": "disabled"}},
+                extra_body=args.extra_body,
+                max_retries=args.max_retries,
+                retry_delay=args.retry_delay,
             )
             print(f"\n===== LLM turn {step_index + 1} =====\n{json.dumps(context['messages'], indent=2)}\n{model_text}")
             context, reward, terminated, truncated, info = env.step(model_text)
@@ -103,20 +107,50 @@ def main() -> None:
     """解析命令行参数并启动铁矿 LLM demo。"""
     load_dotenv()
     parser = argparse.ArgumentParser(description="Run an LLM in the GymCraft iron-mining task")
-    parser.add_argument("entity_uuid")
+    parser.add_argument("entity_uuid", nargs="?", help="受控实体 UUID（省略时取配置文件 connection.entity_uuid）")
+    parser.add_argument("--config", help="YAML 总配置文件路径（见 config.example.yaml）")
     parser.add_argument("--task", default=DEFAULT_TASK, help="覆盖内置任务提示")
-    parser.add_argument("--address", default="localhost:50051", help="GymCraft gRPC 地址")
-    parser.add_argument("--base-url", default=os.getenv("LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL"))
-    parser.add_argument("--api-key", default=os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
-    parser.add_argument("--model", default=os.getenv("LLM_MODEL") or os.getenv("OPENAI_MODEL"))
+    parser.add_argument("--address", help="GymCraft gRPC 地址")
+    parser.add_argument("--base-url")
+    parser.add_argument("--api-key")
+    parser.add_argument("--model")
     parser.add_argument("--max-steps", type=int, default=64)
     parser.add_argument("--seed", type=int)
     parser.add_argument("--trace", help="可选 JSONL 轨迹输出路径")
     args = parser.parse_args()
+
+    # 取值优先级：CLI 显式值 > 配置文件 > 环境变量 / 内置默认。
+    config = GymCraftConfig.load(args.config) if args.config else None
+    connection = config.connection if config else ConnectionConfig()
+    llm_service = config.llm if config else LLMServiceConfig()
+    args.entity_uuid = args.entity_uuid or connection.entity_uuid
+    if not args.entity_uuid:
+        parser.error("请通过位置参数或配置文件 connection.entity_uuid 提供受控实体 UUID")
+    args.address = args.address or connection.address
+    args.base_url = args.base_url or llm_service.base_url or os.getenv("LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL")
+    args.api_key = args.api_key or llm_service.resolve_api_key()
+    args.model = args.model or llm_service.model or os.getenv("LLM_MODEL") or os.getenv("OPENAI_MODEL")
+
+    # demo 必需键（含 max_steps）优先于配置文件中的同名列。
+    reset_options: dict[str, Any] = config.reset_options() if config else {}
+    reset_options.update({"disable_vanilla_ai": True, "max_steps": args.max_steps})
+    args.reset_options = reset_options
+
+    # 配置文件提供 observation 分区时整体采用配置，否则保留 demo 的观测默认（max_blocks=20）。
+    if config is not None and config.observation_configured:
+        args.llm_config = config.llm_env_config()
+    else:
+        base_llm_config = config.llm_env_config() if config else LLMEnvConfig()
+        args.llm_config = replace(base_llm_config, observation=ObservationFormatConfig(max_blocks=20))
+    # 无配置文件时保持 demo 原有的 extra_body 行为。
+    args.extra_body = llm_service.extra_body if config else {"thinking": {"type": "disabled"}}
+    args.max_retries = llm_service.max_retries
+    args.retry_delay = llm_service.retry_delay
+
     if not args.api_key:
-        parser.error("请通过 --api-key、LLM_API_KEY 或 OPENAI_API_KEY 提供 API key")
+        parser.error("请通过 --api-key、配置文件 llm.api_key_env 或 OPENAI_API_KEY 提供 API key")
     if not args.model:
-        parser.error("请通过 --model、LLM_MODEL 或 OPENAI_MODEL 指定模型")
+        parser.error("请通过 --model、配置文件 llm.model、LLM_MODEL 或 OPENAI_MODEL 指定模型")
     if args.max_steps <= 0:
         parser.error("max-steps 必须大于 0")
     if not args.task.strip():
