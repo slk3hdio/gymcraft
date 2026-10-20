@@ -1,6 +1,8 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -10,6 +12,8 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
+import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoBlockView;
@@ -44,6 +48,8 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
     public static final int DEFAULT_MAX_VISITED = 256;
     /** 默认返回方块数上限。 */
     public static final int DEFAULT_MAX_BLOCKS = 128;
+    /** reset options 支持的参数键。 */
+    private static final Set<String> OPTION_KEYS = Set.of("max_blocks", "max_visited");
 
     /** 当前环境实例的返回方块数上限。 */
     private int maxBlocks = DEFAULT_MAX_BLOCKS;
@@ -83,6 +89,26 @@ public class NearbyBlocksObservationCreator extends AbstractObservationComponent
             throw new IllegalArgumentException("max_visited must be positive, got: " + maxVisited);
         }
         this.maxVisited = maxVisited;
+    }
+
+    @Override
+    public Set<String> optionKeys() {
+        return OPTION_KEYS;
+    }
+
+    /**
+     * 应用 reset options 参数覆盖：{@code max_blocks}（正整数，重建观测空间）、
+     * {@code max_visited}（正整数）。
+     */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
+        if (options.containsKey("max_blocks")) {
+            this.setMaxBlocks(ResetOptionValues.intValue(options, "max_blocks"));
+        }
+        if (options.containsKey("max_visited")) {
+            this.setMaxVisited(ResetOptionValues.intValue(options, "max_visited"));
+        }
     }
 
     /** 接受环境区域（构造期一次性推送）：非空时以区域重置扫描范围（写入观测空间）。 */

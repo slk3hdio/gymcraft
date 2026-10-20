@@ -1,6 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.Map;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -28,12 +29,14 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 
 import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
+import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
@@ -63,6 +66,8 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
     public static final double DEFAULT_REACH_DISTANCE = 4.5;
     /** setBlock 标志位: UPDATE_NEIGHBORS | UPDATE_CLIENTS, 与常规方块放置一致。 */
     private static final int SET_BLOCK_FLAGS = 3;
+    /** reset options 支持的参数键。 */
+    private static final Set<String> OPTION_KEYS = Set.of("reach_distance");
 
     /** 当前环境实例的方块交互距离（默认 4.5，可用 {@link #setReachDistance} 覆盖）。 */
     private double reachDistance = DEFAULT_REACH_DISTANCE;
@@ -77,6 +82,20 @@ public class SetBlockController extends AbstractActionComponentController<ProtoS
             throw new IllegalArgumentException("reach_distance must be a positive finite number, got: " + reachDistance);
         }
         this.reachDistance = reachDistance;
+    }
+
+    @Override
+    public Set<String> optionKeys() {
+        return OPTION_KEYS;
+    }
+
+    /** 应用 reset options 参数覆盖：{@code reach_distance}（正数）。 */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
+        if (options.containsKey("reach_distance")) {
+            this.setReachDistance(ResetOptionValues.doubleValue(options, "reach_distance"));
+        }
     }
 
     @Override

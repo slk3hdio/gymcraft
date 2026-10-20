@@ -1,7 +1,12 @@
 package io.github.mousemeya.gymcraft.gym.observation.component;
 
+import java.util.Map;
+import java.util.Set;
+
 import net.minecraft.world.entity.Mob;
 
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
+import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.observation.AbstractObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoStructureLocation;
@@ -28,6 +33,8 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
     public static final int DEFAULT_STRUCTURE_CHUNK_RADIUS = 4;
     /** 附近结构数量上限（观测空间约束）。 */
     public static final int MAX_STRUCTURES = 64;
+    /** reset options 支持的参数键。 */
+    private static final Set<String> OPTION_KEYS = Set.of("structure_chunk_radius");
 
     /**
      * 默认观测空间：day_time 非负，附近结构数量不超过 {@link #MAX_STRUCTURES}；
@@ -61,6 +68,20 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
             throw new IllegalArgumentException("structure_chunk_radius must be positive, got: " + structureChunkRadius);
         }
         this.structureChunkRadius = structureChunkRadius;
+    }
+
+    @Override
+    public Set<String> optionKeys() {
+        return OPTION_KEYS;
+    }
+
+    /** 应用 reset options 参数覆盖：{@code structure_chunk_radius}（正整数，单位区块）。 */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
+        if (options.containsKey("structure_chunk_radius")) {
+            this.setStructureChunkRadius(ResetOptionValues.intValue(options, "structure_chunk_radius"));
+        }
     }
 
     @Override

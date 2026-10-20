@@ -2,6 +2,7 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -22,6 +23,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
 import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerActor;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerService;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
@@ -33,6 +35,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoBreakBlock;
+import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
@@ -71,6 +74,8 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     public static final double DEFAULT_REACH_DISTANCE = 4.5;
     /** 默认挥手动画间隔（tick）。 */
     public static final int DEFAULT_SWING_INTERVAL_TICKS = 10;
+    /** reset options 支持的参数键。 */
+    private static final Set<String> OPTION_KEYS = Set.of("reach_distance");
 
     /** 当前环境实例的跨 tick 挖掘状态（仅服务端 tick 线程访问）。 */
     @Nullable
@@ -114,6 +119,20 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
             throw new IllegalArgumentException("swing_interval_ticks must not be negative, got: " + swingIntervalTicks);
         }
         this.swingIntervalTicks = swingIntervalTicks;
+    }
+
+    @Override
+    public Set<String> optionKeys() {
+        return OPTION_KEYS;
+    }
+
+    /** 应用 reset options 参数覆盖：{@code reach_distance}（正数）。 */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
+        if (options.containsKey("reach_distance")) {
+            this.setReachDistance(ResetOptionValues.doubleValue(options, "reach_distance"));
+        }
     }
 
     @Override

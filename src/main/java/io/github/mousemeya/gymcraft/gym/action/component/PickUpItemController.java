@@ -2,6 +2,7 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -18,6 +19,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
@@ -26,6 +28,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.navigation.MobNavigationTask;
 import io.github.mousemeya.gymcraft.gym.action.navigation.NavigationPathProvider;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoPickUpItem;
+import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentSlot;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
@@ -51,6 +54,8 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
     public static final double DEFAULT_PICKUP_REACH = 1.5;
     /** 默认寻路速度修正值。 */
     public static final double DEFAULT_SPEED = 1.0;
+    /** reset options 支持的参数键。 */
+    private static final Set<String> OPTION_KEYS = Set.of("pickup_reach", "speed");
 
     private static final McSpace<ProtoPickUpItem> DEFAULT_SPACE = MessageSpace.<ProtoPickUpItem>builder(ProtoPickUpItem.getDescriptor())
         .range("entity_id", 0, Integer.MAX_VALUE)
@@ -85,6 +90,23 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
             throw new IllegalArgumentException("speed must be a positive finite number, got: " + speed);
         }
         this.speed = speed;
+    }
+
+    @Override
+    public Set<String> optionKeys() {
+        return OPTION_KEYS;
+    }
+
+    /** 应用 reset options 参数覆盖：{@code pickup_reach}（正数）、{@code speed}（正数）。 */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
+        if (options.containsKey("pickup_reach")) {
+            this.setPickupReach(ResetOptionValues.doubleValue(options, "pickup_reach"));
+        }
+        if (options.containsKey("speed")) {
+            this.setSpeed(ResetOptionValues.doubleValue(options, "speed"));
+        }
     }
 
     @Override
