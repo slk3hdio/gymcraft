@@ -1,0 +1,11 @@
+{# 自上次观测以来的新增聊天消息（时间升序，读后游标推进的增量记录） #}
+{% if not chat %}
+new chat: unavailable
+{% else %}
+{% from "macros.j2" import count_header %}
+{{ count_header("new chat(since last observation)", chat.total, chat.shown) }}
+{% for message in chat.entries %}
+- tick={{ message.game_tick }}{% if message.sender %} sender=<{{ message.sender }}>{% endif %} content={{ message.content | quote }}
+{% endfor %}
+You can chat with other players here.
+{% endif %}

@@ -1,0 +1,31 @@
+{# 逻辑菜单会话、槽位物品（连续空槽压缩）、属性和按钮 #}
+{% if not menu %}
+menu: unavailable
+{% elif not menu.open %}
+menu: open=false
+{% else %}
+menu: open=true session={{ menu.session_id }} type={{ menu.menu_type | quote }} title={{ menu.title | quote }}
+menu_slots:
+{% for slot in menu.slots %}
+{% if slot.empty %}
+- empty ids={{ slot.ids }} category={{ slot.category }}
+{% else %}
+- slot_id={{ slot.slot_id }} category={{ slot.category }} item_id={{ slot.item_id }} count={{ slot.count }}
+{% endif %}
+{% endfor %}
+{% if not menu.slots %}
+- none
+{% endif %}
+{% if menu.properties %}
+menu_properties:
+{% for prop in menu.properties %}
+- data_slot={{ prop.data_slot }} name={{ prop.name | quote }} value={{ prop.value }}
+{% endfor %}
+{% endif %}
+{% if menu.buttons %}
+menu_buttons:
+{% for button in menu.buttons %}
+- id={{ button.button_id }} name={{ button.name | quote }} enabled={{ button.enabled | bool }}
+{% endfor %}
+{% endif %}
+{% endif %}

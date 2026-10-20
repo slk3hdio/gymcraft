@@ -1,0 +1,4 @@
+{# 模板共用宏：序列段标题（带省略计数） #}
+{% macro count_header(name, total, shown) -%}
+{{ name }}: total={{ total }} shown={{ shown }}{% if total > shown %} omitted={{ total - shown }}{% endif %}
+{%- endmacro %}

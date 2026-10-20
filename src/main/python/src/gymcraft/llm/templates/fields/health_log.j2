@@ -1,0 +1,10 @@
+{# 自上次观测以来受到的伤害（时间升序，读后即清空的增量记录） #}
+{% if not health_log %}
+recent damage: unavailable
+{% else %}
+{% from "macros.j2" import count_header %}
+{{ count_header("recent damage(since last observation)", health_log.total, health_log.shown) }}
+{% for record in health_log.entries %}
+- tick={{ record.game_tick }} damage={{ record.health_damage | num }} original={{ record.original_damage | num }} type={{ record.damage_type }}{{ " from=<" ~ record.source_entity_type ~ "#" ~ record.source_entity_id ~ ">" if record.source_entity_type else "" }}{{ " via=<" ~ record.direct_entity_type ~ ">" if record.direct_entity_type else "" }}
+{% endfor %}
+{% endif %}

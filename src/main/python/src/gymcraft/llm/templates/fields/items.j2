@@ -1,0 +1,10 @@
+{# 按距离和 entity id 稳定排序的附近掉落物 #}
+{% if not items %}
+items: unavailable
+{% else %}
+{% from "macros.j2" import count_header %}
+{{ count_header("items", items.total, items.shown) }}
+{% for item in items.entries %}
+- entity_id={{ item.entity_id }} item_id={{ item.item_id }} count={{ item.count }} x={{ item.x | num }} y={{ item.y | num }} z={{ item.z | num }} distance={{ item.distance | num }}
+{% endfor %}
+{% endif %}

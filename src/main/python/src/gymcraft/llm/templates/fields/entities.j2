@@ -1,0 +1,10 @@
+{# 按距离和 entity id 稳定排序的附近实体 #}
+{% if not entities %}
+entities: unavailable
+{% else %}
+{% from "macros.j2" import count_header %}
+{{ count_header("entities", entities.total, entities.shown) }}
+{% for entity in entities.entries %}
+- entity_id={{ entity.entity_id }} entity_type={{ entity.entity_type }} x={{ entity.x | num }} y={{ entity.y | num }} z={{ entity.z | num }} distance={{ entity.distance | num }} health={{ entity.health | num }} max_health={{ entity.max_health | num }} hostile={{ entity.hostile | bool }} ally={{ entity.ally | bool }} player={{ entity.player | bool }} item={{ entity.item | bool }}
+{% endfor %}
+{% endif %}

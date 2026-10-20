@@ -1,0 +1,14 @@
+{# 按距离升序的附近可见方块，附加按种类聚合的数量统计 #}
+{% if not nearby_blocks %}
+nearby_blocks: unavailable
+{% else %}
+{% from "macros.j2" import count_header %}
+{{ count_header("nearby blocks", nearby_blocks.total, nearby_blocks.shown) }}
+{% for block in nearby_blocks.entries %}
+- block_id={{ block.block_id }} x={{ block.x }} y={{ block.y }} z={{ block.z }} distance={{ block.distance | num }}
+{% endfor %}
+{{ count_header("block summary", nearby_blocks.summary.total, nearby_blocks.summary.shown) }}
+{% for entry in nearby_blocks.summary.entries %}
+- block_id={{ entry.block_id }} count={{ entry.count }}
+{% endfor %}
+{% endif %}

@@ -1,0 +1,12 @@
+{# 维度、群系、所在结构、游戏时间、天气，以及按距离升序的附近结构起点 #}
+{% if not world %}
+world: unavailable
+structures: unavailable
+{% else %}
+world: dimension={{ world.dimension }} biome={{ world.biome }} structure={{ world.structure or "none" }} day_time={{ world.day_time }} raining={{ world.raining | bool }} thundering={{ world.thundering | bool }}
+{% from "macros.j2" import count_header %}
+{{ count_header("structures", world.structures.total, world.structures.shown) }}
+{% for entry in world.structures.entries %}
+- structure_id={{ entry.structure_id }} x={{ entry.x }} y={{ entry.y }} z={{ entry.z }} distance={{ entry.distance | num }}
+{% endfor %}
+{% endif %}

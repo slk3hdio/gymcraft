@@ -1,0 +1,5 @@
+{# 反馈位 header：携带上批动作摘要并逐项展开 last_actions #}
+[observation] game_tick={{ header.game_tick }} last_action_status={{ header.last_action_status | lower if header.last_action_status else "none" }} last_action_description={{ header.last_action_description | quote if header.last_action_description else '""' }}
+{% for action in header.last_actions %}
+last_action[{{ action.index }}] {{ action.component_id }} status={{ action.status | lower }} description={{ action.description | quote }}
+{% endfor %}

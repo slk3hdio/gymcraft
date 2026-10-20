@@ -63,9 +63,8 @@ GitHub Actions runs stub generation, mypy, packaging, and uploads the built dist
 
 `gymcraft.llm` 将 LLM 相关能力拆成可独立复用的组件：
 
-- `ObservationTextFormatter`：将 protobuf 观测转换为紧凑、稳定的行式文本；
 - `ActionDslParser` / `encode_action_batch`：解析模型回复中的命令 DSL，并编码为现有 `Action`；
-- `ConversationHistory` / `ContextAssembler`：组装通用 Chat Completions 消息；
+- `ConversationHistory` / `ContextAssembler`：组装通用 Chat Completions 消息；system 提示、任务消息、`action-result` 反馈与全部观测字段的文本格式由 `gymcraft/llm/templates/` 下的 Jinja 模板决定，构造 `ContextAssembler` 时传 `template_dir` 即可用自定义模板覆盖任意文件（未覆盖的文件回落内置模板）；
 - `LLMGymCraftEnv`：只负责串联上述组件与底层 `GymCraftEnv`，所有组件都可替换或单独使用。
 
 内置 system prompt、命令说明和动作纠错反馈均使用英文。观测只渲染决策所需的原生字段，不生成相对坐标等派生状态；附近实体、普通方块和感兴趣方块默认各最多 10 条。`action-result` 不包含服务端 `details`。

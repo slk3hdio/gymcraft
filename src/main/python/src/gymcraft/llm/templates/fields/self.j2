@@ -1,0 +1,6 @@
+{# 受控实体决策所需的生命、位置、朝向、状态字段和主手持物 #}
+{% if not self_state %}
+self: unavailable
+{% else %}
+self: entity_type={{ self_state.entity_type }} health={{ self_state.health | num }} max_health={{ self_state.max_health | num }} x={{ self_state.x | num }} y={{ self_state.y | num }} z={{ self_state.z | num }} yaw={{ self_state.yaw | num }} pitch={{ self_state.pitch | num }} on_ground={{ self_state.on_ground | bool }} in_water={{ self_state.in_water | bool }} in_lava={{ self_state.in_lava | bool }} alive={{ self_state.alive | bool }} navigating={{ self_state.navigating | bool }} target_entity_id={{ self_state.target_entity_id }} main_hand={{ self_state.main_hand.item_id ~ "x" ~ self_state.main_hand.count if self_state.main_hand else "empty" }}
+{% endif %}

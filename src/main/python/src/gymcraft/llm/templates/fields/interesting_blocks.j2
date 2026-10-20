@@ -1,0 +1,10 @@
+{# 按距离和坐标稳定排序的已标记类型附近可见方块 #}
+{% if not interesting_blocks %}
+interesting_blocks: unavailable
+{% else %}
+{% from "macros.j2" import count_header %}
+{{ count_header("interesting_blocks", interesting_blocks.total, interesting_blocks.shown) }}
+{% for block in interesting_blocks.entries %}
+- block_id={{ block.block_id }} x={{ block.x }} y={{ block.y }} z={{ block.z }} distance={{ block.distance | num }}
+{% endfor %}
+{% endif %}

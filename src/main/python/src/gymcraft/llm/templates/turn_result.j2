@@ -1,0 +1,13 @@
+{% if result.advanced %}
+[action-result] advanced=true reward={{ "%g" | format(result.reward) }} terminated={{ result.terminated | bool }} truncated={{ result.truncated | bool }}
+{% if result.action_state %}
+state: status={{ result.action_state.status }} description={{ result.action_state.description | quote }}
+{% endif %}
+{% if show_observation %}
+{% include "observation.j2" %}
+{% endif %}
+{% else %}
+[action-error] advanced=false
+{{ result.error or "unknown action error" }}
+The observation is unchanged. Correct the action format. Remaining correction attempts={{ result.remaining_retries }}
+{% endif %}

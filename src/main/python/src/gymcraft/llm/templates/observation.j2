@@ -1,0 +1,33 @@
+{# 按固定顺序渲染 fields 集合内的观测字段；header 形态随 last_actions 归属切换 #}
+{% if field_ids.last_actions in fields %}
+{% include "fields/header_feedback.j2" %}
+{% else %}
+{% include "fields/header_state.j2" %}
+{% endif %}
+{% if field_ids.self in fields %}
+{% include "fields/self.j2" %}
+{% endif %}
+{% if field_ids.world in fields %}
+{% include "fields/world.j2" %}
+{% endif %}
+{% if field_ids.nearby_entities in fields %}
+{% include "fields/entities.j2" %}
+{% endif %}
+{% if field_ids.nearby_blocks in fields %}
+{% include "fields/nearby_blocks.j2" %}
+{% endif %}
+{% if field_ids.interesting_blocks in fields %}
+{% include "fields/interesting_blocks.j2" %}
+{% endif %}
+{% if field_ids.nearby_items in fields %}
+{% include "fields/items.j2" %}
+{% endif %}
+{% if field_ids.menu in fields %}
+{% include "fields/menu.j2" %}
+{% endif %}
+{% if field_ids.chat in fields %}
+{% include "fields/chat.j2" %}
+{% endif %}
+{% if field_ids.health_log in fields %}
+{% include "fields/health_log.j2" %}
+{% endif %}

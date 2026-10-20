@@ -1,23 +1,33 @@
 """供应商无关的 LLM 上下文组装工具：统一负责观测与动作结果的文本渲染。
 
+渲染格式不再硬编码在 Python 中，而是由 ``gymcraft/llm/templates`` 下的
+Jinja 模板族决定（``system_prompt``/``task_message``/``turn_result``/
+``observation`` + ``fields/*`` 各观测字段分片）。Python 侧只做数据整理：
+排序、按 ``ObservationFormatConfig`` 裁剪、protobuf presence 判定与连续
+空槽压缩；数值精度（``num``）、小写布尔（``bool``）、JSON 转义（``quote``）
+以过滤器形式提供给模板。构造 ``ContextAssembler`` 时传 ``template_dir``
+即可用自定义模板覆盖任意文件，未覆盖的文件回落内置模板。
+
 观测字段经 ``ObservationFormatConfig.feedback_fields`` 分到两个展示位置：
 
 1. 反馈位——渲染进历史中每一步动作的 result 消息，随该步长期保留；
 2. 状态位——只在最新一步的观测消息中显示，避免陈旧状态堆积。
 
 渲染延迟到上下文组装时进行：``ConversationHistory`` 只保存结构化
-``TurnResult``（含当步观测原文），文本格式由本模块唯一决定。
+``TurnResult``（含当步观测原文），文本格式由模板唯一决定。
 """
 
 from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
-from gymcraft.gym.observation.common import slot_pb2
-from gymcraft.gym.observation.observation_pb2 import ProtoObservationHeader
+import jinja2
+
 from gymcraft.gym.observation.components import (
     chat_pb2,
     health_log_pb2,
@@ -29,6 +39,7 @@ from gymcraft.gym.observation.components import (
     self_pb2,
     world_pb2,
 )
+from gymcraft.gym.observation.common import slot_pb2
 from gymcraft.llm.actions import ActionDslParser
 from gymcraft.llm.types import ChatMessage, ConversationTurn, LLMContext, TurnResult
 from gymcraft.type_info import (
@@ -47,7 +58,7 @@ from gymcraft.type_info import (
 # 上批动作逐条反馈的虚拟字段名：内容来自观测 header，不属于任何观测组件。
 FIELD_LAST_ACTIONS = "last_actions"
 
-# 全部可分配展示位置的观测字段（渲染顺序即此声明顺序）。
+# 全部可分配展示位置的观测字段（模板 observation.j2 的渲染顺序与此声明一致）。
 ALL_OBSERVATION_FIELDS = (
     FIELD_LAST_ACTIONS,
     OBS_SELF,
@@ -126,12 +137,32 @@ class ConversationHistory:
         return tuple(self._turns)
 
 
+def _create_environment(template_dir: str | Path | None) -> jinja2.Environment:
+    """创建模板环境：自定义目录优先，未覆盖的文件回落内置模板。
+
+    输出是给 LLM 的纯文本，关闭自动转义（``&``/``<``/``>`` 不能被改写）；
+    开启块级标签的换行裁剪，让模板中的控制行不进入渲染结果。
+    """
+    loaders: list[jinja2.BaseLoader] = []
+    if template_dir is not None:
+        loaders.append(jinja2.FileSystemLoader(template_dir))
+    loaders.append(jinja2.PackageLoader("gymcraft.llm", "templates"))
+    return jinja2.Environment(
+        loader=jinja2.ChoiceLoader(loaders),
+        autoescape=False,
+        trim_blocks=True,
+        lstrip_blocks=True,
+        keep_trailing_newline=True,
+    )
+
+
 # 把任务、短历史和最新观测组合为 Chat Completions 消息；观测渲染唯一入口。
 class ContextAssembler:
     """生成可被不同模型 wrapper 直接消费的通用消息上下文。
 
     统一组装每步的动作与观测：历史 turn 的 result 消息渲染反馈位字段，
-    最新的观测消息只渲染状态位字段；字段归属由 ObservationFormatConfig 决定。
+    最新的观测消息只渲染状态位字段；字段归属由 ``ObservationFormatConfig``
+    决定，行格式由 Jinja 模板决定（见模块 docstring）。
     """
 
     def __init__(
@@ -139,11 +170,27 @@ class ContextAssembler:
         action_parser: ActionDslParser,
         config: ObservationFormatConfig | None = None,
         system_prompt: str | None = None,
+        template_dir: str | Path | None = None,
     ) -> None:
-        """绑定动作目录与渲染配置，并允许调用方完全替换默认 system 提示。"""
+        """绑定动作目录与渲染配置；system 提示与格式模板均可替换。"""
         self.action_parser = action_parser
         self.config = config or ObservationFormatConfig()
-        self.system_prompt = system_prompt or self._default_system_prompt()
+        self._environment = _create_environment(template_dir)
+        self._environment.filters.update(
+            {
+                "num": self._number,
+                "bool": self._bool,
+                "quote": self._quote,
+            }
+        )
+        self.system_prompt = system_prompt if system_prompt is not None else self._render(
+            "system_prompt.j2",
+            {
+                "commands": self.action_parser.command_reference(),
+                "default_timeout_seconds": self.action_parser.default_timeout_seconds,
+                "max_timeout_seconds": self.action_parser.max_timeout_seconds,
+            },
+        )
 
     def build(
         self,
@@ -161,7 +208,7 @@ class ContextAssembler:
         """
         messages: list[ChatMessage] = [
             {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": f"[task]\n{task}"},
+            {"role": "user", "content": self._render("task_message.j2", {"task": task})},
         ]
         for turn in history:
             messages.append({"role": "assistant", "content": turn.assistant_text})
@@ -177,298 +224,347 @@ class ContextAssembler:
 
     def render_turn_result(self, result: TurnResult) -> str:
         """把一步结构化结果渲染为 result 消息：批次摘要 + 反馈位字段。"""
-        if not result.advanced:
-            # 格式错误原地反馈：观测未变化，只提示错误与剩余纠正次数
-            remaining = result.info.get("remaining_retries", 0)
-            return (
-                "[action-error] advanced=false\n"
-                f"{result.error or 'unknown action error'}\n"
-                f"The observation is unchanged. Correct the action format. Remaining correction attempts={remaining}"
-            )
-        lines = [
-            f"[action-result] advanced=true reward={result.reward:g} "
-            f"terminated={self._bool(result.terminated)} truncated={self._bool(result.truncated)}"
-        ]
-        # 只保留批次摘要（info 仅用于调试与记录）；逐动作反馈由观测 header 承载
-        action_state = result.info.get("action_state")
-        if isinstance(action_state, dict):
-            status = action_state.get("status", "unknown")
-            description = action_state.get("description", "")
-            lines.append(f"state: status={status} description={json.dumps(str(description), ensure_ascii=False)}")
-        if result.observation is not None:
-            lines.extend(self._render_observation_lines(result.observation, set(self.config.feedback_fields)))
-        return "\n".join(lines)
+        context: dict[str, Any] = {
+            "result": self._prepare_turn_result(result),
+            "show_observation": result.observation is not None,
+        }
+        context.update(self._prepare_observation_context(result.observation, set(self.config.feedback_fields)))
+        return self._render("turn_result.j2", context)
 
     def render_observation(self, observation: Observation, *, full: bool = False) -> str:
         """渲染观测文本；full=True 渲染全部字段，否则只渲染状态位字段。"""
         fields = set(ALL_OBSERVATION_FIELDS) if full else set(ALL_OBSERVATION_FIELDS) - set(self.config.feedback_fields)
-        return "\n".join(self._render_observation_lines(observation, fields))
+        return self._render("observation.j2", self._prepare_observation_context(observation, fields))
 
-    def _render_observation_lines(self, observation: Observation, fields: set[str]) -> list[str]:
-        """按固定顺序渲染指定字段集合；header 行随 last_actions 归属拆分为两种形态。"""
-        header = observation["header"]
-        lines: list[str] = []
-        if FIELD_LAST_ACTIONS in fields:
-            # 反馈位：header 行携带上批动作摘要，并逐项展开 last_actions
-            lines.append(self._render_header_line(header))
-            for entry in header.last_actions:
-                lines.append(
-                    f"last_action[{entry.index}] {entry.component_id} status={entry.status.lower()} "
-                    f"description={self._quote(entry.description)}"
-                )
-        else:
-            # 状态位：header 行只保留 game_tick，动作反馈归反馈位
-            lines.append(f"[observation] game_tick={header.game_tick}")
-        if OBS_SELF in fields:
-            lines.append(self._format_self(observation.get(OBS_SELF)))
-        if OBS_WORLD in fields:
-            world = observation.get(OBS_WORLD)
-            lines.append(self._format_world(world))
-            lines.extend(self._format_structures(world))
-        if OBS_NEARBY_ENTITIES in fields:
-            lines.extend(self._format_entities(observation.get(OBS_NEARBY_ENTITIES)))
-        if OBS_NEARBY_BLOCKS in fields:
-            lines.extend(self._format_blocks(observation.get(OBS_NEARBY_BLOCKS)))
-        if OBS_INTERESTING_BLOCKS in fields:
-            lines.extend(self._format_interesting_blocks(observation.get(OBS_INTERESTING_BLOCKS)))
-        if OBS_NEARBY_ITEMS in fields:
-            lines.extend(self._format_items(observation.get(OBS_NEARBY_ITEMS)))
-        if OBS_MENU in fields:
-            lines.extend(self._format_menu(observation.get(OBS_MENU)))
-        if OBS_CHAT in fields:
-            lines.extend(self._format_chat(observation.get(OBS_CHAT)))
-        if OBS_HEALTH_LOG in fields:
-            lines.extend(self._format_health_log(observation.get(OBS_HEALTH_LOG)))
-        return lines
+    def _render(self, template_name: str, context: Mapping[str, Any]) -> str:
+        """渲染指定模板并去除尾随换行（模板内部以整行组织输出）。"""
+        return self._environment.get_template(template_name).render(**context).rstrip("\n")
 
-    def _render_header_line(self, header: ProtoObservationHeader) -> str:
-        """格式化携带上批动作摘要的 header 行（反馈位使用）。"""
-        last_status = header.last_action_status.lower() if header.last_action_status else "none"
-        description = self._quote(header.last_action_description) if header.last_action_description else '""'
-        return (
-            f"[observation] game_tick={header.game_tick} last_action_status={last_status} "
-            f"last_action_description={description}"
-        )
+    # ---- 数据整理：以下方法只做排序、裁剪与 presence 判定，不做字符串拼装 ----
 
-    def _format_self(self, state: self_pb2.ProtoSelfState | None) -> str:
-        """格式化受控实体决策所需的生命、位置、朝向、状态字段和主手持物。"""
+    def _prepare_turn_result(self, result: TurnResult) -> dict[str, Any]:
+        """把 TurnResult 规整为模板可消费的纯数据。"""
+        action_state = result.info.get("action_state")
+        state: dict[str, Any] | None = None
+        if isinstance(action_state, dict):
+            state = {
+                "status": action_state.get("status", "unknown"),
+                "description": str(action_state.get("description", "")),
+            }
+        return {
+            "advanced": result.advanced,
+            "reward": result.reward,
+            "terminated": result.terminated,
+            "truncated": result.truncated,
+            "action_state": state,
+            "error": result.error,
+            "remaining_retries": result.info.get("remaining_retries", 0),
+        }
+
+    def _prepare_observation_context(self, observation: Observation | None, fields: set[str]) -> dict[str, Any]:
+        """把整份观测整理为 observation.j2 及其分片需要的模板上下文。"""
+        return {
+            "fields": fields,
+            "field_ids": {
+                "last_actions": FIELD_LAST_ACTIONS,
+                "self": OBS_SELF,
+                "world": OBS_WORLD,
+                "nearby_entities": OBS_NEARBY_ENTITIES,
+                "nearby_blocks": OBS_NEARBY_BLOCKS,
+                "interesting_blocks": OBS_INTERESTING_BLOCKS,
+                "nearby_items": OBS_NEARBY_ITEMS,
+                "menu": OBS_MENU,
+                "chat": OBS_CHAT,
+                "health_log": OBS_HEALTH_LOG,
+            },
+            "header": self._prepare_header(observation["header"]) if observation is not None else None,
+            "self_state": self._prepare_self(observation.get(OBS_SELF)) if observation is not None else None,
+            "world": self._prepare_world(observation.get(OBS_WORLD)) if observation is not None else None,
+            "entities": self._prepare_entities(observation.get(OBS_NEARBY_ENTITIES)) if observation is not None else None,
+            "nearby_blocks": self._prepare_blocks(observation.get(OBS_NEARBY_BLOCKS)) if observation is not None else None,
+            "interesting_blocks": self._prepare_interesting_blocks(
+                observation.get(OBS_INTERESTING_BLOCKS)
+            ) if observation is not None else None,
+            "items": self._prepare_items(observation.get(OBS_NEARBY_ITEMS)) if observation is not None else None,
+            "menu": self._prepare_menu(observation.get(OBS_MENU)) if observation is not None else None,
+            "chat": self._prepare_chat(observation.get(OBS_CHAT)) if observation is not None else None,
+            "health_log": self._prepare_health_log(observation.get(OBS_HEALTH_LOG)) if observation is not None else None,
+        }
+
+    @staticmethod
+    def _prepare_header(header: Any) -> dict[str, Any]:
+        """header 只透传原始字段，状态小写化与描述转义由模板完成。"""
+        return {
+            "game_tick": header.game_tick,
+            "last_action_status": header.last_action_status,
+            "last_action_description": header.last_action_description,
+            "last_actions": [
+                {
+                    "index": entry.index,
+                    "component_id": entry.component_id,
+                    "status": entry.status,
+                    "description": entry.description,
+                }
+                for entry in header.last_actions
+            ],
+        }
+
+    @staticmethod
+    def _prepare_self(state: self_pb2.ProtoSelfState | None) -> dict[str, Any] | None:
+        """self 组件：主手持物的 presence 在此判定，拼装留给模板。"""
         if state is None:
-            return "self: unavailable"
-        main_hand = (
-            f"{state.main_hand_item.item_id}x{state.main_hand_item.count}"
-            if state.HasField("main_hand_item")
-            else "empty"
-        )
-        return (
-            f"self: entity_type={state.entity_type} health={self._number(state.health)} "
-            f"max_health={self._number(state.max_health)} x={self._number(state.x)} y={self._number(state.y)} "
-            f"z={self._number(state.z)} yaw={self._number(state.yaw)} pitch={self._number(state.pitch)} "
-            f"on_ground={self._bool(state.on_ground)} in_water={self._bool(state.in_water)} "
-            f"in_lava={self._bool(state.in_lava)} alive={self._bool(state.alive)} "
-            f"navigating={self._bool(state.navigating)} target_entity_id={state.target_entity_id} "
-            f"main_hand={main_hand}"
-        )
+            return None
+        main_hand: dict[str, Any] | None = None
+        if state.HasField("main_hand_item"):
+            main_hand = {"item_id": state.main_hand_item.item_id, "count": state.main_hand_item.count}
+        return {
+            "entity_type": state.entity_type,
+            "health": state.health,
+            "max_health": state.max_health,
+            "x": state.x,
+            "y": state.y,
+            "z": state.z,
+            "yaw": state.yaw,
+            "pitch": state.pitch,
+            "on_ground": state.on_ground,
+            "in_water": state.in_water,
+            "in_lava": state.in_lava,
+            "alive": state.alive,
+            "navigating": state.navigating,
+            "target_entity_id": state.target_entity_id,
+            "main_hand": main_hand,
+        }
 
-    def _format_world(self, world: world_pb2.ProtoWorldState | None) -> str:
-        """格式化维度、群系、所在结构、游戏时间和原生天气布尔字段。"""
+    def _prepare_world(self, world: world_pb2.ProtoWorldState | None) -> dict[str, Any] | None:
+        """world 组件：附近结构按服务端返回顺序透传并按上限裁剪。"""
         if world is None:
-            return "world: unavailable"
-        # 空结构 ID 表示不在任何结构内，用 none 显式呈现，避免空串歧义
-        structure = world.structure or "none"
-        return (
-            f"world: dimension={world.dimension} biome={world.biome} structure={structure} "
-            f"day_time={world.day_time} raining={self._bool(world.raining)} "
-            f"thundering={self._bool(world.thundering)}"
-        )
-
-    def _format_structures(
-        self,
-        world: world_pb2.ProtoWorldState | None,
-    ) -> list[str]:
-        """按服务端返回的距离升序输出附近结构起点（注册 ID、包围盒中心坐标和距离）。"""
-        if world is None:
-            return ["structures: unavailable"]
+            return None
         structures = list(world.structures)
         shown = structures[: self.config.max_structures]
-        lines = [self._count_header("structures", len(structures), len(shown))]
-        for entry in shown:
-            lines.append(
-                f"- structure_id={entry.structure_id} x={entry.x} y={entry.y} z={entry.z} "
-                f"distance={self._number(entry.distance)}"
-            )
-        return lines
+        return {
+            "dimension": world.dimension,
+            "biome": world.biome,
+            "structure": world.structure,
+            "day_time": world.day_time,
+            "raining": world.raining,
+            "thundering": world.thundering,
+            "structures": {
+                "total": len(structures),
+                "shown": len(shown),
+                "entries": [
+                    {
+                        "structure_id": entry.structure_id,
+                        "x": entry.x,
+                        "y": entry.y,
+                        "z": entry.z,
+                        "distance": entry.distance,
+                    }
+                    for entry in shown
+                ],
+            },
+        }
 
-    def _format_entities(
-        self,
-        nearby: nearby_entities_pb2.ProtoNearbyEntities | None,
-    ) -> list[str]:
-        """按距离和 entity id 稳定排序附近实体。"""
+    def _prepare_entities(self, nearby: nearby_entities_pb2.ProtoNearbyEntities | None) -> dict[str, Any] | None:
+        """nearby_entities 组件：按距离和 entity id 稳定排序并裁剪。"""
         if nearby is None:
-            return ["entities: unavailable"]
+            return None
         entities = sorted(nearby.entities, key=lambda entity: (entity.distance, entity.entity_id))
         shown = entities[: self.config.max_entities]
-        lines = [self._count_header("entities", len(entities), len(shown))]
-        for entity in shown:
-            lines.append(
-                f"- entity_id={entity.entity_id} entity_type={entity.entity_type} "
-                f"x={self._number(entity.x)} y={self._number(entity.y)} z={self._number(entity.z)} "
-                f"distance={self._number(entity.distance)} health={self._number(entity.health)} "
-                f"max_health={self._number(entity.max_health)} hostile={self._bool(entity.hostile)} "
-                f"ally={self._bool(entity.ally)} player={self._bool(entity.player)} item={self._bool(entity.item)}"
-            )
-        return lines
+        return {
+            "total": len(entities),
+            "shown": len(shown),
+            "entries": [
+                {
+                    "entity_id": entity.entity_id,
+                    "entity_type": entity.entity_type,
+                    "x": entity.x,
+                    "y": entity.y,
+                    "z": entity.z,
+                    "distance": entity.distance,
+                    "health": entity.health,
+                    "max_health": entity.max_health,
+                    "hostile": entity.hostile,
+                    "ally": entity.ally,
+                    "player": entity.player,
+                    "item": entity.item,
+                }
+                for entity in shown
+            ],
+        }
 
-    def _format_blocks(
-        self,
-        nearby: nearby_blocks_pb2.ProtoNearbyBlocks | None,
-    ) -> list[str]:
-        """先按距离升序输出附近可见方块（含坐标和距离），再附加按种类聚合的数量统计。"""
+    def _prepare_blocks(self, nearby: nearby_blocks_pb2.ProtoNearbyBlocks | None) -> dict[str, Any] | None:
+        """nearby_blocks 组件：明细排序裁剪，另附按种类聚合的数量统计。"""
         if nearby is None:
-            return ["nearby_blocks: unavailable"]
+            return None
         blocks = sorted(nearby.blocks, key=lambda block: (block.distance, block.x, block.y, block.z, block.block_id))
         shown = blocks[: self.config.max_blocks]
-        lines = [self._count_header("nearby blocks", len(blocks), len(shown))]
-        for block in shown:
-            lines.append(
-                f"- block_id={block.block_id} x={block.x} y={block.y} z={block.z} "
-                f"distance={self._number(block.distance)}"
-            )
-        lines.extend(self._format_block_counts(nearby))
-        return lines
-
-    def _format_block_counts(
-        self,
-        nearby: nearby_blocks_pb2.ProtoNearbyBlocks,
-    ) -> list[str]:
-        """按 block_id 聚合附近可见方块，输出种类与数量（数量降序、种类名升序）。"""
         counts = Counter(block.block_id for block in nearby.blocks)
         kinds = sorted(counts, key=lambda block_id: (-counts[block_id], block_id))
-        shown = kinds[: self.config.max_blocks]
-        lines = [self._count_header("block summary", len(kinds), len(shown))]
-        for block_id in shown:
-            lines.append(f"- block_id={block_id} count={counts[block_id]}")
-        return lines
+        shown_kinds = kinds[: self.config.max_blocks]
+        return {
+            "total": len(blocks),
+            "shown": len(shown),
+            "entries": [
+                {
+                    "block_id": block.block_id,
+                    "x": block.x,
+                    "y": block.y,
+                    "z": block.z,
+                    "distance": block.distance,
+                }
+                for block in shown
+            ],
+            "summary": {
+                "total": len(kinds),
+                "shown": len(shown_kinds),
+                "entries": [{"block_id": block_id, "count": counts[block_id]} for block_id in shown_kinds],
+            },
+        }
 
-    def _format_items(
-        self,
-        nearby: nearby_items_pb2.ProtoNearbyItems | None,
-    ) -> list[str]:
-        """按距离和 entity id 稳定排序附近掉落物。"""
-        if nearby is None:
-            return ["items: unavailable"]
-        items = sorted(nearby.items, key=lambda item: (item.distance, item.entity_id))
-        shown = items[: self.config.max_items]
-        lines = [self._count_header("items", len(items), len(shown))]
-        for item in shown:
-            lines.append(
-                f"- entity_id={item.entity_id} item_id={item.item.item_id} count={item.item.count} "
-                f"x={self._number(item.x)} y={self._number(item.y)} z={self._number(item.z)} "
-                f"distance={self._number(item.distance)}"
-            )
-        return lines
-
-    def _format_interesting_blocks(
+    def _prepare_interesting_blocks(
         self,
         nearby: interesting_blocks_pb2.ProtoInterestingBlocks | None,
-    ) -> list[str]:
-        """按距离和坐标稳定排序已标记类型的附近可见方块。"""
+    ) -> dict[str, Any] | None:
+        """interesting_blocks 组件：按距离和坐标稳定排序并裁剪。"""
         if nearby is None:
-            return ["interesting_blocks: unavailable"]
+            return None
         blocks = sorted(
             nearby.blocks,
             key=lambda block: (block.distance, block.x, block.y, block.z, block.block_id),
         )
         shown = blocks[: self.config.max_interesting_blocks]
-        lines = [self._count_header("interesting_blocks", len(blocks), len(shown))]
-        for block in shown:
-            lines.append(
-                f"- block_id={block.block_id} x={block.x} y={block.y} z={block.z} "
-                f"distance={self._number(block.distance)}"
-            )
-        return lines
+        return {
+            "total": len(blocks),
+            "shown": len(shown),
+            "entries": [
+                {
+                    "block_id": block.block_id,
+                    "x": block.x,
+                    "y": block.y,
+                    "z": block.z,
+                    "distance": block.distance,
+                }
+                for block in shown
+            ],
+        }
 
-    def _format_menu(self, menu: menu_pb2.ProtoMenuObservation | None) -> list[str]:
-        """格式化逻辑菜单会话、槽位物品、属性和按钮。"""
+    def _prepare_items(self, nearby: nearby_items_pb2.ProtoNearbyItems | None) -> dict[str, Any] | None:
+        """nearby_items 组件：按距离和 entity id 稳定排序并裁剪。"""
+        if nearby is None:
+            return None
+        items = sorted(nearby.items, key=lambda item: (item.distance, item.entity_id))
+        shown = items[: self.config.max_items]
+        return {
+            "total": len(items),
+            "shown": len(shown),
+            "entries": [
+                {
+                    "entity_id": item.entity_id,
+                    "item_id": item.item.item_id,
+                    "count": item.item.count,
+                    "x": item.x,
+                    "y": item.y,
+                    "z": item.z,
+                    "distance": item.distance,
+                }
+                for item in shown
+            ],
+        }
+
+    def _prepare_menu(self, menu: menu_pb2.ProtoMenuObservation | None) -> dict[str, Any] | None:
+        """menu 组件：属性/按钮按 id 排序，槽位做连续空槽压缩。"""
         if menu is None:
-            return ["menu: unavailable"]
+            return None
         if not menu.open:
-            return ["menu: open=false"]
-        lines = [
-            f"menu: open=true session={menu.session_id} type={self._quote(menu.menu_type)} title={self._quote(menu.title)}"
-        ]
-        lines.extend(self._format_slots(menu))
-        if menu.properties:
-            lines.append("menu_properties:")
-            for prop in sorted(menu.properties, key=lambda value: value.data_slot):
-                lines.append(f"- data_slot={prop.data_slot} name={self._quote(prop.name)} value={prop.value}")
-        if menu.buttons:
-            lines.append("menu_buttons:")
-            for button in sorted(menu.buttons, key=lambda value: value.button_id):
-                lines.append(
-                    f"- id={button.button_id} name={self._quote(button.name)} enabled={self._bool(button.enabled)}"
-                )
-        return lines
+            return {"open": False}
+        return {
+            "open": True,
+            "session_id": menu.session_id,
+            "menu_type": menu.menu_type,
+            "title": menu.title,
+            "slots": self._prepare_slots(menu),
+            "properties": [
+                {"data_slot": prop.data_slot, "name": prop.name, "value": prop.value}
+                for prop in sorted(menu.properties, key=lambda value: value.data_slot)
+            ],
+            "buttons": [
+                {"button_id": button.button_id, "name": button.name, "enabled": button.enabled}
+                for button in sorted(menu.buttons, key=lambda value: value.button_id)
+            ],
+        }
 
-    def _format_chat(self, chat: chat_pb2.ProtoRecentChat | None) -> list[str]:
-        """格式化自上次观测以来的新增聊天消息（时间升序，读后游标推进的增量记录）。"""
-        if chat is None:
-            return ["new chat: unavailable"]
-        messages = list(chat.messages)
-        shown = messages[-self.config.max_chat_messages :]
-        lines = [self._count_header("new chat(since last observation)", len(messages), len(shown))]
-        for message in shown:
-            sender = f" sender=<{message.sender}>" if message.sender else ""
-            lines.append(f"- tick={message.game_tick}{sender} content={self._quote(message.content)}")
-        lines.append("You can chat with other players here.")
-        return lines
-
-    def _format_health_log(self, log: health_log_pb2.ProtoHealthLog | None) -> list[str]:
-        """格式化自上次观测以来受到的伤害（时间升序，读后即清空的增量记录）。"""
-        if log is None:
-            return ["recent damage: unavailable"]
-        records = list(log.damage_records)
-        shown = records[-self.config.max_health_records :]
-        lines = [self._count_header("recent damage(since last observation)", len(records), len(shown))]
-        for record in shown:
-            # 来源：肇事者实体优先，其次直接来源（箭矢等），均无则只保留伤害类型
-            source = f" from=<{record.source_entity_type}#{record.source_entity_id}>" if record.source_entity_type else ""
-            via = f" via=<{record.direct_entity_type}>" if record.direct_entity_type else ""
-            lines.append(
-                f"- tick={record.game_tick} damage={self._number(record.health_damage)} "
-                f"original={self._number(record.original_damage)} type={record.damage_type}{source}{via}"
-            )
-        return lines
-
-    def _format_slots(self, menu: menu_pb2.ProtoMenuObservation) -> list[str]:
-        """逐槽输出物品；空槽按同 category 的连续 slot id 压缩。"""
-        lines = ["menu_slots:"]
+    @staticmethod
+    def _prepare_slots(menu: menu_pb2.ProtoMenuObservation) -> list[dict[str, Any]]:
+        """逐槽整理物品；空槽按同 category 的连续 slot id 压缩为单条记录。"""
+        entries: list[dict[str, Any]] = []
         empty_run: list[slot_pb2.ProtoSlotView] = []
+
+        def flush_empty_run() -> None:
+            if not empty_run:
+                return
+            first, last = empty_run[0], empty_run[-1]
+            ids = str(first.slot_id) if first.slot_id == last.slot_id else f"{first.slot_id}-{last.slot_id}"
+            entries.append({"empty": True, "ids": ids, "category": first.category})
+            empty_run.clear()
+
         for slot in sorted(menu.slots, key=lambda value: value.slot_id):
             if not slot.HasField("item"):
                 if empty_run and (slot.category != empty_run[-1].category or slot.slot_id != empty_run[-1].slot_id + 1):
-                    lines.append(self._format_empty_run(empty_run))
-                    empty_run = []
+                    flush_empty_run()
                 empty_run.append(slot)
                 continue
-            if empty_run:
-                lines.append(self._format_empty_run(empty_run))
-                empty_run = []
-            lines.append(
-                f"- slot_id={slot.slot_id} category={slot.category} "
-                f"item_id={slot.item.item_id} count={slot.item.count}"
+            flush_empty_run()
+            entries.append(
+                {
+                    "empty": False,
+                    "slot_id": slot.slot_id,
+                    "category": slot.category,
+                    "item_id": slot.item.item_id,
+                    "count": slot.item.count,
+                }
             )
-        if empty_run:
-            lines.append(self._format_empty_run(empty_run))
-        if len(lines) == 1:
-            lines.append("- none")
-        return lines
+        flush_empty_run()
+        return entries
 
-    def _format_empty_run(self, slots: list[slot_pb2.ProtoSlotView]) -> str:
-        """把连续空槽压缩为单行，同时保留首尾 slot id。"""
-        first = slots[0]
-        last = slots[-1]
-        slot_range = str(first.slot_id) if first.slot_id == last.slot_id else f"{first.slot_id}-{last.slot_id}"
-        return f"- empty ids={slot_range} category={first.category}"
+    def _prepare_chat(self, chat: chat_pb2.ProtoRecentChat | None) -> dict[str, Any] | None:
+        """chat 组件：保留最近 max_chat_messages 条增量消息。"""
+        if chat is None:
+            return None
+        messages = list(chat.messages)
+        shown = messages[-self.config.max_chat_messages :]
+        return {
+            "total": len(messages),
+            "shown": len(shown),
+            "entries": [
+                {"game_tick": message.game_tick, "sender": message.sender, "content": message.content}
+                for message in shown
+            ],
+        }
+
+    def _prepare_health_log(self, log: health_log_pb2.ProtoHealthLog | None) -> dict[str, Any] | None:
+        """health_log 组件：保留最近 max_health_records 条伤害记录。"""
+        if log is None:
+            return None
+        records = list(log.damage_records)
+        shown = records[-self.config.max_health_records :]
+        return {
+            "total": len(records),
+            "shown": len(shown),
+            "entries": [
+                {
+                    "game_tick": record.game_tick,
+                    "health_damage": record.health_damage,
+                    "original_damage": record.original_damage,
+                    "damage_type": record.damage_type,
+                    "source_entity_type": record.source_entity_type,
+                    "source_entity_id": record.source_entity_id,
+                    "direct_entity_type": record.direct_entity_type,
+                }
+                for record in shown
+            ],
+        }
+
+    # ---- 模板过滤器 ----
 
     def _number(self, value: float) -> str:
         """格式化浮点数并移除无意义的尾随零。"""
@@ -481,38 +577,14 @@ class ContextAssembler:
         return formatted
 
     @staticmethod
-    def _quote(value: str) -> str:
-        """使用 JSON 字符串转义，保证单行格式可无歧义阅读。"""
-        return json.dumps(value, ensure_ascii=False)
-
-    @staticmethod
     def _bool(value: bool) -> str:
         """把布尔值格式化为 DSL 统一使用的小写形式。"""
         return "true" if value else "false"
 
     @staticmethod
-    def _count_header(name: str, total: int, shown: int) -> str:
-        """生成带省略计数的序列段标题。"""
-        omitted = total - shown
-        suffix = f" omitted={omitted}" if omitted else ""
-        return f"{name}: total={total} shown={shown}{suffix}"
-
-    def _default_system_prompt(self) -> str:
-        """生成包含动作边界、坐标和批处理语义的默认英文指令。"""
-        commands = self.action_parser.command_reference()
-        # execution_order = " -> ".join(self.action_parser.execution_order())
-        return (
-            "You control an entity in Minecraft. Choose the next action batch from the task, recent results, and latest observation.\n"
-            "You may begin with a short analysis, but the response must end with exactly one ```gymcraft-action fenced block. "
-            "Every non-empty line inside the block must be a /command. Include at least one action and no comments.\n"
-            "Action lines execute serially in the exact order written; repeated actions are allowed.\n"
-            # f"Current server execution order: {execution_order}\n"
-            f"Optional /timeout <seconds>: default {self.action_parser.default_timeout_seconds:g}, "
-            f"maximum {self.action_parser.max_timeout_seconds:g}.\n"
-            "Commands available in this environment:\n"
-            f"{commands}\n"
-            "Coordinate note: x and z are horizontal coordinates, and y is the vertical coordinate (a higher y value indicates a greater height)."
-        )
+    def _quote(value: str) -> str:
+        """使用 JSON 字符串转义，保证单行格式可无歧义阅读。"""
+        return json.dumps(value, ensure_ascii=False)
 
 
 def render_chat_transcript(messages: Sequence[ChatMessage]) -> str:

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import re
+import tempfile
 import unittest
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, cast
 
 from gymcraft.gym.action.components import (
@@ -715,6 +717,61 @@ class ObservationAndContextTests(unittest.TestCase):
         """feedback_fields 中的未知字段名应在配置校验时抛错。"""
         with self.assertRaises(ValueError):
             ObservationFormatConfig(feedback_fields=("gymcraft:not_a_field",))
+
+
+# 模板定制测试：验证上下文格式由 Jinja 模板决定且可外部覆盖。
+class TemplateOverrideTests(unittest.TestCase):
+    """自定义模板目录应覆盖同名模板，未覆盖的文件回落内置模板。"""
+
+    def test_custom_template_dir_overrides_and_falls_back(self) -> None:
+        """覆盖 system/task/字段分片后渲染应采用自定义格式，其余回落内置。"""
+        with tempfile.TemporaryDirectory() as template_dir:
+            root = Path(template_dir)
+            (root / "system_prompt.j2").write_text(
+                "CUSTOM PROMPT commands={{ commands | length }}", encoding="utf-8"
+            )
+            (root / "task_message.j2").write_text("[mission]\n{{ task }}", encoding="utf-8")
+            (root / "fields").mkdir()
+            (root / "fields" / "self.j2").write_text(
+                "SELF-CUSTOM type={{ self_state.entity_type }} pos=<{{ self_state.x | num }},{{ self_state.z | num }}>",
+                encoding="utf-8",
+            )
+            assembler = ContextAssembler(ActionDslParser(), template_dir=template_dir)
+            self.assertTrue(assembler.system_prompt.startswith("CUSTOM PROMPT commands="))
+
+            context = assembler.build(task="任务", observation=_observation(), history=(), turn_index=0)
+            self.assertEqual("[mission]\n任务", context["messages"][1]["content"])
+            current_message = context["messages"][-1]["content"]
+            # 覆盖的分片生效，且过滤器（num）在自定义模板中同样可用
+            self.assertIn("SELF-CUSTOM type=minecraft:zombie pos=<10.5,-2.5>", current_message)
+            # 未覆盖的分片与 header 形态回落内置模板
+            self.assertIn("[observation] game_tick=1", current_message)
+            self.assertIn("world: dimension=minecraft:overworld", current_message)
+
+    def test_custom_observation_template_controls_field_order(self) -> None:
+        """自定义 observation 主模板可重排字段顺序、只渲染部分字段。"""
+        with tempfile.TemporaryDirectory() as template_dir:
+            root = Path(template_dir)
+            (root / "observation.j2").write_text(
+                "{% include 'fields/header_state.j2' %}\n"
+                "{% if field_ids.nearby_entities in fields %}\n"
+                "{% include 'fields/entities.j2' %}\n"
+                "{% endif %}\n"
+                "{% if field_ids.self in fields %}\n"
+                "{% include 'fields/self.j2' %}\n"
+                "{% endif %}\n",
+                encoding="utf-8",
+            )
+            assembler = ContextAssembler(ActionDslParser(), template_dir=template_dir)
+            text = assembler.render_observation(_observation())
+            lines = text.splitlines()
+            self.assertEqual("[observation] game_tick=1", lines[0])
+            # entities 段在 self 段之前，且其余字段不再渲染
+            entities_line = next(index for index, line in enumerate(lines) if line.startswith("entities:"))
+            self_line = next(index for index, line in enumerate(lines) if line.startswith("self:"))
+            self.assertLess(entities_line, self_line)
+            self.assertNotIn("world:", text)
+            self.assertNotIn("nearby blocks:", text)
 
 
 # LLM 环境编排和非法输出恢复测试。
