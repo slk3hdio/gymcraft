@@ -118,6 +118,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("nearby_items_observation_lists_item", () -> PickupGameTests::nearbyItemsObservationListsItem);
         TEST_FUNCTIONS.register("interesting_blocks_update", () -> InterestingBlocksGameTests::updateIsIdempotentAndRemoves);
         TEST_FUNCTIONS.register("nearby_blocks_scan_bounds_clamp", () -> BlockScanGameTests::scanBoundsClampRegion);
+        TEST_FUNCTIONS.register("nearby_blocks_scan_prefers_agent_surroundings", () -> NearbyBlocksGameTests::scanPrefersAgentSurroundings);
 
         // ===== 菜单子系统：会话/槽位/按钮/桥接代表用例 =====
         TEST_FUNCTIONS.register("menu_session_id_stable", () -> MenuSessionGameTests::sessionIdStableAcrossObservations);

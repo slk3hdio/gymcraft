@@ -23,9 +23,12 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
- * 附近可见方块扫描器 —— 从 Mob 眼睛所在空间执行有界 BFS，并返回符合过滤条件的可见表面方块。
+ * 附近可见方块扫描器 —— 从 Mob 眼睛所在空间执行有界双优先级 BFS，并返回符合过滤条件的可见表面方块。
+ * 紧贴可见表面的空气节点绝对优先（贴面网络沿表面由近及远环形扩展），普通空气节点作低优先级兜底：
+ * 贴面队列排空后自然回到普通空气的外层扫描，发现新的不连通贴面区域时再次优先。
+ * 预算因此按"沿贴面网络到 Agent 的距离"分配，避免沿单一方向深度追击。
  * 调用方负责提供扫描范围（固定绝对世界坐标 {@link BoundingBox}，null 表示无界）、遍历上限、
- * 结果上限和过滤器；扫描器保持发现顺序并对多面可见方块去重。
+ * 结果上限和过滤器；扫描器对多面可见方块去重。
  */
 public final class NearbyBlockScanner {
     /** 扫描结果 —— 保存方块坐标、状态以及到扫描中心的方块距离。 */
@@ -96,7 +99,7 @@ public final class NearbyBlockScanner {
      * @param maxVisited 最多访问的可穿过空间节点数
      * @param maxBlocks 最多返回的匹配方块数
      * @param filter 方块状态过滤器，只有通过过滤的表面方块才计入结果上限
-     * @return 按 BFS 发现顺序排列的去重扫描结果；声明了范围且眼睛不在范围内时为空列表
+     * @return 按贴面优先、同优先级内近→远的顺序排列的去重扫描结果；声明了范围且眼睛不在范围内时为空列表
      */
     public static List<ScannedBlock> scan(
         Mob mob,
@@ -113,15 +116,25 @@ public final class NearbyBlockScanner {
         if (searchBox != null && !searchBox.isInside(center)) {
             return List.of();
         }
-        var queue = new ArrayDeque<BlockPos>();
+        // 双优先级队列：贴面空气绝对优先，普通空气兜底；各自 FIFO 保证环形（由近及远）扩展。
+        // 贴面队列排空即自然回到外层扫描，等效"表面子 BFS 结束后回到上一层"。
+        var surfaceQueue = new ArrayDeque<BlockPos>();
+        var outerQueue = new ArrayDeque<BlockPos>();
         var visited = new HashSet<Long>();
         var visibleBlocks = new LinkedHashMap<Long, ScannedBlock>();
 
-        queue.add(center);
+        outerQueue.add(center);
         visited.add(center.asLong());
 
-        while (!queue.isEmpty() && visited.size() < maxVisited && visibleBlocks.size() < maxBlocks) {
-            BlockPos airPos = queue.removeFirst();
+        while (visited.size() < maxVisited && visibleBlocks.size() < maxBlocks) {
+            BlockPos airPos;
+            if (!surfaceQueue.isEmpty()) {
+                airPos = surfaceQueue.removeFirst();
+            } else if (!outerQueue.isEmpty()) {
+                airPos = outerQueue.removeFirst();
+            } else {
+                break;
+            }
             BlockState airState = level.getBlockState(airPos);
 
             for (Direction direction : Direction.values()) {
@@ -134,10 +147,11 @@ public final class NearbyBlockScanner {
                 if (canTraverse(level, next, state)) {
                     long key = next.asLong();
                     if (visited.add(key)) {
+                        // flood 期间发现的普通空气也入外层队列（低优先级兜底），保证连通性完备
                         if (touchesVisibleSurface(level, next)) {
-                            queue.addFirst(next);
+                            surfaceQueue.addLast(next);
                         } else {
-                            queue.addLast(next);
+                            outerQueue.addLast(next);
                         }
                     }
                     continue;
