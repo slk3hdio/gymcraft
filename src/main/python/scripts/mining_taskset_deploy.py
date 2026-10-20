@@ -9,9 +9,10 @@
 - 以 ``--base-x/--base-z``（须 16 对齐）为起点按网格排列，每个环境恰好占
   一个区块（场景保存时区域即单区块×完整世界高度，agent 锚点为区块中心），
   网格间距为 ``--pitch-chunks`` 个区块（默认 2：环境区块 + 1 区块隔离带）；
-- 每个环境区块 ``forceload`` 常驻强加载（部署完成后保留）；
 - 每个环境四周（区块边界外侧 1 格、含四角）用屏障方块从基岩层到建筑上限
   整体封闭，隔离带区块仅在填充屏障期间临时强加载；
+- 环境区块自身的常驻强加载由环境构造期的 EnvChunkGuard 自动持票（ticking
+  级），脚本不做 forceload（vanilla 持久票在环境关闭后无法回收，会泄漏）；
 - 加载锚点 Y 必须取 manifest 中的 ``agent_y``（场景区域相对 agent 存垂直
   偏移，换 Y 会被世界高度裁剪）；
 - 部署状态写入 ``--state``（默认 manifest 旁的 mining_taskset_deploy.json），
@@ -139,7 +140,10 @@ def await_new_environment(rcon: MCRcon, address: str, known_uuids: set[str], nam
 
 def deploy_scenario(rcon: MCRcon, address: str, known_uuids: set[str], name: str, agent_y: int,
                     x0: int, z0: int) -> dict[str, Any]:
-    """部署单个场景：强加载、加载环境、填充屏障墙、保留环境区块常驻强加载。
+    """部署单个场景：临时强加载隔离带、加载环境、填充屏障墙、撤销临时强加载。
+
+    环境区块自身的常驻强加载由 EnvChunkGuard 在 env load 构造期自动完成，
+    本函数不留任何 vanilla forceload 票。
 
     参数:
         rcon: 已认证的 RCON 客户端。
@@ -159,9 +163,8 @@ def deploy_scenario(rcon: MCRcon, address: str, known_uuids: set[str], name: str
     # agent 锚点为区块中心：场景区域相对锚点向西/北各 8 格，恰好覆盖该区块
     entity_uuid = await_new_environment(rcon, address, known_uuids, name, x0 + 8, agent_y, z0 + 8)
     build_walls(rcon, x0, z0)
-    # 撤销临时强加载，仅保留环境区块常驻强加载
+    # 撤销全部临时强加载；环境区块由 EnvChunkGuard 持票，无需手动保留
     rcon.command(f"forceload remove {x0 - 16} {z0 - 16} {x0 + 31} {z0 + 31}")
-    rcon.command(f"forceload add {x0} {z0} {x0 + 15} {z0 + 15}")
     return {
         "anchor": [x0 + 8, agent_y, z0 + 8],
         "chunk": [x0 // 16, z0 // 16],

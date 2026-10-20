@@ -7,17 +7,23 @@
 
 背景：RCON 只存在于专用服务器；runClient/单机存档无法经 RCON 编排，因此把
 与 mining_taskset_deploy.py 相同的布局（等间距网格、每环境一个区块、四周
-屏障墙、环境区块常驻强加载）生成为游戏内函数，进世界后按顺序执行：
+屏障墙）生成为游戏内函数，进世界后按顺序执行：
 
 1. ``/function mining_deploy:prepare``  —— 临时强加载全部环境区块及隔离带
    （强加载后区块是异步加载的，等几秒再执行下一步）；
 2. ``/function mining_deploy:deploy``   —— 逐场景 ``env load``（后台自动
    reset 物化）并填充四面完整高度的屏障墙；
-3. ``/function mining_deploy:finalize`` —— 撤销隔离带临时强加载，仅保留
-   每个环境区块自身的常驻强加载。
+3. ``/function mining_deploy:finalize`` —— 撤销全部临时强加载。
 
-分三段是为避开时序竞争：若 deploy 内顺手撤销隔离带强加载，相邻环境的
-fill 可能因区块已被卸载而失败。
+分三段是为避开时序竞争：屏障墙落在环境区块外侧 1 格（属隔离带邻居区块，
+不由 EnvChunkGuard 管理），邻居区块靠加载级别传播异步就绪，deploy 同一 tick
+内 fill 会因"位置未加载"失败，故由 prepare 预载隔离带并人工等待；若 deploy
+内顺手撤销隔离带强加载，相邻环境的 fill 同样可能因区块已被卸载而失败。
+
+环境区块自身的强加载无需手动维护：环境构造期 EnvChunkGuard 会同步强加载
+区域区块（ticking 级），并在环境存活期间持续持票、close 时精确释放；这也是
+finalize 不再保留常驻 forceload 的原因（vanilla 持久票在环境关闭后无法回收，
+会成为区块空转泄漏）。
 
 数据包目录可整体复制到任意存档的 ``datapacks/`` 下，``/reload`` 后生效；
 执行函数需要作弊权限（单机可对局域网开放时开启作弊）。场景文件经
@@ -84,8 +90,8 @@ def render_functions(entries: list[dict[str, Any]], base_x: int, base_z: int,
                           f"say [mining_deploy] prepare 开始：临时强加载 {len(entries)} 个环境区块及隔离带"]
     deploy: list[str] = ["# 第二阶段：加载场景并填充屏障墙（隔离带仍处强加载，fill 不会因区块未加载失败）",
                          f"say [mining_deploy] deploy 开始：加载 {len(entries)} 个场景（后台自动 reset 物化，需数秒）"]
-    finalize: list[str] = ["# 第三阶段：撤销隔离带临时强加载，仅保留环境区块常驻强加载",
-                           "say [mining_deploy] finalize 开始：撤销隔离带临时强加载"]
+    finalize: list[str] = ["# 第三阶段：撤销全部临时强加载（环境区块的常驻强加载由 EnvChunkGuard 持票，无需 forceload）",
+                           "say [mining_deploy] finalize 开始：撤销临时强加载"]
     stride = pitch_chunks * 16
     for index, record in enumerate(entries):
         name = str(record["scenario"])
@@ -105,11 +111,10 @@ def render_functions(entries: list[dict[str, Any]], base_x: int, base_z: int,
         deploy.append(f"fill {x0 - 1} {WORLD_MIN_Y} {z0 + 16} {x0 + 16} {WORLD_MAX_Y} {z0 + 16} {WALL_BLOCK}")
         finalize.append(header)
         finalize.append(f"forceload remove {x0 - 16} {z0 - 16} {x0 + 31} {z0 + 31}")
-        finalize.append(f"forceload add {x0} {z0} {x0 + 15} {z0 + 15}")
     # 每阶段结束给出明确聊天反馈，避免"执行了但没反应"的误判
     prepare.append("say [mining_deploy] prepare 完成：强加载已生效，等数秒后执行 /function mining_deploy:deploy")
     deploy.append("say [mining_deploy] deploy 指令已全部下发：确认场景物化后执行 /function mining_deploy:finalize")
-    finalize.append("say [mining_deploy] finalize 完成：部署结束，每个环境区块保持常驻强加载")
+    finalize.append("say [mining_deploy] finalize 完成：部署结束，环境区块由环境自身持票保持加载")
     return {"prepare": prepare, "deploy": deploy, "finalize": finalize}
 
 
