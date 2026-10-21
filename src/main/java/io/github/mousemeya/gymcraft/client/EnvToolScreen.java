@@ -36,8 +36,6 @@ public final class EnvToolScreen extends Screen {
         "screen.gymcraft.env_tool.dir_down", "screen.gymcraft.env_tool.dir_up",
         "screen.gymcraft.env_tool.dir_north", "screen.gymcraft.env_tool.dir_south"
     };
-    /** 四周水平方向（西/东/北/南）在距离数组中的下标。 */
-    private static final int[] HORIZONTAL_INDICES = {0, 1, 4, 5};
 
     private final UUID target;
     private final List<String> envTypes;
@@ -111,8 +109,9 @@ public final class EnvToolScreen extends Screen {
     }
 
     /**
-     * 构建界面：环境类型循环按钮、六方向范围输入（3 行 × 2 列）、方块/实体快照开关、
-     * 场景名输入与保存按钮，底部挂载/移除/完成；目标与当前环境信息只读绘制。
+     * 构建界面：环境类型循环按钮、六方向范围输入（3 行 × 2 列，每方向配单方向
+     * "最大"快捷按钮）、方块/实体快照开关、场景名输入与保存按钮，底部挂载/移除/
+     * 完成；目标与当前环境信息只读绘制。
      */
     @Override protected void init() {
         int left = this.width / 2 - 150;
@@ -123,12 +122,13 @@ public final class EnvToolScreen extends Screen {
         }).bounds(left, 46, 300, 20).build());
 
         // 六方向范围输入：每行两个方向，方向标签绘制在输入框左侧（见 extractRenderState）。
-        // 水平方向最多 2 位（上限 32），垂直方向最多 4 位（可为完整世界高度）。
+        // 水平方向最多 2 位（上限 32），垂直方向最多 4 位（可为完整世界高度）；
+        // 每个输入框右侧伴随单方向"最大"快捷按钮。
         for (int row = 0; row < DIRECTIONS / 2; row++) {
             for (int column = 0; column < 2; column++) {
                 int index = row * 2 + column;
                 boolean vertical = index == 2 || index == 3;
-                EditBox box = new EditBox(this.font, left + 16 + column * 136, 76 + row * 24, 100, 20,
+                EditBox box = new EditBox(this.font, left + 16 + column * 136, 76 + row * 24, 84, 20,
                     Component.translatable(DIRECTION_KEYS[index]));
                 box.setFilter(text -> text.isEmpty() || text.matches(vertical ? "\\d{1,4}" : "\\d{1,2}"));
                 box.setMaxLength(vertical ? 4 : 2);
@@ -138,19 +138,20 @@ public final class EnvToolScreen extends Screen {
                 });
                 box.setValue(Integer.toString(this.extents[index]));
                 this.extentBoxes[index] = this.addRenderableWidget(box);
+                // 单方向"最大"：水平方向到 MAX_RADIUS，垂直方向到 MAX_HEIGHT
+                // （足够大的值，服务端按世界建筑高度精确钳制到完整世界高度）。
+                int max = vertical ? AttachScope.MAX_HEIGHT : AttachScope.MAX_RADIUS;
+                this.addRenderableWidget(Button.builder(
+                    Component.translatable("screen.gymcraft.env_tool.max"), button -> {
+                        this.extents[index] = max;
+                        box.setValue(Integer.toString(max));
+                    }).bounds(left + 16 + column * 136 + 86, 76 + row * 24, 28, 20)
+                    .tooltip(Tooltip.create(Component.translatable(vertical
+                        ? "screen.gymcraft.env_tool.max_vertical_hint"
+                        : "screen.gymcraft.env_tool.max_direction_hint", AttachScope.MAX_RADIUS)))
+                    .build());
             }
         }
-        // 四周最大：西/东/北/南四个水平方向一键设为延伸上限（垂直方向不变）。
-        this.addRenderableWidget(Button.builder(
-            Component.translatable("screen.gymcraft.env_tool.max_horizontal"), button -> {
-                for (int index : HORIZONTAL_INDICES) {
-                    this.extents[index] = AttachScope.MAX_RADIUS;
-                    this.extentBoxes[index].setValue(Integer.toString(AttachScope.MAX_RADIUS));
-                }
-            }).bounds(left + 256, 76, 44, 20)
-            .tooltip(Tooltip.create(Component.translatable(
-                "screen.gymcraft.env_tool.max_horizontal_hint", AttachScope.MAX_RADIUS)))
-            .build());
 
         this.addRenderableWidget(Button.builder(captureLabel(
                 "screen.gymcraft.env_tool.capture_blocks", this.captureBlocks), button -> {
