@@ -12,7 +12,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 from gymcraft import GymCraftEnv
-from gymcraft.llm import LLMEnvConfig, LLMGymCraftEnv, ObservationFormatConfig, chat_completion_text
+from gymcraft.llm import LLMEnvConfig, LLMGymCraftEnv, RenderConfig, chat_completion_text
 
 
 EXPECTED_ENV_TYPE = "gymcraft:iron_mining"
@@ -49,7 +49,7 @@ def run(args: argparse.Namespace) -> None:
     env = LLMGymCraftEnv(
         base_env,
         task=args.task,
-        config=LLMEnvConfig(observation=ObservationFormatConfig(max_blocks=20)),
+        config=LLMEnvConfig(render=RenderConfig()),
     )
     trace_handle: TextIO | None = None
     try:
@@ -59,7 +59,15 @@ def run(args: argparse.Namespace) -> None:
             trace_handle = trace_path.open("w", encoding="utf-8")
         context, reset_info = env.reset(
             seed=args.seed,
-            options={"disable_vanilla_ai": True, "max_steps": args.max_steps},
+            # 渲染不再做条数裁剪；条数上限改由 reset options 的 components 键控制。
+            options={
+                "disable_vanilla_ai": True,
+                "max_steps": args.max_steps,
+                "components": {
+                    "nearby_blocks": {"max_blocks": 20},
+                    "interesting_blocks": {"max_blocks": 20},
+                },
+            },
         )
         write_trace(trace_handle, {"event": "reset", "context": context, "info": reset_info})
         for step_index in range(args.max_steps):

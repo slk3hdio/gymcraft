@@ -15,7 +15,7 @@ from typing import Any, cast
 from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components import attack_once_pb2, set_attack_target_pb2
 from gymcraft.gym.observation.components import nearby_entities_pb2, self_pb2
-from gymcraft.type_info import (
+from gymcraft.types import (
     ACTION_ATTACK_ONCE,
     ACTION_SET_ATTACK_TARGET,
     OBS_NEARBY_ENTITIES,

@@ -31,7 +31,7 @@ from gymcraft.gym.action.components.drop_item_pb2 import ProtoDropItem
 from gymcraft.gym.action.components.pick_up_item_pb2 import ProtoPickUpItem
 from gymcraft.gym.observation.components.menu_pb2 import ProtoMenuObservation
 from gymcraft.client import single_action
-from gymcraft.type_info import (
+from gymcraft.types import (
     ACTION_DROP_ITEM,
     ACTION_PICK_UP_ITEM,
     OBS_MENU,

@@ -1,0 +1,35 @@
+{% if not menu.open -%}
+menu: open=false
+{%- else -%}
+menu: open=true session={{ menu.session_id }} type={{ menu.menu_type|quote }} title={{ menu.title|quote }}
+menu_slots:
+{%- if rows %}
+{%- for row in rows %}
+
+{% if row.kind == "item" -%}
+- slot_id={{ row.slot_id }} category={{ row.category }} item_id={{ row.item_id }} count={{ row.count }}
+{%- else -%}
+- empty ids={{ row.range }} category={{ row.category }}
+{%- endif %}
+{%- endfor %}
+{% else %}
+
+- none
+{%- endif %}
+{% if properties %}
+
+menu_properties:
+{%- for prop in properties %}
+
+- data_slot={{ prop.data_slot }} name={{ prop.name|quote }} value={{ prop.value }}
+{%- endfor %}
+{% endif %}
+{% if buttons %}
+
+menu_buttons:
+{%- for button in buttons %}
+
+- id={{ button.button_id }} name={{ button.name|quote }} enabled={{ button.enabled|bool }}
+{%- endfor %}
+{% endif %}
+{%- endif %}

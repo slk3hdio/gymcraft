@@ -20,8 +20,8 @@ from mcrcon import MCRcon  # type: ignore[import-untyped]
 
 from gymcraft.client import GymCraftEnv, make_step_request, unpack_observation
 from gymcraft.gym.rpc.env_service_pb2 import ResetRequest, ResetResponse, StepRequest, StepResponse
-from gymcraft.llm import ActionDslParser, encode_action_batch
-from gymcraft.type_info import Observation, OBS_MENU, OBS_SELF
+from gymcraft.llm import ActionParser, encode_action_batch
+from gymcraft.types import Observation, OBS_MENU, OBS_SELF
 
 
 class ResupplyE2E:
@@ -34,7 +34,7 @@ class ResupplyE2E:
         self.tag = "gymcraft_resupply_e2e_" + uuid.uuid4().hex[:10]
         self.entity_uuid = ""
         self.env: GymCraftEnv | None = None
-        self.parser = ActionDslParser()
+        self.parser = ActionParser()
         self.observation: Observation = cast(Observation, {})
         self.steps: list[dict[str, Any]] = []
         self.cases: list[dict[str, Any]] = []
@@ -71,7 +71,7 @@ class ResupplyE2E:
         assert match is not None
         self.entity_uuid = match.group()
         self.env = GymCraftEnv(self.entity_uuid, self.address)
-        self.parser = ActionDslParser(self.env.action_space_spec)
+        self.parser = ActionParser(self.env.action_space_spec)
         self.reset()
 
     def reset(self) -> None:

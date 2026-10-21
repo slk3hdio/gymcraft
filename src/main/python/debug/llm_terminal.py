@@ -6,7 +6,7 @@ import argparse
 
 from gymcraft import GymCraftEnv
 from gymcraft.llm import LLMGymCraftEnv, render_chat_transcript
-from gymcraft.llm.actions import wrap_commands as _wrap_commands
+from gymcraft.llm import wrap_commands as _wrap_commands
 from gymcraft.llm.types import LLMContext
 
 

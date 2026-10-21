@@ -17,8 +17,8 @@ from typing import Any
 
 from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components.noop_pb2 import ProtoNoop
-from gymcraft.llm import ActionDslParser, encode_action_batch
-from gymcraft.type_info import ACTION_NOOP, ActionBatch, Observation, OBS_SELF
+from gymcraft.llm import ActionParser, encode_action_batch
+from gymcraft.types import ACTION_NOOP, ActionBatch, Observation, OBS_SELF
 
 # 生成环境实体与建立会话时等待 RCON 指令生效的通用超时（秒）。
 COMMAND_DEADLINE_SECONDS = 20.0
@@ -41,7 +41,7 @@ class E2ESuite:
         self.tag = tag_prefix + "_" + uuid.uuid4().hex[:10]
         self.entity_uuid = ""
         self.env: GymCraftEnv | None = None
-        self.parser: ActionDslParser | None = None
+        self.parser: ActionParser | None = None
         self.observation: Observation | None = None
         self.region: tuple[int, int, int, int, int] | None = None
         self.results: list[dict[str, Any]] = []
@@ -121,7 +121,7 @@ class E2ESuite:
         self.entity_uuid = match.group()
         env = GymCraftEnv(self.entity_uuid, self.address)
         self.env = env
-        self.parser = ActionDslParser(env.action_space_spec)
+        self.parser = ActionParser(env.action_space_spec)
         self.reset()
 
     def reset(self, disable_vanilla_ai: bool = False) -> None:

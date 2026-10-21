@@ -12,8 +12,8 @@ from gymcraft.gym.space.space_spec_pb2 import (
     ProtoRangeSpec,
     ProtoSpaceSpec,
 )
-from gymcraft.llm import ActionDslParser, ActionParseError, encode_action_batch
-from gymcraft.type_info import ACTION_USE_ITEM
+from gymcraft.llm import ActionParser, ActionParseError, encode_action_batch
+from gymcraft.types import ACTION_USE_ITEM
 
 
 def _range_entry(name: str, low: float, high: float) -> ProtoFieldEntry:
@@ -37,7 +37,7 @@ class UseItemTests(unittest.TestCase):
         cases = [("0", None), ("5 self", None), ("8 block 12 64 -3", "block"), ("5 entity 42", "entity")]
         for suffix, target in cases:
             with self.subTest(suffix=suffix):
-                batch = ActionDslParser().parse(f"```gymcraft-action\n/use_item {suffix}\n```").batch
+                batch = ActionParser().parse(f"```gymcraft-action\n/use_item {suffix}\n```").batch
                 encoded = encode_action_batch(batch)
                 self.assertEqual(ACTION_USE_ITEM, encoded["actions"][0]["component_id"])
                 payload = encoded["actions"][0]["payload"]
@@ -57,13 +57,13 @@ class UseItemTests(unittest.TestCase):
                  "0 block 1 2049 3", "0 block 30000001 64 0"]
         for suffix in cases:
             with self.subTest(suffix=suffix), self.assertRaises(ActionParseError):
-                ActionDslParser().parse(f"```gymcraft-action\n/use_item {suffix}\n```")
+                ActionParser().parse(f"```gymcraft-action\n/use_item {suffix}\n```")
 
     def test_dynamic_space_and_help(self) -> None:
         """动作目录公开语法，结构化空间对 oneof 目标嵌套字段做边界预检。"""
-        parser = ActionDslParser()
+        parser = ActionParser()
         self.assertIn("/use_item <slot_id>", parser.command_reference())
-        constrained = ActionDslParser(ProtoComponentSpaceSet(components=[
+        constrained = ActionParser(ProtoComponentSpaceSet(components=[
             ProtoComponentSpace(
                 component_id=ACTION_USE_ITEM,
                 space=ProtoSpaceSpec(

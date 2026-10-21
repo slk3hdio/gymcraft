@@ -25,7 +25,7 @@ from typing import Any, cast
 from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components import break_block_pb2, noop_pb2, set_block_pb2
 from gymcraft.gym.observation.components import nearby_blocks_pb2, self_pb2
-from gymcraft.type_info import (
+from gymcraft.types import (
     ACTION_BREAK_BLOCK,
     ACTION_NOOP,
     ACTION_SET_BLOCK,

@@ -22,8 +22,8 @@ from mcrcon import MCRcon  # type: ignore[import-untyped]
 from gymcraft.client import GymCraftEnv, make_step_request, single_action, unpack_observation
 from gymcraft.gym.action.components.use_item_pb2 import ProtoUseItem
 from gymcraft.gym.rpc.env_service_pb2 import ResetRequest, ResetResponse, StepRequest, StepResponse
-from gymcraft.llm import ActionDslParser, encode_action_batch
-from gymcraft.type_info import ACTION_USE_ITEM, ActionBatch, Observation, OBS_MENU, OBS_NEARBY_ENTITIES, OBS_SELF
+from gymcraft.llm import ActionParser, encode_action_batch
+from gymcraft.types import ACTION_USE_ITEM, ActionBatch, Observation, OBS_MENU, OBS_NEARBY_ENTITIES, OBS_SELF
 
 
 class UseItemE2E:
@@ -36,7 +36,7 @@ class UseItemE2E:
         self.tag = "gymcraft_use_e2e_" + uuid.uuid4().hex[:10]
         self.entity_uuid = ""
         self.env: GymCraftEnv | None = None
-        self.parser = ActionDslParser()
+        self.parser = ActionParser()
         self.observation: Observation = cast(Observation, {})
         self.steps: list[dict[str, Any]] = []
         self.cases: list[dict[str, Any]] = []
@@ -87,7 +87,7 @@ class UseItemE2E:
             any(component.component_id == ACTION_USE_ITEM for component in self.env.action_space_spec.components),
             "use_item not advertised by Connect",
         )
-        self.parser = ActionDslParser(self.env.action_space_spec)
+        self.parser = ActionParser(self.env.action_space_spec)
         response_reset = cast(ResetResponse, self.env.stub.Reset(ResetRequest(session_id=self.env.session_id), timeout=15))
         self.observation = unpack_observation(response_reset.observation)
         self.entity_uuid = self.observation[OBS_SELF].uuid

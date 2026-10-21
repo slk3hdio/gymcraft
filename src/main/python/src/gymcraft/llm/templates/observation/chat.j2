@@ -1,0 +1,7 @@
+new chat(since last observation): total={{ messages|length }}
+{%- for message in messages %}
+
+- tick={{ message.game_tick }}{% if message.sender %} sender=<{{ message.sender }}>{% endif %} content={{ message.content|quote }}
+{%- endfor %}
+
+You can chat with other players here.
