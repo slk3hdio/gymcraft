@@ -34,6 +34,7 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * <p>
  * 坐标按方块位置解释，目标统一修正为方块中心的可站立点
  * （{@link MobNavigationTask#blockCenterTarget}），到达判定与距离诊断均使用修正后目标。
+ * 停止距离至少使用 0.1 格的物理精度容差，避免零容差造成末段绕圈。
  * 参数空间包含坐标、速度修正值、停止距离和超时时间。实现了
  * {@link EnvironmentRegionAware}：环境区域非空时目标坐标空间收紧到区域边界。
  * </p>
@@ -117,6 +118,12 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
             .build();
     }
 
+    /**
+     * 校验实体并开始导航，已处于有效停止距离内时立即完成。
+     *
+     * @param component 已通过空间校验的动作参数
+     * @return 本次动作的初始状态与控制策略
+     */
     @Override
     public ActionApplyResult apply(ProtoMoveTo component) {
         Mob mob = this.mob();
@@ -130,7 +137,7 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
             .eraseMemory(MemoryModuleType.WALK_TARGET)
             .eraseMemory(MemoryModuleType.PATH);
         double horizontalDistance = horizontalDistance(mob, target);
-        if (horizontalDistance <= component.getStopDistance()) {
+        if (horizontalDistance <= MobNavigationTask.effectiveStopDistance(component.getStopDistance())) {
             return ActionApplyResult.applied(
                 policy,
                 ActionState.completed("reached target", moveDetails(target, component.getStopDistance()))
@@ -170,7 +177,7 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         Vec3 target = target(component);
         double stop = component.getStopDistance();
         double horizontalDist = horizontalDistance(mob, target);
-        if (horizontalDist <= stop) {
+        if (horizontalDist <= MobNavigationTask.effectiveStopDistance(stop)) {
             this.navigationTask.cancel();
             ActionState state = ActionState.completed("reached target", moveDetails(target, stop));
             LOGGER.info("GymCraft MoveTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
@@ -249,6 +256,7 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
             stopDistance
         );
         details.put("vertical_delta", this.mob().getY() - target.y);
+        details.put("effective_stop_distance", MobNavigationTask.effectiveStopDistance(stopDistance));
         return details;
     }
 

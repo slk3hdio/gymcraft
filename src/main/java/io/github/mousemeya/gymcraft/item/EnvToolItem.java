@@ -114,13 +114,14 @@ public class EnvToolItem extends Item {
      */
     public static void openScreen(ServerPlayer player, Mob mob) {
         String currentEnvType = null;
-        // 六方向延伸距离预填值：西/东/下/上/北/南；水平默认 0（不延伸），
-        // 垂直默认完整世界高度。
+        // 六方向延伸距离预填值：西/东/下/上/北/南；默认全 0（不延伸）——
+        // 六方向全零挂载为空区域（不限制范围），完整世界高度等快捷值由界面
+        // 单方向"最大"按钮填入。
         BlockPos anchor = mob.blockPosition();
         int west = 0;
         int east = 0;
-        int down = anchor.getY() - mob.level().getMinY();
-        int up = mob.level().getMaxY() - 1 - anchor.getY();
+        int down = 0;
+        int up = 0;
         int north = 0;
         int south = 0;
         boolean captureBlocks = false;
