@@ -72,6 +72,14 @@ public class SwimMoveControl extends MoveControl {
         this.swimming.strafe(forwards, right);
     }
 
+    /** 同步清除两套控制器的移动目标，防止切回地面控制时恢复过期指令。 */
+    @Override
+    public void setWait() {
+        super.setWait();
+        this.ground.setWait();
+        this.swimming.setWait();
+    }
+
     /**
      * 按是否在液体中分发 tick：水中平滑三维游泳，陆地原样走地面控制。
      * 离开水体的短暂窗口（贴岸上浮越顶时短暂出水）内沿用游泳分支，

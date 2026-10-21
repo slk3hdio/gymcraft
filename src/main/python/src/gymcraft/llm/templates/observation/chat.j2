@@ -1,7 +1,9 @@
-new chat(since last observation): total={{ messages|length }}
+{%- if messages %}
+New message received.
 {%- for message in messages %}
 
-- tick={{ message.game_tick }}{% if message.sender %} sender=<{{ message.sender }}>{% endif %} content={{ message.content|quote }}
+[tick:{{ message.game_tick }}]{% if message.sender %} <{{ message.sender }}>{% endif %} {{ message.content|quote }}
 {%- endfor %}
 
-You can chat with other players here.
+You might reply to these messages
+{%- endif %}

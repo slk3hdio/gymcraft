@@ -463,35 +463,32 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertIn("entities: total=12", text)
         self.assertNotIn("shown", text)
         self.assertNotIn("omitted", text)
-        self.assertEqual(12, text.count("entity_type=minecraft:test_entity_"))
+        self.assertEqual(12, text.count("minecraft:test_entity_"))
         for index in range(12):
-            self.assertIn(f"entity_type=minecraft:test_entity_{index}", text)
+            self.assertIn(f"minecraft:test_entity_{index}", text)
         # 距离最小的是 entity_id=12，应排在最前
         self.assertLess(
-            text.index("entity_type=minecraft:test_entity_11"),
-            text.index("entity_type=minecraft:test_entity_0"),
+            text.index("minecraft:test_entity_11"),
+            text.index("minecraft:test_entity_0"),
         )
         self.assertNotIn("uuid=", text)
 
     def test_blocks_items_and_interesting_blocks_sorted_with_totals(self) -> None:
-        """方块/兴趣方块/掉落物应按距离升序渲染，并保留 total 计数与种类聚合。"""
+        """方块/兴趣方块/掉落物应按距离升序以表格行渲染，并保留 total 计数。"""
         text = ContextAssembler(ActionParser()).render_observation(_observation(), full=True)
         self.assertIn("nearby blocks: total=2", text)
-        self.assertIn("- block_id=minecraft:chest x=11 y=64 z=-2 distance=1", text)
-        self.assertIn("- block_id=minecraft:stone x=12 y=64 z=-2 distance=2", text)
-        self.assertLess(text.index("block_id=minecraft:chest"), text.index("block_id=minecraft:stone"))
-        self.assertIn("block summary: total=2", text)
-        self.assertIn("- block_id=minecraft:chest count=1", text)
-        self.assertIn("- block_id=minecraft:stone count=1", text)
+        self.assertIn("minecraft:chest 11 64 -2 1", text)
+        self.assertIn("minecraft:stone 12 64 -2 2", text)
+        self.assertLess(text.index("minecraft:chest"), text.index("minecraft:stone"))
         self.assertIn("interesting_blocks: total=2", text)
-        self.assertIn("- block_id=minecraft:ancient_debris x=11 y=63 z=-2 distance=1.5", text)
-        self.assertIn("- block_id=minecraft:diamond_ore x=14 y=63 z=-2 distance=4.2", text)
+        self.assertIn("minecraft:ancient_debris 11 63 -2 1.5", text)
+        self.assertIn("minecraft:diamond_ore 14 63 -2 4.2", text)
         self.assertLess(
-            text.index("block_id=minecraft:ancient_debris"),
-            text.index("block_id=minecraft:diamond_ore"),
+            text.index("minecraft:ancient_debris"),
+            text.index("minecraft:diamond_ore"),
         )
         self.assertIn("items: total=1", text)
-        self.assertIn("- entity_id=7 item_id=minecraft:apple count=3", text)
+        self.assertIn("7 minecraft:apple 3 11 64 -2 1.2", text)
 
     def test_world_structures_listed_fully(self) -> None:
         """附近结构应全量渲染注册 ID、坐标和距离，不做条数裁剪。"""
@@ -512,8 +509,8 @@ class ObservationAndContextTests(unittest.TestCase):
         text = ContextAssembler(ActionParser()).render_observation(observation, full=True)
         self.assertIn("structures: total=2", text)
         self.assertNotIn("shown", text)
-        self.assertIn("- structure_id=minecraft:ruined_portal x=10 y=64 z=0 distance=5", text)
-        self.assertIn("- structure_id=minecraft:shipwreck x=60 y=40 z=0 distance=50", text)
+        self.assertIn("minecraft:ruined_portal 10 64 0 5", text)
+        self.assertIn("minecraft:shipwreck 60 40 0 50", text)
 
     def test_world_without_structure_renders_none(self) -> None:
         """不在结构内时结构字段为空串，文本必须渲染为 none 而不是留空。"""
@@ -549,7 +546,7 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertIn("main_hand=empty", text)
 
     def test_menu_open_closed_and_empty_slot_compression(self) -> None:
-        """菜单应按打开/关闭/缺席三种形态渲染，连续同类空槽压缩为区间行。"""
+        """菜单打开时渲染会话与槽位（连续同类空槽压缩为区间行）；未打开或缺席时不渲染。"""
         assembler = ContextAssembler(ActionParser())
         observation = _observation()
         observation["gymcraft:menu"] = menu_pb2.ProtoMenuObservation(
@@ -571,13 +568,13 @@ class ObservationAndContextTests(unittest.TestCase):
         )
         text = assembler.render_observation(observation, full=True)
         self.assertIn('menu: open=true session=1 type="minecraft:generic_9x3" title="Chest"', text)
-        self.assertIn("- slot_id=0 category=menu item_id=minecraft:apple count=2", text)
-        self.assertIn("- empty ids=8-10 category=agent_container", text)
-        self.assertIn("- empty ids=12 category=agent_container", text)
+        self.assertIn("0 menu minecraft:apple 2", text)
+        self.assertIn("8-10 agent_container empty 0", text)
+        self.assertIn("12 agent_container empty 0", text)
 
         observation["gymcraft:menu"] = menu_pb2.ProtoMenuObservation(open=False)
         text = assembler.render_observation(observation, full=True)
-        self.assertIn("menu: open=false", text)
+        self.assertNotIn("menu:", text)
 
         del observation["gymcraft:menu"]
         text = assembler.render_observation(observation, full=True)
@@ -586,16 +583,17 @@ class ObservationAndContextTests(unittest.TestCase):
     def test_chat_incremental_format(self) -> None:
         """聊天增量应保持时间升序全量渲染，系统消息无 sender 字段。"""
         text = ContextAssembler(ActionParser()).render_observation(_observation(), full=True)
-        self.assertIn("new chat(since last observation): total=3", text)
-        self.assertIn('- tick=1 sender=<Steve> content="hello"', text)
-        self.assertIn('- tick=2 content="Server restarting"', text)
-        self.assertIn('- tick=3 sender=<Alex> content="follow me"', text)
-        self.assertLess(text.index('content="hello"'), text.index('content="follow me"'))
+        self.assertIn("New message received.", text)
+        self.assertIn('[tick:1] <Steve> "hello"', text)
+        self.assertIn('[tick:2] "Server restarting"', text)
+        self.assertIn('[tick:3] <Alex> "follow me"', text)
+        self.assertIn("You might reply to these messages", text)
+        self.assertLess(text.index('"hello"'), text.index('"follow me"'))
 
         observation = _observation()
         del observation["gymcraft:chat"]
         text = ContextAssembler(ActionParser()).render_observation(observation, full=True)
-        self.assertNotIn("new chat", text)
+        self.assertNotIn("New message received", text)
 
     def test_health_log_incremental_format(self) -> None:
         """伤害日志应渲染增量标题与记录字段；组件缺席时不渲染。"""
@@ -613,18 +611,47 @@ class ObservationAndContextTests(unittest.TestCase):
             ]
         )
         text = ContextAssembler(ActionParser()).render_observation(observation, full=True)
-        self.assertIn("recent damage(since last observation): total=1", text)
+        self.assertIn("You got hurt!", text)
         self.assertIn(
-            "- tick=5 damage=3 original=4 type=minecraft:mob_attack from=<minecraft:zombie#42>",
+            "[tick:5] HP-3 (original=4) type:minecraft:mob_attack from<minecraft:zombie#42>",
             text,
         )
 
         del observation["gymcraft:health_log"]
         text = ContextAssembler(ActionParser()).render_observation(observation, full=True)
+        self.assertNotIn("You got hurt", text)
+
+    def test_empty_components_are_omitted(self) -> None:
+        """组件无有效信息（列表为空、菜单未打开、无附近结构）时不渲染对应段落。"""
+        observation = _observation()
+        observation["gymcraft:nearby_entities"] = nearby_entities_pb2.ProtoNearbyEntities()
+        observation["gymcraft:nearby_blocks"] = nearby_blocks_pb2.ProtoNearbyBlocks()
+        observation["gymcraft:interesting_blocks"] = interesting_blocks_pb2.ProtoInterestingBlocks()
+        observation["gymcraft:nearby_items"] = nearby_items_pb2.ProtoNearbyItems()
+        observation["gymcraft:chat"] = chat_pb2.ProtoRecentChat()
+        observation["gymcraft:health_log"] = health_log_pb2.ProtoHealthLog()
+        observation["gymcraft:menu"] = menu_pb2.ProtoMenuObservation(open=False)
+        observation["gymcraft:world"] = world_pb2.ProtoWorldState(
+            day_time=6000,
+            dimension="minecraft:overworld",
+            biome="minecraft:plains",
+        )
+        text = ContextAssembler(ActionParser()).render_observation(observation, full=True)
+        self.assertNotIn("entities:", text)
+        self.assertNotIn("nearby blocks", text)
+        self.assertNotIn("block summary", text)
+        self.assertNotIn("interesting_blocks:", text)
+        self.assertNotIn("items:", text)
+        self.assertNotIn("new chat", text)
         self.assertNotIn("recent damage", text)
+        self.assertNotIn("menu:", text)
+        self.assertNotIn("structures:", text)
+        # world 行与 self 行始终携带有效信息，仍然渲染
+        self.assertIn("world: dimension=minecraft:overworld", text)
+        self.assertIn("self: entity_type=minecraft:zombie", text)
 
     def test_header_lists_per_action_feedback(self) -> None:
-        """反馈位 header 应逐项输出上批动作的状态与描述（来自观测 header）。"""
+        """反馈位 header 应输出批次摘要并逐项展开上批动作（来自观测 header）。"""
         observation = _observation()
         observation["header"] = ProtoObservationHeader(
             schema_version=1,
@@ -649,18 +676,14 @@ class ObservationAndContextTests(unittest.TestCase):
         )
         assembler = ContextAssembler(ActionParser())
         text = assembler.render_turn_result(_turn_result(observation))
-        self.assertIn(
-            '[observation] game_tick=7 last_action_status=completed '
-            'last_action_description="action batch completed (2/2)"',
-            text,
-        )
-        self.assertIn('last_action[0] gymcraft:break_block status=completed description="block broken"', text)
-        self.assertIn('last_action[1] gymcraft:noop status=failed description="agent is dead"', text)
+        self.assertIn("action batch completed (2/2)", text)
+        self.assertIn("gymcraft:break_block: [completed] block broken", text)
+        self.assertIn("gymcraft:noop: [failed] agent is dead", text)
 
     def test_state_header_keeps_only_game_tick(self) -> None:
         """状态位（最新观测消息）的 header 行只保留 game_tick，不带上批动作摘要。"""
         text = ContextAssembler(ActionParser()).render_observation(_observation())
-        self.assertIn("[observation] game_tick=1", text)
+        self.assertIn("game_tick=1", text)
         self.assertNotIn("last_action_status", text)
 
     def test_task_merged_into_system_message(self) -> None:
@@ -718,7 +741,7 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertNotIn("SECRET_INFO_MARKER", all_text)
         self.assertNotIn("SECRET_DETAIL_MARKER", all_text)
         # 观测内容仍然正常进入消息
-        self.assertIn("entity_type=minecraft:cow", all_text)
+        self.assertIn("minecraft:cow", all_text)
 
     def test_context_keeps_raw_assistant_text(self) -> None:
         """历史中应原样保存模型文本和 DSL 动作块。"""
@@ -780,19 +803,19 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertIn("Remaining correction attempts=2", text)
 
     def test_rendered_transcript_has_no_role_prefixes(self) -> None:
-        """展平消息时不应在 observation 等标志前添加 [user]。"""
+        """展平消息时不应在正文前添加 [user] 等角色标志。"""
         rendered = render_chat_transcript(
             [
                 {"role": "assistant", "content": "plan"},
                 {"role": "user", "content": "[action-error] advanced=false"},
-                {"role": "user", "content": "[observation] game_tick=2"},
+                {"role": "user", "content": "game_tick=2"},
             ]
         )
-        self.assertEqual("plan\n\n[action-error] advanced=false\n\n[observation] game_tick=2", rendered)
+        self.assertEqual("plan\n\n[action-error] advanced=false\n\ngame_tick=2", rendered)
         self.assertNotIn("[user]", rendered)
 
     def test_builtin_prompt_is_english_and_observation_marker_is_not_duplicated(self) -> None:
-        """固定 system 提示不应含中文，最新消息只保留一个 observation 标志。"""
+        """固定 system 提示不应含中文，game_tick 只出现在最新观测消息中。"""
         context = ContextAssembler(ActionParser()).build(
             task="Explore safely.",
             observation=_observation(3),
@@ -800,8 +823,8 @@ class ObservationAndContextTests(unittest.TestCase):
             turn_index=0,
         )
         self.assertIsNone(re.search(r"[一-龥]", context["messages"][0]["content"]))
-        self.assertIn("[observation] game_tick=3", context["messages"][-1]["content"])
-        self.assertEqual(1, sum("[observation]" in message["content"] for message in context["messages"]))
+        self.assertIn("game_tick=3", context["messages"][-1]["content"])
+        self.assertEqual(1, sum("game_tick=" in message["content"] for message in context["messages"]))
 
     def test_default_placement_splits_feedback_and_current_state(self) -> None:
         """默认配置下历史反馈含 last_actions/chat/health_log，最新观测消息不含这些字段。"""
@@ -815,16 +838,17 @@ class ObservationAndContextTests(unittest.TestCase):
             turn_index=1,
         )
         result_message = context["messages"][2]["content"]
-        self.assertIn("[observation] game_tick=1 last_action_status=completed", result_message)
-        self.assertIn("new chat(since last observation)", result_message)
+        # last_actions 首行为批次摘要（观测 header 的 last_action_description）
+        self.assertEqual("test", result_message.splitlines()[0])
+        self.assertIn("New message received.", result_message)
         # 观测未携带的组件直接不出现
-        self.assertNotIn("recent damage", result_message)
+        self.assertNotIn("You got hurt", result_message)
 
         current_message = context["messages"][-1]["content"]
-        self.assertIn("[observation] game_tick=2", current_message)
+        self.assertIn("game_tick=2", current_message)
         self.assertNotIn("last_action_status", current_message)
-        self.assertNotIn("new chat", current_message)
-        self.assertNotIn("recent damage", current_message)
+        self.assertNotIn("New message received", current_message)
+        self.assertNotIn("You got hurt", current_message)
         # 状态位字段仍在最新观测消息中
         self.assertIn("self: entity_type=minecraft:zombie", current_message)
         self.assertIn("entities: total=2", current_message)
@@ -837,7 +861,9 @@ class ObservationAndContextTests(unittest.TestCase):
         )
         history = ConversationHistory(max_turns=4)
         history_observation = _observation()
-        history_observation["gymcraft:menu"] = menu_pb2.ProtoMenuObservation(open=False)
+        history_observation["gymcraft:menu"] = menu_pb2.ProtoMenuObservation(
+            open=True, session_id=1, menu_type="minecraft:generic_9x3", title="Chest"
+        )
         history.add("raw", _turn_result(history_observation))
         context = assembler.build(
             task="任务",
@@ -846,12 +872,13 @@ class ObservationAndContextTests(unittest.TestCase):
             turn_index=1,
         )
         result_message = context["messages"][2]["content"]
-        self.assertIn("menu: open=false", result_message)
+        self.assertIn("menu: open=true", result_message)
         self.assertNotIn("new chat", result_message)
 
         current_message = context["messages"][-1]["content"]
-        self.assertIn("new chat(since last observation)", current_message)
-        self.assertIn("last_action_status=completed", current_message)
+        self.assertIn("New message received.", current_message)
+        # last_actions 回到状态位：首行为批次摘要
+        self.assertEqual("test", current_message.splitlines()[0])
         self.assertNotIn("menu:", current_message)
 
     def test_full_observation_renders_all_fields(self) -> None:
@@ -865,8 +892,9 @@ class ObservationAndContextTests(unittest.TestCase):
             full_observation=True,
         )
         current_message = context["messages"][-1]["content"]
-        self.assertIn("last_action_status=completed", current_message)
-        self.assertIn("new chat(since last observation)", current_message)
+        # last_actions 首行为批次摘要（观测 header 的 last_action_description）
+        self.assertEqual("test", current_message.splitlines()[0])
+        self.assertIn("New message received.", current_message)
         self.assertIn("self: entity_type=minecraft:zombie", current_message)
 
     def test_unknown_feedback_field_is_rejected(self) -> None:

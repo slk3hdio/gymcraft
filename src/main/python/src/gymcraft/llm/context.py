@@ -149,7 +149,10 @@ class ContextAssembler:
             # 组件缺席（环境未启用/未触发）时直接不渲染，不出现占位文案
             if component.component_id not in components:
                 continue
-            blocks.append(self._render_component(component, components[component.component_id]))
+            # 组件无有效信息（列表为空、菜单未打开等）时模板渲染为空，同样不渲染
+            text = self._render_component(component, components[component.component_id])
+            if text:
+                blocks.append(text)
         return "\n".join(blocks)
 
     def _render_component(self, component: ObservationComponent, message: ProtoMessage) -> str:

@@ -1,5 +1,8 @@
+{%- if blocks %}
 interesting_blocks: total={{ blocks|length }}
+block_id x y z distance
 {%- for block in blocks %}
 
-- block_id={{ block.block_id }} x={{ block.x }} y={{ block.y }} z={{ block.z }} distance={{ block.distance|number }}
+{{ block.block_id }} {{ block.x }} {{ block.y }} {{ block.z }} {{ block.distance|number }}
 {%- endfor %}
+{%- endif %}

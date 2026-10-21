@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from typing import Any
 
 from google.protobuf.message import Message as ProtoMessage
@@ -13,13 +12,10 @@ from gymcraft.types import OBS_NEARBY_BLOCKS
 
 
 def _prepare(message: ProtoMessage) -> dict[str, Any]:
-    """方块按 (distance, x, y, z, block_id) 排序；数量统计按 (-count, block_id) 排序。"""
+    """方块按 (distance, x, y, z, block_id) 稳定排序后交给模板，不做条数裁剪。"""
     assert isinstance(message, ProtoNearbyBlocks)
-    blocks = sorted(message.blocks, key=lambda block: (block.distance, block.x, block.y, block.z, block.block_id))
-    counts = Counter(block.block_id for block in message.blocks)
     return {
-        "blocks": blocks,
-        "counts": sorted(counts.items(), key=lambda entry: (-entry[1], entry[0])),
+        "blocks": sorted(message.blocks, key=lambda block: (block.distance, block.x, block.y, block.z, block.block_id))
     }
 
 

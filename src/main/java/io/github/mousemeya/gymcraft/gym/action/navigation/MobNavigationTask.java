@@ -19,7 +19,7 @@ import net.minecraft.world.phys.Vec3;
  * 单个 Mob 导航动作的内部状态机。
  * <p>
  * 任务在创建 GymCraft 路径前同步停止原版 MOVE goal，避免 goal 的停止回调清除新路径；
- * 执行期间跟踪自有路径、目标移动、位移进度和有限重规划次数。实例只允许由一个动作
+ * 执行期间跟踪自有路径、目标移动、节点接近进度和有限重规划次数。实例只允许由一个动作
  * controller 独占，不跨动作或 Mob 共享。
  * </p>
  * <p>
@@ -36,6 +36,8 @@ public class MobNavigationTask {
     public static final int MOVING_TARGET_REFRESH_TICKS = 10;
     /** 立即触发移动目标重规划的水平位移。 */
     public static final double MOVING_TARGET_REPATH_DISTANCE = 0.75;
+    /** 到达精度下限（格）；避免零容差要求浮点位置严格相等而在目标附近反复绕圈。 */
+    public static final double MIN_STOP_DISTANCE = 0.1;
 
     private static final double PERIODIC_TARGET_REPATH_DISTANCE = 0.10;
     private static final int NO_PROGRESS_TICKS = 40;
@@ -49,7 +51,10 @@ public class MobNavigationTask {
     @Nullable
     private Path ownedPath;
     private Vec3 plannedTarget = Vec3.ZERO;
-    private Vec3 lastProgressPosition = Vec3.ZERO;
+    @Nullable
+    private Path progressPath;
+    private int progressNodeIndex = -1;
+    private double bestProgressDistance = Double.POSITIVE_INFINITY;
     private Vec3 lastPathTarget = Vec3.ZERO;
     private double speed;
     private int ticks;
@@ -111,6 +116,16 @@ public class MobNavigationTask {
     }
 
     /**
+     * 为按方块中心到达的动作提供统一的物理精度下限，不修改调用方请求值。
+     *
+     * @param requestedStopDistance 空间校验通过的非负停止距离
+     * @return 实际使用的停止距离，至少为 0.1 格
+     */
+    public static double effectiveStopDistance(double requestedStopDistance) {
+        return Math.max(MIN_STOP_DISTANCE, requestedStopDistance);
+    }
+
+    /**
      * 抢占原版移动控制并创建首条路径。
      *
      * @param mob 本次动作控制的 Mob
@@ -129,7 +144,6 @@ public class MobNavigationTask {
         this.repathAttempts = 0;
         this.active = true;
         this.directApproach = false;
-        this.lastProgressPosition = mob.position();
         preemptVanillaMovement(mob);
         this.plan(target, exactInitialPath);
     }
@@ -149,7 +163,8 @@ public class MobNavigationTask {
         Mob currentMob = this.mob;
         this.tickOwnedNavigation();
 
-        if (this.trackProgress(currentMob.position())) {
+        // 围着目标移动不等于接近目标；按当前路径节点衡量进度，允许正常绕障。
+        if (this.trackProgress(target)) {
             this.navigationReason = Reason.STUCK;
             this.navigation(currentMob).stop();
             this.ownedPath = null;
@@ -190,6 +205,7 @@ public class MobNavigationTask {
             this.navigation(currentMob).stop();
             this.ownedPath = null;
             this.directApproach = true;
+            this.resetProgress();
             currentMob.getMoveControl().setWantedPosition(target.x, target.y, target.z, this.speed);
             return Update.running(this.navigationReason);
         }
@@ -204,9 +220,7 @@ public class MobNavigationTask {
             Path current = this.navigation(this.mob).getPath();
             if (current == this.ownedPath || this.directApproach) {
                 this.navigation(this.mob).stop();
-                this.mob.getMoveControl().setWantedPosition(
-                    this.mob.getX(), this.mob.getY(), this.mob.getZ(), 0.0
-                );
+                this.stopMovementInput();
             }
         }
         this.active = false;
@@ -226,13 +240,22 @@ public class MobNavigationTask {
         Path current = this.navigation(this.mob).getPath();
         if (current == this.ownedPath || this.directApproach) {
             this.navigation(this.mob).stop();
-            this.mob.getMoveControl().setWantedPosition(
-                this.mob.getX(), this.mob.getY(), this.mob.getZ(), 0.0
-            );
+            this.stopMovementInput();
         }
         this.ownedPath = null;
         this.directApproach = false;
         this.navigationReason = reason;
+    }
+
+    /** 清空自有移动指令与输入；保留惯性、重力等物理速度，不把当前位置当作新目标。 */
+    private void stopMovementInput() {
+        if (this.mob != null) {
+            this.mob.getMoveControl().setWait();
+            this.mob.setSpeed(0.0F);
+            this.mob.setXxa(0.0F);
+            this.mob.setYya(0.0F);
+            this.mob.setZza(0.0F);
+        }
     }
 
     /**
@@ -324,8 +347,7 @@ public class MobNavigationTask {
         this.lastTargetRefreshTick = this.ticks;
         this.plannedTarget = target;
         this.directApproach = false;
-        this.noProgressTicks = 0;
-        this.lastProgressPosition = currentMob.position();
+        this.resetProgress();
         this.lastPathCanReach = path != null && path.canReach();
         this.lastPathTarget = path == null || path.getTarget() == null
             ? target : Vec3.atBottomCenterOf(path.getTarget());
@@ -395,14 +417,29 @@ public class MobNavigationTask {
     }
 
     /**
-     * 更新位移看门狗。
+     * 更新接近进度看门狗：沿路径时跟踪下一节点，末段直行时跟踪最终目标。
+     * 只有刷新历史最近距离或切换路径节点才算进展，绕圈/往返抖动不会重置计时。
      *
-     * @param position Mob 当前坐标
-     * @return 连续无有效位移达到阈值时为 true
+     * @param target 当前最终目标
+     * @return 连续未接近当前节点或目标达到阈值时为 true
      */
-    private boolean trackProgress(Vec3 position) {
-        if (this.progressDistance(position, this.lastProgressPosition) >= PROGRESS_DISTANCE) {
-            this.lastProgressPosition = position;
+    private boolean trackProgress(Vec3 target) {
+        Mob currentMob = this.mob;
+        if (currentMob == null) {
+            return false;
+        }
+        Path path = this.currentPath();
+        if (path != null && path.isDone()) {
+            path = null;
+        }
+        int nodeIndex = path == null ? -1 : path.getNextNodeIndex();
+        Vec3 waypoint = path == null ? target : path.getNextEntityPos(currentMob);
+        double distance = this.progressDistance(currentMob.position(), waypoint);
+        if (path != this.progressPath || nodeIndex != this.progressNodeIndex
+            || this.bestProgressDistance - distance >= PROGRESS_DISTANCE) {
+            this.progressPath = path;
+            this.progressNodeIndex = nodeIndex;
+            this.bestProgressDistance = distance;
             this.noProgressTicks = 0;
             return false;
         }
@@ -410,15 +447,23 @@ public class MobNavigationTask {
         return this.noProgressTicks >= NO_PROGRESS_TICKS;
     }
 
+    /** 新路径或末段开始时清空进度基准；重试计数仍由任务统一限制。 */
+    private void resetProgress() {
+        this.progressPath = null;
+        this.progressNodeIndex = -1;
+        this.bestProgressDistance = Double.POSITIVE_INFINITY;
+        this.noProgressTicks = 0;
+    }
+
     /**
-     * 计算看门狗使用的有效位移；默认仅水平位移。
+     * 计算看门狗使用的节点距离；默认仅水平距离。
      * <p>
-     * 子类可覆盖以计入垂直位移（如游泳上浮），默认保持 move_to 的判定不变。
+     * 子类可覆盖以计入垂直距离（如游泳上浮），默认保持 move_to 的判定不变。
      * </p>
      *
-     * @param from 上次位置
-     * @param to 当前位置
-     * @return 有效位移
+     * @param from 当前位置
+     * @param to 当前节点或目标
+     * @return 用于衡量接近进度的距离
      */
     protected double progressDistance(Vec3 from, Vec3 to) {
         return horizontalDistance(from, to);
