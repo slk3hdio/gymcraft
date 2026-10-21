@@ -1,7 +1,7 @@
 {%- if records %}
-recent damage(since last observation): total={{ records|length }}
+You got hurt!
 {%- for record in records %}
 
-- tick={{ record.game_tick }} damage={{ record.health_damage|number }} original={{ record.original_damage|number }} type={{ record.damage_type }}{% if record.source_entity_type %} from=<{{ record.source_entity_type }}#{{ record.source_entity_id }}>{% endif %}{% if record.direct_entity_type %} via=<{{ record.direct_entity_type }}>{% endif %}
+[tick:{{ record.game_tick }}] HP-{{ record.health_damage|number }} (original={{ record.original_damage|number }}) type:{{ record.damage_type }}{% if record.source_entity_type %} from<{{ record.source_entity_type }}#{{ record.source_entity_id }}>{% endif %}{% if record.direct_entity_type %} via<{{ record.direct_entity_type }}>{% endif %}
 {%- endfor %}
 {%- endif %}

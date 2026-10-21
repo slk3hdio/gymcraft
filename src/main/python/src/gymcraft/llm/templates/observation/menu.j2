@@ -2,32 +2,35 @@
 menu: open=true session={{ menu.session_id }} type={{ menu.menu_type|quote }} title={{ menu.title|quote }}
 menu_slots:
 {%- if rows %}
+slot_id category item_id count
 {%- for row in rows %}
 
 {% if row.kind == "item" -%}
-- slot_id={{ row.slot_id }} category={{ row.category }} item_id={{ row.item_id }} count={{ row.count }}
+{{ row.slot_id }} {{ row.category }} {{ row.item_id }} {{ row.count }}
 {%- else -%}
-- empty ids={{ row.range }} category={{ row.category }}
+{{ row.range }} {{ row.category }} empty 0
 {%- endif %}
 {%- endfor %}
 {% else %}
 
-- none
+none
 {%- endif %}
 {% if properties %}
 
 menu_properties:
+data_slot name value
 {%- for prop in properties %}
 
-- data_slot={{ prop.data_slot }} name={{ prop.name|quote }} value={{ prop.value }}
+{{ prop.data_slot }} {{ prop.name|quote }} {{ prop.value }}
 {%- endfor %}
 {% endif %}
 {% if buttons %}
 
 menu_buttons:
+id name enabled
 {%- for button in buttons %}
 
-- id={{ button.button_id }} name={{ button.name|quote }} enabled={{ button.enabled|bool }}
+{{ button.button_id }} {{ button.name|quote }} {{ button.enabled|bool }}
 {%- endfor %}
 {% endif %}
 {%- endif %}
