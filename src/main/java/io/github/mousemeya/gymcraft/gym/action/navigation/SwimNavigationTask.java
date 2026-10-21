@@ -57,11 +57,11 @@ public class SwimNavigationTask extends MobNavigationTask {
     }
 
     /**
-     * 液体中使用三维位移计进度：游泳上浮/下潜阶段水平位移接近零，但属于
+     * 液体中使用三维节点距离计进度：游泳上浮/下潜阶段水平位移接近零，但属于
      * 有效推进；不计入会被看门狗误判为卡死。陆地上保持水平判定。
      *
-     * @param from 上次位置
-     * @param to 当前位置
+     * @param from 当前位置
+     * @param to 当前节点或目标
      * @return 液体中返回三维距离，否则返回水平距离
      */
     @Override

@@ -138,6 +138,12 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
             .build();
     }
 
+    /**
+     * 校验实体并开始两栖导航，已处于有效停止距离内时立即完成。
+     *
+     * @param component 已通过空间校验的动作参数
+     * @return 本次动作的初始状态与控制策略
+     */
     @Override
     public ActionApplyResult apply(ProtoSwimTo component) {
         Mob mob = this.mob();
@@ -151,7 +157,7 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
             .eraseMemory(MemoryModuleType.WALK_TARGET)
             .eraseMemory(MemoryModuleType.PATH);
         double horizontalDistance = horizontalDistance(mob, target);
-        if (horizontalDistance <= component.getStopDistance()) {
+        if (horizontalDistance <= MobNavigationTask.effectiveStopDistance(component.getStopDistance())) {
             return ActionApplyResult.applied(
                 policy,
                 ActionState.completed("reached target", moveDetails(target, component.getStopDistance()))
@@ -193,7 +199,7 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
         Vec3 target = target(component);
         double stop = component.getStopDistance();
         double horizontalDist = horizontalDistance(mob, target);
-        if (horizontalDist <= stop) {
+        if (horizontalDist <= MobNavigationTask.effectiveStopDistance(stop)) {
             this.navigationTask.cancel();
             this.restoreMoveControl(mob);
             ActionState state = ActionState.completed("reached target", moveDetails(target, stop));
@@ -313,6 +319,7 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
             stopDistance
         );
         details.put("vertical_delta", this.mob().getY() - target.y);
+        details.put("effective_stop_distance", MobNavigationTask.effectiveStopDistance(stopDistance));
         return details;
     }
 
