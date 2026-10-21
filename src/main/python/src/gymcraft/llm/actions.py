@@ -249,7 +249,7 @@ class ActionDslParser:
             "swim_to": "/swim_to <x> <y> <z> [stop_distance] (amphibious pathfinding: use in water, deep water, or when the target is across water; on land it behaves like move_to. Coordinates name a block; the agent navigates to that block's standing center)",
             "set_attack_target": "/set_attack_target clear|entity <entity_id>|uuid <uuid> (continuely chase and attack until the target or yourself is dead)",
             "attack_once": "/attack_once <entity_id>",
-            "break_block": "/break_block <x> <y> <z> [slot_id] (break the block at <x> <y> <z> using the tool from inventory slot_id, default slot 0 = main hand; the tool swaps into the main hand and stays there. Note that items will only drop if the correct tool is used.)",
+            "break_block": "/break_block <x> <y> <z> (break the block at <x> <y> <z> using the item in your main hand; no item is swapped. Note that items will only drop if the correct tool is used.)",
             "set_block": "/set_block <x> <y> <z> <block description with optional SNBT> (place a block from your inventory at <x> <y> <z>)",
             "jump": "/jump",
             "open_menu": "/open_menu self|entity <entity_id>|block <x> <y> <z>",
@@ -258,7 +258,7 @@ class ActionDslParser:
             "click_menu_button": "/click_menu_button <session_id> <button_id>",
             "pick_up_item": "/pick_up_item <entity_id>",
             "drop_item": "/drop_item <slot_id> [count] (throw the item as a dropped object in the direction of your line of sight.)",
-            "use_item": "/use_item <slot_id> [self|block <x> <y> <z>|entity <id>] (use, consume, eat, or throw items from your backpack.)",
+            "use_item": "/use_item [self|block <x> <y> <z>|entity <id>] (use, consume, eat, or throw the item in your main hand.)",
             "update_interesting_blocks": "/update_interesting_blocks add <block_id>... [remove <block_id>...] (nearby interesting blocks will be shown in current observation and the scanning range is typically greater than [nearby_blocks])",
             "send_chat": "/send_chat <message>",
         }
@@ -423,11 +423,10 @@ class ActionDslParser:
         return ParsedAction(ACTION_ATTACK_ONCE, "attack_once", attack_once_pb2.ProtoAttackOnce(target_entity_id=entity_id))
 
     def _parse_break_block(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
-        """解析整数方块坐标的破坏命令；slot_id 缺省时用主手（slot 0）。"""
-        self._require_arity(tokens, 4, 5, line_number)
+        """解析整数方块坐标的破坏命令；固定使用主手持物。"""
+        self._require_arity(tokens, 4, 4, line_number)
         x, y, z = self._parse_block_position(tokens[1:4], line_number)
-        slot_id = self._non_negative_int(tokens[4], "slot_id", line_number) if len(tokens) == 5 else 0
-        return ParsedAction(ACTION_BREAK_BLOCK, "break_block", break_block_pb2.ProtoBreakBlock(x=x, y=y, z=z, slot_id=slot_id))
+        return ParsedAction(ACTION_BREAK_BLOCK, "break_block", break_block_pb2.ProtoBreakBlock(x=x, y=y, z=z))
 
     def _parse_set_block(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
         """解析方块放置命令，并把第四参数后的内容原样作为 block 描述。"""
@@ -502,22 +501,19 @@ class ActionDslParser:
         return ParsedAction(ACTION_DROP_ITEM, "drop_item", payload)
 
     def _parse_use_item(self, tokens: Sequence[str], raw: str, line_number: int) -> ParsedAction:
-        """解析槽号和可选目标；省略目标或 self 均编码为未设置 target。"""
-        self._require_arity(tokens, 2, 6, line_number)
-        slot_id = self._non_negative_int(tokens[1], "slot_id", line_number)
-        if slot_id > 2_147_483_647:
-            raise ActionParseError("slot_id exceeds int32 range", line_number)
-        payload = use_item_pb2.ProtoUseItem(slot_id=slot_id)
-        target = tokens[2] if len(tokens) > 2 else "self"
+        """解析可选目标；省略目标或 self 均编码为未设置 target；固定使用主手持物。"""
+        self._require_arity(tokens, 1, 5, line_number)
+        payload = use_item_pb2.ProtoUseItem()
+        target = tokens[1] if len(tokens) > 1 else "self"
         if target == "self":
-            self._require_arity(tokens, 2, 3, line_number)
+            self._require_arity(tokens, 1, 2, line_number)
         elif target == "block":
-            self._require_arity(tokens, 6, 6, line_number)
-            x, y, z = self._parse_block_position(tokens[3:6], line_number)
+            self._require_arity(tokens, 5, 5, line_number)
+            x, y, z = self._parse_block_position(tokens[2:5], line_number)
             payload.block.CopyFrom(use_item_pb2.ProtoUseItemBlockTarget(x=x, y=y, z=z))
         elif target == "entity":
-            self._require_arity(tokens, 4, 4, line_number)
-            entity_id = self._positive_int(tokens[3], "entity_id", line_number)
+            self._require_arity(tokens, 3, 3, line_number)
+            entity_id = self._positive_int(tokens[2], "entity_id", line_number)
             if entity_id > 2_147_483_647:
                 raise ActionParseError("entity_id exceeds int32 range", line_number)
             payload.entity.CopyFrom(use_item_pb2.ProtoUseItemEntityTarget(entity_id=entity_id))

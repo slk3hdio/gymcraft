@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n-gymcraft/gym/action/components/use_item.proto\x12\x13gymcraft.gym.action\":\n\x17ProtoUseItemBlockTarget\x12\t\n\x01x\x18\x01 \x01(\x05\x12\t\n\x01y\x18\x02 \x01(\x05\x12\t\n\x01z\x18\x03 \x01(\x05\"-\n\x18ProtoUseItemEntityTarget\x12\x11\n\tentity_id\x18\x01 \x01(\x05\"\xba\x01\n\x0cProtoUseItem\x12\x14\n\x07slot_id\x18\x01 \x01(\x05H\x01\x88\x01\x01\x12=\n\x05\x62lock\x18\x02 \x01(\x0b\x32,.gymcraft.gym.action.ProtoUseItemBlockTargetH\x00\x12?\n\x06\x65ntity\x18\x03 \x01(\x0b\x32-.gymcraft.gym.action.ProtoUseItemEntityTargetH\x00\x42\x08\n\x06targetB\n\n\x08_slot_idB?\n-io.github.mousemeya.gymcraft.gym.action.protoB\x0cUseItemProtoP\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n-gymcraft/gym/action/components/use_item.proto\x12\x13gymcraft.gym.action\":\n\x17ProtoUseItemBlockTarget\x12\t\n\x01x\x18\x01 \x01(\x05\x12\t\n\x01y\x18\x02 \x01(\x05\x12\t\n\x01z\x18\x03 \x01(\x05\"-\n\x18ProtoUseItemEntityTarget\x12\x11\n\tentity_id\x18\x01 \x01(\x05\"\xa7\x01\n\x0cProtoUseItem\x12=\n\x05\x62lock\x18\x02 \x01(\x0b\x32,.gymcraft.gym.action.ProtoUseItemBlockTargetH\x00\x12?\n\x06\x65ntity\x18\x03 \x01(\x0b\x32-.gymcraft.gym.action.ProtoUseItemEntityTargetH\x00\x42\x08\n\x06targetJ\x04\x08\x01\x10\x02R\x07slot_idB?\n-io.github.mousemeya.gymcraft.gym.action.protoB\x0cUseItemProtoP\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -37,5 +37,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_PROTOUSEITEMENTITYTARGET']._serialized_start=130
   _globals['_PROTOUSEITEMENTITYTARGET']._serialized_end=175
   _globals['_PROTOUSEITEM']._serialized_start=178
-  _globals['_PROTOUSEITEM']._serialized_end=364
+  _globals['_PROTOUSEITEM']._serialized_end=345
 # @@protoc_insertion_point(module_scope)

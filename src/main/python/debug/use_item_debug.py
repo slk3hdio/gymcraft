@@ -116,9 +116,9 @@ class UseItemE2E:
         self.require(result["status"] == expected, str(result))
         return result
 
-    def equip(self, hand: str, item: str, count: int = 1) -> None:
-        """通过 RCON 指定装备；随后刷新观测，便于可靠测量单次动作 tick。"""
-        response = self.command(f"item replace entity {self.entity_uuid} weapon.{hand} with {item} {count}")
+    def equip(self, item: str, count: int = 1) -> None:
+        """通过 RCON 装备主手；随后刷新观测，便于可靠测量单次动作 tick。"""
+        response = self.command(f"item replace entity {self.entity_uuid} weapon.mainhand with {item} {count}")
         self.require("Replaced" in response, response)
         self.step("/noop")
 
@@ -130,135 +130,133 @@ class UseItemE2E:
         self.require((slot.item.item_id, slot.item.count) == (item_id, count),
                      f"slot {slot_id}: expected {count}x {item_id}, actual {slot.item}")
 
+    def main_hand(self, item_id: str, count: int) -> None:
+        """核对主手槽（slot_id 0）的物品身份和数量。"""
+        self.slot(0, item_id, count)
+
     def placement(self) -> None:
         """验证命中上表面后放置、主手来源扣减及真实方块变化。"""
-        self.equip("mainhand", "minecraft:cobblestone", 2)
-        self.step("/use_item 0 block 5 99 4")
+        self.equip("minecraft:cobblestone", 2)
+        self.step("/use_item block 5 99 4")
         self.world_check("if block 5 100 4 minecraft:cobblestone")
-        self.slot(0, "minecraft:cobblestone", 1)
+        self.main_hand("minecraft:cobblestone", 1)
         self.command("setblock 5 100 4 minecraft:air")
 
     def fire(self) -> None:
-        """验证副手打火石使用、耐久消耗和原主手恢复。"""
-        self.equip("mainhand", "minecraft:stick")
-        self.equip("offhand", "minecraft:flint_and_steel")
-        self.step("/use_item 5 block 5 99 4")
+        """验证主手打火石使用、耐久消耗和其他槽位不受影响。"""
+        self.equip("minecraft:flint_and_steel")
+        self.command(f"item replace entity {self.entity_uuid} weapon.offhand with minecraft:stick 1")
+        self.step("/use_item block 5 99 4")
         self.world_check("if block 5 100 4 minecraft:fire")
-        damage = self.command(f'data get entity {self.entity_uuid} equipment.offhand.components."minecraft:damage"')
+        damage = self.command(f'data get entity {self.entity_uuid} equipment.mainhand.components."minecraft:damage"')
         self.require(damage.rstrip().endswith("1"), damage)
-        self.slot(0, "minecraft:stick", 1)
         self.command("setblock 5 100 4 minecraft:air")
 
     def bone_meal(self) -> None:
-        """验证低于方块中心的幼苗命中、作物生长和数量扣减。"""
+        """验证低于方块中心的幼苗命中、作物生长和主手数量扣减。"""
         self.command("setblock 6 99 4 minecraft:farmland")
         self.command("setblock 6 100 4 minecraft:wheat[age=0]")
-        self.equip("offhand", "minecraft:bone_meal", 3)
-        self.step("/use_item 5 block 6 100 4")
+        self.equip("minecraft:bone_meal", 3)
+        self.step("/use_item block 6 100 4")
         self.world_check("unless block 6 100 4 minecraft:wheat[age=0]")
-        self.slot(5, "minecraft:bone_meal", 2)
+        self.main_hand("minecraft:bone_meal", 2)
         self.command("setblock 6 100 4 minecraft:air")
         self.command("setblock 6 99 4 minecraft:stone")
 
     def composter(self) -> None:
-        """验证持物方块入口能够投入堆肥桶，并同步扣减来源槽。"""
+        """验证持物方块入口能够投入堆肥桶，并同步扣减主手。"""
         self.command("setblock 5 100 4 minecraft:composter[level=0]")
-        self.equip("offhand", "minecraft:pumpkin_pie", 2)
-        self.step("/use_item 5 block 5 100 4")
+        self.equip("minecraft:pumpkin_pie", 2)
+        self.step("/use_item block 5 100 4")
         self.world_check("if block 5 100 4 minecraft:composter[level=1]")
-        self.slot(5, "minecraft:pumpkin_pie", 1)
-        self.slot(0, "minecraft:stick", 1)
+        self.main_hand("minecraft:pumpkin_pie", 1)
         self.command("setblock 5 100 4 minecraft:air")
 
     def naming(self) -> None:
         """从附近实体观测取网络 ID，再验证命名牌只作用于指定实体。"""
         cow_tag = self.tag + "_cow"
         self.command('summon minecraft:cow 6.5 100 4.5 {Tags:["' + cow_tag + '"],NoAI:1b,NoGravity:1b,Invulnerable:1b}')
-        self.equip("offhand", 'minecraft:name_tag[minecraft:custom_name="E2E cow"]', 2)
+        self.equip('minecraft:name_tag[minecraft:custom_name="E2E cow"]', 2)
         targets = self.observation[OBS_NEARBY_ENTITIES].entities
         target = next(value for value in targets if value.entity_type == "minecraft:cow")
-        self.step(f"/use_item 5 entity {target.entity_id}")
+        self.step(f"/use_item entity {target.entity_id}")
         name = self.command(f"data get entity @e[tag={cow_tag},limit=1] CustomName")
         self.require("E2E cow" in name, name)
-        self.slot(5, "minecraft:name_tag", 1)
-        self.equip("offhand", "minecraft:apple", 3)
-        self.step(f"/use_item 5 entity {target.entity_id}", "FAILED")
-        self.slot(5, "minecraft:apple", 3)
+        self.main_hand("minecraft:name_tag", 1)
+        self.equip("minecraft:apple", 3)
+        self.step(f"/use_item entity {target.entity_id}", "FAILED")
+        self.main_hand("minecraft:apple", 3)
         self.command(f"kill @e[tag={cow_tag}]")
 
     def cure_zombie_villager(self) -> None:
-        """验证虚弱僵尸村民接受金苹果并进入原版治愈流程。"""
+        """验证虚弱僵尸村民接受主手金苹果并进入原版治愈流程。"""
         target_tag = self.tag + "_zombie_villager"
         self.command('summon minecraft:zombie_villager 6.5 100 4.5 {Tags:["' + target_tag
                      + '"],NoAI:1b,NoGravity:1b,Invulnerable:1b}')
         self.command(f"effect give @e[tag={target_tag},limit=1] minecraft:weakness 60 0 true")
-        self.equip("offhand", "minecraft:golden_apple", 2)
+        self.equip("minecraft:golden_apple", 2)
         targets = self.observation[OBS_NEARBY_ENTITIES].entities
         target = next(value for value in targets if value.entity_type == "minecraft:zombie_villager")
-        self.step(f"/use_item 5 entity {target.entity_id}")
+        self.step(f"/use_item entity {target.entity_id}")
         conversion = self.command(f"data get entity @e[tag={target_tag},limit=1] ConversionTime")
         match = re.search(r"(-?\d+)\s*$", conversion)
         self.require(match is not None and int(match.group(1)) > 0, conversion)
-        self.slot(5, "minecraft:golden_apple", 1)
-        self.slot(0, "minecraft:stick", 1)
+        self.main_hand("minecraft:golden_apple", 1)
         self.command(f"kill @e[tag={target_tag}]")
 
     def throwing(self) -> None:
-        """省略目标时沿当前视线投掷，验证世界中的投射物与副手数量。"""
+        """省略目标时沿当前视线投掷，验证世界中的投射物与主手数量。"""
         self.command(f"tp {self.entity_uuid} 4.5 100 4.5 -90 0")
-        self.equip("offhand", "minecraft:snowball", 3)
-        self.step("/use_item 5")
+        self.equip("minecraft:snowball", 3)
+        self.step("/use_item")
         self.world_check("if entity @e[type=minecraft:snowball,x=4,y=100,z=4,distance=..12]")
-        self.slot(5, "minecraft:snowball", 2)
-        self.slot(0, "minecraft:stick", 1)
+        self.main_hand("minecraft:snowball", 2)
         self.require(abs(self.observation[OBS_SELF].yaw + 90) < 0.1, "self use changed yaw")
 
     def food(self) -> None:
         """食物必须等待原版消费完成，只消耗一件且不额外回血。"""
         self.command(f"data merge entity {self.entity_uuid} {{Health:10.0f}}")
-        self.equip("offhand", "minecraft:apple", 3)
-        result = self.step("/use_item 5 self")
+        self.equip("minecraft:apple", 3)
+        result = self.step("/use_item self")
         self.require(result["elapsed_game_ticks"] >= 32, str(result))
-        self.slot(5, "minecraft:apple", 2)
-        self.slot(0, "minecraft:stick", 1)
+        self.main_hand("minecraft:apple", 2)
         self.require(self.observation[OBS_SELF].health == 10, "food unexpectedly healed mob")
 
     def potion(self) -> None:
-        """药水等待完成，效果落在真实 Mob，玻璃瓶归还来源槽。"""
-        self.equip("offhand", 'minecraft:potion[minecraft:potion_contents={potion:"minecraft:swiftness"}]')
-        result = self.step("/use_item 5")
+        """药水等待完成，效果落在真实 Mob，玻璃瓶归还主手。"""
+        self.equip('minecraft:potion[minecraft:potion_contents={potion:"minecraft:swiftness"}]')
+        result = self.step("/use_item")
         self.require(result["elapsed_game_ticks"] >= 32, str(result))
-        self.slot(5, "minecraft:glass_bottle", 1)
-        self.slot(0, "minecraft:stick", 1)
+        self.main_hand("minecraft:glass_bottle", 1)
         effects = self.command(f"data get entity {self.entity_uuid} active_effects")
         self.require("minecraft:speed" in effects, effects)
 
     def timeout(self) -> None:
-        """动作级超时通过 RPC 返回 FAILED，物品与主手完整归还。"""
-        self.equip("offhand", "minecraft:apple", 3)
-        result = self.step("/timeout 0.1\n/use_item 5", "FAILED")
+        """动作级超时通过 RPC 返回 FAILED，主手物品完整归还。"""
+        self.equip("minecraft:apple", 3)
+        result = self.step("/timeout 0.1\n/use_item", "FAILED")
         self.require("action batch timeout" in result["description"], str(result))
-        self.slot(5, "minecraft:apple", 3)
-        self.slot(0, "minecraft:stick", 1)
+        self.main_hand("minecraft:apple", 3)
 
     def invalid_targets(self) -> None:
-        """验证超距、遮挡、未知实体、缺失槽位及拉弓拒绝路径。"""
-        self.equip("offhand", "minecraft:flint_and_steel")
-        self.step("/use_item 5 block 15 99 4", "FAILED")
+        """验证超距、遮挡、未知实体、空主手及拉弓拒绝路径。"""
+        self.equip("minecraft:flint_and_steel")
+        self.step("/use_item block 15 99 4", "FAILED")
         self.command("fill 5 100 4 5 102 4 minecraft:stone")
-        self.step("/use_item 5 block 6 99 4", "FAILED")
+        self.step("/use_item block 6 99 4", "FAILED")
         self.command("fill 5 100 4 5 102 4 minecraft:air")
-        self.step("/use_item 5 entity 2147483647", "FAILED")
-        self.send(single_action(ACTION_USE_ITEM, ProtoUseItem(), 10.0), "missing slot_id", "FAILED")
-        self.equip("offhand", "minecraft:bow")
-        self.step("/use_item 5", "FAILED")
-        self.slot(5, "minecraft:bow", 1)
+        self.step("/use_item entity 2147483647", "FAILED")
+        self.equip("minecraft:air")
+        self.send(single_action(ACTION_USE_ITEM, ProtoUseItem(), 10.0), "empty main hand", "FAILED")
+        self.equip("minecraft:bow")
+        self.step("/use_item", "FAILED")
+        self.main_hand("minecraft:bow", 1)
 
     def serialized_reset(self) -> None:
         """验证现有 RPC 会话锁的串行语义：Reset 等待 Step 完成后恢复原始快照。"""
         assert self.env is not None
-        self.equip("offhand", "minecraft:apple", 3)
-        action = single_action(ACTION_USE_ITEM, ProtoUseItem(slot_id=5), 10.0)
+        self.equip("minecraft:apple", 3)
+        action = single_action(ACTION_USE_ITEM, ProtoUseItem(), 10.0)
         pending = self.env.stub.Step.future(make_step_request(self.env.session_id, action), timeout=15)
         time.sleep(0.25)
         self.require(not pending.done(), "consumption returned before concurrent reset")
@@ -277,11 +275,10 @@ class UseItemE2E:
         self.world_check("unless entity @e[type=minecraft:item,x=4,y=100,z=4,distance=..3,nbt={Item:{id:\"minecraft:apple\"}}]")
 
     def environment_close(self) -> None:
-        """通过 RCON 删除环境抢占正在等待的 Step，校验 RPC 错误与物品完整归还。"""
+        """通过 RCON 删除环境抢占正在等待的 Step，校验 RPC 错误与主手物品完整归还。"""
         assert self.env is not None
-        self.equip("mainhand", "minecraft:stick")
-        self.equip("offhand", "minecraft:apple", 3)
-        action = single_action(ACTION_USE_ITEM, ProtoUseItem(slot_id=5), 10.0)
+        self.equip("minecraft:apple", 3)
+        action = single_action(ACTION_USE_ITEM, ProtoUseItem(), 10.0)
         pending = self.env.stub.Step.future(make_step_request(self.env.session_id, action), timeout=15)
         time.sleep(0.25)
         self.require(not pending.done(), "consumption finished before environment close")
@@ -295,7 +292,7 @@ class UseItemE2E:
                                "description": error.details()})
         else:
             raise AssertionError("environment close did not interrupt pending Step")
-        self.world_check(f'if data entity {self.entity_uuid} {{equipment:{{mainhand:{{id:"minecraft:stick",count:1}},offhand:{{id:"minecraft:apple",count:3}}}}}}')
+        self.world_check(f'if data entity {self.entity_uuid} {{equipment:{{mainhand:{{id:"minecraft:apple",count:3}}}}}}')
 
     def run(self) -> None:
         """按顺序运行独立场景并记录结果；首个失败保留完整报告后交由调用者退出。"""

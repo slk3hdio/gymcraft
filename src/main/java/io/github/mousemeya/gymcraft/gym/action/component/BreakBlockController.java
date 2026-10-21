@@ -13,7 +13,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.item.ItemStack;
@@ -26,8 +25,6 @@ import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerActor;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentFakePlayerService;
-import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
-import io.github.mousemeya.gymcraft.gym.inventory.AgentSlot;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
@@ -40,18 +37,14 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
- * 破坏方块动作组件 —— 让 Mob 用指定槽位的工具按原版规则挖掘指定方块。
+ * 破坏方块动作组件 —— 让 Mob 用主手持有物按原版规则挖掘指定方块。
  * <p>
- * 动作必须显式指定工具槽位 {@code slot_id}（Agent 统一物品栏编号，见
- * {@link AgentInventoryLayout}）；校验通过后该槽与主手<b>交换</b>（交换而非移动，
- * 保持物品守恒，与 set_block 一致），挖掘全程由主手持有工具，结束后工具留在主手；
- * 指向空槽视为空手挖掘。错误工具不拦截，按原版规则仅影响速度与掉落。
+ * 动作不选择物品槽位、不交换物品，固定以当前主手持有物为工具；主手为空即空手挖掘。
+ * 错误工具不拦截，按原版规则仅影响速度与掉落。
  * </p>
  * <p>
- * 动作反馈（RUNNING 与终态 details）始终携带 {@code slot_id}/{@code tool}/
- * {@code correct_tool} 字段；发生主手交换时附 {@code main_hand_swapped} 与
- * {@code previous_main_hand}；工具不适合目标方块时附 {@code warning}
- * （区分“不掉落”与“仅降速”两种后果）。
+ * 动作反馈（RUNNING 与终态 details）始终携带 {@code tool}/{@code correct_tool} 字段；
+ * 工具不适合目标方块时附 {@code warning}（区分“不掉落”与“仅降速”两种后果）。
  * </p>
  * <p>
  * 破坏耗时完全复用原版计算链:每 tick 进度增量为
@@ -88,7 +81,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     /** 单个 Mob 的挖掘进度。 */
     private static final class MiningState {
         final BlockPos pos;
-        /** 工具与换手反馈字段（slot_id/tool/correct_tool/main_hand_swapped/warning）。 */
+        /** 工具反馈字段（tool/correct_tool/warning）。 */
         final Map<String, Object> toolDetails;
         float progress;
         int ticks;
@@ -176,21 +169,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
                 .range("y", -2048, 2048)
                 .range("z", -30_000_000, 30_000_000);
         }
-        return builder
-            .range("slot_id", 0, Integer.MAX_VALUE)
-            .build();
-    }
-
-    /**
-     * 在空间校验之上补充 slot_id 的 presence 检查（proto3 optional 未设置时空间跳过校验，
-     * 而本动作必须显式指定工具槽位）。
-     *
-     * @param component 待校验动作
-     * @return 空间通过且 slot_id 已显式设置时为 true
-     */
-    @Override
-    public boolean contains(ProtoBreakBlock component) {
-        return this.space().contains(component) && component.hasSlotId();
+        return builder.build();
     }
 
     @Override
@@ -210,30 +189,11 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
             return ActionApplyResult.none(validationError);
         }
 
-        // 所有失败校验通过后才改动物品栏：工具槽与主手交换（交换而非移动），挖掘全程主手持工具。
-        var layout = AgentInventoryLayout.resolve(mob);
-        int slotId = component.getSlotId();
-        if (slotId < 0 || slotId >= layout.size()) {
-            return ActionApplyResult.none(ActionState.failed("slot id out of range", Map.of(
-                "slot_id", slotId,
-                "inventory_size", layout.size()
-            )));
-        }
-        AgentSlot toolSlot = layout.slot(slotId);
-        boolean swapped = slotId != EquipmentSlot.MAINHAND.getId();
-        ItemStack held = mob.getMainHandItem();
-        String previousMainHandId = itemId(held);
-        if (swapped) {
-            mob.setItemSlot(EquipmentSlot.MAINHAND, toolSlot.getItem());
-            toolSlot.setItem(held);
-        }
-
         AgentFakePlayerActor actor = AgentFakePlayerService.borrowHandActor(mob);
         // 与原版 getDestroyProgress 的判定口径一致：无需正确工具即可掉落的方块恒为 true
         boolean correctTool = !blockState.requiresCorrectToolForDrops()
             || mob.getMainHandItem().isCorrectToolForDrops(blockState);
-        Map<String, Object> toolDetails = toolDetails(slotId, itemId(mob.getMainHandItem()),
-            correctTool, swapped, previousMainHandId, blockState);
+        Map<String, Object> toolDetails = toolDetails(itemId(mob.getMainHandItem()), correctTool, blockState);
         // 首 tick 进度与原版 START_DESTROY_BLOCK 一致:立即累计一次
         float progress = blockState.getDestroyProgress(actor.player(), level, pos);
         mob.getLookControl().setLookAt(Vec3.atCenterOf(pos));
@@ -347,7 +307,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     /**
      * 通过假玩家执行原版生存模式破坏（含工具耐久损耗与掉落物）。
      *
-     * @param toolDetails 工具与换手反馈字段，并入终态 details
+     * @param toolDetails 工具反馈字段，并入终态 details
      */
     private static ActionState finishDestroy(
         Mob mob, ServerLevel level, BlockPos pos, int ticks, Map<String, Object> toolDetails
@@ -378,28 +338,17 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     }
 
     /**
-     * 构造工具与换手反馈字段；工具不适合目标方块时附带 warning。
+     * 构造工具反馈字段；工具不适合目标方块时附带 warning。
      *
-     * @param slotId 工具来源槽位
-     * @param toolId 工具物品 id（"empty" 表示空手）
+     * @param toolId 主手工具物品 id（"empty" 表示空手）
      * @param correctTool 工具是否适合挖掘目标方块（决定速度与掉落）
-     * @param swapped 工具槽是否与主手发生交换
-     * @param previousMainHandId 交换前主手物品 id（"empty" 表示空手）
      * @param blockState 目标方块状态（用于区分"不掉落"与"仅降速"）
      * @return 有序反馈字段
      */
-    private static Map<String, Object> toolDetails(
-        int slotId, String toolId, boolean correctTool,
-        boolean swapped, String previousMainHandId, BlockState blockState
-    ) {
+    private static Map<String, Object> toolDetails(String toolId, boolean correctTool, BlockState blockState) {
         Map<String, Object> details = new LinkedHashMap<>();
-        details.put("slot_id", slotId);
         details.put("tool", toolId);
         details.put("correct_tool", correctTool);
-        if (swapped) {
-            details.put("main_hand_swapped", true);
-            details.put("previous_main_hand", previousMainHandId);
-        }
         if (!correctTool) {
             details.put("warning", blockState.requiresCorrectToolForDrops()
                 ? "incorrect tool: the block will not drop items"

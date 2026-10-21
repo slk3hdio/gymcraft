@@ -9,6 +9,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -33,7 +34,6 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItem;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItemBlockTarget;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItemEntityTarget;
 import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
-import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryBridge;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryTransaction;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
@@ -41,7 +41,8 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 /**
- * 按 Agent 槽号使用物品；外部目标先校验距离和视线，再转向并执行原版持物交互入口。
+ * 使用 Agent 主手持有物；外部目标先校验距离和视线，再转向并执行原版持物交互入口。
+ * 动作不选择物品槽位、不交换物品，固定使用主手。
  * 目标不接受直接交互的物品（如投掷物）回退为面向目标的普通使用。
  * 瞬时交互通过独立玩家桥接，食物药水由 Mob 原版 tick 消费；不执行目标自身交互。
  * 实现了 {@link EnvironmentRegionAware}：环境区域非空时方块目标坐标空间收紧到区域边界。
@@ -107,7 +108,7 @@ public final class UseItemController extends AbstractActionComponentController<P
     /** @return 对应协议类型 */
     @Override public Class<ProtoUseItem> protoType() { return ProtoUseItem.class; }
 
-    /** @return 槽号与 oneof 目标分支的嵌套动作空间 */
+    /** @return oneof 目标分支的嵌套动作空间 */
     @Override public McSpace<ProtoUseItem> defaultSpace() { return buildSpace(null); }
 
     /** 接受环境区域（构造期一次性推送）：非空时方块目标坐标空间收紧到区域边界。 */
@@ -118,14 +119,13 @@ public final class UseItemController extends AbstractActionComponentController<P
 
     /**
      * 构造动作空间：区域非空时 {@code block} 分支 x/y/z 收紧到区域闭区间边界，
-     * 槽号与实体分支不随区域变化。
+     * 实体分支不随区域变化。
      *
      * @param region 环境区域；null 表示无区域约束
      * @return 动作参数空间
      */
     private static McSpace<ProtoUseItem> buildSpace(@Nullable BoundingBox region) {
         return MessageSpace.<ProtoUseItem>builder(ProtoUseItem.getDescriptor())
-            .range("slot_id", 0, Integer.MAX_VALUE)
             .message("block", blockTargetSpace(region))
             .message("entity", MessageSpace.<ProtoUseItemEntityTarget>builder(ProtoUseItemEntityTarget.getDescriptor())
                 .range("entity_id", 1, Integer.MAX_VALUE)
@@ -154,24 +154,13 @@ public final class UseItemController extends AbstractActionComponentController<P
     }
 
     /**
-     * 在空间校验之上补充 slot_id 的 presence 检查（proto3 optional 未设置时空间跳过校验，
-     * 而本动作必须显式指定槽号）；oneof 目标分支未设置时空间自动跳过，缺省即自身使用。
-     *
-     * @param action 协议动作
-     * @return 空间通过且 slot_id 已显式设置时为 true
-     */
-    @Override public boolean contains(ProtoUseItem action) {
-        return this.space().contains(action) && action.hasSlotId();
-    }
-
-    /**
-     * @param action 来源与可选目标
+     * @param action 可选目标
      * @return 即时结果或持续消费状态
      */
     @Override public ActionApplyResult apply(ProtoUseItem action) {
         this.onInterrupt(action);
         this.consumption = null;
-        this.details = Map.of("slot_id", action.getSlotId(), "target", action.getTargetCase().name());
+        this.details = Map.of("target", action.getTargetCase().name());
         ActionState error = this.validateMobForAction();
         if (error != null) {
             this.state = error;
@@ -180,16 +169,11 @@ public final class UseItemController extends AbstractActionComponentController<P
         if (!this.contains(action)) {
             return this.fail("invalid use item payload");
         }
-        var layout = AgentInventoryLayout.resolve(this.mob());
-        if (action.getSlotId() >= layout.size()) {
-            return this.fail("slot id out of range");
-        }
-        ItemStack stack = layout.slot(action.getSlotId()).getItem();
+        ItemStack stack = this.mob().getMainHandItem();
         if (stack.isEmpty()) {
-            return this.fail("source slot is empty");
+            return this.fail("main hand is empty");
         }
         var targetDetails = new LinkedHashMap<String, Object>();
-        targetDetails.put("slot_id", action.getSlotId());
         targetDetails.put("item_id", BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
         targetDetails.put("target", action.hasBlock() ? "block" : action.hasEntity() ? "entity" : "self");
         if (action.hasBlock()) {
@@ -204,25 +188,25 @@ public final class UseItemController extends AbstractActionComponentController<P
             return this.fail("agent is already using an item");
         }
 
-        // 所有目标检查在临时挪动物品之前执行，失败不改变物品栏。
+        // 所有目标检查在临时桥接物品栏之前执行，失败不改变物品栏。
         try {
             BlockHitResult blockHit = action.hasBlock() ? this.blockTarget(action) : null;
             LivingEntity entity = action.hasEntity() ? this.entityTarget(action) : null;
             if (!action.hasBlock() && !action.hasEntity() && stack.has(DataComponents.CONSUMABLE)) {
                 // 提前验证桥接容量，保证跨 tick 消费结束后一定能建立清算桥接。
                 AgentInventoryBridge.validateCapacity(this.mob());
-                this.consumption = new UseItemConsumption(this.mob(), action.getSlotId());
+                this.consumption = new UseItemConsumption(this.mob());
                 this.consumption.start();
                 this.state = ActionState.running("consuming item", this.details);
                 this.tick(action);
                 return ActionApplyResult.applied(this.policy(), this.state);
             }
             InteractionResult result;
-            try (var inventory = AgentInventoryTransaction.open(this.mob(), action.getSlotId())) {
+            // 来源固定为主手：桥接建立时 FakePlayer 主手已同步，无需暂借换槽。
+            try (var inventory = AgentInventoryTransaction.open(this.mob(), EquipmentSlot.MAINHAND.getId())) {
                 if (!action.hasBlock() && !action.hasEntity() && stack.getUseDuration(inventory.player()) > 0) {
                     return this.fail("non-consumable sustained use is not supported");
                 }
-                inventory.stageSelectedInMainHand();
                 try {
                     result = this.use(inventory, blockHit, entity);
                 } finally {

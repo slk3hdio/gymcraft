@@ -2,7 +2,6 @@ package io.github.mousemeya.gymcraft.gym.fakeplayer;
 
 import java.util.List;
 
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 
@@ -11,8 +10,8 @@ import io.github.mousemeya.gymcraft.gym.inventory.AgentSlot;
 /**
  * 单次 FakePlayer 完整库存事务。
  * <p>
- * 事务可把任意 Agent 逻辑槽暂借到玩家主手，结束时恢复原主手、归还结果并通过
- * {@link AgentInventoryBridge} 写回。提交与关闭均幂等，异常路径不得静默丢失物品。
+ * 事务建立时同步 Agent 完整物品栏，结束时通过 {@link AgentInventoryBridge} 写回。
+ * 提交与关闭均幂等，异常路径不得静默丢失物品。
  * </p>
  */
 public final class AgentInventoryTransaction implements AutoCloseable {
@@ -20,8 +19,6 @@ public final class AgentInventoryTransaction implements AutoCloseable {
     private final AgentInventoryBridge bridge;
     private final int slotId;
     private final int sourceIndex;
-    private ItemStack savedMain = ItemStack.EMPTY;
-    private boolean staged;
     private boolean committed;
     private AgentInventoryBridge.WriteBackResult result = new AgentInventoryBridge.WriteBackResult(List.of(), List.of());
 
@@ -75,23 +72,6 @@ public final class AgentInventoryTransaction implements AutoCloseable {
     }
 
     /**
-     * 将选中槽暂借到 FakePlayer 主手；重复调用视为编程错误。
-     */
-    public void stageSelectedInMainHand() {
-        if (this.staged) {
-            throw new IllegalStateException("Agent inventory transaction was already staged");
-        }
-        this.staged = true;
-        if (this.slotId == 0) {
-            return;
-        }
-        this.savedMain = this.player().getMainHandItem();
-        ItemStack selected = this.player().getInventory().getItem(this.sourceIndex);
-        this.player().getInventory().setItem(this.sourceIndex, ItemStack.EMPTY);
-        this.player().setItemInHand(InteractionHand.MAIN_HAND, selected);
-    }
-
-    /**
      * 将操作结果归还来源槽；无法放回的余量按统一清算顺序处理。
      *
      * @param returned 需要归还的物品堆
@@ -116,7 +96,7 @@ public final class AgentInventoryTransaction implements AutoCloseable {
     }
 
     /**
-     * 幂等提交事务，恢复暂借主手并写回 Mob。
+     * 幂等提交事务，写回 Mob。
      *
      * @return 首次提交产生的清算与掉落结果；重复调用返回同一结果
      */
@@ -125,11 +105,6 @@ public final class AgentInventoryTransaction implements AutoCloseable {
             return this.result;
         }
         this.committed = true;
-        if (this.staged && this.slotId != 0) {
-            ItemStack returned = this.player().getMainHandItem();
-            this.player().setItemInHand(InteractionHand.MAIN_HAND, this.savedMain);
-            this.returnResult(returned);
-        }
         this.result = this.bridge.writeBackToMob();
         return this.result;
     }

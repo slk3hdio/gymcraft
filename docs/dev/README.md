@@ -81,14 +81,14 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 |---|---|
 | `gymcraft:step_move` | 单 tick 前进、横移、视角和跳跃控制 |
 | `gymcraft:look_at` | 将当前视线对准实体、掉落物或方块 |
-| `gymcraft:use_item` | 按 Agent 槽号向方块、实体或自身使用物品；食物药水等待消费完成，详见[使用物品动作](../use-item-action.md) |
+| `gymcraft:use_item` | 固定使用主手持有物向方块、实体或自身使用物品（不选槽位、不换物品）；食物药水等待消费完成，详见[使用物品动作](../use-item-action.md) |
 | `gymcraft:move_to` | 使用寻路移动到目标坐标，按 Mob 中心的水平距离精确判定 `stop_distance` |
 | `gymcraft:swim_to` | 参数与判定同 `move_to`，但使用两栖寻路（原版海龟同款）：水中、深水起点或目标在彼岸时仍可规划路径，陆地等价 `move_to`；动作期间临时换用三维游泳移动控制（海豚/青蛙同款，结束自动恢复），不切换游泳姿态。深水垂直岸沿（无坡度直壁）爬升能力有限，优先经岸坡/台阶出水 |
 | `gymcraft:set_attack_target` | 设置实体攻击目标 |
 | `gymcraft:attack_once` | 执行一次近战攻击 |
 | `gymcraft:noop` | 空操作 |
 | `gymcraft:jump` | 提交一次跳跃意图 |
-| `gymcraft:break_block` | 必须指定工具槽位 `slot_id`；执行时该槽与主手交换（交换而非移动），通过 FakePlayer 复用原版方块破坏逻辑，结束后工具留在主手；空槽等价空手 |
+| `gymcraft:break_block` | 固定使用主手持有物挖掘（不选槽位、不换物品），通过 FakePlayer 复用原版方块破坏逻辑；空手主手即空手挖掘 |
 | `gymcraft:set_block` | 校验距离和实体碰撞后放置方块；物品栏任一槽位有匹配方块物品即可，放置前自动换到主手 |
 | `gymcraft:update_interesting_blocks` | 原子地批量添加或移除 Agent 感兴趣的方块类型 |
 | `gymcraft:send_chat` | 以受控 Mob 的显示名称向全服聊天栏发送纯文本消息；正文最长 256 个 UTF-16 单元 |

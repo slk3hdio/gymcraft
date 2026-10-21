@@ -1,10 +1,10 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryTransaction;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 import net.minecraft.util.profiling.Profiler;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -15,28 +15,24 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 
 /**
- * 挂在 Mob 上的单次消费会话；借用主手让原版实体 tick 推进消费并应用效果。
+ * 挂在 Mob 上的单次消费会话；从主手堆叠拆出单个物品，让原版实体 tick 推进消费并应用效果。
  * 完成事件只标记成功，待原版写回最终堆叠后结算；中断不调用完成或释放逻辑。
  */
 public final class UseItemConsumption {
     private final Mob mob;
-    private final int slotId;
     private final ItemStack savedMain;
     private boolean finished;
     private boolean closed;
 
     /**
-     * @param mob 受控生物
-     * @param slotId 已校验的非空来源槽
+     * @param mob 受控生物；调用前主手必须非空
      */
-    UseItemConsumption(Mob mob, int slotId) {
+    UseItemConsumption(Mob mob) {
         this.mob = mob;
-        this.slotId = slotId;
-        var slot = AgentInventoryLayout.resolve(mob).slot(slotId);
-        ItemStack remaining = slot.getItem().copy();
+        // 主手堆叠拆出单个进行消费，其余暂存，结算时统一归还。
+        ItemStack remaining = mob.getMainHandItem().copy();
         ItemStack single = remaining.split(1);
-        this.savedMain = slotId == 0 ? remaining : mob.getMainHandItem();
-        slot.setItem(remaining);
+        this.savedMain = remaining;
         mob.setItemInHand(InteractionHand.MAIN_HAND, single);
         mob.setData(ModAttachments.ITEM_CONSUMPTION, this);
         NeoForge.EVENT_BUS.register(this);
@@ -123,7 +119,7 @@ public final class UseItemConsumption {
         this.mob.stopUsingItem();
         ItemStack result = this.mob.getMainHandItem();
         this.mob.setItemInHand(InteractionHand.MAIN_HAND, this.savedMain);
-        AgentInventoryTransaction.settle(this.mob, this.slotId, result);
+        AgentInventoryTransaction.settle(this.mob, EquipmentSlot.MAINHAND.getId(), result);
     }
 
     /** @return 是否已经完成结算 */

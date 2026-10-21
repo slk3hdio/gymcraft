@@ -17,6 +17,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.animal.golem.IronGolem;
 import net.minecraft.world.entity.monster.warden.Warden;
@@ -157,9 +158,18 @@ public final class IronGolemWardenEnvGameTests {
                 golemStep.set(step(env, "gymcraft:noop", ProtoNoop.getDefaultInstance()));
 
                 IronGolem golem = helper.getLevel().getEntitiesOfClass(IronGolem.class, arenaBounds(origin)).getFirst();
-                Mob currentMob = (Mob) helper.getLevel().getEntity(mob.getUUID());
-                int ingotSlot = findItemSlot(currentMob, Items.IRON_INGOT);
-                healStep.set(step(env, "gymcraft:use_item", ProtoUseItem.newBuilder().setSlotId(ingotSlot)
+                // use_item 固定使用主手：把背包铁锭与主手铁块交换后再执行治疗
+                runOnServer(helper, () -> {
+                    Mob current = (Mob) helper.getLevel().getEntity(mob.getUUID());
+                    var ingotSlot = AgentInventoryLayout.resolve(current).slots().stream()
+                        .filter(slot -> slot.getItem().is(Items.IRON_INGOT))
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalStateException("iron ingot not found in Agent inventory"));
+                    ItemStack ingots = ingotSlot.getItem();
+                    ingotSlot.setItem(current.getMainHandItem());
+                    current.setItemSlot(EquipmentSlot.MAINHAND, ingots);
+                });
+                healStep.set(step(env, "gymcraft:use_item", ProtoUseItem.newBuilder()
                     .setEntity(ProtoUseItemEntityTarget.newBuilder().setEntityId(golem.getId())).build()));
                 healthAfterHeal.set(golem.getHealth());
 
@@ -202,21 +212,6 @@ public final class IronGolemWardenEnvGameTests {
                 env.close();
             }
         });
-    }
-
-    /**
-     * 从统一物品栏查找指定物品的实时逻辑槽。
-     *
-     * @param mob 当前受控 Mob
-     * @param item 需要查找的物品
-     * @return 包含该物品的逻辑 slot_id
-     */
-    private static int findItemSlot(Mob mob, net.minecraft.world.item.Item item) {
-        return AgentInventoryLayout.resolve(mob).slots().stream()
-            .filter(slot -> slot.getItem().is(item))
-            .findFirst()
-            .orElseThrow(() -> new IllegalStateException("item not found in Agent inventory: " + item))
-            .slotId();
     }
 
     /**
