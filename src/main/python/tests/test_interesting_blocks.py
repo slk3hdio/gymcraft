@@ -1,7 +1,5 @@
 """感兴趣方块动作打包与观测解包测试。"""
 
-from typing import cast
-
 from google.protobuf.any_pb2 import Any as ProtoAny
 
 from gymcraft.client import make_action, unpack_observation
@@ -13,10 +11,9 @@ from gymcraft.gym.observation.components.interesting_blocks_pb2 import (
     ProtoInterestingBlocks,
 )
 from gymcraft.gym.observation.observation_pb2 import ProtoMcObservation
-from gymcraft.type_info import (
+from gymcraft.types import (
     ACTION_UPDATE_INTERESTING_BLOCKS,
     OBS_INTERESTING_BLOCKS,
-    Action,
 )
 
 
@@ -26,10 +23,10 @@ def test_make_update_interesting_blocks_action() -> None:
         add_block_ids=["minecraft:diamond_ore"],
         remove_block_ids=["minecraft:stone"],
     )
-    action = make_action(cast(Action, {ACTION_UPDATE_INTERESTING_BLOCKS: payload}))
+    action = make_action({"component_id": ACTION_UPDATE_INTERESTING_BLOCKS, "payload": payload})
 
     unpacked = ProtoUpdateInterestingBlocks()
-    assert action.components[ACTION_UPDATE_INTERESTING_BLOCKS].Unpack(unpacked)
+    assert action.payload.Unpack(unpacked)
     assert list(unpacked.add_block_ids) == ["minecraft:diamond_ore"]
     assert list(unpacked.remove_block_ids) == ["minecraft:stone"]
 

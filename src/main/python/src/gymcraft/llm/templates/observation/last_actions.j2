@@ -1,0 +1,5 @@
+[observation] game_tick={{ header.game_tick }} last_action_status={{ status }} last_action_description={{ header.last_action_description|quote }}
+{%- for entry in header.last_actions %}
+
+last_action[{{ entry.index }}] {{ entry.component_id }} status={{ entry.status|lower }} description={{ entry.description|quote }}
+{%- endfor %}

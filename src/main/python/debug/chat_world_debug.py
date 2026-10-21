@@ -32,7 +32,7 @@ from gymcraft.gym.action.components.send_chat_pb2 import ProtoSendChat
 from gymcraft.gym.observation.components.chat_pb2 import ProtoRecentChat
 from gymcraft.gym.observation.components.world_pb2 import ProtoWorldState
 from gymcraft.client import single_action
-from gymcraft.type_info import ACTION_SEND_CHAT, OBS_CHAT, OBS_WORLD
+from gymcraft.types import ACTION_SEND_CHAT, OBS_CHAT, OBS_WORLD
 
 from e2e_support import E2ESuite, read_server_properties, write_report
 

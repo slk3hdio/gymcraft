@@ -16,7 +16,7 @@ from typing import Any
 from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components import move_to_pb2
 from gymcraft.gym.observation.components import self_pb2
-from gymcraft.type_info import ACTION_MOVE_TO, OBS_SELF
+from gymcraft.types import ACTION_MOVE_TO, OBS_SELF
 
 
 def self_position(obs: Any) -> tuple[float, float, float]:

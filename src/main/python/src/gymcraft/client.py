@@ -11,15 +11,6 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.struct_pb2 import Struct
 
 from gymcraft.gym.action.action_pb2 import ProtoMcAction
-from gymcraft.gym.observation.components.chat_pb2 import ProtoRecentChat
-from gymcraft.gym.observation.components.health_log_pb2 import ProtoHealthLog
-from gymcraft.gym.observation.components.menu_pb2 import ProtoMenuObservation
-from gymcraft.gym.observation.components.interesting_blocks_pb2 import ProtoInterestingBlocks
-from gymcraft.gym.observation.components.nearby_blocks_pb2 import ProtoNearbyBlocks
-from gymcraft.gym.observation.components.nearby_entities_pb2 import ProtoNearbyEntities
-from gymcraft.gym.observation.components.nearby_items_pb2 import ProtoNearbyItems
-from gymcraft.gym.observation.components.self_pb2 import ProtoSelfState
-from gymcraft.gym.observation.components.world_pb2 import ProtoWorldState
 from gymcraft.gym.observation.observation_pb2 import ProtoMcObservation
 from gymcraft.gym.rpc.env_service_pb2 import (
     CloseSessionRequest,
@@ -32,37 +23,19 @@ from gymcraft.gym.rpc.env_service_pb2 import (
 )
 from gymcraft.gym.rpc.env_service_pb2_grpc import GymEnvServiceStub
 from gymcraft.gym.space.space_spec_pb2 import ProtoComponentSpaceSet
-from gymcraft.type_info import (
+from gymcraft.llm.components.observations import OBSERVATION_REGISTRY
+from gymcraft.types import (
     Action,
     ActionBatch,
     Observation,
-    OBS_INTERESTING_BLOCKS,
-    OBS_MENU,
-    OBS_NEARBY_BLOCKS,
-    OBS_NEARBY_ENTITIES,
-    OBS_NEARBY_ITEMS,
-    OBS_CHAT,
-    OBS_HEALTH_LOG,
-    OBS_SELF,
-    OBS_WORLD,
     TIMEOUT_SECONDS,
 )
 
 _TMessage = TypeVar("_TMessage", bound=message.Message)
 
 # 观测组件注册 id（完整 wire 键，含 `gymcraft:` 命名空间）→ 解包目标 protobuf 消息类型。
-# 新增观测组件时需在此登记，否则 `unpack_observation` 会将其视为未知组件。
-_OBSERVATION_COMPONENT_TYPES: dict[str, type[message.Message]] = {
-    OBS_SELF: ProtoSelfState,
-    OBS_WORLD: ProtoWorldState,
-    OBS_NEARBY_ENTITIES: ProtoNearbyEntities,
-    OBS_NEARBY_BLOCKS: ProtoNearbyBlocks,
-    OBS_MENU: ProtoMenuObservation,
-    OBS_NEARBY_ITEMS: ProtoNearbyItems,
-    OBS_INTERESTING_BLOCKS: ProtoInterestingBlocks,
-    OBS_CHAT: ProtoRecentChat,
-    OBS_HEALTH_LOG: ProtoHealthLog,
-}
+# 源自 LLM 观测组件注册表（单一事实源）；新增观测组件只需在注册表登记。
+_OBSERVATION_COMPONENT_TYPES: dict[str, type[message.Message]] = OBSERVATION_REGISTRY.unpack_map()
 
 
 class GymCraftEnv(gym.Env[Any, Any]):

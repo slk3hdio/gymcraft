@@ -20,8 +20,8 @@ from gymcraft.gym.observation.components.interesting_blocks_pb2 import (
     ProtoInterestingBlocks,
 )
 from gymcraft.client import single_action
-from gymcraft.llm import ActionDslParser, ContextAssembler, encode_action_batch
-from gymcraft.type_info import (
+from gymcraft.llm import ActionParser, ContextAssembler, encode_action_batch
+from gymcraft.types import (
     ACTION_UPDATE_INTERESTING_BLOCKS,
     OBS_INTERESTING_BLOCKS,
     ActionBatch,
@@ -69,7 +69,7 @@ def parse_position(raw: list[int] | None) -> Pos | None:
     return raw[0], raw[1], raw[2]
 
 
-def parse_dsl(parser: ActionDslParser, command: str) -> ActionBatch:
+def parse_dsl(parser: ActionParser, command: str) -> ActionBatch:
     """把单条 GymCraft LLM DSL 命令编码为客户端动作。
 
     参数:
@@ -170,7 +170,7 @@ def main() -> None:
         if interesting_blocks(observation).blocks:
             raise AssertionError("reset did not start with an empty interesting block attachment")
 
-        dsl_parser = ActionDslParser(env.action_space_spec)
+        dsl_parser = ActionParser(env.action_space_spec)
         add_command = "/update_interesting_blocks add " + " ".join(args.add)
         observation = step(env, parse_dsl(dsl_parser, add_command), "dsl_add", "COMPLETED")
         print_interesting("after_add", observation)
@@ -197,7 +197,7 @@ def main() -> None:
                 raise AssertionError(f"removed block types are still observed: {sorted(removed_ids)}")
             print_interesting("after_remove", observation)
 
-        formatted = ContextAssembler(ActionDslParser()).render_observation(observation, full=True)
+        formatted = ContextAssembler(ActionParser()).render_observation(observation, full=True)
         if "interesting_blocks:" not in formatted:
             raise AssertionError("LLM formatter omitted interesting_blocks")
         print("llm_observation:\n" + formatted)

@@ -1,0 +1,9 @@
+{% if entities is none -%}
+entities: unavailable
+{%- else -%}
+entities: total={{ entities|length }}
+{%- for entity in entities %}
+
+- entity_id={{ entity.entity_id }} entity_type={{ entity.entity_type }} x={{ entity.x|number }} y={{ entity.y|number }} z={{ entity.z|number }} distance={{ entity.distance|number }} health={{ entity.health|number }} max_health={{ entity.max_health|number }} hostile={{ entity.hostile|bool }} ally={{ entity.ally|bool }} player={{ entity.player|bool }} item={{ entity.item|bool }}
+{%- endfor %}
+{%- endif %}

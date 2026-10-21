@@ -17,10 +17,17 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 
 from gymcraft import GymCraftEnv, list_environments
-from gymcraft.llm.actions import ActionDslParser, ActionParseError, encode_action_batch, wrap_commands
-from gymcraft.llm.context import FIELD_LAST_ACTIONS, ContextAssembler, ObservationFormatConfig
-from gymcraft.llm.types import TurnResult
-from gymcraft.type_info import Observation
+from gymcraft.llm import (
+    LAST_ACTIONS_FIELD,
+    ActionParseError,
+    ActionParser,
+    ContextAssembler,
+    RenderConfig,
+    TurnResult,
+    encode_action_batch,
+    wrap_commands,
+)
+from gymcraft.types import Observation
 
 # 未连接时的统一提示，避免每个工具重复拼装文案。
 _NO_SESSION_MSG = "尚无活跃连接，请先调用 gymcraft_connect。"
@@ -32,7 +39,7 @@ class _EnvSession:
     """持有底层 gRPC 环境、动作 DSL 解析器、上下文组装器和最新观测文本缓存。"""
 
     env: GymCraftEnv | None = None
-    parser: ActionDslParser | None = None
+    parser: ActionParser | None = None
     assembler: ContextAssembler | None = None
     observation_text: str = ""
     done: bool = False
@@ -51,7 +58,7 @@ _SERVER = MCPServer(
 )
 
 
-def _require_session() -> tuple[GymCraftEnv, ActionDslParser, ContextAssembler]:
+def _require_session() -> tuple[GymCraftEnv, ActionParser, ContextAssembler]:
     """返回已连接的环境、动作解析器与上下文组装器，未连接时抛 RuntimeError。"""
     if _SESSION.env is None or _SESSION.parser is None or _SESSION.assembler is None:
         raise RuntimeError(_NO_SESSION_MSG)
@@ -103,12 +110,12 @@ def gymcraft_connect(entity_uuid: str, address: str = "localhost:50051") -> str:
     except Exception as exc:  # gRPC 连接失败等场景直接反馈给调用方
         return f"connect 失败: {type(exc).__name__}: {exc}"
     _SESSION.env = env
-    _SESSION.parser = ActionDslParser(env.action_space_spec)
+    _SESSION.parser = ActionParser(env.action_space_spec)
     # 动作执行结果只渲染批次摘要与逐项动作反馈（反馈位仅保留 last_actions），
     # 其余观测字段经 get_observation 的全字段渲染返回。
     _SESSION.assembler = ContextAssembler(
         _SESSION.parser,
-        config=ObservationFormatConfig(feedback_fields=(FIELD_LAST_ACTIONS,)),
+        config=RenderConfig(feedback_fields=(LAST_ACTIONS_FIELD,)),
     )
     _SESSION.observation_text = ""
     _SESSION.done = False

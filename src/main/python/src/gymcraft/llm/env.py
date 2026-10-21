@@ -7,10 +7,12 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from gymcraft.gym.space.space_spec_pb2 import ProtoComponentSpaceSet
-from gymcraft.llm.actions import ActionDslParser, ActionParseError, encode_action_batch
-from gymcraft.llm.context import ContextAssembler, ConversationHistory, ObservationFormatConfig
+from gymcraft.llm.context import ContextAssembler, RenderConfig
+from gymcraft.llm.errors import ActionParseError
+from gymcraft.llm.history import ConversationHistory
+from gymcraft.llm.parser import ActionParser, encode_action_batch
 from gymcraft.llm.types import LLMContext, TurnResult
-from gymcraft.type_info import ActionBatch, Observation
+from gymcraft.types import ActionBatch, Observation
 
 
 # Wrapper 所需的最小底层环境接口，便于测试和替换 transport。
@@ -40,7 +42,7 @@ class GymCraftEnvLike(Protocol):
         ...
 
 
-# LLM wrapper 的回合、超时、历史和观测默认配置。
+# LLM wrapper 的回合、超时、历史和观测渲染默认配置。
 @dataclass(frozen=True)
 class LLMEnvConfig:
     """集中配置薄 wrapper 使用的可复用工具组件。"""
@@ -49,7 +51,7 @@ class LLMEnvConfig:
     default_timeout_seconds: float = 10.0
     max_timeout_seconds: float = 60.0
     max_invalid_retries: int = 2
-    observation: ObservationFormatConfig = field(default_factory=ObservationFormatConfig)
+    render: RenderConfig = field(default_factory=RenderConfig)
 
     def __post_init__(self) -> None:
         """校验历史容量和非法输出重试次数。"""
@@ -65,6 +67,8 @@ class LLMGymCraftEnv:
 
     观测与动作结果以结构化形式保留（``TurnResult`` + 观测原文），
     文本渲染与反馈位/状态位划分统一由 ``ContextAssembler`` 在组装时完成。
+    输入模型的内容严格来自 observation；reward/terminated/truncated/info
+    只出现在 ``step`` 的返回值中。
     """
 
     def __init__(
@@ -73,7 +77,7 @@ class LLMGymCraftEnv:
         *,
         task: str,
         config: LLMEnvConfig | None = None,
-        action_parser: ActionDslParser | None = None,
+        action_parser: ActionParser | None = None,
         context_assembler: ContextAssembler | None = None,
         history: ConversationHistory | None = None,
     ) -> None:
@@ -83,12 +87,12 @@ class LLMGymCraftEnv:
         self.env = env
         self.task = task
         self.config = config or LLMEnvConfig()
-        self.action_parser = action_parser or ActionDslParser(
+        self.action_parser = action_parser or ActionParser(
             env.action_space_spec,
             default_timeout_seconds=self.config.default_timeout_seconds,
             max_timeout_seconds=self.config.max_timeout_seconds,
         )
-        self.context_assembler = context_assembler or ContextAssembler(self.action_parser, config=self.config.observation)
+        self.context_assembler = context_assembler or ContextAssembler(self.action_parser, config=self.config.render)
         self.history = history or ConversationHistory(self.config.history_turns)
         self._observation: Observation | None = None
         self._turn_index = 0
@@ -113,7 +117,7 @@ class LLMGymCraftEnv:
         self._invalid_attempts = 0
         self._needs_reset = False
         self._observation = observation
-        info = self._decode_info(raw_info)
+        info = dict(raw_info)
         info["advanced"] = True
         # 首轮渲染全部字段（含反馈位），避免 chat/health_log 等增量内容在首步丢失
         return self._build_context(full_observation=True), info
@@ -128,7 +132,7 @@ class LLMGymCraftEnv:
             return self._handle_invalid_response(response_text, exc)
 
         observation, reward, terminated, truncated, raw_info = self.env.step(encode_action_batch(parsed.batch))
-        info = self._decode_info(raw_info)
+        info = dict(raw_info)
         info.update(
             {
                 "advanced": True,
@@ -175,6 +179,7 @@ class LLMGymCraftEnv:
             info={"invalid_attempts": self._invalid_attempts, "remaining_retries": remaining},
             observation=None,
             error=str(error),
+            remaining_retries=remaining,
         )
         self.history.add(response_text, result)
         self._needs_reset = truncated
@@ -197,8 +202,3 @@ class LLMGymCraftEnv:
             turn_index=self._turn_index,
             full_observation=full_observation,
         )
-
-    @staticmethod
-    def _decode_info(raw_info: Mapping[str, Any]) -> dict[str, Any]:
-        """把底层 info 规整为字典（Struct 解包结果即字典，直接复制）。"""
-        return dict(raw_info)

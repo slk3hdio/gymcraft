@@ -13,8 +13,8 @@ from typing import Any
 
 from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components.noop_pb2 import ProtoNoop
-from gymcraft.llm import ActionDslParser, encode_action_batch
-from gymcraft.type_info import ACTION_NOOP, OBS_CHAT, OBS_SELF, ActionBatch, Observation
+from gymcraft.llm import ActionParser, encode_action_batch
+from gymcraft.types import ACTION_NOOP, OBS_CHAT, OBS_SELF, ActionBatch, Observation
 
 ANGLE_TOLERANCE = 5.0
 
@@ -41,7 +41,7 @@ def send(env: GymCraftEnv, action: ActionBatch, expected: str = "COMPLETED") -> 
     return obs
 
 
-def dsl(env: GymCraftEnv, parser: ActionDslParser, command: str, expected: str = "COMPLETED") -> Any:
+def dsl(env: GymCraftEnv, parser: ActionParser, command: str, expected: str = "COMPLETED") -> Any:
     """经真实 LLM DSL 路径解析并发送一条命令，返回刷新后的观测。"""
     parsed = parser.parse(f"```gymcraft-action\n{command}\n```")
     return send(env, encode_action_batch(parsed.batch), expected)
@@ -55,7 +55,7 @@ def main() -> None:
     args = parser_arg.parse_args()
 
     env = GymCraftEnv(args.uuid, args.address)
-    parser = ActionDslParser(env.action_space_spec)
+    parser = ActionParser(env.action_space_spec)
 
     obs, _info = env.reset()
     state = self_state(obs)

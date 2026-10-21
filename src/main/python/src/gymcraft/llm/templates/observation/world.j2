@@ -1,0 +1,11 @@
+{% if world is none -%}
+world: unavailable
+structures: unavailable
+{%- else -%}
+world: dimension={{ world.dimension }} biome={{ world.biome }} structure={{ world.structure or "none" }} day_time={{ world.day_time }} raining={{ world.raining|bool }} thundering={{ world.thundering|bool }}
+structures: total={{ structures|length }}
+{%- for entry in structures %}
+
+- structure_id={{ entry.structure_id }} x={{ entry.x }} y={{ entry.y }} z={{ entry.z }} distance={{ entry.distance|number }}
+{%- endfor %}
+{%- endif %}

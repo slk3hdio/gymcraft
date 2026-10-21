@@ -7,7 +7,7 @@ from typing import Any, Literal, TypeAlias, TypedDict
 
 from google.protobuf.message import Message as ProtoMessage
 
-from gymcraft.type_info import Observation
+from gymcraft.types import Observation
 
 
 JsonScalar: TypeAlias = str | int | float | bool | None
@@ -62,6 +62,7 @@ class ParsedAgentResponse:
 
 
 # 一步 step 的完整结构化结果；观测原样保留，文本渲染推迟到上下文组装时进行。
+# reward/terminated/truncated/info 仅供调用方程序使用，绝不进入模型消息。
 @dataclass(frozen=True)
 class TurnResult:
     """记录一次环境推进（或原地纠错）的完整结果，供 ContextAssembler 按需渲染。"""
@@ -71,12 +72,14 @@ class TurnResult:
     reward: float
     terminated: bool
     truncated: bool
-    # 底层 info 字典（批次摘要等，仅用于调试与摘要渲染）。
+    # 底层 info 字典（批次摘要等，仅用于调试与记录）。
     info: dict[str, Any] = field(default_factory=dict)
     # 本步产生的新观测；advanced=False（观测未变化）时为 None。
     observation: Observation | None = None
     # 动作解析错误文本（advanced=False 时携带）。
     error: str | None = None
+    # 解析错误时剩余的纠正次数（advanced=False 时使用；协议纠错通道，非环境信号）。
+    remaining_retries: int = 0
 
 
 # 历史缓冲中的一轮模型输出和环境反馈。

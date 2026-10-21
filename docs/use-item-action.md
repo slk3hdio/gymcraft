@@ -13,16 +13,16 @@
 from gymcraft.gym.action.components.use_item_pb2 import (
     ProtoUseItem, ProtoUseItemBlockTarget, ProtoUseItemEntityTarget,
 )
-from gymcraft.type_info import ACTION_USE_ITEM
+from gymcraft.types import ACTION_USE_ITEM
 
 # 使用主手物品；食物、药水等待消费完成。
-action = {ACTION_USE_ITEM: ProtoUseItem(slot_id=0)}
+action = {"component_id": ACTION_USE_ITEM, "payload": ProtoUseItem(slot_id=0)}
 # 使用副手物品作用于方块。
-action = {ACTION_USE_ITEM: ProtoUseItem(
+action = {"component_id": ACTION_USE_ITEM, "payload": ProtoUseItem(
     slot_id=5, block=ProtoUseItemBlockTarget(x=10, y=64, z=20),
 )}
 # 使用容器槽中的物品作用于实体。
-action = {ACTION_USE_ITEM: ProtoUseItem(
+action = {"component_id": ACTION_USE_ITEM, "payload": ProtoUseItem(
     slot_id=8, entity=ProtoUseItemEntityTarget(entity_id=42),
 )}
 ```
