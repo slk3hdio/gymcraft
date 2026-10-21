@@ -1,3 +1,4 @@
+{%- if blocks %}
 nearby blocks: total={{ blocks|length }}
 {%- for block in blocks %}
 
@@ -9,3 +10,4 @@ block summary: total={{ counts|length }}
 
 - block_id={{ block_id }} count={{ count }}
 {%- endfor %}
+{%- endif %}

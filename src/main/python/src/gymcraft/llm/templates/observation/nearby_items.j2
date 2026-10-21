@@ -1,5 +1,7 @@
+{%- if items %}
 items: total={{ items|length }}
 {%- for item in items %}
 
 - entity_id={{ item.entity_id }} item_id={{ item.item.item_id }} count={{ item.item.count }} x={{ item.x|number }} y={{ item.y|number }} z={{ item.z|number }} distance={{ item.distance|number }}
 {%- endfor %}
+{%- endif %}

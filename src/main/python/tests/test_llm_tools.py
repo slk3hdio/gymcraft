@@ -549,7 +549,7 @@ class ObservationAndContextTests(unittest.TestCase):
         self.assertIn("main_hand=empty", text)
 
     def test_menu_open_closed_and_empty_slot_compression(self) -> None:
-        """菜单应按打开/关闭/缺席三种形态渲染，连续同类空槽压缩为区间行。"""
+        """菜单打开时渲染会话与槽位（连续同类空槽压缩为区间行）；未打开或缺席时不渲染。"""
         assembler = ContextAssembler(ActionParser())
         observation = _observation()
         observation["gymcraft:menu"] = menu_pb2.ProtoMenuObservation(
@@ -577,7 +577,7 @@ class ObservationAndContextTests(unittest.TestCase):
 
         observation["gymcraft:menu"] = menu_pb2.ProtoMenuObservation(open=False)
         text = assembler.render_observation(observation, full=True)
-        self.assertIn("menu: open=false", text)
+        self.assertNotIn("menu:", text)
 
         del observation["gymcraft:menu"]
         text = assembler.render_observation(observation, full=True)
@@ -622,6 +622,35 @@ class ObservationAndContextTests(unittest.TestCase):
         del observation["gymcraft:health_log"]
         text = ContextAssembler(ActionParser()).render_observation(observation, full=True)
         self.assertNotIn("recent damage", text)
+
+    def test_empty_components_are_omitted(self) -> None:
+        """组件无有效信息（列表为空、菜单未打开、无附近结构）时不渲染对应段落。"""
+        observation = _observation()
+        observation["gymcraft:nearby_entities"] = nearby_entities_pb2.ProtoNearbyEntities()
+        observation["gymcraft:nearby_blocks"] = nearby_blocks_pb2.ProtoNearbyBlocks()
+        observation["gymcraft:interesting_blocks"] = interesting_blocks_pb2.ProtoInterestingBlocks()
+        observation["gymcraft:nearby_items"] = nearby_items_pb2.ProtoNearbyItems()
+        observation["gymcraft:chat"] = chat_pb2.ProtoRecentChat()
+        observation["gymcraft:health_log"] = health_log_pb2.ProtoHealthLog()
+        observation["gymcraft:menu"] = menu_pb2.ProtoMenuObservation(open=False)
+        observation["gymcraft:world"] = world_pb2.ProtoWorldState(
+            day_time=6000,
+            dimension="minecraft:overworld",
+            biome="minecraft:plains",
+        )
+        text = ContextAssembler(ActionParser()).render_observation(observation, full=True)
+        self.assertNotIn("entities:", text)
+        self.assertNotIn("nearby blocks", text)
+        self.assertNotIn("block summary", text)
+        self.assertNotIn("interesting_blocks:", text)
+        self.assertNotIn("items:", text)
+        self.assertNotIn("new chat", text)
+        self.assertNotIn("recent damage", text)
+        self.assertNotIn("menu:", text)
+        self.assertNotIn("structures:", text)
+        # world 行与 self 行始终携带有效信息，仍然渲染
+        self.assertIn("world: dimension=minecraft:overworld", text)
+        self.assertIn("self: entity_type=minecraft:zombie", text)
 
     def test_header_lists_per_action_feedback(self) -> None:
         """反馈位 header 应逐项输出上批动作的状态与描述（来自观测 header）。"""
@@ -837,7 +866,9 @@ class ObservationAndContextTests(unittest.TestCase):
         )
         history = ConversationHistory(max_turns=4)
         history_observation = _observation()
-        history_observation["gymcraft:menu"] = menu_pb2.ProtoMenuObservation(open=False)
+        history_observation["gymcraft:menu"] = menu_pb2.ProtoMenuObservation(
+            open=True, session_id=1, menu_type="minecraft:generic_9x3", title="Chest"
+        )
         history.add("raw", _turn_result(history_observation))
         context = assembler.build(
             task="任务",
@@ -846,7 +877,7 @@ class ObservationAndContextTests(unittest.TestCase):
             turn_index=1,
         )
         result_message = context["messages"][2]["content"]
-        self.assertIn("menu: open=false", result_message)
+        self.assertIn("menu: open=true", result_message)
         self.assertNotIn("new chat", result_message)
 
         current_message = context["messages"][-1]["content"]

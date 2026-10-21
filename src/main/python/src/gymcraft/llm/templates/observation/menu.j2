@@ -1,6 +1,4 @@
-{% if not menu.open -%}
-menu: open=false
-{%- else -%}
+{% if menu.open -%}
 menu: open=true session={{ menu.session_id }} type={{ menu.menu_type|quote }} title={{ menu.title|quote }}
 menu_slots:
 {%- if rows %}
