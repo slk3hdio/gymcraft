@@ -20,7 +20,7 @@ import io.github.mousemeya.gymcraft.gym.action.component.BreakBlockController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoBreakBlock;
 
 /**
- * 破坏方块动作的 GameTest —— 验证工具槽交换、原版掉落与耐久损耗。
+ * 破坏方块动作的 GameTest —— 验证固定使用主手工具、原版掉落与耐久损耗。
  */
 public final class BreakBlockGameTests {
     /** 禁止实例化 GameTest 集合。 */
@@ -28,33 +28,28 @@ public final class BreakBlockGameTests {
     }
 
     /**
-     * 工具槽与主手交换（交换而非移动），挖掘结束后工具留在主手；
+     * 固定使用主手持有物挖掘（不选择槽位、不交换物品），其他槽位不受影响；
      * 正确工具挖掘石头掉落圆石且消耗耐久。
      *
      * @param helper 测试场景
      */
-    public static void toolSwapsIntoMainHand(GameTestHelper helper) {
+    public static void minesWithMainHand(GameTestHelper helper) {
         Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
-        int offhandSlot = EquipmentSlot.OFFHAND.getId();
-        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STICK));
-        mob.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.STONE_PICKAXE));
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STONE_PICKAXE));
+        mob.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.STICK));
         BlockPos target = new BlockPos(3, 2, 2);
         helper.setBlock(target, Blocks.STONE);
         BlockPos absolute = helper.absolutePos(target);
         ProtoBreakBlock action = ProtoBreakBlock.newBuilder()
             .setX(absolute.getX()).setY(absolute.getY()).setZ(absolute.getZ())
-            .setSlotId(offhandSlot)
             .build();
 
         var controller = new BreakBlockController(mob);
         var state = controller.apply(action).initialState();
         assertEquals(helper, ActionStatus.RUNNING, state.status(), "mining should start");
-        assertTrue(helper, mob.getMainHandItem().is(Items.STONE_PICKAXE), "tool was not swapped to main hand");
-        assertTrue(helper, mob.getOffhandItem().is(Items.STICK), "original main hand item was not moved to tool slot");
+        assertTrue(helper, mob.getMainHandItem().is(Items.STONE_PICKAXE), "main hand tool changed");
         assertEquals(helper, "minecraft:stone_pickaxe", state.details().get("tool"), "tool feedback missing");
         assertEquals(helper, Boolean.TRUE, state.details().get("correct_tool"), "correct tool feedback wrong");
-        assertEquals(helper, Boolean.TRUE, state.details().get("main_hand_swapped"), "swap feedback missing");
-        assertEquals(helper, "minecraft:stick", state.details().get("previous_main_hand"), "previous main hand feedback wrong");
 
         // 同步推进不限游戏 tick；未着地惩罚下石镐约需 60 次，留足余量
         for (int tick = 0; tick < 200 && state.status() == ActionStatus.RUNNING; tick++) {
@@ -65,7 +60,7 @@ public final class BreakBlockGameTests {
         assertEquals(helper, "minecraft:stone_pickaxe", state.details().get("tool"), "terminal tool feedback missing");
         assertTrue(helper, mob.getMainHandItem().is(Items.STONE_PICKAXE), "tool did not stay in main hand");
         assertTrue(helper, mob.getMainHandItem().getDamageValue() > 0, "tool took no durability damage");
-        assertTrue(helper, mob.getOffhandItem().is(Items.STICK), "tool slot content changed during mining");
+        assertTrue(helper, mob.getOffhandItem().is(Items.STICK), "offhand content changed during mining");
         var drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, new AABB(absolute).inflate(2));
         assertTrue(helper, drops.stream().anyMatch(item -> item.getItem().is(Items.COBBLESTONE)),
             "stone did not drop cobblestone with a pickaxe");

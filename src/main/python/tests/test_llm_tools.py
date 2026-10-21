@@ -423,7 +423,7 @@ class ActionParserTests(unittest.TestCase):
             "click_menu_button": "/click_menu_button 1 0",
             "pick_up_item": "/pick_up_item 3",
             "drop_item": "/drop_item 0 2",
-            "use_item": "/use_item 0",
+            "use_item": "/use_item self",
             "update_interesting_blocks": "/update_interesting_blocks add minecraft:diamond_ore remove minecraft:stone",
             "send_chat": "/send_chat Hello from GymCraft!",
         }

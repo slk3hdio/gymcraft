@@ -22,11 +22,9 @@ class ProtoUseItemEntityTarget(_message.Message):
     def __init__(self, entity_id: _Optional[int] = ...) -> None: ...
 
 class ProtoUseItem(_message.Message):
-    __slots__ = ("slot_id", "block", "entity")
-    SLOT_ID_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("block", "entity")
     BLOCK_FIELD_NUMBER: _ClassVar[int]
     ENTITY_FIELD_NUMBER: _ClassVar[int]
-    slot_id: int
     block: ProtoUseItemBlockTarget
     entity: ProtoUseItemEntityTarget
-    def __init__(self, slot_id: _Optional[int] = ..., block: _Optional[_Union[ProtoUseItemBlockTarget, _Mapping]] = ..., entity: _Optional[_Union[ProtoUseItemEntityTarget, _Mapping]] = ...) -> None: ...
+    def __init__(self, block: _Optional[_Union[ProtoUseItemBlockTarget, _Mapping]] = ..., entity: _Optional[_Union[ProtoUseItemEntityTarget, _Mapping]] = ...) -> None: ...

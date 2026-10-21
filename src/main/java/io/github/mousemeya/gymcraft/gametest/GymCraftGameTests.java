@@ -99,7 +99,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("player_sim_attack_target", () -> PlayerSimGameTests::playerSimPursuesConfiguredAttackTarget);
 
         // ===== 动作组件：每族一个代表性用例 =====
-        TEST_FUNCTIONS.register("break_block_tool_swap", () -> BreakBlockGameTests::toolSwapsIntoMainHand);
+        TEST_FUNCTIONS.register("break_block_main_hand_tool", () -> BreakBlockGameTests::minesWithMainHand);
         TEST_FUNCTIONS.register("set_block_self_obstructed", () -> SetBlockGameTests::selfObstructionBlocksPlacement);
         TEST_FUNCTIONS.register("jump_applied_and_executed", () -> JumpGameTests::jumpAppliedAndExecuted);
         TEST_FUNCTIONS.register("look_at_living_entity_eyes", () -> LookAtGameTests::lookAtLivingEntityEyes);

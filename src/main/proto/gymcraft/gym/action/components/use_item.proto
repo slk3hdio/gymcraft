@@ -17,9 +17,10 @@ message ProtoUseItemEntityTarget {
   int32 entity_id = 1;
 }
 
-// 从 Agent 统一物品栏选择物品；必须显式设置 slot_id，省略目标表示自身。
+// 固定使用 Agent 主手持有物（不选择槽位、不换物品）；省略目标表示自身。
 message ProtoUseItem {
-  optional int32 slot_id = 1;
+  reserved 1;
+  reserved "slot_id";
   oneof target {
     ProtoUseItemBlockTarget block = 2;
     ProtoUseItemEntityTarget entity = 3;

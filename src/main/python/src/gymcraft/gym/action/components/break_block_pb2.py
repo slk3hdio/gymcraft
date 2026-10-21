@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n0gymcraft/gym/action/components/break_block.proto\x12\x13gymcraft.gym.action\"T\n\x0fProtoBreakBlock\x12\t\n\x01x\x18\x01 \x01(\x05\x12\t\n\x01y\x18\x02 \x01(\x05\x12\t\n\x01z\x18\x03 \x01(\x05\x12\x14\n\x07slot_id\x18\x04 \x01(\x05H\x00\x88\x01\x01\x42\n\n\x08_slot_idBB\n-io.github.mousemeya.gymcraft.gym.action.protoB\x0f\x42reakBlockProtoP\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n0gymcraft/gym/action/components/break_block.proto\x12\x13gymcraft.gym.action\"A\n\x0fProtoBreakBlock\x12\t\n\x01x\x18\x01 \x01(\x05\x12\t\n\x01y\x18\x02 \x01(\x05\x12\t\n\x01z\x18\x03 \x01(\x05J\x04\x08\x04\x10\x05R\x07slot_idBB\n-io.github.mousemeya.gymcraft.gym.action.protoB\x0f\x42reakBlockProtoP\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,5 +33,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n-io.github.mousemeya.gymcraft.gym.action.protoB\017BreakBlockProtoP\001'
   _globals['_PROTOBREAKBLOCK']._serialized_start=73
-  _globals['_PROTOBREAKBLOCK']._serialized_end=157
+  _globals['_PROTOBREAKBLOCK']._serialized_end=138
 # @@protoc_insertion_point(module_scope)
