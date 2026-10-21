@@ -23,6 +23,6 @@ COMPONENT = ActionComponent(
     component_id=ACTION_BREAK_BLOCK,
     command="break_block",
     usage="/break_block <x> <y> <z>",
-    help="break the block at <x> <y> <z> using the item in your main hand; no item is swapped. Note that items will only drop if the correct tool is used.",
+    help="break the block at <x> <y> <z> using the item in your main hand; Note that items will only drop if the correct tool is used.",
     parse=_parse,
 )
