@@ -11,10 +11,8 @@ from gymcraft.llm.components.base import ObservationComponent
 from gymcraft.types import OBS_NEARBY_ITEMS
 
 
-def _prepare(message: ProtoMessage | None) -> dict[str, Any]:
+def _prepare(message: ProtoMessage) -> dict[str, Any]:
     """附近掉落物按 (distance, entity_id) 稳定排序后交给模板。"""
-    if message is None:
-        return {"items": None}
     assert isinstance(message, ProtoNearbyItems)
     return {"items": sorted(message.items, key=lambda item: (item.distance, item.entity_id))}
 

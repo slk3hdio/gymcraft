@@ -37,10 +37,11 @@ class ActionComponent:
     merge: ActionMergeFn | None = None
 
 
-# 观测渲染准备器：组件消息（组件缺席时为 None；header 派生的虚拟组件收到
-# header 消息）→ Jinja 模板上下文。只允许排序与归一化，不做条数裁剪
-# （条目数量由环境侧 reset options 控制，后端返回多少就渲染多少）。
-ObservationPrepareFn = Callable[[ProtoMessage | None], dict[str, Any]]
+# 观测渲染准备器：组件消息（header 派生的虚拟组件收到 header 消息）→
+# Jinja 模板上下文。只允许排序与归一化，不做条数裁剪（条目数量由环境侧
+# reset options 控制，后端返回多少就渲染多少）。组件在观测中缺席时
+# 组装器直接跳过渲染，prepare 不会收到 None。
+ObservationPrepareFn = Callable[[ProtoMessage], dict[str, Any]]
 
 
 @dataclass(frozen=True)

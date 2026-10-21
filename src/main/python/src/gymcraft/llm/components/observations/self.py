@@ -11,7 +11,7 @@ from gymcraft.llm.components.base import ObservationComponent
 from gymcraft.types import OBS_SELF
 
 
-def _prepare(message: ProtoMessage | None) -> dict[str, Any]:
+def _prepare(message: ProtoMessage) -> dict[str, Any]:
     """self 状态无需排序归一化，原样交给模板。"""
     return {"state": message}
 

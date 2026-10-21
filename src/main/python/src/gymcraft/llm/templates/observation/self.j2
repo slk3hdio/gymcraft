@@ -1,5 +1,1 @@
-{% if state is none -%}
-self: unavailable
-{%- else -%}
 self: entity_type={{ state.entity_type }} health={{ state.health|number }} max_health={{ state.max_health|number }} x={{ state.x|number }} y={{ state.y|number }} z={{ state.z|number }} yaw={{ state.yaw|number }} pitch={{ state.pitch|number }} on_ground={{ state.on_ground|bool }} in_water={{ state.in_water|bool }} in_lava={{ state.in_lava|bool }} alive={{ state.alive|bool }} navigating={{ state.navigating|bool }} target_entity_id={{ state.target_entity_id }} main_hand={% if state.HasField("main_hand_item") %}{{ state.main_hand_item.item_id }}x{{ state.main_hand_item.count }}{% else %}empty{% endif %}
-{%- endif %}

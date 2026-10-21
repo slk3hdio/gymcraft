@@ -1,6 +1,3 @@
-{% if messages is none -%}
-new chat: unavailable
-{%- else -%}
 new chat(since last observation): total={{ messages|length }}
 {%- for message in messages %}
 
@@ -8,4 +5,3 @@ new chat(since last observation): total={{ messages|length }}
 {%- endfor %}
 
 You can chat with other players here.
-{%- endif %}

@@ -12,10 +12,8 @@ from gymcraft.llm.components.base import ObservationComponent
 from gymcraft.types import OBS_MENU
 
 
-def _prepare(message: ProtoMessage | None) -> dict[str, Any]:
+def _prepare(message: ProtoMessage) -> dict[str, Any]:
     """压缩连续同类空槽为区间行；属性按 data_slot、按钮按 button_id 排序。"""
-    if message is None:
-        return {"menu": None, "rows": None, "properties": None, "buttons": None}
     assert isinstance(message, ProtoMenuObservation)
     if not message.open:
         return {"menu": message, "rows": None, "properties": None, "buttons": None}

@@ -1,6 +1,4 @@
-{% if menu is none -%}
-menu: unavailable
-{%- elif not menu.open -%}
+{% if not menu.open -%}
 menu: open=false
 {%- else -%}
 menu: open=true session={{ menu.session_id }} type={{ menu.menu_type|quote }} title={{ menu.title|quote }}

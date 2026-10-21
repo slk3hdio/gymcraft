@@ -12,10 +12,8 @@ from gymcraft.llm.components.base import ObservationComponent
 from gymcraft.types import OBS_NEARBY_BLOCKS
 
 
-def _prepare(message: ProtoMessage | None) -> dict[str, Any]:
+def _prepare(message: ProtoMessage) -> dict[str, Any]:
     """方块按 (distance, x, y, z, block_id) 排序；数量统计按 (-count, block_id) 排序。"""
-    if message is None:
-        return {"blocks": None, "counts": None}
     assert isinstance(message, ProtoNearbyBlocks)
     blocks = sorted(message.blocks, key=lambda block: (block.distance, block.x, block.y, block.z, block.block_id))
     counts = Counter(block.block_id for block in message.blocks)

@@ -11,10 +11,8 @@ from gymcraft.llm.components.base import ObservationComponent
 from gymcraft.types import OBS_WORLD
 
 
-def _prepare(message: ProtoMessage | None) -> dict[str, Any]:
+def _prepare(message: ProtoMessage) -> dict[str, Any]:
     """世界状态无需排序归一化；结构起点列表原样传递给模板。"""
-    if message is None:
-        return {"world": None, "structures": None}
     assert isinstance(message, ProtoWorldState)
     return {"world": message, "structures": list(message.structures)}
 

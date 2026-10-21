@@ -142,14 +142,17 @@ class ContextAssembler:
         else:
             # 状态位：header 行只保留 game_tick，动作反馈归反馈位
             blocks.append(self._templates.get_template(_HEADER_TEMPLATE).render(header=header).rstrip("\n"))
+        components = cast(dict[str, ProtoMessage], observation)
         for component in OBSERVATION_REGISTRY.components:
             if component.component_id == LAST_ACTIONS_FIELD or component.component_id not in fields:
                 continue
-            message = cast(ProtoMessage | None, observation.get(component.component_id))
-            blocks.append(self._render_component(component, message))
+            # 组件缺席（环境未启用/未触发）时直接不渲染，不出现占位文案
+            if component.component_id not in components:
+                continue
+            blocks.append(self._render_component(component, components[component.component_id]))
         return "\n".join(blocks)
 
-    def _render_component(self, component: ObservationComponent, message: ProtoMessage | None) -> str:
+    def _render_component(self, component: ObservationComponent, message: ProtoMessage) -> str:
         """用组件声明的 prepare 产出模板上下文并渲染对应 Jinja 模板。"""
         context = component.prepare(message)
         return self._templates.get_template(component.template).render(**context).rstrip("\n")

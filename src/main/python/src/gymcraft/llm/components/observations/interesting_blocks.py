@@ -13,10 +13,8 @@ from gymcraft.llm.components.base import ObservationComponent
 from gymcraft.types import OBS_INTERESTING_BLOCKS
 
 
-def _prepare(message: ProtoMessage | None) -> dict[str, Any]:
+def _prepare(message: ProtoMessage) -> dict[str, Any]:
     """已标记方块按 (distance, x, y, z, block_id) 稳定排序后交给模板。"""
-    if message is None:
-        return {"blocks": None}
     assert isinstance(message, ProtoInterestingBlocks)
     return {
         "blocks": sorted(message.blocks, key=lambda block: (block.distance, block.x, block.y, block.z, block.block_id))

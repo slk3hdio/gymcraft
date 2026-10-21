@@ -11,10 +11,8 @@ from gymcraft.llm.components.base import ObservationComponent
 from gymcraft.types import OBS_CHAT
 
 
-def _prepare(message: ProtoMessage | None) -> dict[str, Any]:
+def _prepare(message: ProtoMessage) -> dict[str, Any]:
     """新增聊天保持服务端返回的时间升序，全量交给模板。"""
-    if message is None:
-        return {"messages": None}
     assert isinstance(message, ProtoRecentChat)
     return {"messages": list(message.messages)}
 

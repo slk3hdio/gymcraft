@@ -11,10 +11,8 @@ from gymcraft.llm.components.base import ObservationComponent
 from gymcraft.types import OBS_HEALTH_LOG
 
 
-def _prepare(message: ProtoMessage | None) -> dict[str, Any]:
+def _prepare(message: ProtoMessage) -> dict[str, Any]:
     """伤害记录保持服务端返回的时间升序，全量交给模板。"""
-    if message is None:
-        return {"records": None}
     assert isinstance(message, ProtoHealthLog)
     return {"records": list(message.damage_records)}
 

@@ -581,7 +581,7 @@ class ObservationAndContextTests(unittest.TestCase):
 
         del observation["gymcraft:menu"]
         text = assembler.render_observation(observation, full=True)
-        self.assertIn("menu: unavailable", text)
+        self.assertNotIn("menu:", text)
 
     def test_chat_incremental_format(self) -> None:
         """聊天增量应保持时间升序全量渲染，系统消息无 sender 字段。"""
@@ -595,10 +595,10 @@ class ObservationAndContextTests(unittest.TestCase):
         observation = _observation()
         del observation["gymcraft:chat"]
         text = ContextAssembler(ActionParser()).render_observation(observation, full=True)
-        self.assertIn("new chat: unavailable", text)
+        self.assertNotIn("new chat", text)
 
     def test_health_log_incremental_format(self) -> None:
-        """伤害日志应渲染增量标题与记录字段；组件缺席时显示 unavailable。"""
+        """伤害日志应渲染增量标题与记录字段；组件缺席时不渲染。"""
         observation = _observation()
         observation["gymcraft:health_log"] = health_log_pb2.ProtoHealthLog(
             damage_records=[
@@ -621,7 +621,7 @@ class ObservationAndContextTests(unittest.TestCase):
 
         del observation["gymcraft:health_log"]
         text = ContextAssembler(ActionParser()).render_observation(observation, full=True)
-        self.assertIn("recent damage: unavailable", text)
+        self.assertNotIn("recent damage", text)
 
     def test_header_lists_per_action_feedback(self) -> None:
         """反馈位 header 应逐项输出上批动作的状态与描述（来自观测 header）。"""
@@ -817,7 +817,8 @@ class ObservationAndContextTests(unittest.TestCase):
         result_message = context["messages"][2]["content"]
         self.assertIn("[observation] game_tick=1 last_action_status=completed", result_message)
         self.assertIn("new chat(since last observation)", result_message)
-        self.assertIn("recent damage: unavailable", result_message)
+        # 观测未携带的组件直接不出现
+        self.assertNotIn("recent damage", result_message)
 
         current_message = context["messages"][-1]["content"]
         self.assertIn("[observation] game_tick=2", current_message)
@@ -835,7 +836,9 @@ class ObservationAndContextTests(unittest.TestCase):
             config=RenderConfig(feedback_fields=(OBS_MENU,)),
         )
         history = ConversationHistory(max_turns=4)
-        history.add("raw", _turn_result(_observation()))
+        history_observation = _observation()
+        history_observation["gymcraft:menu"] = menu_pb2.ProtoMenuObservation(open=False)
+        history.add("raw", _turn_result(history_observation))
         context = assembler.build(
             task="任务",
             observation=_observation(2),
@@ -843,7 +846,7 @@ class ObservationAndContextTests(unittest.TestCase):
             turn_index=1,
         )
         result_message = context["messages"][2]["content"]
-        self.assertIn("menu: unavailable", result_message)
+        self.assertIn("menu: open=false", result_message)
         self.assertNotIn("new chat", result_message)
 
         current_message = context["messages"][-1]["content"]
