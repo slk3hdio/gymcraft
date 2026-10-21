@@ -14,9 +14,9 @@ LAST_ACTIONS_FIELD: Final = "last_actions"
 
 
 def _prepare(message: ProtoMessage) -> dict[str, Any]:
-    """header 原样传递；缺失的上批动作状态渲染为 none。"""
+    """header 原样传递。"""
     assert isinstance(message, ProtoObservationHeader)
-    return {"header": message, "status": message.last_action_status.lower() or "none"}
+    return {"header": message}
 
 
 COMPONENT = ObservationComponent(
