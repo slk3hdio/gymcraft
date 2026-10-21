@@ -20,7 +20,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 from gymcraft import GymCraftEnv
-from gymcraft.llm import LLMEnvConfig, LLMGymCraftEnv, ObservationFormatConfig, chat_completion_text
+from gymcraft.llm import LLMEnvConfig, LLMGymCraftEnv, RenderConfig, chat_completion_text
 
 
 EXPECTED_ENV_TYPE = "gymcraft:iron_golem_warden"
@@ -123,7 +123,12 @@ def run_trial(
     """
     context, reset_info = env.reset(
         seed=args.seed,
-        options={"disable_vanilla_ai": True, "max_steps": args.max_steps},
+        # 渲染不再做条数裁剪；条数上限改由 reset options 的 components 键控制。
+        options={
+            "disable_vanilla_ai": True,
+            "max_steps": args.max_steps,
+            "components": {"nearby_blocks": {"max_blocks": 20}},
+        },
         task=task,
     )
     write_trace(trace_handle, {"event": "reset", "trial": trial_index, "task": task, "info": reset_info})
@@ -260,7 +265,7 @@ def run(args: argparse.Namespace) -> None:
     env = LLMGymCraftEnv(
         base_env,
         task=args.task,
-        config=LLMEnvConfig(observation=ObservationFormatConfig(max_blocks=20)),
+        config=LLMEnvConfig(render=RenderConfig()),
     )
     trace_handle: TextIO | None = None
     try:

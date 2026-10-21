@@ -1,0 +1,5 @@
+{{ header.last_action_description }}
+{%- for entry in header.last_actions %}
+
+{{ entry.component_id }}: [{{ entry.status|lower }}] {{ entry.description }}
+{%- endfor %}

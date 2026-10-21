@@ -15,7 +15,7 @@ from typing import Any, cast
 from gymcraft.client import GymCraftEnv, single_action
 from gymcraft.gym.action.components import jump_pb2, noop_pb2, set_block_pb2
 from gymcraft.gym.observation.components import self_pb2
-from gymcraft.type_info import ActionBatch, ACTION_JUMP, ACTION_NOOP, ACTION_SET_BLOCK, OBS_SELF
+from gymcraft.types import ActionBatch, ACTION_JUMP, ACTION_NOOP, ACTION_SET_BLOCK, OBS_SELF
 
 
 def self_state(obs: Any) -> self_pb2.ProtoSelfState:

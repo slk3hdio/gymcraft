@@ -1,0 +1,9 @@
+{%- if messages %}
+New message received.
+{%- for message in messages %}
+
+[tick:{{ message.game_tick }}]{% if message.sender %} <{{ message.sender }}>{% endif %} {{ message.content|quote }}
+{%- endfor %}
+
+You might reply to these messages
+{%- endif %}

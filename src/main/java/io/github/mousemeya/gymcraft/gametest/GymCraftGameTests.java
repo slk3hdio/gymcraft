@@ -104,6 +104,9 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("jump_applied_and_executed", () -> JumpGameTests::jumpAppliedAndExecuted);
         TEST_FUNCTIONS.register("look_at_living_entity_eyes", () -> LookAtGameTests::lookAtLivingEntityEyes);
         TEST_FUNCTIONS.register("navigation_preempts_move_goal", () -> NavigationReliabilityGameTests::runningMoveGoalIsPreemptedBeforeNewPath);
+        TEST_FUNCTIONS.register("navigation_zero_stop_distance", () -> NavigationReliabilityGameTests::zeroStopDistanceCompletes);
+        TEST_FUNCTIONS.register("navigation_swim_zero_stop_distance", () -> NavigationReliabilityGameTests::swimZeroStopDistanceCompletes);
+        TEST_FUNCTIONS.register("navigation_circling_exhausts", () -> NavigationReliabilityGameTests::circlingWithoutProgressExhausts);
         TEST_FUNCTIONS.register("swim_water_crossing", () -> NavigationWaterGameTests::crossingCompletes);
         TEST_FUNCTIONS.register("pickup_within_reach_collects", () -> PickupGameTests::pickupWithinReachCollects);
         TEST_FUNCTIONS.register("drop_item_requested_count_forward", () -> DropItemGameTests::dropRequestedCountForward);

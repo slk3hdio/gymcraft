@@ -1,35 +1,17 @@
-"""GymCraft 动作批次与观测的用户视角类型信息。
+"""GymCraft 动作批次与观测的 wire 级类型信息。
 
 单个 ``Action`` 由完整组件注册 ID 和 protobuf 负载组成；``ActionBatch``
 保存按顺序执行的动作列表与 step 共享超时。观测仍以完整注册 ID
 为键解包 ``ProtoMcObservation.components``。
+
+本模块只承载线缆契约（组件注册 ID 常量与 TypedDict）；组件的 DSL 语法、
+解析与渲染声明见 ``gymcraft.llm.components``。
 """
 
 from typing import Final, NotRequired, TypedDict
 
 from google.protobuf.message import Message as ProtoMessage
 
-from gymcraft.gym.action.components.attack_once_pb2 import ProtoAttackOnce
-from gymcraft.gym.action.components.break_block_pb2 import ProtoBreakBlock
-from gymcraft.gym.action.components.click_menu_button_pb2 import ProtoClickMenuButton
-from gymcraft.gym.action.components.close_menu_pb2 import ProtoCloseMenu
-from gymcraft.gym.action.components.drop_item_pb2 import ProtoDropItem
-from gymcraft.gym.action.components.use_item_pb2 import ProtoUseItem
-from gymcraft.gym.action.components.jump_pb2 import ProtoJump
-from gymcraft.gym.action.components.look_at_pb2 import ProtoLookAt
-from gymcraft.gym.action.components.move_menu_item_pb2 import ProtoMoveMenuItem
-from gymcraft.gym.action.components.move_to_pb2 import ProtoMoveTo
-from gymcraft.gym.action.components.noop_pb2 import ProtoNoop
-from gymcraft.gym.action.components.open_menu_pb2 import ProtoOpenMenu
-from gymcraft.gym.action.components.pick_up_item_pb2 import ProtoPickUpItem
-from gymcraft.gym.action.components.set_attack_target_pb2 import ProtoSetAttackTarget
-from gymcraft.gym.action.components.set_block_pb2 import ProtoSetBlock
-from gymcraft.gym.action.components.send_chat_pb2 import ProtoSendChat
-from gymcraft.gym.action.components.step_move_pb2 import ProtoStepMove
-from gymcraft.gym.action.components.swim_to_pb2 import ProtoSwimTo
-from gymcraft.gym.action.components.update_interesting_blocks_pb2 import (
-    ProtoUpdateInterestingBlocks,
-)
 from gymcraft.gym.observation.components.chat_pb2 import ProtoRecentChat
 from gymcraft.gym.observation.components.health_log_pb2 import ProtoHealthLog
 from gymcraft.gym.observation.components.interesting_blocks_pb2 import (

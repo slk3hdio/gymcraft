@@ -29,7 +29,7 @@ from gymcraft.gym.action.components import (
     open_menu_pb2,
 )
 from gymcraft.gym.observation.components import menu_pb2
-from gymcraft.type_info import (
+from gymcraft.types import (
     ACTION_CLICK_MENU_BUTTON,
     ACTION_CLOSE_MENU,
     ACTION_MOVE_MENU_ITEM,

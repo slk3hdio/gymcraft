@@ -1,0 +1,9 @@
+{%- if blocks %}
+nearby blocks: total={{ blocks|length }}
+block_id x y z distance
+{%- for block in blocks %}
+
+{{ block.block_id }} {{ block.x }} {{ block.y }} {{ block.z }} {{ block.distance|number }}
+{%- endfor %}
+
+{%- endif %}

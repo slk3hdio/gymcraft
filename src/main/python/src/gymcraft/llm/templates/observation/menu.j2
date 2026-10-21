@@ -1,0 +1,36 @@
+{% if menu.open -%}
+menu: open=true session={{ menu.session_id }} type={{ menu.menu_type|quote }} title={{ menu.title|quote }}
+menu_slots:
+{%- if rows %}
+slot_id category item_id count
+{%- for row in rows %}
+
+{% if row.kind == "item" -%}
+{{ row.slot_id }} {{ row.category }} {{ row.item_id }} {{ row.count }}
+{%- else -%}
+{{ row.range }} {{ row.category }} empty 0
+{%- endif %}
+{%- endfor %}
+{% else %}
+
+none
+{%- endif %}
+{% if properties %}
+
+menu_properties:
+data_slot name value
+{%- for prop in properties %}
+
+{{ prop.data_slot }} {{ prop.name|quote }} {{ prop.value }}
+{%- endfor %}
+{% endif %}
+{% if buttons %}
+
+menu_buttons:
+id name enabled
+{%- for button in buttons %}
+
+{{ button.button_id }} {{ button.name|quote }} {{ button.enabled|bool }}
+{%- endfor %}
+{% endif %}
+{%- endif %}

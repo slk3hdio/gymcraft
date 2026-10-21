@@ -1,0 +1,9 @@
+world: dimension={{ world.dimension }} biome={{ world.biome }} structure={{ world.structure or "none" }} day_time={{ world.day_time }} raining={{ world.raining|bool }} thundering={{ world.thundering|bool }}
+{%- if structures %}
+structures: total={{ structures|length }}
+structure_id x y z distance
+{%- for entry in structures %}
+
+{{ entry.structure_id }} {{ entry.x }} {{ entry.y }} {{ entry.z }} {{ entry.distance|number }}
+{%- endfor %}
+{%- endif %}

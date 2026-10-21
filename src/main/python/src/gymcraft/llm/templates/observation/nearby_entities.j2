@@ -1,0 +1,8 @@
+{%- if entities %}
+entities: total={{ entities|length }}
+entity_id entity_type x y z distance health max_health hostile ally player item
+{%- for entity in entities %}
+
+{{ entity.entity_id }} {{ entity.entity_type }} {{ entity.x|number }} {{ entity.y|number }} {{ entity.z|number }} {{ entity.distance|number }} {{ entity.health|number }} {{ entity.max_health|number }} {{ entity.hostile|bool }} {{ entity.ally|bool }} {{ entity.player|bool }} {{ entity.item|bool }}
+{%- endfor %}
+{%- endif %}
