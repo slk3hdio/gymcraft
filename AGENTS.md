@@ -42,6 +42,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 
 - Gradle 用 `JAVA_HOME` 确定 JDK；确保指向 JDK 25
 - Python 所有代码必须通过 mypy 类型检查；python 库版本（pyproject.toml）与 mod 版本保持一致
+- **发布命名约定**：`mod_version` 和 Python 包版本只含 GymCraft 版本（如 `1.3.0`）；GitHub Release 标题为 `GymCraft <版本>+mc<MC版本>`，tag 为 `v<版本>+mc<MC版本>`（如 `v1.3.0+mc26.1.2`），模组 JAR 与其他 GitHub Assets 文件名均带同样的版本后缀（如 `gymcraft-1.3.0+mc26.1.2.jar`）。Python wheel/sdist 只发布纯 GymCraft 版本到 PyPI，不按 MC 拆包，默认兼容所有 MC 适配版本；同一 GymCraft 版本只发布一次，后续 MC Release 跳过已存在的分发文件。跨 MC 适配应保持同版本 gRPC 协议一致。
 - **Mod metadata 模板**: 编辑 `src/main/templates/META-INF/neoforge.mods.toml`（不编辑构建产物）
 - Java 编译编码 UTF-8, gym 相关代码使用中文 Javadoc/注释
 - EnvToolItem: 右键 Mob 打开环境管理界面（选择环境类型、按六方向延伸距离设定范围——默认六方向全 0（全零挂载为空区域、不限制范围），每方向配"最大"快捷按钮（水平 = `MAX_RADIUS` 32 格，垂直 = `MAX_HEIGHT` 4096 由服务端钳制到完整世界高度）——与方块/实体快照开关、挂载、保存场景、移除；`client/EnvToolScreen` + `network/EnvTool*Payload`），Shift+右键快速移除环境；`/gymcraft env create <target> [type] [west east north south [down up] [captureBlocks] [captureEntities]]`（垂直省略或 -1 = 完整世界高度）与 `remove` 指令与之等价（供专用服务器控制台/RCON）

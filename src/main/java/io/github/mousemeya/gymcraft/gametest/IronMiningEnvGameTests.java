@@ -6,6 +6,7 @@ import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.infoJson
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 
@@ -105,6 +106,7 @@ public final class IronMiningEnvGameTests {
             ScenarioStore.loadBundled(helper.getLevel(), "iron_mining").orElseThrow());
         AtomicReference<StepResponse> finalResponse = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
+        AtomicBoolean done = new AtomicBoolean();
 
         Thread.startVirtualThread(() -> {
             try {
@@ -190,10 +192,14 @@ public final class IronMiningEnvGameTests {
                 finalResponse.set(pickUpIfPresent(env, nearbyItems(ironBroken), Items.RAW_IRON));
             } catch (Throwable error) {
                 failure.set(error);
+            } finally {
+                done.set(true);
             }
         });
 
-        helper.runAfterDelay(10000, () -> {
+        // 等异步工具链实际结束再断言，避免不限速 tick 提前耗尽固定延迟。
+        helper.succeedWhen(() -> {
+            assertTrue(helper, done.get(), "waiting for tool progression");
             try {
                 assertTrue(helper, failure.get() == null, "tool progression failed: " + failure.get());
                 StepResponse response = finalResponse.get();
@@ -203,7 +209,6 @@ public final class IronMiningEnvGameTests {
                 Mob current = (Mob) helper.getLevel().getEntity(originalMob.getUUID());
                 assertTrue(helper, AgentInventoryLayout.resolve(current).slots().stream()
                     .anyMatch(slot -> slot.getItem().is(Items.RAW_IRON)), "raw iron is not in Agent inventory");
-                helper.succeed();
             } finally {
                 env.close();
             }

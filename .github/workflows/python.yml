@@ -4,6 +4,12 @@ on:
   push:
     branches: [master]
   pull_request:
+  # 发布 GitHub Release 时，先执行检查和打包，再上传 PyPI。
+  release:
+    types: [published]
+
+permissions:
+  contents: read
 
 jobs:
   typecheck-and-package:
@@ -52,3 +58,28 @@ jobs:
           name: gymcraft-python-dist
           path: dist/*
           if-no-files-found: error
+
+  # 发布任务只下载已验证的构建产物，并通过 OIDC 获取短期凭据。
+  publish:
+    name: Publish Python client to PyPI
+    if: github.event_name == 'release'
+    needs: typecheck-and-package
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/gymcraft
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download Python distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: gymcraft-python-dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # 不同 MC 发行版共享同一 Python 版本，已上传的分发文件直接跳过。
+          skip-existing: true

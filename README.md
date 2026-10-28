@@ -101,8 +101,10 @@ flowchart LR
 
 | Minecraft | NeoForge | Java | Release |
 |---|---|---|---|
-| 26.1.2 | 26.1.2.95 | 25 | [`v1.2.1`](https://github.com/slk3hdio/gymcraft/releases/tag/v1.2.1) |
+| 26.1.2 | 26.1.2.95 | 25 | `v1.3.0+mc26.1.2`（待发布，见[发布说明](docs/releases/1.3.0+mc26.1.2.md)） |
 | 1.21.1 | 21.1.250 | 21 | [`v1.2.1+mc1.21.1`](https://github.com/slk3hdio/gymcraft/releases/tag/v1.2.1%2Bmc1.21.1) |
+
+Release 和模组附件统一使用 `<GymCraft版本>+mc<MC版本>` 命名，例如 `v1.3.0+mc26.1.2` 和 `gymcraft-1.3.0+mc26.1.2.jar`。Python 客户端只按 GymCraft 版本发布到 PyPI（例如 `gymcraft==1.3.0`），默认兼容同一 GymCraft 版本的所有 MC 适配版本，不需要随 MC 版本切换 Python 包。
 
 ## 使用方法
 
@@ -120,8 +122,8 @@ Minecraft 服务端启动后会同时启动 gRPC 服务，默认监听 `localhos
 ### 2. 创建环境
 
 1. 从创造模式的 GymCraft 标签页取得 **Environment Tool** 和 **UUID Copier**。
-2. 按住 Shift 滚动滚轮，选择 `simple_mob`、`parkour_mob`、`iron_mining`、`iron_golem_warden` 或 `general` 环境。
-3. 使用 Environment Tool 右键已有 Mob 挂载环境；仅保存该 Mob 的基线，不加载场景或管理周围世界。Shift + 右键移除环境。
+2. 使用 Environment Tool 右键已有 Mob，打开环境管理界面，选择 `simple_mob`、`parkour_mob`、`iron_mining`、`iron_golem_warden`、`general` 或 `mining` 环境。
+3. 在界面中设置六方向范围及方块、实体快照开关，然后挂载环境。默认六方向均为 0，表示空区域，仅捕获 agent 基线；挂载不加载场景。Shift + 右键移除环境。
 4. 使用 UUID Copier 右键同一 Mob，取得 Python 连接所需的实体 UUID。
 
 也可以在服务器控制台或 RCON 中使用：

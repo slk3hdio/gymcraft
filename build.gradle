@@ -51,6 +51,11 @@ base {
     archivesName = mod_id
 }
 
+// 模组附件带 Minecraft 版本；项目与 Python 包仍使用纯 GymCraft 版本。
+tasks.withType(Jar).configureEach {
+    archiveVersion = "${mod_version}+mc${minecraft_version}"
+}
+
 // Mojang ships Java 25 to end users in 26.1, so mods should target Java 25.
 java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 

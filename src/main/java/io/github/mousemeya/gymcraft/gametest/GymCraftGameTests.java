@@ -161,15 +161,23 @@ public final class GymCraftGameTests {
         Holder<TestEnvironmentDefinition<?>> structureInjectionEnvironment = event.registerEnvironment(
             Identifier.fromNamespaceAndPath(GymCraft.MODID, "structure_injection")
         );
+        // 聊天窗口用例会向全服共享缓冲批量注入消息，独占批次避免裁掉其他用例的发言。
+        Holder<TestEnvironmentDefinition<?>> chatCaptureEnvironment = event.registerEnvironment(
+            Identifier.fromNamespaceAndPath(GymCraft.MODID, "chat_capture")
+        );
         for (var holder : TEST_FUNCTIONS.getEntries()) {
             boolean injectsStructureStarts = holder.getId().getPath().equals("world_state_structure_inside_piece");
+            boolean capturesChatWindow = holder.getId().getPath().equals("chat_observation_shows_recent_messages");
             event.registerTest(
                 holder.getId(),
                 new FunctionGameTestInstance(
                     holder.getKey(),
-                    new TestData<>(injectsStructureStarts ? structureInjectionEnvironment : environment,
+                    new TestData<>(injectsStructureStarts ? structureInjectionEnvironment
+                            : capturesChatWindow ? chatCaptureEnvironment : environment,
                         USE_ITEM_STRUCTURE,
-                        holder.getId().getPath().startsWith("iron_mining_") ? 12000
+                        // GameTest 不限速推进 tick，完整工具链须给虚拟线程足够的调度余量。
+                        holder.getId().getPath().equals("iron_mining_progression") ? 60000
+                            : holder.getId().getPath().startsWith("iron_mining_") ? 12000
                             : holder.getId().getPath().startsWith("iron_golem_warden_") ? 12000
                             : holder.getId().getPath().startsWith("state_") ? 12000
                             : holder.getId().getPath().startsWith("scenario_") ? 12000
