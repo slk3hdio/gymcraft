@@ -101,10 +101,10 @@ flowchart LR
 
 | Minecraft | NeoForge | Java | Release |
 |---|---|---|---|
-| 26.1.2 | 26.1.2.95 | 25 | [`v1.3.0+mc26.1.2`](https://github.com/slk3hdio/gymcraft/releases/tag/v1.3.0%2Bmc26.1.2) |
-| 1.21.1 | 21.1.250 | 21 | [`v1.2.1+mc1.21.1`](https://github.com/slk3hdio/gymcraft/releases/tag/v1.2.1%2Bmc1.21.1) |
+| 26.1.2 | 26.1.2.95 | 25 | [`v1.3.1+mc26.1.2`](https://github.com/slk3hdio/gymcraft/releases/tag/v1.3.1%2Bmc26.1.2) |
+| 1.21.1 | 21.1.250 | 21 | [`v1.3.1+mc1.21.1`](https://github.com/slk3hdio/gymcraft/releases/tag/v1.3.1%2Bmc1.21.1) |
 
-Release 和模组附件统一使用 `<GymCraft版本>+mc<MC版本>` 命名，例如 `v1.3.0+mc26.1.2` 和 `gymcraft-1.3.0+mc26.1.2.jar`。Python 客户端只按 GymCraft 版本发布到 PyPI（例如 `gymcraft==1.3.0`），默认兼容同一 GymCraft 版本的所有 MC 适配版本，不需要随 MC 版本切换 Python 包。
+Release 和模组附件统一使用 `<GymCraft版本>+mc<MC版本>` 命名，例如 `v1.3.1+mc26.1.2` 和 `gymcraft-1.3.1+mc26.1.2.jar`。Python 客户端只按 GymCraft 版本发布到 PyPI（例如 `gymcraft==1.3.1`），默认兼容同一 GymCraft 版本的所有 MC 适配版本，不需要随 MC 版本切换 Python 包。
 
 ## 使用方法
 
