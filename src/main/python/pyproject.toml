@@ -39,6 +39,7 @@ where = ["src"]
 include = ["gymcraft", "gymcraft.*"]
 
 [tool.setuptools.package-data]
+"gymcraft" = ["py.typed"]
 "gymcraft.llm" = ["templates/**/*.j2"]
 
 [tool.mypy]
