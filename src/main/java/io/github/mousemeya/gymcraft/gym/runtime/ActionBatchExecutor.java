@@ -48,7 +48,7 @@ final class ActionBatchExecutor {
      *
      * @param actions 输入动作列表
      * @param timeoutSeconds 整批共享超时
-     * @param future 完成回调
+     * @param future 运行时结果完成回调
      */
     record Request(
         List<ProtoMcAction> actions,
@@ -155,8 +155,10 @@ final class ActionBatchExecutor {
             this.pendingBatch.rejectionDescription = "action count " + request.actions().size()
                 + " exceeds the per-step limit of " + this.maxActionsPerStep;
         }
-        LOGGER.info("GymCraft runtime consume action batch entity={} count={} timeout={}",
-            this.mob.getUUID(), request.actions().size(), request.timeoutSeconds());
+        try (var zone = Profiler.get().zone("runtime_logging")) {
+            LOGGER.info("GymCraft runtime consume action batch entity={} count={} timeout={}",
+                this.mob.getUUID(), request.actions().size(), request.timeoutSeconds());
+        }
     }
 
     /** 在实体 Pre 阶段启动空批次 noop 或下一个动作。 */
@@ -170,10 +172,14 @@ final class ActionBatchExecutor {
             batch.emptyNoopStarted = true;
         }
         if (batch != null && batch.activeAction == null && batch.hasNextAction()) {
-            this.betweenActionsPolicy.releaseFrom(this.mob);
+            try (var zone = Profiler.get().zone("action_between_release")) {
+                this.betweenActionsPolicy.releaseFrom(this.mob);
+            }
             batch.activeAction = batch.actions.get(batch.nextIndex);
             // apply 前缓存执行前几何；瞬时动作（破坏/拾取等）的终态反馈需要它。
-            VisualizationService.beforeAction(this.mob, batch.activeAction);
+            try (var zone = Profiler.get().zone("action_visualization_before")) {
+                VisualizationService.beforeAction(this.mob, batch.activeAction);
+            }
             ActionApplyResult result;
             try (var zone = Profiler.get()
                 .zone("action_apply_" + batch.activeAction.getComponentId())) {
@@ -182,11 +188,15 @@ final class ActionBatchExecutor {
             batch.activeState = result.initialState();
             // apply 完成立即强制推送初始状态（绕过节流）；终态由 finishActiveAction 统一推送。
             if (!batch.activeState.isTerminal()) {
-                VisualizationService.action(this.mob, batch.activeAction, batch.activeState, true);
+                try (var zone = Profiler.get().zone("action_visualization_initial")) {
+                    VisualizationService.action(this.mob, batch.activeAction, batch.activeState, true);
+                }
             }
             this.activePolicy = result.policy();
-            LOGGER.info("GymCraft runtime action applied entity={} index={} component={} status={}",
-                this.mob.getUUID(), batch.nextIndex, batch.activeAction.getComponentId(), batch.activeState.status());
+            try (var zone = Profiler.get().zone("runtime_logging")) {
+                LOGGER.info("GymCraft runtime action applied entity={} index={} component={} status={}",
+                    this.mob.getUUID(), batch.nextIndex, batch.activeAction.getComponentId(), batch.activeState.status());
+            }
         }
         this.applyControlPolicy();
     }
@@ -334,15 +344,24 @@ final class ActionBatchExecutor {
         }
     }
 
-    /** @param batch 当前批次 @param state 批次终态 */
+    /** 在 tick 线程生成观测并发布不可变运行时结果。 */
     private void publish(BatchExecution batch, ActionState state) {
-        ProtoMcObservation observation = this.observationCreator.create(this.mob, state);
-        batch.future.complete(new AgentRuntime.RuntimeStepResult(observation, state));
-        LOGGER.info("GymCraft runtime published action batch entity={} status={} completed={}/{} tick={}",
-            this.mob.getUUID(), state.status(), batch.completedCount, batch.inputCount,
-            observation.getHeader().getGameTick());
-        if (this.pendingBatch == batch) {
-            this.pendingBatch = null;
+        try (var zone = Profiler.get().zone("step_publish")) {
+            ProtoMcObservation observation = this.observationCreator.create(this.mob, state);
+            try (var futureZone = Profiler.get().zone("step_future_complete")) {
+                batch.future.complete(new AgentRuntime.RuntimeStepResult(observation, state));
+            }
+            try (var bookkeepingZone = Profiler.get().zone("step_publish_bookkeeping")) {
+                TickMetricsCollector.recordStepCompleted();
+                if (this.pendingBatch == batch) {
+                    this.pendingBatch = null;
+                }
+            }
+            try (var loggingZone = Profiler.get().zone("runtime_logging")) {
+                LOGGER.info("GymCraft runtime published action batch entity={} status={} completed={}/{} tick={}",
+                    this.mob.getUUID(), state.status(), batch.completedCount, batch.inputCount,
+                    observation.getHeader().getGameTick());
+            }
         }
     }
 
@@ -375,14 +394,16 @@ final class ActionBatchExecutor {
 
     /** 根据动作生命周期应用当前策略或动作间策略。 */
     private void applyControlPolicy() {
-        ActionControlPolicy policy = ActionControlPolicy.none();
-        BatchExecution batch = this.pendingBatch;
-        boolean running = batch != null && batch.activeState != null
-            && batch.activeState.status() == ActionStatus.RUNNING;
-        if (!running) {
-            policy.merge(this.betweenActionsPolicy);
+        try (var zone = Profiler.get().zone("action_control_policy")) {
+            ActionControlPolicy policy = ActionControlPolicy.none();
+            BatchExecution batch = this.pendingBatch;
+            boolean running = batch != null && batch.activeState != null
+                && batch.activeState.status() == ActionStatus.RUNNING;
+            if (!running) {
+                policy.merge(this.betweenActionsPolicy);
+            }
+            policy.merge(this.activePolicy).applyTo(this.mob);
         }
-        policy.merge(this.activePolicy).applyTo(this.mob);
     }
 
     /** @param seconds 超时秒数 @return 超时 tick 数，0 表示不限制 */

@@ -2,6 +2,11 @@ package io.github.mousemeya.gymcraft.gym.rpc;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Supplier;
+
+import net.minecraft.server.MinecraftServer;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.EnvManager;
@@ -79,16 +84,17 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
 
         EnvManager.get(entityUuid).ifPresentOrElse(env -> {
             try {
-                // 记录 transport 远端地址，供断连时按 transport 定位会话
-                RpcEnvSessions.Session session = sessions.create(
-                        entityUuid, env, RemoteAddrInterceptor.REMOTE_ADDR_KEY.get());
-                responseObserver.onNext(ConnectResponse.newBuilder()
-                        .setSessionId(session.id())
+                // 元数据和组件空间可能关联当前实体与组件状态，只能在服务端线程读取。
+                ConnectResponse environmentData = callOnServer(() -> ConnectResponse.newBuilder()
                         .setEntityUuid(entityUuid.toString())
                         .setMetadata(ProtoJson.toStruct(env.getMetadata()))
                         .setActionSpace(env.getActionSpace().toSpec())
                         .setObservationSpace(env.getObservationSpace().toSpec())
                         .build());
+                // 记录 transport 远端地址，供断连时按 transport 定位会话
+                RpcEnvSessions.Session session = sessions.create(
+                        entityUuid, env, RemoteAddrInterceptor.REMOTE_ADDR_KEY.get());
+                responseObserver.onNext(environmentData.toBuilder().setSessionId(session.id()).build());
                 responseObserver.onCompleted();
             } catch (IllegalStateException e) {
                 GymCraft.LOGGER.warn("Failed to connect GymCraft RPC session for entity {}", entityUuid, e);
@@ -208,5 +214,25 @@ final class GymEnvService extends GymEnvServiceGrpc.GymEnvServiceImplBase {
         }
         responseObserver.onNext(builder.build());
         responseObserver.onCompleted();
+    }
+
+    /** 在服务端线程读取环境状态，RPC 线程只等待不可变结果。 */
+    private static <T> T callOnServer(Supplier<T> task) {
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null) {
+            throw new IllegalStateException("Minecraft server is not running");
+        }
+        try {
+            return server.submit(task).get();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while reading environment on server thread", error);
+        } catch (ExecutionException error) {
+            Throwable cause = error.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Failed to read environment on server thread", cause);
+        }
     }
 }

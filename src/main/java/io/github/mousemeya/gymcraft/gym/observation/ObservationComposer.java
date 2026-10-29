@@ -92,35 +92,42 @@ public class ObservationComposer {
      * @return 同时用于 RL 返回与只读可视化的真实观测
      */
     public ProtoMcObservation create(Mob mob, ActionState lastActionState) {
-        var headerBuilder = ProtoObservationHeader.newBuilder()
-            .setSchemaVersion(1)
-            .setGameTick(mob.level().getGameTime())
-            // .setDimension(mob.level().dimension().location().toString())
-            .setAgentId(mob.getUUID().toString());
-        if (lastActionState != null) {
-            headerBuilder.setLastActionStatus(lastActionState.status().name());
-            headerBuilder.setLastActionDescription(lastActionState.description());
-            // 批次状态 details["actions"] 携带逐项明细（ActionBatchExecutor.batchState），
-            // 聚合到 header.last_actions，使逐动作反馈成为观测的一部分而非仅存在于 info
-            for (ProtoActionFeedback feedback : expandActionFeedback(lastActionState)) {
-                headerBuilder.addLastActions(feedback);
+        try (var composeZone = Profiler.get().zone("observation_compose")) {
+            ProtoObservationHeader.Builder headerBuilder;
+            try (var headerZone = Profiler.get().zone("obs_header")) {
+                headerBuilder = ProtoObservationHeader.newBuilder()
+                    .setSchemaVersion(1)
+                    .setGameTick(mob.level().getGameTime())
+                    // .setDimension(mob.level().dimension().location().toString())
+                    .setAgentId(mob.getUUID().toString());
+                if (lastActionState != null) {
+                    headerBuilder.setLastActionStatus(lastActionState.status().name());
+                    headerBuilder.setLastActionDescription(lastActionState.description());
+                    // 批次状态 details["actions"] 携带逐项明细（ActionBatchExecutor.batchState），
+                    // 聚合到 header.last_actions，使逐动作反馈成为观测的一部分而非仅存在于 info
+                    for (ProtoActionFeedback feedback : expandActionFeedback(lastActionState)) {
+                        headerBuilder.addLastActions(feedback);
+                    }
+                }
             }
-        }
 
-        var builder = ProtoMcObservation.newBuilder()
-            .setHeader(headerBuilder.build());
+            var builder = ProtoMcObservation.newBuilder()
+                .setHeader(headerBuilder.build());
 
-        for (var entry : this.components.entrySet()) {
-            try (var zone = Profiler.get().zone("obs_" + entry.getKey())) {
-                builder.putComponents(entry.getKey(), Any.pack(entry.getValue().create(mob)));
-            } catch (RuntimeException e) {
-                LOGGER.warn("Failed to create observation component {}: {}", entry.getKey(), e.getMessage());
+            for (var entry : this.components.entrySet()) {
+                try (var zone = Profiler.get().zone("obs_" + entry.getKey())) {
+                    builder.putComponents(entry.getKey(), Any.pack(entry.getValue().create(mob)));
+                } catch (RuntimeException e) {
+                    LOGGER.warn("Failed to create observation component {}: {}", entry.getKey(), e.getMessage());
+                }
             }
+            ProtoMcObservation observation = builder.build();
+            // 可视化只消费本次真实观测，不能重复调用有会话副作用的 creator。
+            try (var visualizationZone = Profiler.get().zone("obs_visualization")) {
+                io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.observation(mob, observation);
+            }
+            return observation;
         }
-        ProtoMcObservation observation = builder.build();
-        // 可视化只消费本次真实观测，不能重复调用有会话副作用的 creator。
-        io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.observation(mob, observation);
-        return observation;
     }
 
     /**

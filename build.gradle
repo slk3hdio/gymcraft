@@ -112,7 +112,8 @@ neoForge {
             // Recommended logging level for the console
             // You can set various levels here.
             // Please read: https://stackoverflow.com/questions/2031163/when-to-use-the-different-log-levels
-            logLevel = org.slf4j.event.Level.DEBUG
+            // 性能测评用 -Pbenchmark 关闭 DEBUG 日志；默认开发运行保持不变。
+            logLevel = project.hasProperty('benchmark') ? org.slf4j.event.Level.INFO : org.slf4j.event.Level.DEBUG
         }
     }
 

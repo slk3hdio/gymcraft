@@ -18,16 +18,17 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 /**
  * Agent 运行时，负责在 Minecraft tick 循环中串行执行一个 step 的动作批次。
  * <p>
- * gRPC 线程只投递批次并等待 future；动作 apply/tick/state 和观测生成
- * 都在服务端 tick 线程中执行。批次内每个动作至少占用一个 tick，且仅在前一项
- * COMPLETED 后才会在下一个 Pre 阶段启动后一项。
+ * 调用线程只投递批次；动作 apply/tick/state 和观测生成都在服务端 tick 线程中执行，
+ * 完成后经 Future 发布不可变的 {@link RuntimeStepResult}。任务评估与 RPC 响应构造由
+ * 环境层负责，不属于运行时。批次内每个动作至少占用一个 tick，且仅在前一项 COMPLETED
+ * 后才会在下一个 Pre 阶段启动后一项。
  * </p>
  * <p>
  * reset 只负责动作管线清理、组件释放转发（{@link ActionDispatcher#releaseComponents}）
@@ -42,6 +43,7 @@ public class AgentRuntime {
     private final ActionDispatcher actionController;
     private final ObservationComposer observationCreator;
     private final ActionBatchExecutor actionExecutor;
+    private final UUID entityId;
     private final ArrayBlockingQueue<ActionBatchExecutor.Request> actionBuf = new ArrayBlockingQueue<>(1);
     private final ArrayBlockingQueue<ResetRequest> resetBuf = new ArrayBlockingQueue<>(1);
     private boolean entityPostObserved;
@@ -67,7 +69,7 @@ public class AgentRuntime {
     ) {
     }
 
-    /** 一次 reset/step 完成后的观测与状态。 */
+    /** 一次 reset/step 完成后的不可变观测与状态。 */
     public record RuntimeStepResult(ProtoMcObservation observation, ActionState actionState) {
     }
 
@@ -86,10 +88,11 @@ public class AgentRuntime {
         this.actionController = actionController;
         this.observationCreator = observationCreator;
         this.mob = mob;
+        this.entityId = mob.getUUID();
         this.actionExecutor = new ActionBatchExecutor(actionController, observationCreator, mob);
     }
 
-    /** @return 当前受控 Mob，reset 后可能是新实例 */
+    /** @return 当前受控 Mob，reset 后可能是新实例；仅限服务端 tick 线程调用 */
     public Mob mob() {
         return this.mob;
     }
@@ -105,76 +108,67 @@ public class AgentRuntime {
     }
 
     /**
-     * 投递重置请求并阻塞等待 tick 线程完成。
+     * 投递重置请求，不等待 tick 线程完成。
      *
      * @param seed 可选随机种子
      * @param options 重置选项
      * @param handler 环境侧重置回调（状态恢复、实体重建、场景与选项）
-     * @return 重置结果
+     * @return 由 tick 线程完成的重置结果
      */
-    public RuntimeStepResult reset(Integer seed, Map<String, Object> options, ResetHandler handler) {
+    public CompletableFuture<RuntimeStepResult> submitReset(
+        Integer seed, Map<String, Object> options, ResetHandler handler) {
         ResetRequest request = new ResetRequest(
             seed, options == null ? Map.of() : options, handler, new CompletableFuture<>());
         try {
             this.resetBuf.put(request);
-            return request.future().get();
+            return request.future();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while resetting environment entity " + this.mob.getUUID(), e);
-        } catch (ExecutionException e) {
-            throw unwrap("Failed to reset environment entity " + this.mob.getUUID(), e);
+            throw new IllegalStateException("Interrupted while resetting environment entity " + this.entityId, e);
         }
     }
 
     /**
-     * 投递一个串行动作批次并阻塞等待整批终态。
+     * 投递一个串行动作批次，不等待整批终态。
      *
      * @param actions 按执行顺序排列的动作，空列表视为 noop
      * @param timeoutSeconds 整批共享超时，小于等于零表示不限制
-     * @return 最终观测与批次状态
+     * @return 由 tick 线程完成的最终观测与批次状态
      */
-    public RuntimeStepResult step(List<ProtoMcAction> actions, float timeoutSeconds) {
+    public CompletableFuture<RuntimeStepResult> submitStep(List<ProtoMcAction> actions, float timeoutSeconds) {
         var request = new ActionBatchExecutor.Request(
             List.copyOf(actions), timeoutSeconds, new CompletableFuture<>());
         try {
             LOGGER.info("GymCraft runtime enqueue action batch entity={} count={} timeout={} queue_size={}",
-                this.mob.getUUID(), actions.size(), timeoutSeconds, this.actionBuf.size());
+                this.entityId, actions.size(), timeoutSeconds, this.actionBuf.size());
             this.actionBuf.put(request);
-            return request.future().get();
+            return request.future();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while stepping environment entity " + this.mob.getUUID(), e);
-        } catch (ExecutionException e) {
-            throw unwrap("Failed to step environment entity " + this.mob.getUUID(), e);
+            throw new IllegalStateException("Interrupted while stepping environment entity " + this.entityId, e);
         }
-    }
-
-    /** 将 future 的 ExecutionException 转换为对外运行时异常。 */
-    private static RuntimeException unwrap(String message, ExecutionException error) {
-        Throwable cause = error.getCause();
-        return cause instanceof RuntimeException runtimeException
-            ? runtimeException
-            : new IllegalStateException(message, cause);
     }
 
     /** 处理 reset，并在实体没有 Post 事件时推进通用动作流程。 */
     @SubscribeEvent
     private void onServerTickPost(ServerTickEvent.Post event) {
-        ResetRequest reset = this.resetBuf.poll();
-        if (reset != null) {
-            try {
-                reset.future().complete(this.resetOnServerTick(reset));
-            } catch (RuntimeException e) {
-                reset.future().completeExceptionally(e);
+        try (var zone = Profiler.get().zone("gymcraft_runtime_tick")) {
+            ResetRequest reset = this.resetBuf.poll();
+            if (reset != null) {
+                try {
+                    reset.future().complete(this.resetOnServerTick(reset));
+                } catch (RuntimeException e) {
+                    reset.future().completeExceptionally(e);
+                }
+                this.entityPostObserved = false;
+                return;
+            }
+            if (!this.entityPostObserved && (this.actionExecutor.hasPendingBatch() || !this.actionBuf.isEmpty())) {
+                this.processActionBeforeTick();
+                this.processActionAfterTick();
             }
             this.entityPostObserved = false;
-            return;
         }
-        if (!this.entityPostObserved && (this.actionExecutor.hasPendingBatch() || !this.actionBuf.isEmpty())) {
-            this.processActionBeforeTick();
-            this.processActionAfterTick();
-        }
-        this.entityPostObserved = false;
     }
 
     /** 在 tick 线程中清理动作管线、转发组件释放，执行环境侧重置并重绑定实体。 */
@@ -217,7 +211,10 @@ public class AgentRuntime {
         try (var gymcraftZone = profiler.zone("gymcraft_pre")) {
             ActionBatchExecutor.Request request = this.actionExecutor.hasPendingBatch() ? null : this.actionBuf.poll();
             if (request != null) {
-                this.actionExecutor.accept(request);
+                try (var acceptZone = profiler.zone("step_accept")) {
+                    TickMetricsCollector.recordStepStarted();
+                    this.actionExecutor.accept(request);
+                }
             }
             try (var actionZone = profiler.zone("action_batch_before_tick")) {
                 this.actionExecutor.beforeTick();
@@ -246,8 +243,8 @@ public class AgentRuntime {
 
     /** 关闭运行时，拒绝所有待处理请求并释放状态。 */
     public void clear() {
-        LOGGER.info("GymCraft runtime clear entity={}", this.mob.getUUID());
-        IllegalStateException closed = new IllegalStateException("Runtime is closed for entity " + this.mob.getUUID());
+        LOGGER.info("GymCraft runtime clear entity={}", this.entityId);
+        IllegalStateException closed = new IllegalStateException("Runtime is closed for entity " + this.entityId);
         this.failQueuedActions(closed);
         this.failQueuedResets(closed);
         this.actionExecutor.failPending(closed);

@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import javax.annotation.Nullable;
 
@@ -21,6 +23,7 @@ import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
@@ -81,6 +84,8 @@ public abstract class AbstractMcEnv implements McEnv {
     protected final ActionDispatcher actionController;
     protected final ObservationComposer observationCreator;
     protected final AgentRuntime agentRuntime;
+    /** 环境最终化使用的服务端执行器；保证任务评估不落在 RPC 线程。 */
+    private final MinecraftServer server;
     private boolean disableVanillaAi;
     private int maxActionsPerStep = DEFAULT_MAX_ACTIONS_PER_STEP;
     private boolean closed;
@@ -142,6 +147,7 @@ public abstract class AbstractMcEnv implements McEnv {
         if (!(mob.level() instanceof ServerLevel level)) {
             throw new IllegalArgumentException("GymCraft environments require a server-level Mob: " + envTypeId);
         }
+        this.server = level.getServer();
         // 抗卸载守卫紧随 level 校验创建；tick 事件只发生在服务端线程，构造完成前不会触发，
         // mob 经 Supplier 延迟取值（此时尚无 agentRuntime）是安全的。
         this.chunkGuard = new EnvChunkGuard(level, this.envId, () -> this.mob());
@@ -221,31 +227,61 @@ public abstract class AbstractMcEnv implements McEnv {
     @Override
     public ResetResponse reset(Integer seed, Map<String, Object> options) {
         this.ensureOpen();
-        RuntimeStepResult result = this.agentRuntime.reset(
-            seed, options == null ? Map.of() : options, this::resetEnvironment);
-        return ResetResponse.newBuilder()
-            .setObservation(result.observation())
-            .setInfo(ProtoJson.toStruct(this.createResetInfo()))
-            .build();
+        return this.awaitResponse(this.agentRuntime
+            .submitReset(seed, options == null ? Map.of() : options, this::resetEnvironment)
+            .thenCompose(result -> this.server.submit(() -> this.finalizeReset(result))));
     }
 
     @Override
     public StepResponse step(List<ProtoMcAction> actions, float timeoutSeconds) {
         this.ensureReady();
-        RuntimeStepResult result = this.agentRuntime.step(actions, timeoutSeconds);
-        Map<String, Object> info = new LinkedHashMap<>(this.createStepInfo(result.observation()));
-        info.put("action_state", Map.of(
-            "status", result.actionState().status().name().toLowerCase(),
-            "description", result.actionState().description(),
-            "details", result.actionState().details()
-        ));
-        return StepResponse.newBuilder()
-            .setObservation(result.observation())
-            .setReward(this.computeReward(result.observation()))
-            .setTerminated(this.isTerminated(result.observation()))
-            .setTruncated(this.isTruncated(result.observation()))
-            .setInfo(ProtoJson.toStruct(info))
-            .build();
+        return this.awaitResponse(this.agentRuntime.submitStep(actions, timeoutSeconds)
+            .thenCompose(result -> this.server.submit(() -> this.finalizeStep(result))));
+    }
+
+    /** 等待已经投递到服务端线程的最终响应，并还原业务异常。 */
+    private <T> T awaitResponse(CompletableFuture<T> response) {
+        try {
+            return response.get();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for environment " + this.envId, error);
+        } catch (ExecutionException error) {
+            Throwable cause = error.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Failed to execute environment " + this.envId, cause);
+        }
+    }
+
+    /** 在服务端线程构造 reset 响应，RPC 线程只等待并返回不可变结果。 */
+    private ResetResponse finalizeReset(RuntimeStepResult result) {
+        try (var zone = Profiler.get().zone("reset_finalize")) {
+            return ResetResponse.newBuilder()
+                .setObservation(result.observation())
+                .setInfo(ProtoJson.toStruct(this.createResetInfo()))
+                .build();
+        }
+    }
+
+    /** 在服务端线程完成任务评估并构造 step 响应，避免 RPC 线程读取世界或实体。 */
+    private StepResponse finalizeStep(RuntimeStepResult result) {
+        try (var zone = Profiler.get().zone("step_finalize")) {
+            Map<String, Object> info = new LinkedHashMap<>(this.createStepInfo(result.observation()));
+            info.put("action_state", Map.of(
+                "status", result.actionState().status().name().toLowerCase(),
+                "description", result.actionState().description(),
+                "details", result.actionState().details()
+            ));
+            return StepResponse.newBuilder()
+                .setObservation(result.observation())
+                .setReward(this.computeReward(result.observation()))
+                .setTerminated(this.isTerminated(result.observation()))
+                .setTruncated(this.isTruncated(result.observation()))
+                .setInfo(ProtoJson.toStruct(info))
+                .build();
+        }
     }
 
     @Override

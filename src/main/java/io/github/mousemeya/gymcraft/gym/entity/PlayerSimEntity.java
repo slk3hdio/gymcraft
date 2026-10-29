@@ -11,6 +11,7 @@ import net.minecraft.world.entity.ai.control.MoveControl;
 import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import io.github.mousemeya.gymcraft.gym.compat.Profiler;
 
 /**
  * 玩家模拟实体（{@code gymcraft:player_sim}）—— 玩家外观的受控 Agent 实体。
@@ -85,7 +86,9 @@ public class PlayerSimEntity extends PathfinderMob {
     @Override
     public void aiStep() {
         super.aiStep();
-        this.updateSwingTime();
+        try (var zone = Profiler.get().zone("gymcraft_player_sim_swing")) {
+            this.updateSwingTime();
+        }
     }
 
     /**

@@ -2,6 +2,7 @@ package io.github.mousemeya.gymcraft.command;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -9,6 +10,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +18,7 @@ import java.util.function.Predicate;
 
 import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
+import io.github.mousemeya.gymcraft.gym.runtime.TickMetricsCollector;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.registry.EnvFactories;
@@ -153,7 +156,16 @@ public final class GymCraftCommands {
                                 .then(Commands.argument("from", BlockPosArgument.blockPos())
                                         .then(Commands.argument("to", BlockPosArgument.blockPos())
                                                 .then(Commands.argument("filter", BlockPredicateArgument.blockPredicate(event.getBuildContext()))
-                                                        .executes(GymCraftCommands::countBlocksCommand)))))));
+                                                        .executes(GymCraftCommands::countBlocksCommand)))))
+                        .then(Commands.literal("tick_metrics")
+                                .then(Commands.literal("start")
+                                        .then(Commands.argument("run_id", StringArgumentType.word())
+                                                .then(Commands.argument("target_hz", DoubleArgumentType.doubleArg(0.0, 20.0))
+                                                        .then(Commands.argument("active_environments", IntegerArgumentType.integer(1))
+                                                                .then(Commands.argument("output", StringArgumentType.greedyString())
+                                                                        .executes(GymCraftCommands::startTickMetrics))))))
+                                .then(Commands.literal("stop")
+                                        .executes(GymCraftCommands::stopTickMetrics)))));
     }
 
     /**
@@ -357,6 +369,35 @@ public final class GymCraftCommands {
             return 0;
         }
         return 1;
+    }
+
+    /** 启动默认关闭的 tick 指标采集，输出路径由测评脚本显式指定。 */
+    private static int startTickMetrics(CommandContext<CommandSourceStack> ctx) {
+        String runId = StringArgumentType.getString(ctx, "run_id");
+        double targetHz = DoubleArgumentType.getDouble(ctx, "target_hz");
+        int environments = IntegerArgumentType.getInteger(ctx, "active_environments");
+        Path output = Path.of(StringArgumentType.getString(ctx, "output"));
+        try {
+            TickMetricsCollector.start(runId, targetHz, environments, output);
+            Path absolute = output.toAbsolutePath().normalize();
+            ctx.getSource().sendSuccess(() -> Component.literal("tick_metrics_started=" + absolute), false);
+            return 1;
+        } catch (IOException | IllegalArgumentException | IllegalStateException e) {
+            ctx.getSource().sendFailure(Component.literal("tick_metrics_start_failed: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /** 停止 tick 指标采集并一次性写出 CSV。 */
+    private static int stopTickMetrics(CommandContext<CommandSourceStack> ctx) {
+        try {
+            Path output = TickMetricsCollector.stop();
+            ctx.getSource().sendSuccess(() -> Component.literal("tick_metrics_stopped=" + output), false);
+            return 1;
+        } catch (IOException | IllegalStateException e) {
+            ctx.getSource().sendFailure(Component.literal("tick_metrics_stop_failed: " + e.getMessage()));
+            return 0;
+        }
     }
 
     /**
