@@ -9,14 +9,11 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import net.minecraft.world.level.storage.TagValueInput;
-import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.AABB;
 
 import org.slf4j.Logger;
@@ -81,12 +78,7 @@ public final class RegionEntitySnapshot {
     public static RegionEntitySnapshot capture(ServerLevel level, AABB region, Mob agent) {
         List<SavedEntity> entities = new ArrayList<>();
         for (Entity entity : collectRegionEntities(level, region, agent.getUUID())) {
-            try (ProblemReporter.ScopedCollector reporter =
-                new ProblemReporter.ScopedCollector(entity.problemPath(), LOGGER)) {
-                TagValueOutput output = TagValueOutput.createWithContext(reporter, level.registryAccess());
-                entity.saveWithoutId(output);
-                entities.add(new SavedEntity(entity.getType(), output.buildResult().copy()));
-            }
+            entities.add(new SavedEntity(entity.getType(), io.github.mousemeya.gymcraft.gym.compat.EntityNbt.capture(entity)));
         }
         return new RegionEntitySnapshot(region, agent.getUUID(), List.copyOf(entities));
     }
@@ -151,15 +143,7 @@ public final class RegionEntitySnapshot {
     public void restore(ServerLevel level) {
         discardRegionEntities(level, this.region, this.agentUuid);
         for (SavedEntity saved : this.entities) {
-            Entity entity;
-            try (ProblemReporter.ScopedCollector reporter = new ProblemReporter.ScopedCollector(LOGGER)) {
-                entity = EntityType.create(
-                    saved.type(),
-                    TagValueInput.create(reporter, level.registryAccess(), saved.data().copy()),
-                    level,
-                    EntitySpawnReason.LOAD
-                ).orElseThrow(() -> new IllegalStateException("Failed to restore region entity from snapshot"));
-            }
+            Entity entity = io.github.mousemeya.gymcraft.gym.compat.EntityNbt.restore(saved.type(), saved.data(), level);
             if (!level.addWithUUID(entity)) {
                 throw new IllegalStateException("Failed to add restored region entity to level: " + entity.getUUID());
             }

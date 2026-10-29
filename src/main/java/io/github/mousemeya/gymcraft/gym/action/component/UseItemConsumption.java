@@ -2,10 +2,11 @@ package io.github.mousemeya.gymcraft.gym.action.component;
 
 import io.github.mousemeya.gymcraft.gym.fakeplayer.AgentInventoryTransaction;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
-import net.minecraft.util.profiling.Profiler;
+import io.github.mousemeya.gymcraft.gym.compat.Profiler;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -63,6 +64,14 @@ public final class UseItemConsumption {
     public void onFinish(LivingEntityUseItemEvent.Finish event) {
         if (event.getEntity() == this.mob) {
             this.finished = true;
+            // 1.21.1 原版药水仅对 Player 消耗并返回玻璃瓶；Mob 饮用需补齐语义：
+            // 未消耗时收缩一份并归还玻璃瓶，保持 26.1 的消费契约
+            ItemStack result = event.getResultStack();
+            ItemStack used = event.getItem();
+            if (result.is(Items.POTION) && ItemStack.isSameItemSameComponents(result, used)) {
+                result.shrink(1);
+                event.setResultStack(result.isEmpty() ? new ItemStack(Items.GLASS_BOTTLE) : result);
+            }
         }
     }
 
@@ -119,7 +128,7 @@ public final class UseItemConsumption {
         this.mob.stopUsingItem();
         ItemStack result = this.mob.getMainHandItem();
         this.mob.setItemInHand(InteractionHand.MAIN_HAND, this.savedMain);
-        AgentInventoryTransaction.settle(this.mob, EquipmentSlot.MAINHAND.getId(), result);
+        AgentInventoryTransaction.settle(this.mob, EquipmentSlot.MAINHAND.ordinal(), result);
     }
 
     /** @return 是否已经完成结算 */

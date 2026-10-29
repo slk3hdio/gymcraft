@@ -21,7 +21,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -75,7 +75,7 @@ public final class ChatObservationGameTests {
     public static void chatObservationShowsRecentMessages(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         SimpleMobEnv env = new SimpleMobEnv(
-            Identifier.fromNamespaceAndPath(GymCraft.MODID, "chat_observation_test"), mob);
+            ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "chat_observation_test"), mob);
         AtomicReference<StepResponse> firstStep = new AtomicReference<>();
         AtomicReference<StepResponse> windowStep = new AtomicReference<>();
         AtomicReference<StepResponse> idleStep = new AtomicReference<>();
@@ -169,7 +169,7 @@ public final class ChatObservationGameTests {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
         mob.setCustomName(Component.literal("Gym Agent"));
         SimpleMobEnv env = new SimpleMobEnv(
-            Identifier.fromNamespaceAndPath(GymCraft.MODID, "send_chat_test"), mob);
+            ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "send_chat_test"), mob);
         AtomicReference<StepResponse> response = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
@@ -211,7 +211,7 @@ public final class ChatObservationGameTests {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, relPos);
         BlockPos absPos = helper.absolutePos(relPos).above();
         SimpleMobEnv env = new SimpleMobEnv(
-            Identifier.fromNamespaceAndPath(GymCraft.MODID, "world_state_test"), mob);
+            ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "world_state_test"), mob);
         AtomicReference<ProtoWorldState> world = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         CompletableFuture<Void> tested = new CompletableFuture<>();
@@ -281,8 +281,8 @@ public final class ChatObservationGameTests {
         BlockPos absPos = helper.absolutePos(relPos).above();
         var serverLevel = helper.getLevel();
         Structure treasure = serverLevel.registryAccess()
-            .lookupOrThrow(Registries.STRUCTURE)
-            .getValue(Identifier.withDefaultNamespace("buried_treasure"));
+            .registryOrThrow(Registries.STRUCTURE)
+            .get(ResourceLocation.withDefaultNamespace("buried_treasure"));
         assertTrue(helper, treasure != null, "minecraft:buried_treasure structure is not registered");
         // 注入口必须运行在服务端线程上：区块结构引用属于服务端世界状态
         runOnServer(helper, () -> {
@@ -290,10 +290,10 @@ public final class ChatObservationGameTests {
             StructureStart start = new StructureStart(treasure, chunk.getPos(), 1,
                 new PiecesContainer(List.of(new BuriedTreasurePieces.BuriedTreasurePiece(absPos))));
             chunk.setStartForStructure(treasure, start);
-            chunk.addReferenceForStructure(treasure, chunk.getPos().pack());
+            chunk.addReferenceForStructure(treasure, chunk.getPos().toLong());
         });
         SimpleMobEnv env = new SimpleMobEnv(
-            Identifier.fromNamespaceAndPath(GymCraft.MODID, "world_structure_test"), mob);
+            ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "world_structure_test"), mob);
         AtomicReference<ProtoWorldState> world = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         CompletableFuture<Void> tested = new CompletableFuture<>();

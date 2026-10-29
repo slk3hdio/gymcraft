@@ -11,14 +11,14 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.warden.Warden;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -102,10 +102,10 @@ public final class EnvStateGameTests {
                         .getEntitiesOfClass(Warden.class, arenaBounds(origin)).getFirst();
                     warden.setNoAi(true);
                     baselineWarden.set(warden.getUUID());
-                    helper.kill(warden);
-                    Zombie intruder = EntityType.ZOMBIE.create(helper.getLevel(), EntitySpawnReason.COMMAND);
+                    warden.kill();
+                    Zombie intruder = EntityType.ZOMBIE.create(helper.getLevel());
                     if (intruder != null) {
-                        intruder.snapTo(origin.getX() + 0.5, origin.getY(), origin.getZ() + 0.5, 0.0F, 0.0F);
+                        intruder.moveTo(origin.getX() + 0.5, origin.getY(), origin.getZ() + 0.5, 0.0F, 0.0F);
                         helper.getLevel().addFreshEntity(intruder);
                     }
                 });
@@ -249,7 +249,7 @@ public final class EnvStateGameTests {
      * @param suffix 测试场景后缀
      * @return 唯一测试 ID
      */
-    private static Identifier testId(String suffix) {
-        return Identifier.fromNamespaceAndPath(GymCraft.MODID, "state_" + suffix + "_test");
+    private static ResourceLocation testId(String suffix) {
+        return ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "state_" + suffix + "_test");
     }
 }

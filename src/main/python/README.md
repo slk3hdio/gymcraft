@@ -1,5 +1,7 @@
 # GymCraft Python RPC Client
 
+Python 包仅使用 GymCraft 版本号（如 `gymcraft==1.3.0`），不带 Minecraft 版本后缀，默认兼容同一 GymCraft 版本的所有 MC 适配版本。GitHub Release 与模组附件使用 `<GymCraft版本>+mc<MC版本>` 命名；同一个 Python 版本只向 PyPI 发布一次。
+
 Install dependencies:
 
 ```powershell

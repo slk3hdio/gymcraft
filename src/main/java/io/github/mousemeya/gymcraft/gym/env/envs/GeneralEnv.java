@@ -7,7 +7,7 @@ import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Mob;
 
 import java.util.List;
@@ -26,7 +26,7 @@ public class GeneralEnv extends AbstractMcEnv {
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Agent
      */
-    public GeneralEnv(Identifier envTypeId, Mob mob) {
+    public GeneralEnv(ResourceLocation envTypeId, Mob mob) {
         this(envTypeId, mob, null);
     }
 
@@ -36,7 +36,7 @@ public class GeneralEnv extends AbstractMcEnv {
      * @param mob 服务端世界中的受控 Mob
      * @param scenario 完整场景；null 表示仅捕获 agent，状态范围不含方块及周围实体
      */
-    public GeneralEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
+    public GeneralEnv(ResourceLocation envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
         this(envTypeId, mob, scenario, new AttachScope(null, false, false));
     }
 
@@ -47,7 +47,7 @@ public class GeneralEnv extends AbstractMcEnv {
      * @param scenario 完整场景；null 表示挂载已有 Mob
      * @param scope 挂载作用域（区域与方块/实体捕获开关）
      */
-    public GeneralEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
+    public GeneralEnv(ResourceLocation envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
         super(
             envTypeId,
             mob,
@@ -102,7 +102,7 @@ public class GeneralEnv extends AbstractMcEnv {
          * @return 新环境实例
          */
         @Override
-        public GeneralEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
+        public GeneralEnv create(ResourceLocation envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
             return new GeneralEnv(envTypeId, mob, scenario, scope);
         }
     }

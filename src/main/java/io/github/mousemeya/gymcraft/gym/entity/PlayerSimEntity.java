@@ -117,8 +117,8 @@ public class PlayerSimEntity extends PathfinderMob {
      * @return 对方为玩家或原版队伍关系为友方时返回 true
      */
     @Override
-    protected boolean considersEntityAsAlly(Entity other) {
-        return other instanceof Player || super.considersEntityAsAlly(other);
+    public boolean isAlliedTo(Entity other) {
+        return other instanceof Player || super.isAlliedTo(other);
     }
 
     /**

@@ -47,7 +47,7 @@ public final class EnvChunkGuardGameTests {
         McEnv env = EnvManager.attach("gymcraft:simple_mob", agent,
             AttachScope.around(agent, 24, 1, 0, 1, 24, 1, true, false));
         // forceChunk(add=true) 同步加载区块：挂载返回时区域角区块必须已加载
-        assertTrue(helper, level.hasChunk(corner.x(), corner.z()),
+        assertTrue(helper, level.hasChunk(corner.x, corner.z),
             "region corner chunk was not force-loaded on attach: " + corner);
         assertTrue(helper, ((AbstractMcEnv) env).stateRegion() != null, "scoped attach did not capture a region");
         helper.runAfterDelay(5, () -> {
@@ -77,6 +77,6 @@ public final class EnvChunkGuardGameTests {
 
     /** 查询区块当前是否处于 entity-ticking 票级（等价 /forceload 的强加载效果）。 */
     private static boolean isEntityTicking(ServerLevel level, ChunkPos pos) {
-        return level.getChunkSource().chunkMap.getDistanceManager().inEntityTickingRange(pos.pack());
+        return level.getChunkSource().chunkMap.getDistanceManager().inEntityTickingRange(pos.toLong());
     }
 }

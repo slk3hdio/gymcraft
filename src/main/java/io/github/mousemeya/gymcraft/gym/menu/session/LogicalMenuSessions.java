@@ -21,7 +21,7 @@ import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.animal.equine.AbstractHorse;
+import net.minecraft.world.entity.animal.horse.AbstractHorse;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.HorseInventoryMenu;
 import net.minecraft.world.inventory.InventoryMenu;
@@ -215,10 +215,10 @@ public final class LogicalMenuSessions {
     }
 
     /**
-     * 马菜单规范化（计划 7.3 节）：{@code HorseInventoryMenu} 结构固定——
-     * 槽 0 为 SADDLE、槽 1 为 BODY（{@code Mob#createEquipmentSlotContainer} 包装容器，
-     * 识别为 MobEquipment 并复用背包 slot_id），随后为马货物容器槽
-     * （MobNativeContainer，复用 slot_id 8+localIndex），最后为玩家物品栏。
+     * 马菜单规范化（计划 7.3 节）：1.21.1 的鞍槽位于
+     * {@code horse.getInventory()}，马铠槽位于独立的 {@code horse.getBodyArmorAccess()}。
+     * 马铠槽复用 BODY 的 slot_id 6；鞍槽和货物槽按容器局部索引复用
+     * slot_id 7+localIndex，最后为玩家物品栏。
      */
     private static SlotNormalizer horseNormalizer(FakePlayer player, AgentInventoryBridge bridge, AbstractHorse horse) {
         SlotNormalizer fallback = defaultNormalizer(player, bridge);
@@ -226,11 +226,9 @@ public final class LogicalMenuSessions {
             if (menuSlot.container == player.getInventory()) {
                 return fallback.normalize(menuSlot);
             }
-            if (menuSlot.index == 0) {
-                return new NormalizedMenuSlot.AgentClaim(EquipmentSlot.SADDLE.getId());
-            }
-            if (menuSlot.index == 1) {
-                return new NormalizedMenuSlot.AgentClaim(EquipmentSlot.BODY.getId());
+            if (menuSlot.container == horse.getBodyArmorAccess()) {
+                return new NormalizedMenuSlot.AgentClaim(
+                    AgentInventoryLayout.equipmentSlotId(EquipmentSlot.BODY));
             }
             if (menuSlot.container == horse.getInventory()) {
                 int agentSlotId = AgentInventoryLayout.EQUIPMENT_SLOT_COUNT + menuSlot.getContainerSlot();

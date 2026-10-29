@@ -9,7 +9,6 @@ import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import io.github.mousemeya.gymcraft.item.EnvToolItem;
 import io.github.mousemeya.gymcraft.item.UuidCopierItem;
 import io.github.mousemeya.gymcraft.command.GymCraftCommands;
-import io.github.mousemeya.gymcraft.gametest.GymCraftGameTests;
 import io.github.mousemeya.gymcraft.gym.chat.ChatCapture;
 import io.github.mousemeya.gymcraft.gym.entity.PlayerSimTargetingHooks;
 import io.github.mousemeya.gymcraft.gym.env.EnvChunkGuard;
@@ -27,6 +26,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.SpawnEggItem;
+import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.fml.common.Mod;
@@ -49,17 +49,17 @@ public class GymCraft {
     public static final DeferredItem<EnvToolItem> ENV_TOOL = ITEMS.registerItem(
             "env_tool",
             EnvToolItem::new,
-            properties -> properties.stacksTo(1));
+            new Item.Properties().stacksTo(1));
 
     public static final DeferredItem<UuidCopierItem> UUID_COPIER = ITEMS.registerItem(
             "uuid_copier",
             UuidCopierItem::new,
-            properties -> properties.stacksTo(1));
+            new Item.Properties().stacksTo(1));
 
     // 玩家模拟实体刷怪蛋：实体注册先于物品注册（原版注册表顺序），此处 get() 安全
-    public static final DeferredItem<SpawnEggItem> PLAYER_SIM_SPAWN_EGG = ITEMS.registerItem(
+    public static final DeferredItem<SpawnEggItem> PLAYER_SIM_SPAWN_EGG = ITEMS.register(
             "player_sim_spawn_egg",
-            properties -> new SpawnEggItem(properties.spawnEgg(ModEntities.PLAYER_SIM.get())));
+            () -> new net.neoforged.neoforge.common.DeferredSpawnEggItem(ModEntities.PLAYER_SIM, 0xC2A38A, 0x4A6E9C, new Item.Properties()));
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = CREATIVE_MODE_TABS.register("tab",
             () -> CreativeModeTab.builder()
@@ -107,10 +107,6 @@ public class GymCraft {
         ModAttachments.REGISTRY.register(modEventBus);
         ModEntities.REGISTRY.register(modEventBus);
         modEventBus.addListener(ModEntities::registerAttributes);
-
-        // GameTest：测试函数注册表常驻（无运行副作用），测试实例仅在 GameTest 启用时装配
-        GymCraftGameTests.TEST_FUNCTIONS.register(modEventBus);
-        modEventBus.addListener(GymCraftGameTests::register);
 
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }

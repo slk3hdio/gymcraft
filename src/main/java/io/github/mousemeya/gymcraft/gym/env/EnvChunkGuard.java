@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.ChunkPos;
@@ -42,7 +42,7 @@ public final class EnvChunkGuard {
 
     /** 环境区块票控制器：所有 GymCraft 环境共用，owner 区分环境实例。 */
     public static final TicketController CONTROLLER = new TicketController(
-        Identifier.fromNamespaceAndPath(GymCraft.MODID, "environment"),
+        ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "environment"),
         (level, helper) -> {
             // 环境不跨重启存活，持久票皆孤儿，无条件清除
             for (UUID owner : helper.getEntityTickets().keySet()) {
@@ -92,7 +92,7 @@ public final class EnvChunkGuard {
         for (int chunkX = region.minX() >> 4; chunkX <= region.maxX() >> 4; chunkX++) {
             for (int chunkZ = region.minZ() >> 4; chunkZ <= region.maxZ() >> 4; chunkZ++) {
                 CONTROLLER.forceChunk(this.level, this.owner, chunkX, chunkZ, true, true);
-                this.regionChunks.add(ChunkPos.pack(chunkX, chunkZ));
+                this.regionChunks.add(ChunkPos.asLong(chunkX, chunkZ));
             }
         }
     }
@@ -119,7 +119,7 @@ public final class EnvChunkGuard {
         if (this.released) {
             return;
         }
-        long current = mob.chunkPosition().pack();
+        long current = mob.chunkPosition().toLong();
         if (current == this.agentChunk) {
             return;
         }

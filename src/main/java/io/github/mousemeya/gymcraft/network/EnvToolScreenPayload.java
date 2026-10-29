@@ -9,7 +9,7 @@ import io.github.mousemeya.gymcraft.GymCraft;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * 服务端 → 客户端：打开或刷新环境工具管理界面。
@@ -30,7 +30,7 @@ public record EnvToolScreenPayload(
     boolean captureEntities
 ) implements CustomPacketPayload {
     public static final Type<EnvToolScreenPayload> TYPE = new Type<>(
-        Identifier.fromNamespaceAndPath(GymCraft.MODID, "env_tool_screen"));
+        ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "env_tool_screen"));
     public static final StreamCodec<RegistryFriendlyByteBuf, EnvToolScreenPayload> STREAM_CODEC = StreamCodec.of(
         EnvToolScreenPayload::write, EnvToolScreenPayload::read);
 

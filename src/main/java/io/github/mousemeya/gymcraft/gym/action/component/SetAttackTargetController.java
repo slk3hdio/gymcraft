@@ -9,6 +9,8 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 
+import javax.annotation.Nullable;
+
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
@@ -114,7 +116,7 @@ public class SetAttackTargetController extends AbstractActionComponentController
             }
         }
         if (!component.getTargetUuid().isEmpty() && mob.level() instanceof ServerLevel serverLevel) {
-            Entity found = serverLevel.getEntityInAnyDimension(UUID.fromString(component.getTargetUuid()));
+            Entity found = serverLevel.getEntity(UUID.fromString(component.getTargetUuid()));
             if (found instanceof LivingEntity living) {
                 return living;
             }

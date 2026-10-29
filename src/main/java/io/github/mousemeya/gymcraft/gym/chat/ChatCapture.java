@@ -8,7 +8,7 @@ import java.util.Set;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
-import net.minecraft.util.profiling.Profiler;
+import io.github.mousemeya.gymcraft.gym.compat.Profiler;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import net.neoforged.neoforge.event.ServerChatEvent;

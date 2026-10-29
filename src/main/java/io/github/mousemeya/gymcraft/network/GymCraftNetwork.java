@@ -34,7 +34,8 @@ public final class GymCraftNetwork {
     public static void register(RegisterPayloadHandlersEvent event) {
         var main = event.registrar("1");
         // 服务端 → 客户端：打开/刷新环境管理界面，客户端处理器由 EnvToolClient 装配。
-        main.playToClient(EnvToolScreenPayload.TYPE, EnvToolScreenPayload.STREAM_CODEC);
+        main.playToClient(EnvToolScreenPayload.TYPE, EnvToolScreenPayload.STREAM_CODEC, (payload, context) ->
+            context.enqueueWork(() -> io.github.mousemeya.gymcraft.client.EnvToolClient.openOrRefresh(payload)));
         // 客户端 → 服务端：环境管理界面的挂载/保存/移除操作。
         main.playToServer(EnvToolAttachPayload.TYPE, EnvToolAttachPayload.STREAM_CODEC, GymCraftNetwork::handleEnvToolAttach);
         main.playToServer(EnvToolSavePayload.TYPE, EnvToolSavePayload.STREAM_CODEC, GymCraftNetwork::handleEnvToolSave);
@@ -46,7 +47,8 @@ public final class GymCraftNetwork {
             io.github.mousemeya.gymcraft.gym.visualization.VisualizationService.subscribe(
                 (net.minecraft.server.level.ServerPlayer) context.player(), payload));
         // 服务端 → 客户端：只注册协议，帧处理器由客户端装配入口注册。
-        visual.playToClient(VisualFramePayload.TYPE, VisualFramePayload.STREAM_CODEC);
+        visual.playToClient(VisualFramePayload.TYPE, VisualFramePayload.STREAM_CODEC, (payload, context) ->
+            context.enqueueWork(() -> io.github.mousemeya.gymcraft.client.visualization.VisualizationClient.acceptFrame(payload)));
     }
 
     /**
@@ -123,7 +125,7 @@ public final class GymCraftNetwork {
         if (!(context.player() instanceof ServerPlayer player)) {
             return null;
         }
-        if (player.level().getEntity(uuid) instanceof Mob mob) {
+        if (player.serverLevel().getEntity(uuid) instanceof Mob mob) {
             return mob;
         }
         player.sendSystemMessage(Component.translatable("message.gymcraft.target_not_mob", uuid.toString()));

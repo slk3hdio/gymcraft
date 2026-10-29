@@ -41,7 +41,7 @@ public final class FakePlayerBridgeGameTests {
         var menuPlayer = session.agentPlayer().player();
         var menu = menuPlayer.containerMenu;
 
-        try (var transaction = AgentInventoryTransaction.open(mob, EquipmentSlot.MAINHAND.getId())) {
+        try (var transaction = AgentInventoryTransaction.open(mob, EquipmentSlot.MAINHAND.ordinal())) {
             assertTrue(helper, transaction.player() != menuPlayer, "inventory transaction reused menu player");
         }
         var hand = AgentFakePlayerService.borrowHandActor(mob);

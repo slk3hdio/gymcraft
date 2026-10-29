@@ -8,7 +8,7 @@ import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 
@@ -70,7 +70,7 @@ public final class ActionTimeoutGameTests {
     private static final class TimeoutTestEnv extends AbstractMcEnv {
         /** @param mob 受控测试实体 */
         private TimeoutTestEnv(Mob mob) {
-            super(Identifier.fromNamespaceAndPath("gymcraft", "timeout_test"), mob,
+            super(ResourceLocation.fromNamespaceAndPath("gymcraft", "timeout_test"), mob,
                 List.of(ActionComponents.SET_ATTACK_TARGET.get()), List.of());
         }
     }

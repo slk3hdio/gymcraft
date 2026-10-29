@@ -73,11 +73,10 @@ public class SwimMoveControl extends MoveControl {
     }
 
     /** 同步清除两套控制器的移动目标，防止切回地面控制时恢复过期指令。 */
-    @Override
     public void setWait() {
-        super.setWait();
-        this.ground.setWait();
-        this.swimming.setWait();
+        this.operation = Operation.WAIT;
+        io.github.mousemeya.gymcraft.gym.compat.MoveControlBridge.stop(this.ground);
+        io.github.mousemeya.gymcraft.gym.compat.MoveControlBridge.stop(this.swimming);
     }
 
     /**
@@ -157,11 +156,11 @@ public class SwimMoveControl extends MoveControl {
                         // 贴岸/贴障时优先上浮：目标在彼岸时俯仰角近乎水平，
                         // 垂直分量趋零导致爬岸极慢；保持 -60° 兼顾上浮与贴岸推进，
                         // 升到障碍顶后由出水窗口期向目标俯冲带过岸沿。
-                        this.mob.setXRot(this.rotateTowards(this.mob.getXRot(), -60.0F, 5.0F));
+                        this.mob.setXRot(this.rotlerp(this.mob.getXRot(), -60.0F, 5.0F));
                     } else if (Math.abs(yd) > 1.0E-5F || Math.abs(horizontal) > 1.0E-5F) {
                         float xRotD = -((float) (Mth.atan2(yd, horizontal) * 180.0F / (float) Math.PI));
                         xRotD = Mth.clamp(Mth.wrapDegrees(xRotD), -85.0F, 85.0F);
-                        this.mob.setXRot(this.rotateTowards(this.mob.getXRot(), xRotD, 5.0F));
+                        this.mob.setXRot(this.rotlerp(this.mob.getXRot(), xRotD, 5.0F));
                     }
                     float inputScale = Mth.clamp((float) this.speedModifier, 0.0F, 1.0F);
                     float cos = Mth.cos(this.mob.getXRot() * (float) (Math.PI / 180.0));

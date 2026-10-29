@@ -8,7 +8,7 @@ import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.ChunkPos;
@@ -72,12 +72,12 @@ public final class WorldLocationScanner {
             return List.of();
         }
         ChunkPos center = mob.chunkPosition();
-        Registry<Structure> structures = serverLevel.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+        Registry<Structure> structures = serverLevel.registryAccess().registryOrThrow(Registries.STRUCTURE);
         List<ScannedStructure> result = new ArrayList<>();
         for (int dx = -chunkRadius; dx <= chunkRadius; dx++) {
             for (int dz = -chunkRadius; dz <= chunkRadius; dz++) {
-                int chunkX = center.x() + dx;
-                int chunkZ = center.z() + dz;
+                int chunkX = center.x + dx;
+                int chunkZ = center.z + dz;
                 // 未加载区块直接跳过：getChunk 的默认行为会触发加载，必须显式守卫
                 if (!serverLevel.hasChunk(chunkX, chunkZ)) {
                     continue;
@@ -88,7 +88,7 @@ public final class WorldLocationScanner {
                     if (start == null || !start.isValid()) {
                         continue;
                     }
-                    Identifier id = structures.getKey(entry.getKey());
+                    ResourceLocation id = structures.getKey(entry.getKey());
                     if (id == null) {
                         continue;
                     }
@@ -141,7 +141,7 @@ public final class WorldLocationScanner {
             if (!start.isValid()) {
                 continue;
             }
-            Identifier id = serverLevel.registryAccess().lookupOrThrow(Registries.STRUCTURE).getKey(structure);
+            ResourceLocation id = serverLevel.registryAccess().registryOrThrow(Registries.STRUCTURE).getKey(structure);
             return id == null ? NO_STRUCTURE : id.toString();
         }
         return NO_STRUCTURE;

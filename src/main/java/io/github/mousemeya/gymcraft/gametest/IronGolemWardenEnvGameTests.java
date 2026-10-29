@@ -15,11 +15,11 @@ import com.google.protobuf.Message;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.animal.golem.IronGolem;
+import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.monster.warden.Warden;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -153,7 +153,7 @@ public final class IronGolemWardenEnvGameTests {
                     IronGolem golem = helper.getLevel().getEntitiesOfClass(IronGolem.class, arenaBounds(origin)).getFirst();
                     // 傀儡会主动攻击僵尸 Agent；本测试只验证环境逻辑，冻结傀儡避免误杀。
                     golem.setNoAi(true);
-                    golem.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 30.0F);
+                    golem.hurt(helper.getLevel().damageSources().generic(), 30.0F);
                 });
                 golemStep.set(step(env, "gymcraft:noop", ProtoNoop.getDefaultInstance()));
 
@@ -173,8 +173,8 @@ public final class IronGolemWardenEnvGameTests {
                     .setEntity(ProtoUseItemEntityTarget.newBuilder().setEntityId(golem.getId())).build()));
                 healthAfterHeal.set(golem.getHealth());
 
-                runOnServer(helper, () -> helper.kill(helper.getLevel()
-                    .getEntitiesOfClass(Warden.class, arenaBounds(origin)).getFirst()));
+                runOnServer(helper, () -> helper.getLevel()
+                    .getEntitiesOfClass(Warden.class, arenaBounds(origin)).getFirst().kill());
                 victoryStep.set(step(env, "gymcraft:noop", ProtoNoop.getDefaultInstance()));
             } catch (Throwable error) {
                 failure.set(error);
@@ -279,7 +279,7 @@ public final class IronGolemWardenEnvGameTests {
      * @param suffix 测试场景后缀
      * @return 唯一测试 ID
      */
-    private static Identifier testId(String suffix) {
-        return Identifier.fromNamespaceAndPath(GymCraft.MODID, "iron_golem_warden_" + suffix + "_test");
+    private static ResourceLocation testId(String suffix) {
+        return ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "iron_golem_warden_" + suffix + "_test");
     }
 }

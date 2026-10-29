@@ -92,7 +92,7 @@ public class WorldStateObservationCreator extends AbstractObservationComponentCr
             .setDayTime(level.getGameTime())
             .setRaining(level.isRaining())
             .setThundering(level.isThundering())
-            .setDimension(level.dimension().identifier().toString())
+            .setDimension(level.dimension().location().toString())
             .setBiome(location.biome())
             .setStructure(location.structure());
         for (WorldLocationScanner.ScannedStructure nearby : WorldLocationScanner

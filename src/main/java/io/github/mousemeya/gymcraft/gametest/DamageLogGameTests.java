@@ -14,7 +14,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
@@ -63,7 +63,7 @@ public final class DamageLogGameTests {
     public static void healthLogObservesDamageBetweenObservations(GameTestHelper helper) {
         Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(5, 1, 5));
         TestableEnv env = new TestableEnv(
-            Identifier.fromNamespaceAndPath(GymCraft.MODID, "health_log_incremental_test"), mob);
+            ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "health_log_incremental_test"), mob);
         AtomicReference<ResetResponse> initialReset = new AtomicReference<>();
         AtomicReference<StepResponse> damagedStep = new AtomicReference<>();
         AtomicReference<StepResponse> idleStep = new AtomicReference<>();
@@ -150,7 +150,7 @@ public final class DamageLogGameTests {
         // 攻击者：普通无自主 AI 僵尸，仅作为伤害来源实体（mobAttack 的肇事者与直接来源相同）
         Mob attacker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new BlockPos(2, 2, 2));
         TestableEnv env = new TestableEnv(
-            Identifier.fromNamespaceAndPath(GymCraft.MODID, "health_log_source_test"), mob);
+            ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "health_log_source_test"), mob);
         AtomicReference<StepResponse> damagedStep = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread.startVirtualThread(() -> {
@@ -201,7 +201,7 @@ public final class DamageLogGameTests {
             Mob current = env.currentMob();
             // 清无敌帧，保证同一观测间隔内的每次注入都正常生效
             current.invulnerableTime = 0;
-            current.hurtServer((ServerLevel) current.level(), sourceFactory.apply(current.damageSources()), amount);
+            current.hurt(sourceFactory.apply(current.damageSources()), amount);
         });
     }
 
@@ -276,7 +276,7 @@ public final class DamageLogGameTests {
          * @param envTypeId 环境类型注册 ID
          * @param mob 受控 Agent
          */
-        TestableEnv(Identifier envTypeId, Mob mob) {
+        TestableEnv(ResourceLocation envTypeId, Mob mob) {
             super(envTypeId, mob);
         }
 

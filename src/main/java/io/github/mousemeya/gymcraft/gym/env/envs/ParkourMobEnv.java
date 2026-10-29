@@ -7,7 +7,7 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -45,7 +45,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
     private boolean resourceExhausted;
 
     /** 创建跳搭环境并暴露跳跃、放置、移动和空操作组件。 */
-    public ParkourMobEnv(Identifier envTypeId, Mob mob) {
+    public ParkourMobEnv(ResourceLocation envTypeId, Mob mob) {
         this(envTypeId, mob, null);
     }
 
@@ -55,7 +55,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
      * @param mob 服务端世界中的受控 Mob
      * @param scenario 完整场景；null 表示仅捕获 agent，状态范围不含方块及周围实体
      */
-    public ParkourMobEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
+    public ParkourMobEnv(ResourceLocation envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
         this(envTypeId, mob, scenario, new AttachScope(null, false, false));
     }
 
@@ -66,7 +66,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
      * @param scenario 完整场景；null 表示挂载已有 Mob
      * @param scope 挂载作用域（区域与方块/实体捕获开关）
      */
-    public ParkourMobEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
+    public ParkourMobEnv(ResourceLocation envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
         super(envTypeId, mob,
             List.of(ActionComponents.NOOP.get(), ActionComponents.JUMP.get(),
                 ActionComponents.SET_BLOCK.get(), ActionComponents.STEP_MOVE.get()),
@@ -165,7 +165,7 @@ public class ParkourMobEnv extends AbstractMcEnv {
     public static final class Factory implements McEnvFactory {
         /** 创建指定 Mob 的跳搭环境。 */
         @Override
-        public ParkourMobEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
+        public ParkourMobEnv create(ResourceLocation envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
             return new ParkourMobEnv(envTypeId, mob, scenario, scope);
         }
     }

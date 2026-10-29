@@ -17,7 +17,7 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.NumericTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
@@ -26,7 +26,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.PalettedContainer;
-import net.minecraft.world.level.chunk.PalettedContainerFactory;
+import io.github.mousemeya.gymcraft.gym.compat.BlockStateContainers;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 
@@ -83,19 +83,19 @@ public final class ScenarioWorldCodec {
         region.putIntArray("min_offset", new int[]{min.getX() - origin.getX(), min.getY() - origin.getY(), min.getZ() - origin.getZ()});
         region.putIntArray("size", new int[]{box.getXSpan(), box.getYSpan(), box.getZSpan()});
         definition.put("region", region);
-        PalettedContainerFactory factory = PalettedContainerFactory.create(level.registryAccess());
+        BlockStateContainers factory = BlockStateContainers.create(level.registryAccess());
         Map<Long, PalettedContainer<BlockState>> sections = new LinkedHashMap<>();
         for (ChunkPos pos : requiredChunks(definition)) {
             CompoundTag chunk = NbtUtils.addCurrentDataVersion(new CompoundTag());
-            chunk.putInt("xPos", pos.x());
-            chunk.putInt("zPos", pos.z());
+            chunk.putInt("xPos", pos.x);
+            chunk.putInt("zPos", pos.z);
             chunk.put("sections", new ListTag());
             chunk.put("block_entities", new ListTag());
             chunk.put("entities", new ListTag());
             chunks.put(pos, chunk);
             if (captureBlocks) {
                 for (int y = 0; y <= (box.getYSpan() - 1) >> 4; y++) {
-                    sections.put(SectionPos.asLong(pos.x(), y, pos.z()), factory.createForBlockStates());
+                    sections.put(SectionPos.asLong(pos.x, y, pos.z), factory.createForBlockStates());
                 }
             }
         }
@@ -111,14 +111,14 @@ public final class ScenarioWorldCodec {
                 section.putInt("Y", pos.y());
                 section.put("block_states", factory.blockStatesContainerCodec().encodeStart(NbtOps.INSTANCE, container)
                     .getOrThrow(message -> invalid("Cannot encode block states: " + message)));
-                chunks.get(new ChunkPos(pos.x(), pos.z())).getListOrEmpty("sections").add(section);
+                io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(chunks.get(new ChunkPos(pos.getX(), pos.getZ())), "sections").add(section);
             });
             // 方块实体与区域实体按局部区块归属；存档中不复用实体 UUID。
             state.blocks().blockEntities().forEach((key, data) -> {
                 BlockPos local = BlockPos.of(key).subtract(min);
                 CompoundTag nbt = data.copy();
                 putBlockPos(nbt, local);
-                chunks.get(ChunkPos.containing(local)).getListOrEmpty("block_entities").add(nbt);
+                io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(chunks.get(new ChunkPos(local)), "block_entities").add(nbt);
             });
         }
         if (state.entities() != null) {
@@ -127,7 +127,7 @@ public final class ScenarioWorldCodec {
                     CompoundTag nbt = data.copy();
                     nbt.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(type).toString());
                     translateEntity(nbt, -min.getX(), -min.getY(), -min.getZ());
-                    chunks.get(ChunkPos.containing(entityBlockPos(nbt))).getListOrEmpty("entities").add(nbt);
+                    io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(chunks.get(new ChunkPos(entityBlockPos(nbt))), "entities").add(nbt);
                 }
             });
         }
@@ -154,14 +154,14 @@ public final class ScenarioWorldCodec {
             return EnvStateSnapshot.of(agent, null, null, null);
         }
         boolean captureBlocks = booleanValue(required(definition, "capture_blocks"));
-        int[] size = vector(definition.getCompoundOrEmpty("region"), "size");
-        int[] offset = vector(definition.getCompoundOrEmpty("region"), "min_offset");
+        int[] size = vector(definition.getCompound("region"), "size");
+        int[] offset = vector(definition.getCompound("region"), "min_offset");
         BlockPos min = anchorMob.blockPosition().offset(offset[0], offset[1], offset[2]);
         BoundingBox box = clipRegion(level, min, size);
         if (box == null) {
             return EnvStateSnapshot.of(agent, null, null, null);
         }
-        PalettedContainerFactory factory = PalettedContainerFactory.create(level.registryAccess());
+        BlockStateContainers factory = BlockStateContainers.create(level.registryAccess());
         List<RegionBlockSnapshot.BlockEntry> blocks = new ArrayList<>();
         List<RegionEntitySnapshot.EntityEntry> entities = new ArrayList<>();
         for (var entry : loaded.chunks().entrySet()) {
@@ -179,10 +179,10 @@ public final class ScenarioWorldCodec {
                         .getOrThrow(message -> invalid("Invalid block states at " + cp + "/" + sy + ": " + message));
                     containers.put(sy, container);
                     for (int y = 0; y < 16 && (sy << 4) + y < size[1]; y++) {
-                        for (int z = 0; z < 16 && (cp.z() << 4) + z < size[2]; z++) {
-                            for (int x = 0; x < 16 && (cp.x() << 4) + x < size[0]; x++) {
+                        for (int z = 0; z < 16 && (cp.z << 4) + z < size[2]; z++) {
+                            for (int x = 0; x < 16 && (cp.x << 4) + x < size[0]; x++) {
                                 // 始终按原始区域最小角平移，裁剪不改变保留内容的相对布局。
-                                BlockPos target = min.offset((cp.x() << 4) + x, (sy << 4) + y, (cp.z() << 4) + z);
+                                BlockPos target = min.offset((cp.x << 4) + x, (sy << 4) + y, (cp.z << 4) + z);
                                 if (!box.isInside(target)) { continue; }
                                 BlockState block = container.get(x, y, z);
                                 if (block != Blocks.AIR.defaultBlockState()) {
@@ -215,7 +215,7 @@ public final class ScenarioWorldCodec {
                 translateEntity(nbt, min.getX(), min.getY(), min.getZ());
                 ListTag pos = list(nbt, "Pos");
                 if (!box.isInside(entityBlockPos(nbt))
-                    || !level.getWorldBorder().isWithinBounds(pos.getDoubleOr(0, 0), pos.getDoubleOr(2, 0))) {
+                    || !level.getWorldBorder().isWithinBounds(io.github.mousemeya.gymcraft.gym.compat.NbtValues.decimal(pos, 0, 0), io.github.mousemeya.gymcraft.gym.compat.NbtValues.decimal(pos, 2, 0))) {
                     continue;
                 }
                 entities.add(new RegionEntitySnapshot.EntityEntry(entityType, nbt));
@@ -223,7 +223,7 @@ public final class ScenarioWorldCodec {
         }
         return EnvStateSnapshot.of(agent, box,
             captureBlocks ? RegionBlockSnapshot.of(factory, box, blocks) : null,
-            definition.getBooleanOr("manage_entities", false)
+            io.github.mousemeya.gymcraft.gym.compat.NbtValues.bool(definition, "manage_entities", false)
                 ? RegionEntitySnapshot.of(RegionEntitySnapshot.toAabb(box), anchorMob.getUUID(), entities) : null);
     }
 
@@ -240,11 +240,11 @@ public final class ScenarioWorldCodec {
     private static BoundingBox clipRegion(ServerLevel level, BlockPos min, int[] size) {
         var border = level.getWorldBorder();
         long minX = Math.max(min.getX(), Math.max(-Level.MAX_LEVEL_SIZE, (long) Math.ceil(border.getMinX())));
-        long minY = Math.max(min.getY(), level.getMinY());
+        long minY = Math.max(min.getY(), level.getMinBuildHeight());
         long minZ = Math.max(min.getZ(), Math.max(-Level.MAX_LEVEL_SIZE, (long) Math.ceil(border.getMinZ())));
         long maxX = Math.min((long) min.getX() + size[0] - 1,
             Math.min(Level.MAX_LEVEL_SIZE - 1, (long) Math.ceil(border.getMaxX()) - 1));
-        long maxY = Math.min((long) min.getY() + size[1] - 1, level.getMaxY() - 1);
+        long maxY = Math.min((long) min.getY() + size[1] - 1, level.getMaxBuildHeight() - 1);
         long maxZ = Math.min((long) min.getZ() + size[2] - 1,
             Math.min(Level.MAX_LEVEL_SIZE - 1, (long) Math.ceil(border.getMaxZ()) - 1));
         if (minX > maxX || minY > maxY || minZ > maxZ) { return null; }
@@ -262,10 +262,10 @@ public final class ScenarioWorldCodec {
         }
         if (expected.isEmpty()) { return; }
         boolean captureBlocks = booleanValue(required(definition, "capture_blocks"));
-        int[] size = vector(definition.getCompoundOrEmpty("region"), "size");
+        int[] size = vector(definition.getCompound("region"), "size");
         for (ChunkPos pos : expected) {
             CompoundTag chunk = chunks.get(pos);
-            if (integer(chunk, "xPos") != pos.x() || integer(chunk, "zPos") != pos.z()) {
+            if (integer(chunk, "xPos") != pos.x || integer(chunk, "zPos") != pos.z) {
                 throw invalid("Chunk coordinates do not match MCA slot: " + pos);
             }
             boolean[] seen = new boolean[((size[1] - 1) >> 4) + 1];
@@ -287,12 +287,12 @@ public final class ScenarioWorldCodec {
             for (Tag tag : list(chunk, "block_entities")) {
                 CompoundTag nbt = compound(tag);
                 requireLocal(new BlockPos(integer(nbt, "x"), integer(nbt, "y"), integer(nbt, "z")), size, pos);
-                Identifier.parse(string(nbt, "id"));
+                ResourceLocation.parse(string(nbt, "id"));
             }
             for (Tag tag : list(chunk, "entities")) {
                 CompoundTag nbt = compound(tag);
                 requireLocal(entityBlockPos(nbt), size, pos);
-                Identifier.parse(string(nbt, "id"));
+                ResourceLocation.parse(string(nbt, "id"));
             }
         }
     }
@@ -301,8 +301,8 @@ public final class ScenarioWorldCodec {
     public static void validateDefinition(CompoundTag definition) {
         if (integer(definition, "version") != FORMAT_VERSION) { throw invalid("Unsupported scenario format version"); }
         integer(definition, "DataVersion");
-        Identifier.parse(envType(definition));
-        Identifier.parse(string(compound(required(definition, "agent")), "id"));
+        ResourceLocation.parse(envType(definition));
+        ResourceLocation.parse(string(compound(required(definition, "agent")), "id"));
         booleanValue(required(definition, "manage_entities"));
         options(definition);
         if (definition.contains("region")) {
@@ -345,7 +345,7 @@ public final class ScenarioWorldCodec {
     /** 查找实体注册类型；未知类型拒绝加载。 */
     public static EntityType<?> entityType(CompoundTag nbt) {
         String id = string(nbt, "id");
-        return BuiltInRegistries.ENTITY_TYPE.get(Identifier.parse(id)).map(value -> value.value())
+        return BuiltInRegistries.ENTITY_TYPE.getOptional(ResourceLocation.parse(id))
             .orElseThrow(() -> invalid("Unknown entity type: " + id));
     }
 
@@ -387,7 +387,7 @@ public final class ScenarioWorldCodec {
     /** 递归解码字符串键映射；返回允许 null 值的不可变映射。 */
     private static Map<String, Object> decodeMap(CompoundTag tag) {
         Map<String, Object> result = new LinkedHashMap<>();
-        tag.keySet().forEach(key -> result.put(key, decodeValue(compound(required(tag, key)))));
+        tag.getAllKeys().forEach(key -> result.put(key, decodeValue(compound(required(tag, key)))));
         return Collections.unmodifiableMap(result);
     }
 
@@ -398,7 +398,10 @@ public final class ScenarioWorldCodec {
         Tag value = required(tag, "value");
         return switch (type) {
             case "boolean" -> booleanValue(value);
-            case "string" -> tag.getString("value").orElseThrow(() -> invalid("Invalid string option"));
+            case "string" -> {
+                if (!(value instanceof net.minecraft.nbt.StringTag string)) { throw invalid("Invalid string option"); }
+                yield string.getAsString();
+            }
             case "byte", "short", "int", "long", "float", "double" -> optionNumber(value, type);
             case "list" -> {
                 List<Object> result = new ArrayList<>();
@@ -424,7 +427,7 @@ public final class ScenarioWorldCodec {
         if (!(value instanceof NumericTag number) || value.getId() != expected) {
             throw invalid("Option payload does not match number type: " + type);
         }
-        return number.box();
+        return number.getAsNumber();
     }
 
     /** 校验原版方块调色板与打包数组，拒绝原版宽松解析可能回退为空气的损坏内容。 */
@@ -435,13 +438,14 @@ public final class ScenarioWorldCodec {
         }
         for (Tag tag : palette) {
             CompoundTag entry = compound(tag);
-            Identifier.parse(string(entry, "Name"));
+            ResourceLocation.parse(string(entry, "Name"));
             // 直接校验元素 Codec，避免 PalettedContainer 的默认空气部分结果掩盖错误。
             BlockState.CODEC.parse(NbtOps.INSTANCE, entry)
                 .getOrThrow(message -> invalid("Invalid palette entry: " + message));
         }
         if (palette.size() > 1) {
-            long[] data = states.getLongArray("data").orElseThrow(() -> invalid("Missing block state data"));
+            if (!(required(states, "data") instanceof net.minecraft.nbt.LongArrayTag array)) { throw invalid("Invalid block state data type"); }
+            long[] data = array.getAsLongArray();
             int bits = Math.max(4, Integer.SIZE - Integer.numberOfLeadingZeros(palette.size() - 1));
             int perLong = Long.SIZE / bits;
             if (data.length != (4096 + perLong - 1) / perLong) {
@@ -460,10 +464,10 @@ public final class ScenarioWorldCodec {
 
     /** 读取严格的 NBT 布尔值；必须为 byte 0 或 1，返回 Java Boolean。 */
     private static boolean booleanValue(Tag value) {
-        if (!(value instanceof ByteTag number) || (number.byteValue() != 0 && number.byteValue() != 1)) {
+        if (!(value instanceof ByteTag number) || (number.getAsByte() != 0 && number.getAsByte() != 1)) {
             throw invalid("Boolean must be byte 0 or 1");
         }
-        return number.byteValue() == 1;
+        return number.getAsByte() == 1;
     }
 
     /** 读取实体位置的方块坐标；三个坐标必须为有限数字。 */
@@ -472,7 +476,8 @@ public final class ScenarioWorldCodec {
         if (pos.size() != 3) { throw invalid("Entity Pos must have three coordinates"); }
         double[] values = new double[3];
         for (int i = 0; i < 3; i++) {
-            values[i] = pos.getDouble(i).orElseThrow(() -> invalid("Invalid entity coordinate"));
+            if (!(pos.get(i) instanceof NumericTag number)) { throw invalid("Invalid entity coordinate"); }
+            values[i] = number.getAsDouble();
             if (!Double.isFinite(values[i])) { throw invalid("Non-finite entity coordinate"); }
         }
         return BlockPos.containing(values[0], values[1], values[2]);
@@ -482,7 +487,7 @@ public final class ScenarioWorldCodec {
     private static void translateEntity(CompoundTag nbt, double dx, double dy, double dz) {
         entityBlockPos(nbt);
         ListTag pos = list(nbt, "Pos");
-        putEntityPos(nbt, pos.getDoubleOr(0, 0) + dx, pos.getDoubleOr(1, 0) + dy, pos.getDoubleOr(2, 0) + dz);
+        putEntityPos(nbt, io.github.mousemeya.gymcraft.gym.compat.NbtValues.decimal(pos, 0, 0) + dx, io.github.mousemeya.gymcraft.gym.compat.NbtValues.decimal(pos, 1, 0) + dy, io.github.mousemeya.gymcraft.gym.compat.NbtValues.decimal(pos, 2, 0) + dz);
         nbt.remove("UUID");
         if (nbt.contains("Passengers")) {
             for (Tag passenger : list(nbt, "Passengers")) { translateEntity(compound(passenger), dx, dy, dz); }
@@ -504,14 +509,15 @@ public final class ScenarioWorldCodec {
     /** 校验局部位置在区域内且归属当前区块。 */
     private static void requireLocal(BlockPos pos, int[] size, ChunkPos chunk) {
         if (pos.getX() < 0 || pos.getY() < 0 || pos.getZ() < 0 || pos.getX() >= size[0]
-            || pos.getY() >= size[1] || pos.getZ() >= size[2] || !ChunkPos.containing(pos).equals(chunk)) {
+            || pos.getY() >= size[1] || pos.getZ() >= size[2] || !new ChunkPos(pos).equals(chunk)) {
             throw invalid("Entity outside scenario chunk or region: " + pos);
         }
     }
 
     /** 读取必需的三元整型数组；返回尺寸或偏移。 */
     private static int[] vector(CompoundTag tag, String key) {
-        int[] result = tag.getIntArray(key).orElseThrow(() -> invalid("Missing vector: " + key));
+        if (!(required(tag, key) instanceof net.minecraft.nbt.IntArrayTag array)) { throw invalid("Invalid vector: " + key); }
+        int[] result = array.getAsIntArray();
         if (result.length != 3) { throw invalid("Invalid vector: " + key); }
         return result;
     }
@@ -531,17 +537,20 @@ public final class ScenarioWorldCodec {
 
     /** 读取必需列表；不将损坏或缺失列表视为空内容。 */
     private static ListTag list(CompoundTag tag, String key) {
-        return tag.getList(key).orElseThrow(() -> invalid("Missing list: " + key));
+        if (!(required(tag, key) instanceof ListTag list)) { throw invalid("Invalid list: " + key); }
+        return list;
     }
 
     /** 读取必需整数；返回已校验数值。 */
     private static int integer(CompoundTag tag, String key) {
-        return tag.getInt(key).orElseThrow(() -> invalid("Missing integer: " + key));
+        if (!(required(tag, key) instanceof net.minecraft.nbt.IntTag number)) { throw invalid("Invalid integer: " + key); }
+        return number.getAsInt();
     }
 
     /** 读取必需非空字符串；返回字段内容。 */
     private static String string(CompoundTag tag, String key) {
-        String value = tag.getString(key).orElseThrow(() -> invalid("Missing string: " + key));
+        if (!(required(tag, key) instanceof net.minecraft.nbt.StringTag string)) { throw invalid("Invalid string: " + key); }
+        String value = string.getAsString();
         if (value.isEmpty()) { throw invalid("Empty string: " + key); }
         return value;
     }

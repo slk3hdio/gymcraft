@@ -12,7 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
-import net.minecraft.util.profiling.Profiler;
+import io.github.mousemeya.gymcraft.gym.compat.Profiler;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoActionFeedback;
@@ -95,7 +95,7 @@ public class ObservationComposer {
         var headerBuilder = ProtoObservationHeader.newBuilder()
             .setSchemaVersion(1)
             .setGameTick(mob.level().getGameTime())
-            // .setDimension(mob.level().dimension().identifier().toString())
+            // .setDimension(mob.level().dimension().location().toString())
             .setAgentId(mob.getUUID().toString());
         if (lastActionState != null) {
             headerBuilder.setLastActionStatus(lastActionState.status().name());

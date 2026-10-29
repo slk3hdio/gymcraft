@@ -10,7 +10,7 @@ import io.github.mousemeya.gymcraft.network.EnvToolScreenPayload;
 import io.github.mousemeya.gymcraft.registry.RegistryKeys;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -153,7 +153,7 @@ public class EnvToolItem extends Item {
      */
     private static List<String> getRegisteredEnvTypes() {
         List<String> envTypes = new ArrayList<>();
-        for (Identifier id : RegistryKeys.ENV_FACTORIES.keySet()) {
+        for (ResourceLocation id : RegistryKeys.ENV_FACTORIES.keySet()) {
             envTypes.add(id.toString());
         }
         envTypes.sort(Comparator.naturalOrder());

@@ -9,7 +9,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.visualization.VisualizationService;
-import net.minecraft.util.profiling.Profiler;
+import io.github.mousemeya.gymcraft.gym.compat.Profiler;
 import net.minecraft.world.entity.Mob;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

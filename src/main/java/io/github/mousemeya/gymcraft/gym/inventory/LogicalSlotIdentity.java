@@ -18,9 +18,9 @@ public sealed interface LogicalSlotIdentity {
     /**
      * Mob 装备槽身份：由 Mob UUID 与 {@link EquipmentSlot} 唯一确定。
      * <p>
-     * 例如 {@code HorseInventoryMenu} 的 SADDLE/BODY 槽由 {@code Mob#createEquipmentSlotContainer}
-     * 创建包装 {@code Container}，但最终读写的仍是同一匹马的装备槽，
-     * 必须规范化为本身份并复用背包 slot_id，不分配第二个菜单 slot_id。
+     * 例如 1.21.1 {@code HorseInventoryMenu} 的 BODY 槽由
+     * {@code AbstractHorse#getBodyArmorAccess()} 提供独立 {@code Container}，但最终读写的
+     * 仍是同一匹马的 BODY 装备槽，必须规范化为本身份并复用 slot_id 6。
      * </p>
      *
      * @param mobId 所属 Mob 的 UUID

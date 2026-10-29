@@ -6,12 +6,12 @@ import java.util.ArrayList;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 
 /** 有界的服务端调试消息；独立于 RL protobuf 协议，双方使用相同版本。 */
 public record VisualFramePayload(VisualFrame frame) implements CustomPacketPayload {
-    public static final Type<VisualFramePayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath("gymcraft", "visual_frame"));
+    public static final Type<VisualFramePayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath("gymcraft", "visual_frame"));
     public static final StreamCodec<RegistryFriendlyByteBuf, VisualFramePayload> STREAM_CODEC = StreamCodec.of(
         VisualFramePayload::write, VisualFramePayload::read);
 

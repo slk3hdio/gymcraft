@@ -101,7 +101,7 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
         if (!(mob.level() instanceof ServerLevel serverLevel)) {
             return ActionApplyResult.none(ActionState.failed("agent is not in a server level", details));
         }
-        boolean attacked = mob.doHurtTarget(serverLevel, target);
+        boolean attacked = mob.doHurtTarget(target);
         if (attacked) {
             mob.swing(InteractionHand.MAIN_HAND);
         }

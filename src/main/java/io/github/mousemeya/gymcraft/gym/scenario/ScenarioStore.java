@@ -17,7 +17,7 @@ import java.util.stream.Stream;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.world.level.ChunkPos;
@@ -160,7 +160,7 @@ public final class ScenarioStore {
         try {
             CompoundTag definition;
             try (var input = definitionResource.get().open()) {
-                definition = NbtIo.readCompressed(input, NbtAccounter.uncompressedQuota());
+                definition = NbtIo.readCompressed(input, NbtAccounter.unlimitedHeap());
             }
             ScenarioWorldCodec.validateDefinition(definition);
             if (ScenarioWorldCodec.requiredChunks(definition).isEmpty()) {
@@ -228,7 +228,7 @@ public final class ScenarioStore {
         }
         String prefix = ASSET_DIR + "/";
         String suffix = "/" + DEFINITION_FILE;
-        for (Identifier id : level.getServer().getResourceManager().listResources(ASSET_DIR,
+        for (ResourceLocation id : level.getServer().getResourceManager().listResources(ASSET_DIR,
             id -> id.getNamespace().equals(GymCraft.MODID)
                 && id.getPath().startsWith(prefix) && id.getPath().endsWith(suffix)
                 && id.getPath().length() > prefix.length() + suffix.length()).keySet()) {
@@ -255,7 +255,7 @@ public final class ScenarioStore {
     /** 读取目录定义，再经相同 MCA 路径读取世界；返回完整场景。 */
     private static LoadedScenario readDirectory(Path dir) throws IOException {
         if (!Files.isRegularFile(dir.resolve(DEFINITION_FILE))) { throw new IOException("Scenario not found: " + dir.getFileName()); }
-        CompoundTag definition = NbtIo.readCompressed(dir.resolve(DEFINITION_FILE), NbtAccounter.uncompressedQuota());
+        CompoundTag definition = NbtIo.readCompressed(dir.resolve(DEFINITION_FILE), NbtAccounter.unlimitedHeap());
         return readChunks(dir, definition);
     }
 
@@ -306,8 +306,8 @@ public final class ScenarioStore {
     }
 
     /** 返回指定场景文件的数据包资源 ID。 */
-    private static Identifier assetId(String name, String file) {
-        return Identifier.fromNamespaceAndPath(GymCraft.MODID, ASSET_DIR + "/" + name + "/" + file);
+    private static ResourceLocation assetId(String name, String file) {
+        return ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, ASSET_DIR + "/" + name + "/" + file);
     }
 
     /** 删除指定临时目录或已校验场景目录；不跟随符号链接。 */

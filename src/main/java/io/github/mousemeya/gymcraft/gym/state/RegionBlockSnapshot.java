@@ -15,7 +15,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.PalettedContainerFactory;
+import io.github.mousemeya.gymcraft.gym.compat.BlockStateContainers;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
@@ -70,7 +70,7 @@ public final class RegionBlockSnapshot {
                 LevelChunk chunk = level.getChunk(chunkX, chunkZ);
                 for (int sectionY = minSectionY; sectionY <= maxSectionY; sectionY++) {
                     LevelChunkSection section = chunk.getSection(level.getSectionIndexFromSectionY(sectionY));
-                    sections.put(SectionPos.asLong(chunkX, sectionY, chunkZ), section.copy());
+                    sections.put(SectionPos.asLong(chunkX, sectionY, chunkZ), new LevelChunkSection(section.getStates().copy(), section.getBiomes()));
                 }
                 // 方块实体从区块的稀疏表按键过滤，避免逐格 getBlockEntity 全扫描
                 for (BlockPos bePos : chunk.getBlockEntitiesPos()) {
@@ -103,14 +103,14 @@ public final class RegionBlockSnapshot {
      * 多出来的方块会被恢复流程清除。
      * </p>
      *
-     * @param containerFactory 区块段存储工厂（{@code PalettedContainerFactory.create(registryAccess)}）
+     * @param containerFactory 区块段存储工厂（{@code BlockStateContainers.create(registryAccess)}）
      * @param region 闭区间方块区域
      * @param blocks 稀疏方块条目（绝对坐标，必须落在区域内）
      * @return 区域快照
      * @throws IllegalArgumentException 条目坐标落在区域外时
      */
     public static RegionBlockSnapshot of(
-        PalettedContainerFactory containerFactory,
+        BlockStateContainers containerFactory,
         BoundingBox region,
         List<BlockEntry> blocks
     ) {
@@ -120,7 +120,7 @@ public final class RegionBlockSnapshot {
         for (int chunkX = region.minX() >> 4; chunkX <= region.maxX() >> 4; chunkX++) {
             for (int chunkZ = region.minZ() >> 4; chunkZ <= region.maxZ() >> 4; chunkZ++) {
                 for (int sectionY = minSectionY; sectionY <= maxSectionY; sectionY++) {
-                    sections.put(SectionPos.asLong(chunkX, sectionY, chunkZ), new LevelChunkSection(containerFactory));
+                    sections.put(SectionPos.asLong(chunkX, sectionY, chunkZ), containerFactory.createSection());
                 }
             }
         }
@@ -341,11 +341,7 @@ public final class RegionBlockSnapshot {
         }
         CompoundTag currentData = current.saveWithFullMetadata(level.registryAccess());
         if (!currentData.equals(baselineData)) {
-            current.loadWithComponents(
-                net.minecraft.world.level.storage.TagValueInput.create(
-                    net.minecraft.util.ProblemReporter.DISCARDING,
-                    level.registryAccess(),
-                    baselineData.copy()));
+            current.loadWithComponents(baselineData.copy(), level.registryAccess());
             current.setChanged();
         }
     }

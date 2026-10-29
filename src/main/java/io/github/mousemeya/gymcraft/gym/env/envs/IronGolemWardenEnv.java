@@ -9,16 +9,15 @@ import java.util.UUID;
 import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Unit;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.animal.golem.IronGolem;
+import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.warden.Warden;
@@ -78,7 +77,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      * @param envTypeId 环境类型注册 ID
      * @param mob 受控 Mob
      */
-    public IronGolemWardenEnv(Identifier envTypeId, Mob mob) {
+    public IronGolemWardenEnv(ResourceLocation envTypeId, Mob mob) {
         this(envTypeId, mob, null);
     }
 
@@ -88,7 +87,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      * @param mob 服务端世界中的受控 Mob
      * @param scenario 完整场景；null 表示仅捕获 agent，状态范围不含方块及周围实体
      */
-    public IronGolemWardenEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
+    public IronGolemWardenEnv(ResourceLocation envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario) {
         this(envTypeId, mob, scenario, new AttachScope(null, false, false));
     }
 
@@ -99,7 +98,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
      * @param scenario 完整场景；null 表示挂载已有 Mob
      * @param scope 挂载作用域（区域与方块/实体捕获开关）
      */
-    public IronGolemWardenEnv(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
+    public IronGolemWardenEnv(ResourceLocation envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
         super(
             envTypeId,
             mob,
@@ -614,7 +613,7 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
          * @return 新环境实例
          */
         @Override
-        public IronGolemWardenEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
+        public IronGolemWardenEnv create(ResourceLocation envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
             return new IronGolemWardenEnv(envTypeId, mob, scenario, scope);
         }
     }

@@ -24,14 +24,14 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
-import net.minecraft.commands.arguments.IdentifierArgument;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.commands.arguments.blocks.BlockPredicateArgument;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
@@ -70,7 +70,7 @@ public final class GymCraftCommands {
     /** create 的环境类型补全：来自环境工厂注册表。 */
     private static final SuggestionProvider<CommandSourceStack> ENV_TYPE_SUGGESTIONS = (context, builder) ->
         SharedSuggestionProvider.suggest(
-            RegistryKeys.ENV_FACTORIES.keySet().stream().map(Identifier::toString).toList(),
+            RegistryKeys.ENV_FACTORIES.keySet().stream().map(ResourceLocation::toString).toList(),
             builder);
 
     /** 禁止实例化仅包含静态指令注册逻辑的工具类。 */
@@ -111,16 +111,16 @@ public final class GymCraftCommands {
         var west = Commands.argument("west", IntegerArgumentType.integer(0, AttachScope.MAX_RADIUS))
                 .then(east);
         dispatcher.register(Commands.literal("gymcraft")
-                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("env")
                         .then(Commands.literal("create")
                                 .then(Commands.argument("target", EntityArgument.entities())
                                         .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"), defaultType,
                                                 0, 0, 0, 0, 0, 0, true, true))
-                                        .then(Commands.argument("type", IdentifierArgument.id())
+                                        .then(Commands.argument("type", ResourceLocationArgument.id())
                                                 .suggests(ENV_TYPE_SUGGESTIONS)
                                                 .executes(ctx -> create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
-                                                        IdentifierArgument.getId(ctx, "type").toString(), 0, 0, 0, 0, 0, 0, true, true))
+                                                        ResourceLocationArgument.getId(ctx, "type").toString(), 0, 0, 0, 0, 0, 0, true, true))
                                                 .then(west))))
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("target", EntityArgument.entities())
@@ -170,7 +170,7 @@ public final class GymCraftCommands {
     private static int create(CommandContext<CommandSourceStack> ctx, int down, int up,
             boolean captureBlocks, boolean captureEntities) throws CommandSyntaxException {
         return create(ctx.getSource(), EntityArgument.getEntities(ctx, "target"),
-            IdentifierArgument.getId(ctx, "type").toString(),
+            ResourceLocationArgument.getId(ctx, "type").toString(),
             IntegerArgumentType.getInteger(ctx, "west"), IntegerArgumentType.getInteger(ctx, "east"),
             IntegerArgumentType.getInteger(ctx, "north"), IntegerArgumentType.getInteger(ctx, "south"),
             down, up, captureBlocks, captureEntities);
@@ -207,8 +207,8 @@ public final class GymCraftCommands {
             }
             try {
                 // -1 = 完整世界高度：按该 Mob 当前位置换算为到世界边界的距离
-                int downDist = down < 0 ? mob.blockPosition().getY() - mob.level().getMinY() : down;
-                int upDist = up < 0 ? mob.level().getMaxY() - 1 - mob.blockPosition().getY() : up;
+                int downDist = down < 0 ? mob.blockPosition().getY() - mob.level().getMinBuildHeight() : down;
+                int upDist = up < 0 ? mob.level().getMaxBuildHeight() - 1 - mob.blockPosition().getY() : up;
                 EnvManager.attach(envType, mob,
                     AttachScope.around(mob, west, east, downDist, upDist, north, south, captureBlocks, captureEntities));
             } catch (IllegalArgumentException | IllegalStateException e) {

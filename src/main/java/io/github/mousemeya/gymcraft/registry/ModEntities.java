@@ -1,7 +1,7 @@
 package io.github.mousemeya.gymcraft.registry;
 
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
@@ -31,8 +31,7 @@ public final class ModEntities {
             .sized(0.6F, 1.8F)
             .eyeHeight(1.62F)
             .clientTrackingRange(10)
-            .build(ResourceKey.create(Registries.ENTITY_TYPE,
-                Identifier.fromNamespaceAndPath(GymCraft.MODID, "player_sim")))
+            .build("gymcraft:player_sim")
     );
 
     private ModEntities() {

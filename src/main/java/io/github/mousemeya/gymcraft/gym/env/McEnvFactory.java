@@ -2,7 +2,7 @@ package io.github.mousemeya.gymcraft.gym.env;
 
 import javax.annotation.Nullable;
 
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Mob;
 
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
@@ -26,5 +26,5 @@ public interface McEnvFactory {
      * @param scope 挂载作用域；scenario 非空时被忽略
      * @return 环境实例，由 EnvManager 注册并管理生命周期
      */
-    McEnv create(Identifier envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope);
+    McEnv create(ResourceLocation envTypeId, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope);
 }

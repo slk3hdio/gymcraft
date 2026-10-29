@@ -7,24 +7,23 @@ import java.util.UUID;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.EntityHitResult;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlersEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.common.NeoForge;
 import org.lwjgl.glfw.GLFW;
 
 /** 可视化客户端装配入口；只由物理客户端入口调用，不被公共网络处理器引用。 */
 public final class VisualizationClient {
     /** 按键分类；显示名称取自语言文件。 */
-    private static final KeyMapping.Category CATEGORY = new KeyMapping.Category(Identifier.fromNamespaceAndPath("gymcraft", "visualization"));
+    private static final String CATEGORY = "key.categories.gymcraft.visualization";
     /** 选择/取消 Agent 可视化（默认 V）。 */
     private static final KeyMapping SELECT = new KeyMapping("key.gymcraft.visual_select", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_V, CATEGORY);
     /** 打开可视化图层设置界面（默认 O）。 */
@@ -41,7 +40,6 @@ public final class VisualizationClient {
      */
     public static void register(IEventBus bus) {
         bus.addListener(VisualizationClient::registerKeys);
-        bus.addListener(VisualizationClient::registerPayloads);
         bus.addListener(VisualizationClient::registerHud);
         NeoForge.EVENT_BUS.addListener(VisualizationClient::tick);
         NeoForge.EVENT_BUS.addListener(VisualizationRenderer::extract);
@@ -49,7 +47,6 @@ public final class VisualizationClient {
 
     /** @param event 按键注册事件 */
     private static void registerKeys(RegisterKeyMappingsEvent event) {
-        event.registerCategory(CATEGORY);
         event.register(SELECT);
         event.register(SETTINGS);
     }
@@ -57,16 +54,15 @@ public final class VisualizationClient {
     /**
      * 注册服务端 → 客户端的帧载荷处理器；在客户端主线程写入共享缓存。
      *
-     * @param event 客户端处理器注册事件
+     * @param payload 已解码的可视化帧
      */
-    private static void registerPayloads(RegisterClientPayloadHandlersEvent event) {
-        event.register(VisualFramePayload.TYPE, (payload, context) ->
-            VisualizationClientState.INSTANCE.accept(payload.frame(), System.nanoTime()));
+    public static void acceptFrame(VisualFramePayload payload) {
+        VisualizationClientState.INSTANCE.accept(payload.frame(), System.nanoTime());
     }
 
     /** @param event GUI 图层注册事件 */
     private static void registerHud(RegisterGuiLayersEvent event) {
-        event.registerAboveAll(Identifier.fromNamespaceAndPath("gymcraft", "visualization"), VisualizationClient::hud);
+        event.registerAboveAll(ResourceLocation.fromNamespaceAndPath("gymcraft", "visualization"), VisualizationClient::hud);
     }
 
     /**
@@ -85,7 +81,7 @@ public final class VisualizationClient {
             state.clear();
             return;
         }
-        if (!state.dimension().isEmpty() && !minecraft.level.dimension().identifier().toString().equals(state.dimension())) cancel();
+        if (!state.dimension().isEmpty() && !minecraft.level.dimension().location().toString().equals(state.dimension())) cancel();
         if (!VisualizationConfig.ENABLED.get() && state.agent() != null) cancel();
         state.feedback(System.nanoTime());
         while (SETTINGS.consumeClick()) {
@@ -104,7 +100,7 @@ public final class VisualizationClient {
             if (mob.getUUID().equals(state.agent())) { cancel(); continue; }
             UUID request = UUID.randomUUID();
             state.begin(request, mob.getUUID());
-            ClientPacketDistributor.sendToServer(new VisualSubscribePayload(request, mob.getUUID(), false));
+            PacketDistributor.sendToServer(new VisualSubscribePayload(request, mob.getUUID(), false));
         }
     }
 
@@ -114,7 +110,7 @@ public final class VisualizationClient {
         UUID agent = state.agent();
         state.clear();
         if (agent != null && Minecraft.getInstance().getConnection() != null) {
-            ClientPacketDistributor.sendToServer(new VisualSubscribePayload(UUID.randomUUID(), agent, true));
+            PacketDistributor.sendToServer(new VisualSubscribePayload(UUID.randomUUID(), agent, true));
         }
     }
 
@@ -125,7 +121,7 @@ public final class VisualizationClient {
      * @param graphics GUI 提取器
      * @param delta    插值参数
      */
-    private static void hud(GuiGraphicsExtractor graphics, DeltaTracker delta) {
+    private static void hud(GuiGraphics graphics, DeltaTracker delta) {
         Minecraft minecraft = Minecraft.getInstance();
         var state = VisualizationClientState.INSTANCE;
         if (!VisualizationConfig.ENABLED.get() || minecraft.options.hideGui || minecraft.level == null) return;
@@ -163,13 +159,13 @@ public final class VisualizationClient {
      * @param color    文本颜色（ARGB）
      * @return 下一行纵坐标
      */
-    private static int line(GuiGraphicsExtractor graphics, Component text, int y, int color) {
+    private static int line(GuiGraphics graphics, Component text, int y, int color) {
         var minecraft = Minecraft.getInstance();
         int width = Math.min(380, minecraft.getWindow().getGuiScaledWidth() - 16);
         var lines = minecraft.font.split(text, Math.max(80, width));
         for (var line : lines.stream().limit(2).toList()) {
             graphics.fill(5, y - 1, 11 + minecraft.font.width(line), y + 10, 0x88000000);
-            graphics.text(minecraft.font, line, 8, y, color);
+            graphics.drawString(minecraft.font, line, 8, y, color);
             y += 11;
         }
         return y;

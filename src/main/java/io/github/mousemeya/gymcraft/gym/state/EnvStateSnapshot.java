@@ -82,8 +82,8 @@ public final class EnvStateSnapshot {
 
     /** 把区域 Y 范围裁剪到世界建筑高度内（X/Z 不动）。 */
     private static BoundingBox clampToBuildHeight(ServerLevel level, BoundingBox region) {
-        int minY = Math.max(region.minY(), level.getMinY());
-        int maxY = Math.min(region.maxY(), level.getMaxY() - 1);
+        int minY = Math.max(region.minY(), level.getMinBuildHeight());
+        int maxY = Math.min(region.maxY(), level.getMaxBuildHeight() - 1);
         if (minY == region.minY() && maxY == region.maxY()) {
             return region;
         }

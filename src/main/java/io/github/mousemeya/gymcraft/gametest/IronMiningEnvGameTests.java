@@ -6,6 +6,7 @@ import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.infoJson
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 
@@ -15,7 +16,7 @@ import com.google.protobuf.Message;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
@@ -105,6 +106,7 @@ public final class IronMiningEnvGameTests {
             ScenarioStore.loadBundled(helper.getLevel(), "iron_mining").orElseThrow());
         AtomicReference<StepResponse> finalResponse = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
+        AtomicBoolean done = new AtomicBoolean();
 
         Thread.startVirtualThread(() -> {
             try {
@@ -119,13 +121,13 @@ public final class IronMiningEnvGameTests {
 
                 long selfSession = openSelf(env);
                 move(env, selfSession, List.of(
-                    transfer(0, 36, 3, 1),
-                    transfer(35, 8, 4, 3)
+                    transfer(0, 35, 3, 1),
+                    transfer(34, 7, 4, 3)
                 ));
                 move(env, selfSession, List.of(
-                    transfer(8, 36, 1, 1), transfer(8, 37, 1, 1),
-                    transfer(8, 38, 1, 1), transfer(8, 39, 1, 1),
-                    transfer(35, 0, 1, 1)
+                    transfer(7, 35, 1, 1), transfer(7, 36, 1, 1),
+                    transfer(7, 37, 1, 1), transfer(7, 38, 1, 1),
+                    transfer(34, 0, 1, 1)
                 ));
                 close(env, selfSession);
 
@@ -152,11 +154,11 @@ public final class IronMiningEnvGameTests {
                 }
                 long tableSession = openBlock(env, tablePos);
                 move(env, tableSession, List.of(
-                    transfer(8, 36, 1, 1), transfer(8, 39, 1, 1),
-                    transfer(35, 9, 4, 1),
-                    transfer(8, 36, 1, 1), transfer(8, 37, 1, 1), transfer(8, 38, 1, 1),
-                    transfer(9, 40, 1, 1), transfer(9, 43, 1, 1),
-                    transfer(35, 0, 1, 1)
+                    transfer(7, 35, 1, 1), transfer(7, 38, 1, 1),
+                    transfer(34, 8, 4, 1),
+                    transfer(7, 35, 1, 1), transfer(7, 36, 1, 1), transfer(7, 37, 1, 1),
+                    transfer(8, 39, 1, 1), transfer(8, 42, 1, 1),
+                    transfer(34, 0, 1, 1)
                 ));
                 close(env, tableSession);
 
@@ -174,11 +176,11 @@ public final class IronMiningEnvGameTests {
                 tableSession = openBlock(env, tablePos);
                 int cobblestoneSlot = findItemSlot(currentMob(helper, originalMob), Items.COBBLESTONE);
                 move(env, tableSession, List.of(
-                    transfer(0, 11, 1, 1),
-                    transfer(cobblestoneSlot, 36, 1, 1), transfer(cobblestoneSlot, 37, 1, 1),
-                    transfer(cobblestoneSlot, 38, 1, 1),
-                    transfer(9, 40, 1, 1), transfer(9, 43, 1, 1),
-                    transfer(35, 0, 1, 1)
+                    transfer(0, 10, 1, 1),
+                    transfer(cobblestoneSlot, 35, 1, 1), transfer(cobblestoneSlot, 36, 1, 1),
+                    transfer(cobblestoneSlot, 37, 1, 1),
+                    transfer(8, 39, 1, 1), transfer(8, 42, 1, 1),
+                    transfer(34, 0, 1, 1)
                 ));
                 close(env, tableSession);
 
@@ -190,10 +192,14 @@ public final class IronMiningEnvGameTests {
                 finalResponse.set(pickUpIfPresent(env, nearbyItems(ironBroken), Items.RAW_IRON));
             } catch (Throwable error) {
                 failure.set(error);
+            } finally {
+                done.set(true);
             }
         });
 
-        helper.runAfterDelay(10000, () -> {
+        // 等异步工具链实际结束再断言，避免不限速 tick 提前耗尽固定延迟。
+        helper.succeedWhen(() -> {
+            assertTrue(helper, done.get(), "waiting for tool progression");
             try {
                 assertTrue(helper, failure.get() == null, "tool progression failed: " + failure.get());
                 StepResponse response = finalResponse.get();
@@ -203,7 +209,6 @@ public final class IronMiningEnvGameTests {
                 Mob current = (Mob) helper.getLevel().getEntity(originalMob.getUUID());
                 assertTrue(helper, AgentInventoryLayout.resolve(current).slots().stream()
                     .anyMatch(slot -> slot.getItem().is(Items.RAW_IRON)), "raw iron is not in Agent inventory");
-                helper.succeed();
             } finally {
                 env.close();
             }
@@ -368,7 +373,7 @@ public final class IronMiningEnvGameTests {
      * @param suffix 测试场景后缀
      * @return 唯一测试 ID
      */
-    private static Identifier testId(String suffix) {
-        return Identifier.fromNamespaceAndPath(GymCraft.MODID, "iron_mining_" + suffix + "_test");
+    private static ResourceLocation testId(String suffix) {
+        return ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "iron_mining_" + suffix + "_test");
     }
 }

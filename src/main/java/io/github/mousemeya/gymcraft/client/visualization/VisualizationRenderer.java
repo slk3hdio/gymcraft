@@ -6,17 +6,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.client.Minecraft;
-import net.minecraft.gizmos.GizmoProperties;
-import net.minecraft.gizmos.GizmoStyle;
-import net.minecraft.gizmos.Gizmos;
-import net.minecraft.gizmos.TextGizmo;
-import net.minecraft.util.ARGB;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 
-/** 客户端原生 Gizmos 后端；每帧重建图形，既不修改实体也不维护持久化世界标记。 */
+/** 客户端 1.21.1 世界渲染后端；每帧重建图形，既不修改实体也不维护持久化世界标记。 */
 public final class VisualizationRenderer {
+    private static com.mojang.blaze3d.vertex.PoseStack pose;
+    private static com.mojang.blaze3d.vertex.VertexConsumer vertices;
+    private static Vec3 camera;
+
     /** 合并同形同位置的图形，仅保留最高优先级颜色并合并标签。 */
     private record Drawing(VisualElement element, Vec3 from, Vec3 to, int color, int priority, String label) { }
     /** 精确世界坐标键，避免方块观测与动作目标发生叠线闪烁。 */
@@ -26,7 +25,7 @@ public final class VisualizationRenderer {
     private VisualizationRenderer() { }
 
     /**
-     * 每帧从缓存重建全部图形并提交给原生 Gizmo 渲染管线。
+     * 每帧从缓存重建全部图形并提交给原生线框与字体渲染管线。
      *
      * <p>收集顺序（后写覆盖先写）：环境边界 → 全量观测 → 淡出中的终态反馈 → 运行中动作；
      * 标签数量与准星距离受限，避免文字过载。收集完成后观测图形按观察者距离淡出，
@@ -34,12 +33,15 @@ public final class VisualizationRenderer {
      *
      * @param event 世界渲染状态提取事件；只有此阶段允许读取客户端实体
      */
-    public static void extract(ExtractLevelRenderStateEvent event) {
+    public static void extract(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
+        var level = Minecraft.getInstance().level;
+        if (level == null) return;
         var state = VisualizationClientState.INSTANCE;
         if (!VisualizationConfig.ENABLED.get() || state.agent() == null
-            || !event.getLevel().dimension().identifier().toString().equals(state.dimension())) return;
+            || !level.dimension().location().toString().equals(state.dimension())) return;
         long now = System.nanoTime();
-        float partialTick = event.getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(false);
         Map<GeometryKey, Drawing> drawings = new LinkedHashMap<>();
         // 环境边界垫底：优先级最低、不参与淡出，作为全部图形的空间参照。
         collect(drawings, state.boundary(), 1, partialTick);
@@ -64,7 +66,12 @@ public final class VisualizationRenderer {
             }
         }
         // 每帧收集后由原生渲染管线负责深度与穿墙两个阶段。
-        try (var ignored = event.getLevelRenderer().collectPerFrameGizmos()) {
+        {
+            pose = event.getPoseStack();
+            camera = event.getCamera().getPosition();
+            var buffers = Minecraft.getInstance().renderBuffers().bufferSource();
+            var renderType = VisualizationRenderTypes.lines(VisualizationConfig.THROUGH_WALLS.get());
+            vertices = buffers.getBuffer(renderType);
             for (Drawing drawing : drawings.values()) {
                 draw(drawing);
                 Vec3 center = drawing.from().add(drawing.to()).scale(.5);
@@ -73,11 +80,14 @@ public final class VisualizationRenderer {
                     Vec3 position = drawing.element().shape() == VisualElement.Shape.BOX
                         ? new Vec3(center.x, Math.max(drawing.from().y, drawing.to().y) + .15, center.z)
                         : drawing.to().add(0, .2, 0);
-                    top(Gizmos.billboardText(VisualElement.shorten(drawing.label(), 128), position,
-                        TextGizmo.Style.forColorAndCentered(drawing.color()).withScale(.12F)));
+                    label(VisualElement.shorten(drawing.label(), 128), position, drawing.color(), buffers);
+                    vertices = buffers.getBuffer(renderType);
                     labels++;
                 }
             }
+            buffers.endBatch();
+            pose = null;
+            vertices = null;
         }
     }
 
@@ -163,7 +173,7 @@ public final class VisualizationRenderer {
                 iterator.remove();
             } else if (visibility < 1F) {
                 entry.setValue(new Drawing(drawing.element(), drawing.from(), drawing.to(),
-                    ARGB.multiplyAlpha(drawing.color(), visibility), drawing.priority(), drawing.label()));
+                    (((int) ((drawing.color() >>> 24) * visibility)) << 24) | (drawing.color() & 0xFFFFFF), drawing.priority(), drawing.label()));
             }
         }
     }
@@ -209,12 +219,12 @@ public final class VisualizationRenderer {
                     && VisualizationConfig.COMPACT_BOXES.get()) {
                     cornerFrame(from, to, drawing.color());
                 } else {
-                    top(Gizmos.cuboid(new AABB(from, to).inflate(.002), GizmoStyle.stroke(drawing.color())));
+                    box(new AABB(from, to).inflate(.002), drawing.color());
                 }
             }
-            case POINT -> top(Gizmos.point(from, drawing.color(), 6));
-            case LINE -> { if (from.distanceToSqr(to) > 1.0E-8) top(Gizmos.line(from, to, drawing.color(), 2)); }
-            case ARROW -> { if (from.distanceToSqr(to) > 1.0E-8) top(Gizmos.arrow(from, to, drawing.color(), 2)); }
+            case POINT -> box(new AABB(from, from).inflate(.08), drawing.color());
+            case LINE -> { if (from.distanceToSqr(to) > 1.0E-8) segment(from, to, drawing.color()); }
+            case ARROW -> { if (from.distanceToSqr(to) > 1.0E-8) arrow(from, to, drawing.color()); }
         }
     }
 
@@ -249,11 +259,49 @@ public final class VisualizationRenderer {
      * @param color ARGB 颜色
      */
     private static void segment(Vec3 from, Vec3 to, int color) {
-        if (from.distanceToSqr(to) > 1.0E-8) top(Gizmos.line(from, to, color, 2));
+        if (from.distanceToSqr(to) <= 1.0E-8) return;
+        Vec3 normal = to.subtract(from).normalize();
+        Vec3 a = from.subtract(camera), b = to.subtract(camera);
+        vertices.addVertex(pose.last(), (float) a.x, (float) a.y, (float) a.z).setColor(color)
+            .setNormal(pose.last(), (float) normal.x, (float) normal.y, (float) normal.z);
+        vertices.addVertex(pose.last(), (float) b.x, (float) b.y, (float) b.z).setColor(color)
+            .setNormal(pose.last(), (float) normal.x, (float) normal.y, (float) normal.z);
     }
 
-    /** @param properties 图形属性；按客户端偏好启用穿墙 */
-    private static void top(GizmoProperties properties) {
-        if (VisualizationConfig.THROUGH_WALLS.get()) properties.setAlwaysOnTop();
+    /** 绘制十二条方框棱；参数 box 为世界包围盒，color 为 ARGB 颜色。 */
+    private static void box(AABB box, int color) {
+        for (int x = 0; x < 2; x++) for (int y = 0; y < 2; y++) {
+            segment(new Vec3(x == 0 ? box.minX : box.maxX, y == 0 ? box.minY : box.maxY, box.minZ),
+                new Vec3(x == 0 ? box.minX : box.maxX, y == 0 ? box.minY : box.maxY, box.maxZ), color);
+            segment(new Vec3(x == 0 ? box.minX : box.maxX, box.minY, y == 0 ? box.minZ : box.maxZ),
+                new Vec3(x == 0 ? box.minX : box.maxX, box.maxY, y == 0 ? box.minZ : box.maxZ), color);
+            segment(new Vec3(box.minX, x == 0 ? box.minY : box.maxY, y == 0 ? box.minZ : box.maxZ),
+                new Vec3(box.maxX, x == 0 ? box.minY : box.maxY, y == 0 ? box.minZ : box.maxZ), color);
+        }
+    }
+
+    /** 绘制带箭头线段；参数 from、to 为端点，color 为 ARGB 颜色。 */
+    private static void arrow(Vec3 from, Vec3 to, int color) {
+        segment(from, to, color);
+        Vec3 direction = to.subtract(from).normalize();
+        Vec3 side = direction.cross(Math.abs(direction.y) > .9 ? new Vec3(1, 0, 0) : new Vec3(0, 1, 0)).normalize().scale(.15);
+        Vec3 back = to.subtract(direction.scale(.3));
+        segment(to, back.add(side), color);
+        segment(to, back.subtract(side), color);
+    }
+
+    /** 绘制朝向相机的标签；参数 text、position、color、buffers 为文字、位置、颜色和缓冲。 */
+    private static void label(String text, Vec3 position, int color, net.minecraft.client.renderer.MultiBufferSource.BufferSource buffers) {
+        var minecraft = Minecraft.getInstance();
+        pose.pushPose();
+        Vec3 relative = position.subtract(camera);
+        pose.translate(relative.x, relative.y, relative.z);
+        pose.mulPose(minecraft.gameRenderer.getMainCamera().rotation());
+        pose.scale(.02F, -.02F, .02F);
+        minecraft.font.drawInBatch(text, -minecraft.font.width(text) / 2.0F, 0, color, false,
+            pose.last().pose(), buffers, VisualizationConfig.THROUGH_WALLS.get()
+                ? net.minecraft.client.gui.Font.DisplayMode.SEE_THROUGH : net.minecraft.client.gui.Font.DisplayMode.NORMAL,
+            0, net.minecraft.client.renderer.LightTexture.FULL_BRIGHT);
+        pose.popPose();
     }
 }

@@ -8,7 +8,7 @@ import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 
@@ -127,7 +127,7 @@ public final class ActionBatchGameTests {
     private static final class BatchTestEnv extends AbstractMcEnv {
         /** @param mob 受控测试实体 */
         private BatchTestEnv(Mob mob) {
-            super(Identifier.fromNamespaceAndPath("gymcraft", "action_batch_test"), mob,
+            super(ResourceLocation.fromNamespaceAndPath("gymcraft", "action_batch_test"), mob,
                 List.of(ActionComponents.NOOP.get()), List.of());
         }
     }

@@ -6,14 +6,14 @@ import io.github.mousemeya.gymcraft.GymCraft;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * 客户端 → 服务端：移除目标实体当前绑定的环境。
  */
 public record EnvToolRemovePayload(UUID target) implements CustomPacketPayload {
     public static final Type<EnvToolRemovePayload> TYPE = new Type<>(
-        Identifier.fromNamespaceAndPath(GymCraft.MODID, "env_tool_remove"));
+        ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "env_tool_remove"));
     public static final StreamCodec<RegistryFriendlyByteBuf, EnvToolRemovePayload> STREAM_CODEC = StreamCodec.of(
         EnvToolRemovePayload::write, EnvToolRemovePayload::read);
 

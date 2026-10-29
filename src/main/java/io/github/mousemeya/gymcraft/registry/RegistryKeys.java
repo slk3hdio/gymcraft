@@ -1,7 +1,7 @@
 package io.github.mousemeya.gymcraft.registry;
 
 import net.minecraft.core.Registry;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.neoforged.neoforge.registries.NewRegistryEvent;
 import net.neoforged.neoforge.registries.RegistryBuilder;
@@ -25,13 +25,13 @@ import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
 public final class RegistryKeys {
 
     public static final ResourceKey<Registry<ActionComponentFactory<?, ?>>> ACTION_COMPONENT_FACTORIES_KEY = ResourceKey.createRegistryKey(
-        Identifier.fromNamespaceAndPath(GymCraft.MODID, "action_components")
+        ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "action_components")
     );
     public static final ResourceKey<Registry<ObservationComponentFactory<?, ?>>> OBSERVATION_COMPONENT_FACTORIES_KEY = ResourceKey.createRegistryKey(
-        Identifier.fromNamespaceAndPath(GymCraft.MODID, "observation_components")
+        ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "observation_components")
     );
     public static final ResourceKey<Registry<McEnvFactory>> ENV_FACTORIES_KEY = ResourceKey.createRegistryKey(
-        Identifier.fromNamespaceAndPath(GymCraft.MODID, "env_factories")
+        ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "env_factories")
     );
 
     /** 动作组件工厂注册表实例 */

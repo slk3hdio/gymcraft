@@ -1,6 +1,6 @@
 package io.github.mousemeya.gymcraft.client.visualization;
 
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -114,9 +114,9 @@ public final class VisualizationScreen extends Screen {
     }
 
     /** @param graphics GUI 提取器 @param mouseX 鼠标横坐标 @param mouseY 鼠标纵坐标 @param partialTick 插值 */
-    @Override public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
-        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
-        graphics.centeredText(font, title, width / 2, 12, 0xFFFFFFFF);
+    @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        super.render(graphics, mouseX, mouseY, partialTick);
+        graphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFFFF);
     }
 
     /** @return false，设置时环境继续执行 */

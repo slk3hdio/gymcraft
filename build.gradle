@@ -51,8 +51,13 @@ base {
     archivesName = mod_id
 }
 
-// Mojang ships Java 25 to end users in 26.1, so mods should target Java 25.
-java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+// 模组附件带 Minecraft 版本；项目与 Python 包仍使用纯 GymCraft 版本。
+tasks.withType(Jar).configureEach {
+    archiveVersion = "${mod_version}+mc${minecraft_version}"
+}
+
+// Minecraft 1.21.1 使用 Java 21 工具链。
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 neoForge {
     // Specify the version of NeoForge to use.
@@ -127,14 +132,22 @@ neoForge {
 // "optional", meaning it will not be pulled by dependents of this mod.
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+    // 1.21.1（<= 1.21.8）的 dev 运行不会自动把 implementation 依赖放进运行类路径：
+    // gRPC/protobuf 等非 MC 库声明在 libraries，同时挂到编译类路径与 additionalRuntimeClasspath；
+    // 生产环境由 jarJar 内嵌（见 dependencies 块注释）。
+    libraries
+    implementation.extendsFrom libraries
+    additionalRuntimeClasspath.extendsFrom libraries
 }
 
 dependencies {
-    implementation 'com.google.protobuf:protobuf-java:4.30.2'
-    implementation 'com.google.protobuf:protobuf-java-util:4.30.2'
-    implementation 'io.grpc:grpc-netty-shaded:1.72.0'
-    implementation 'io.grpc:grpc-protobuf:1.72.0'
-    implementation 'io.grpc:grpc-stub:1.72.0'
+    libraries 'com.google.protobuf:protobuf-java:4.30.2'
+    libraries('com.google.protobuf:protobuf-java-util:4.30.2') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }
+    // 排除 guava: MC 1.21.1 对 guava 32.1.2-jre 声明 strictly, gRPC 传递的 guava 33 会造成解析冲突;
+    // 编译/运行时 guava 均由 MC 本体提供（guava 32.1.2 满足 gRPC 用到的 API 面）。
+    libraries('io.grpc:grpc-netty-shaded:1.72.0') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }
+    libraries('io.grpc:grpc-protobuf:1.72.0') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }
+    libraries('io.grpc:grpc-stub:1.72.0') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }
     compileOnly 'org.apache.tomcat:annotations-api:6.0.53'
 
     // JarJar: 把 gRPC/protobuf 运行时依赖内嵌进模组 jar（用户端无需单独提供）。
@@ -142,57 +155,57 @@ dependencies {
     // guava/gson 由 Minecraft 本体提供, 不内嵌避免版本冲突。
     // 版本固定为精确值：动态区间会迫使 Gradle 每次冷配置都访问远程仓库列版本，
     // 网络不可达时每次构建白白等待多个 TCP 连接超时（曾达 8~13 分钟）。
-    jarJar(implementation('io.grpc:grpc-netty-shaded')) {
+    jarJar(libraries('io.grpc:grpc-netty-shaded') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-core')) {
+    jarJar(libraries('io.grpc:grpc-core') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-api')) {
+    jarJar(libraries('io.grpc:grpc-api') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-context')) {
+    jarJar(libraries('io.grpc:grpc-context') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-util')) {
+    jarJar(libraries('io.grpc:grpc-util') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-protobuf')) {
+    jarJar(libraries('io.grpc:grpc-protobuf') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-protobuf-lite')) {
+    jarJar(libraries('io.grpc:grpc-protobuf-lite') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson'; exclude group: 'com.google.protobuf', module: 'protobuf-javalite' }) {
         version {
             strictly '1.72.0'
         }
     }
-    jarJar(implementation('io.grpc:grpc-stub')) {
+    jarJar(libraries('io.grpc:grpc-stub') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '1.72.0'
         }
     }
-    jarJar(implementation('io.perfmark:perfmark-api')) {
+    jarJar(libraries('io.perfmark:perfmark-api')) {
         version {
             strictly '0.27.0'
         }
     }
-    jarJar(implementation('com.google.api.grpc:proto-google-common-protos')) {
+    jarJar(libraries('com.google.api.grpc:proto-google-common-protos') { exclude group: 'com.google.guava'; exclude group: 'com.google.code.gson' }) {
         version {
             strictly '2.51.0'
         }
     }
-    jarJar(implementation('com.google.protobuf:protobuf-java')) {
+    jarJar(libraries('com.google.protobuf:protobuf-java')) {
         version {
             strictly '4.30.2'
         }

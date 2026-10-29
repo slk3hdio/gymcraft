@@ -33,7 +33,6 @@ import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
-import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.Blocks;
@@ -116,7 +115,7 @@ public final class VisualizationGameTests {
         }
 
         /** @return 可由测试撤销的管理员权限 */
-        @Override public PermissionSet permissions() { return allowed ? PermissionSet.ALL_PERMISSIONS : PermissionSet.NO_PERMISSIONS; }
+        @Override protected int getPermissionLevel() { return allowed ? 4 : 0; }
 
     }
 

@@ -17,7 +17,7 @@ import java.util.UUID;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.profiling.Profiler;
+import io.github.mousemeya.gymcraft.gym.compat.Profiler;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
@@ -78,7 +78,7 @@ public final class VisualizationService {
             this.agent = request.agent();
             this.env = env;
             this.environment = UUID.fromString(env.getMetadata().get("env_id").toString());
-            this.dimension = player.level().dimension().identifier().toString();
+            this.dimension = player.level().dimension().location().toString();
         }
     }
 
@@ -150,7 +150,7 @@ public final class VisualizationService {
      * @return 是否满足现有管理员权限规则（与指令一致的游戏管理员等级）
      */
     private static boolean permitted(ServerPlayer player) {
-        return Commands.hasPermission(Commands.LEVEL_GAMEMASTERS).test(player.createCommandSourceStack());
+        return player.createCommandSourceStack().hasPermission(Commands.LEVEL_GAMEMASTERS);
     }
 
     /**
@@ -167,7 +167,7 @@ public final class VisualizationService {
      */
     private static void sendReply(ServerPlayer player, VisualSubscribePayload request, VisualFrame.Kind kind, String reason) {
         var frame = new VisualFrame(kind, request.subscription(), new UUID(0, 0), request.agent(),
-            player.level().dimension().identifier().toString(), 0, 1, player.level().getGameTime(), 0,
+            player.level().dimension().location().toString(), 0, 1, player.level().getGameTime(), 0,
             "", "", reason, 0, List.of());
         PacketDistributor.sendToPlayer(player, new VisualFramePayload(frame));
     }
@@ -184,7 +184,7 @@ public final class VisualizationService {
     private static Mob validMob(Subscription subscription) {
         ServerPlayer player = subscription.player;
         if (player.hasDisconnected() || !permitted(player)
-            || !player.level().dimension().identifier().toString().equals(subscription.dimension)
+            || !player.level().dimension().location().toString().equals(subscription.dimension)
             || EnvManager.get(subscription.agent).orElse(null) != subscription.env) return null;
         var entity = ((ServerLevel) player.level()).getEntity(subscription.agent);
         return entity instanceof Mob mob && mob.distanceToSqr(player) <= 128 * 128 ? mob : null;

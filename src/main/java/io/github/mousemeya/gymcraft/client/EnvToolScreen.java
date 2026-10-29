@@ -10,13 +10,13 @@ import io.github.mousemeya.gymcraft.network.EnvToolAttachPayload;
 import io.github.mousemeya.gymcraft.network.EnvToolRemovePayload;
 import io.github.mousemeya.gymcraft.network.EnvToolSavePayload;
 import io.github.mousemeya.gymcraft.network.EnvToolScreenPayload;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.neoforged.neoforge.client.network.ClientPacketDistributor;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * 环境工具管理界面：绑定到单个目标 Mob，支持选择环境类型、以六方向（西/东/下/上/
@@ -195,7 +195,7 @@ public final class EnvToolScreen extends Screen {
         if (this.envTypes.isEmpty()) {
             return;
         }
-        ClientPacketDistributor.sendToServer(new EnvToolAttachPayload(
+        PacketDistributor.sendToServer(new EnvToolAttachPayload(
             this.target, this.envTypes.get(this.selectedIndex),
             this.extents[0], this.extents[1], this.extents[2],
             this.extents[3], this.extents[4], this.extents[5],
@@ -208,12 +208,12 @@ public final class EnvToolScreen extends Screen {
         if (name.isEmpty()) {
             return;
         }
-        ClientPacketDistributor.sendToServer(new EnvToolSavePayload(this.target, name));
+        PacketDistributor.sendToServer(new EnvToolSavePayload(this.target, name));
     }
 
     /** 发送移除环境请求。 */
     private void removeEnv() {
-        ClientPacketDistributor.sendToServer(new EnvToolRemovePayload(this.target));
+        PacketDistributor.sendToServer(new EnvToolRemovePayload(this.target));
     }
 
     /** 写入六方向延伸距离暂存（顺序：西/东/下/上/北/南）。 */
@@ -249,23 +249,23 @@ public final class EnvToolScreen extends Screen {
     }
 
     /** @param graphics GUI 提取器 @param mouseX 鼠标横坐标 @param mouseY 鼠标纵坐标 @param partialTick 插值 */
-    @Override public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
-        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+    @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        super.render(graphics, mouseX, mouseY, partialTick);
         int left = this.width / 2 - 150;
-        graphics.centeredText(this.font, this.title, this.width / 2, 8, 0xFFFFFFFF);
+        graphics.drawCenteredString(this.font, this.title, this.width / 2, 8, 0xFFFFFFFF);
         String shortUuid = this.target.toString().substring(0, 8);
-        graphics.text(this.font, Component.translatable("screen.gymcraft.env_tool.target", shortUuid),
+        graphics.drawString(this.font, Component.translatable("screen.gymcraft.env_tool.target", shortUuid),
             left, 22, 0xFFAAAAAA);
         Component current = this.currentEnvType == null
             ? Component.translatable("screen.gymcraft.env_tool.none")
             : Component.literal(this.currentEnvType);
-        graphics.text(this.font, Component.translatable("screen.gymcraft.env_tool.current_env", current),
+        graphics.drawString(this.font, Component.translatable("screen.gymcraft.env_tool.current_env", current),
             left, 33, 0xFFAAAAAA);
-        graphics.text(this.font, Component.translatable("screen.gymcraft.env_tool.range"), left, 68, 0xFFAAAAAA);
+        graphics.drawString(this.font, Component.translatable("screen.gymcraft.env_tool.range"), left, 68, 0xFFAAAAAA);
         // 方向标签画在对应输入框左侧，垂直居中对齐 20 高的输入框。
         for (int row = 0; row < DIRECTIONS / 2; row++) {
             for (int column = 0; column < 2; column++) {
-                graphics.text(this.font, Component.translatable(DIRECTION_KEYS[row * 2 + column]),
+                graphics.drawString(this.font, Component.translatable(DIRECTION_KEYS[row * 2 + column]),
                     left + column * 136, 82 + row * 24, 0xFFFFFFFF);
             }
         }

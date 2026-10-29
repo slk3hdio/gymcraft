@@ -1,7 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.health;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
@@ -33,7 +33,7 @@ public final class DamageLogHooks {
         var source = event.getSource();
         mob.getData(ModAttachments.DAMAGE_LOG).append(new DamageLog.DamageEntry(
             mob.level().getGameTime(),
-            event.getHealthDamage(),
+            event.getNewDamage(),
             event.getOriginalDamage(),
             source.getMsgId(),
             entityTypeId(source.getEntity()),
@@ -52,7 +52,7 @@ public final class DamageLogHooks {
         if (entity == null) {
             return "";
         }
-        Identifier key = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+        ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         return key == null ? "" : key.toString();
     }
 

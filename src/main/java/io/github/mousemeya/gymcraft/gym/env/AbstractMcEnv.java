@@ -20,13 +20,13 @@ import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioWorldCodec;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import net.minecraft.util.profiling.Profiler;
+import io.github.mousemeya.gymcraft.gym.compat.Profiler;
 import net.neoforged.neoforge.common.NeoForge;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
@@ -76,7 +76,7 @@ public abstract class AbstractMcEnv implements McEnv {
     /** {@link #MAX_ACTIONS_PER_STEP_OPTION} 缺省值。 */
     public static final int DEFAULT_MAX_ACTIONS_PER_STEP = 9;
 
-    protected final Identifier envTypeId;
+    protected final ResourceLocation envTypeId;
     protected final UUID envId;
     protected final ActionDispatcher actionController;
     protected final ObservationComposer observationCreator;
@@ -102,7 +102,7 @@ public abstract class AbstractMcEnv implements McEnv {
 
     /** 仅装配动作/观测组件的最小环境（无场景，仅捕获 agent，测试内嵌环境用）。 */
     protected AbstractMcEnv(
-        Identifier envTypeId,
+        ResourceLocation envTypeId,
         Mob mob,
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents
@@ -125,7 +125,7 @@ public abstract class AbstractMcEnv implements McEnv {
      * @param scope 挂载作用域；scenarioSource 非空时被忽略
      */
     protected AbstractMcEnv(
-        Identifier envTypeId,
+        ResourceLocation envTypeId,
         Mob mob,
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents,

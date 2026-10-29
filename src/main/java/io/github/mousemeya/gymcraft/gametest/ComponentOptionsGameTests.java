@@ -5,7 +5,7 @@ import java.util.Map;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 
@@ -115,7 +115,7 @@ public final class ComponentOptionsGameTests {
          */
         private TestEnv(Mob mob) {
             super(
-                Identifier.fromNamespaceAndPath(GymCraft.MODID, "component_options_test"),
+                ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "component_options_test"),
                 mob,
                 List.of(ActionComponents.MOVE_TO.get(), ActionComponents.NOOP.get(), ActionComponents.BREAK_BLOCK.get()),
                 List.of(ObservationCreators.NEARBY_ENTITIES.get(), ObservationCreators.NEARBY_BLOCKS.get())

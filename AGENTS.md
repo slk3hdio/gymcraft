@@ -2,7 +2,7 @@
 
 ## Project
 
-NeoForge 模组 (`mod_id=gymcraft`, `io.github.mousemeya.gymcraft`), MC 26.1, NeoForge 26.1.0.19-beta, Java 25 工具链, Gradle 9.2.1。
+NeoForge 模组 (`mod_id=gymcraft`, `io.github.mousemeya.gymcraft`)。本分支适配 MC 1.21.1、NeoForge 21.1.250，使用 Java 21 工具链与 Gradle 9.2.1；主分支面向 MC 26.1.2 / Java 25。
 
 Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以 protobuf 表示 (`ProtoMcAction` / `ProtoMcObservation`)。外部 Agent 通过 **gRPC** (`GymEnvService`, 默认端口 `50051`) 连接已存在的环境；附带 uv 管理的 Python 客户端 (`src/main/python`)。
 
@@ -40,20 +40,21 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 
 ## Gotchas
 
-- Gradle 用 `JAVA_HOME` 确定 JDK；确保指向 JDK 25
+- Gradle 用 `JAVA_HOME` 确定 JDK；确保指向 JDK 21
 - Python 所有代码必须通过 mypy 类型检查；python 库版本（pyproject.toml）与 mod 版本保持一致
+- **发布命名约定**：`mod_version` 和 Python 包版本只含 GymCraft 版本（如 `1.3.0`）；GitHub Release 标题为 `GymCraft <版本>+mc<MC版本>`，tag 为 `v<版本>+mc<MC版本>`（如 `v1.3.0+mc26.1.2`），模组 JAR 与其他 GitHub Assets 文件名均带同样的版本后缀（如 `gymcraft-1.3.0+mc26.1.2.jar`）。Python wheel/sdist 只发布纯 GymCraft 版本到 PyPI，不按 MC 拆包，默认兼容所有 MC 适配版本；同一 GymCraft 版本只发布一次，后续 MC Release 跳过已存在的分发文件。跨 MC 适配应保持同版本 gRPC 协议一致。
 - **Mod metadata 模板**: 编辑 `src/main/templates/META-INF/neoforge.mods.toml`（不编辑构建产物）
 - Java 编译编码 UTF-8, gym 相关代码使用中文 Javadoc/注释
 - EnvToolItem: 右键 Mob 打开环境管理界面（选择环境类型、按六方向延伸距离设定范围——默认六方向全 0（全零挂载为空区域、不限制范围），每方向配"最大"快捷按钮（水平 = `MAX_RADIUS` 32 格，垂直 = `MAX_HEIGHT` 4096 由服务端钳制到完整世界高度）——与方块/实体快照开关、挂载、保存场景、移除；`client/EnvToolScreen` + `network/EnvTool*Payload`），Shift+右键快速移除环境；`/gymcraft env create <target> [type] [west east north south [down up] [captureBlocks] [captureEntities]]`（垂直省略或 -1 = 完整世界高度）与 `remove` 指令与之等价（供专用服务器控制台/RCON）
 - 无头服务器测试 (runServer + RCON): `server.properties` 必须设 `pause-when-empty-seconds=-1`（否则空服 60 秒后暂停 tick，gRPC step 永久挂起）；受控生物所在区块由 `EnvChunkGuard` 自动强加载，无需手动 `forceload`
 - **端到端测试方式**: 先启动服务器，通过 RCON 执行指令布置场景，然后运行 Python 脚本（`src/main/python/debug/` 下）交互
 - **断连会话自动清理**: 客户端 TCP 终止 → `ServerTransportFilter` 把该连接上的会话标记为孤儿；瞬断重连由 `RpcEnvSessions.rebindIfOrphaned` 透明恢复，新进程 `Connect` 直接接管孤儿会话，真死会话按 `rpcSessionReconnectGraceSeconds`（默认 60s）宽限期由清扫线程清理；`rpcKeepAliveTimeSeconds`/`rpcKeepAliveTimeoutSeconds`（默认 30/10）探测死连接。实体被**活跃**会话占用时 `Connect` 仍返回 `ALREADY_EXISTS`
-- **26.1 指令 API**: 权限检查用 `Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)`；资源位置类型是 `Identifier`/`IdentifierArgument`；`spawnChunkRadius` gamerule 已移除；`/forceload` 参数是方块坐标
-- **26.1 实体装备 NBT 键为 `equipment:{mainhand:{id,...},...}`**；旧键 `HandItems`/`ArmorItems` 被静默忽略。排查"物品丢失"先 `data get entity <target> equipment`
+- **1.21.1 指令 API**: 权限检查用 `CommandSourceStack.hasPermission(Commands.LEVEL_GAMEMASTERS)`；资源位置类型是 `ResourceLocation`/`ResourceLocationArgument`；`/forceload` 参数是方块坐标；环境 ID 使用完整命名空间（如 `gymcraft:general`）
+- **1.21.1 实体装备 NBT** 使用 `HandItems`/`ArmorItems`，物品数量使用 `count`；属性 ID 使用 `minecraft:generic.*` 等旧名称。内置场景已转换为 DataVersion 3955，背包附件使用 ItemStackHandler 的 `Items` + `Size` 格式，不接受新版 `stacks` 数组
 - **reset 物品语义**: reset 时旧 mob 携带物品直接删除（`AgentInventoryLayout.clearAllItems`），不掉落；保留掉落用 `dropAllItems`
-- **26.1 GameTest**: `FunctionGameTestInstance(ResourceKey<Consumer<GameTestHelper>>, TestData)`；`helper.setBlock` 放双箱不会合并（需显式设 `ChestBlock.TYPE`）；`LecternBlockEntity.setBook` 不置 `HAS_BOOK`，需手动 setValue
+- **1.21.1 GameTest**: `GymCraftGameTests` 使用 `@GameTestHolder` / `@GameTest` 注解委托原有 75 项核心用例；模板只填 `use_item_empty`，命名空间由注解补入；`helper.setBlock` 放双箱不会合并（需显式设 `ChestBlock.TYPE`）；`LecternBlockEntity.setBook` 不置 `HAS_BOOK`，需手动 setValue
 - **1.26 `AbstractContainerMenu#getType()` 对 menuType 为 null 的菜单抛 `UnsupportedOperationException`**；self 背包直接复用原版 `InventoryMenu`（无类型，`idOf` 返回 `gymcraft:agent_inventory`），读菜单类型必须经 `gym/menu/MenuTypeUtil`（`typeOf`/`idOf`）
-- **菜单会话 slot_id 布局** (`AgentInventoryLayout` + `AgentInventoryBridge`): 0–7 = 装备槽（按 `EquipmentSlot.getId()` 升序），8 起 = Mob 容器槽，菜单自有槽排在最后；FakePlayer 映射常量见 `AgentInventoryBridge`
+- **菜单会话 slot_id 布局** (`AgentInventoryLayout` + `AgentInventoryBridge`): 0–6 = 装备槽（按 `AgentInventoryLayout.equipmentSlotId()` 固定映射），7 起 = Mob 容器槽；1.21.1 没有 SADDLE 装备槽，客户端须使用观测中的 slot_id，菜单自有槽排在最后；FakePlayer 映射常量见 `AgentInventoryBridge`
 - **菜单动作 stale 校验**: `move_menu_item`/`click_menu_button` 依赖每次 step/reset 返回的 `gymcraft:menu` 观测作基线；`close_menu` 只验 `session_id`。`move_menu_item` 的 `repeat` 字段一次动作内重复移动（合成连取产出的标准用法）
 - **step 共享超时**: `StepRequest.timeout_seconds`（<=0 不限制）由 `AgentRuntime` 按 20 tick/秒换算，批次内 action 按输入顺序串行；超时中断当前组件并返回 `failed("action batch timeout")`
 - **info 仅用于调试/记录，agent 决策只能依赖观测**: info/metadata/options 在 gRPC 上以 `google.protobuf.Struct`（`map<string, Value>`）传输，Python 客户端直接解包为 dict（`reset`/`step` 返回的 info 即字典，无需 `json.loads`）；上批动作的逐项状态/描述由观测 header `last_actions` 聚合（`ObservationComposer` 从批次 `details["actions"]` 展开，status 大写），摘要仍在 `last_action_status`/`last_action_description`；主手持物经 `self.main_hand_item` 被动可见（空手不设置）。LLM 的 result 消息只渲染该步观测的反馈位字段（逐项反馈来自观测 header `last_actions`），不含 reward/info
@@ -65,3 +66,10 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 - **use_item 实体交互白名单**: 目标实体自身的持物交互（`entity.interact`）仅放行 虚弱僵尸村民+金苹果、受伤铁傀儡+铁锭（+25 生命）；其余走 `stack.interactLivingEntity`，不接受时回退普通使用（`UseItemController.use`）
 - 用 `gh` 操作含中文的 GitHub issue 前先设 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
 - `repo/` 既是 maven-publish 目标，又存放参考资源: `Documentation` (NeoForge 文档)、`minecraft-source-1.26`/`minecraft-source-1.20.1-java` (反编译源码)、`TouhouLittleMaid-1.20` (参考模组)
+
+## 1.3.0 的 1.21.1 移植
+
+- 在 `codex/mc1211-1.3.0` 开发，基于当前主分支 1.3.0，复用旧 `adapt/1.21.1` 的平台适配；旧分支保留为历史维护线。
+- Python 源码和 `.proto` 与主分支一致，不添加 MC 后缀；发布命名为 `v1.3.0+mc1.21.1`。
+- `gym/compat` 承载旧版 Profiler、NBT、方块容器与移动等待接口。客户端可视化通过 `RenderLevelStageEvent`、线框和字体绘制，保留图层、淡出、穿墙与标签配置。
+- 详细迁移和验证记录见 `docs/dev/mc-1.21.1-port.md`。

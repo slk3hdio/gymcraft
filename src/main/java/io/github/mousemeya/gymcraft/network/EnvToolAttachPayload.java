@@ -6,7 +6,7 @@ import io.github.mousemeya.gymcraft.GymCraft;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * 客户端 → 服务端：按界面设定向目标 Mob 挂载（或重新挂载）环境。
@@ -25,7 +25,7 @@ public record EnvToolAttachPayload(
     boolean captureEntities
 ) implements CustomPacketPayload {
     public static final Type<EnvToolAttachPayload> TYPE = new Type<>(
-        Identifier.fromNamespaceAndPath(GymCraft.MODID, "env_tool_attach"));
+        ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "env_tool_attach"));
     public static final StreamCodec<RegistryFriendlyByteBuf, EnvToolAttachPayload> STREAM_CODEC = StreamCodec.of(
         EnvToolAttachPayload::write, EnvToolAttachPayload::read);
 

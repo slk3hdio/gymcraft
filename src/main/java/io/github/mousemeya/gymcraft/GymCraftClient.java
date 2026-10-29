@@ -19,7 +19,7 @@ import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
  * 该类只在客户端加载，不得被专用服务端代码直接引用。
  */
 @Mod(value = GymCraft.MODID, dist = Dist.CLIENT)
-@EventBusSubscriber(modid = GymCraft.MODID, value = Dist.CLIENT)
+@EventBusSubscriber(modid = GymCraft.MODID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
 public class GymCraftClient {
     /**
      * 初始化客户端扩展点与玩家模拟实体渲染器。
@@ -40,7 +40,7 @@ public class GymCraftClient {
             // 装配可视化客户端：按键、帧载荷、HUD 与世界提取渲染（全部隔离在本包，公共端零依赖）。
             io.github.mousemeya.gymcraft.client.visualization.VisualizationClient.register(modEventBus);
             // 装配环境工具客户端：管理界面载荷处理器。
-            EnvToolClient.register(modEventBus);
+
             modEventBus.addListener((EntityRenderersEvent.RegisterRenderers event) ->
                 event.registerEntityRenderer(ModEntities.PLAYER_SIM.get(), PlayerSimRenderer::new));
         }

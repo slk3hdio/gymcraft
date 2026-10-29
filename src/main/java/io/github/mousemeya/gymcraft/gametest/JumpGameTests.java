@@ -41,7 +41,7 @@ public final class JumpGameTests {
 
         // JumpControl.tick() 是游戏每 tick 对跳跃控制的常规驱动
         mob.getJumpControl().tick();
-        assertTrue(helper, mob.isJumping(), "mob should be jumping after JumpControl tick");
+        assertTrue(helper, mob.jumping, "mob should be jumping after JumpControl tick");
         helper.succeed();
     }
 }

@@ -15,7 +15,7 @@ import com.mojang.authlib.GameProfile;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -75,7 +75,7 @@ public final class PlayerSimGameTests {
     public static void playerSimWorksAsEnvAgent(GameTestHelper helper) {
         PlayerSimEntity mob = MenuGameTestSupport.spawnAgent(helper, ModEntities.PLAYER_SIM.get(), new BlockPos(2, 1, 2));
         SimpleMobEnv env = new SimpleMobEnv(
-            Identifier.fromNamespaceAndPath(GymCraft.MODID, "player_sim_env_test"), mob);
+            ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "player_sim_env_test"), mob);
         AtomicReference<StepResponse> step = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         CompletableFuture<Void> tested = new CompletableFuture<>();

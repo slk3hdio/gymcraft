@@ -42,18 +42,18 @@ public final class MenuInventoryGameTests {
         placeChest(helper, new BlockPos(0, 1, 2));
         LogicalMenuSession session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
 
-        // 僵尸无自带容器：N=7，27 格箱子从 slot_id 8 起
-        assertEquals(helper, 8 + 27, session.slots().size(), "unexpected session slot count");
-        for (int i = 0; i < 8; i++) {
+        // 僵尸无自带容器，箱子槽位紧跟当前版本的装备槽段。
+        assertEquals(helper, AgentInventoryLayout.EQUIPMENT_SLOT_COUNT + 27, session.slots().size(), "unexpected session slot count");
+        for (int i = 0; i < AgentInventoryLayout.EQUIPMENT_SLOT_COUNT; i++) {
             SessionSlot slot = session.slot(i);
             assertTrue(helper, slot != null, "agent slot " + i + " missing from session");
             assertTrue(helper, !"menu".equals(slot.category()),
                 "agent slot " + i + " was allocated as menu-owned: " + slot.category());
         }
         for (int i = 0; i < 27; i++) {
-            SessionSlot slot = session.slot(8 + i);
+            SessionSlot slot = session.slot(AgentInventoryLayout.EQUIPMENT_SLOT_COUNT + i);
             assertTrue(helper, slot != null && "menu".equals(slot.category()),
-                "chest slot " + i + " not allocated as menu-owned at " + (8 + i));
+                "chest slot " + i + " not allocated as menu-owned at " + (AgentInventoryLayout.EQUIPMENT_SLOT_COUNT + i));
             assertTrue(helper, slot.slot() == session.menu().slots.get(i),
                 "chest slot " + i + " does not wrap menu slot " + i);
         }

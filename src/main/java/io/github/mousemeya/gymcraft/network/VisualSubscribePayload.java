@@ -4,11 +4,11 @@ import java.util.UUID;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 /** 客户端生成请求标识，切换目标时可立即拒绝前一次订阅的迟到响应。 */
 public record VisualSubscribePayload(UUID subscription, UUID agent, boolean cancel) implements CustomPacketPayload {
-    public static final Type<VisualSubscribePayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath("gymcraft", "visual_subscribe"));
+    public static final Type<VisualSubscribePayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath("gymcraft", "visual_subscribe"));
     public static final StreamCodec<RegistryFriendlyByteBuf, VisualSubscribePayload> STREAM_CODEC = StreamCodec.of(
         VisualSubscribePayload::write, VisualSubscribePayload::read);
 

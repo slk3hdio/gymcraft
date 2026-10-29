@@ -11,7 +11,7 @@ import com.google.protobuf.Any;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.Blocks;
 
@@ -115,7 +115,7 @@ public final class NavigationWaterGameTests {
         /** @param mob 当前测试控制的 Mob */
         private NavigationWaterEnv(Mob mob) {
             super(
-                Identifier.fromNamespaceAndPath(GymCraft.MODID, "navigation_water_test"),
+                ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "navigation_water_test"),
                 mob,
                 List.of(ActionComponents.SWIM_TO.get()),
                 List.of()

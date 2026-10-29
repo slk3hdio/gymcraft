@@ -9,14 +9,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
@@ -63,7 +61,7 @@ public final class EnvManager {
      * @return 注册完成的环境；同 Mob 上原环境会被关闭
      */
     public static McEnv attach(String envType, Mob mob, AttachScope scope) {
-        Identifier id = Identifier.parse(envType);
+        ResourceLocation id = ResourceLocation.parse(envType);
         return register(id, factory(id), mob, null, scope);
     }
 
@@ -77,7 +75,7 @@ public final class EnvManager {
      */
     public static Mob createFromScenario(ScenarioStore.LoadedScenario loaded, ServerLevel level, Vec3 pos) {
         ScenarioWorldCodec.validate(loaded);
-        Identifier id = Identifier.parse(ScenarioWorldCodec.envType(loaded.definition()));
+        ResourceLocation id = ResourceLocation.parse(ScenarioWorldCodec.envType(loaded.definition()));
         McEnvFactory factory = factory(id);
         Mob mob = spawnAgent(loaded.definition(), level, pos);
         try {
@@ -90,8 +88,8 @@ public final class EnvManager {
     }
 
     /** 根据注册 ID 查找工厂，未知 ID 在生成实体或替换原环境前拒绝。 */
-    private static McEnvFactory factory(Identifier id) {
-        McEnvFactory factory = RegistryKeys.ENV_FACTORIES.getValue(id);
+    private static McEnvFactory factory(ResourceLocation id) {
+        McEnvFactory factory = RegistryKeys.ENV_FACTORIES.get(id);
         if (factory == null) {
             throw new IllegalArgumentException("Invalid environment type: " + id);
         }
@@ -107,7 +105,7 @@ public final class EnvManager {
      * @param scope 挂载作用域；scenario 非空时被忽略
      * @return 已注册的环境实例
      */
-    private static McEnv register(Identifier id, McEnvFactory factory, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
+    private static McEnv register(ResourceLocation id, McEnvFactory factory, Mob mob, @Nullable ScenarioStore.LoadedScenario scenario, AttachScope scope) {
         close(mob.getUUID());
         McEnv env = factory.create(id, mob, scenario, scope);
         ENVS_BY_ENTITY.put(mob.getUUID(), env);
@@ -187,20 +185,12 @@ public final class EnvManager {
     private static Mob spawnAgent(CompoundTag definition, ServerLevel level, Vec3 pos) {
         CompoundTag nbt = ScenarioWorldCodec.agentData(definition, pos);
         EntityType<?> type = ScenarioWorldCodec.entityType(nbt);
-        Entity entity;
-        try (ProblemReporter.ScopedCollector reporter = new ProblemReporter.ScopedCollector(LOGGER)) {
-            entity = EntityType.create(
-                type,
-                TagValueInput.create(reporter, level.registryAccess(), nbt),
-                level,
-                EntitySpawnReason.COMMAND
-            ).orElseThrow(() -> new IllegalStateException("Failed to rebuild agent from scenario"));
-        }
+        Entity entity = io.github.mousemeya.gymcraft.gym.compat.EntityNbt.restore(type, nbt, level);
         if (!(entity instanceof Mob mob)) {
             entity.discard();
             throw new IllegalStateException("Scenario agent is not a Mob: " + type);
         }
-        mob.snapTo(pos.x, pos.y, pos.z, mob.getYRot(), mob.getXRot());
+        mob.moveTo(pos.x, pos.y, pos.z, mob.getYRot(), mob.getXRot());
         if (!level.addFreshEntity(mob)) {
             throw new IllegalStateException("Failed to add scenario agent to level: " + type);
         }

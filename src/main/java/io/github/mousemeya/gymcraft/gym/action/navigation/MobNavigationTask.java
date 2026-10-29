@@ -250,7 +250,7 @@ public class MobNavigationTask {
     /** 清空自有移动指令与输入；保留惯性、重力等物理速度，不把当前位置当作新目标。 */
     private void stopMovementInput() {
         if (this.mob != null) {
-            this.mob.getMoveControl().setWait();
+            io.github.mousemeya.gymcraft.gym.compat.MoveControlBridge.stop(this.mob.getMoveControl());
             this.mob.setSpeed(0.0F);
             this.mob.setXxa(0.0F);
             this.mob.setYya(0.0F);

@@ -6,14 +6,14 @@ import io.github.mousemeya.gymcraft.GymCraft;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * 客户端 → 服务端：把目标 Mob 绑定的环境保存为命名场景（当前世界与 agent 的即时快照）。
  */
 public record EnvToolSavePayload(UUID target, String name) implements CustomPacketPayload {
     public static final Type<EnvToolSavePayload> TYPE = new Type<>(
-        Identifier.fromNamespaceAndPath(GymCraft.MODID, "env_tool_save"));
+        ResourceLocation.fromNamespaceAndPath(GymCraft.MODID, "env_tool_save"));
     public static final StreamCodec<RegistryFriendlyByteBuf, EnvToolSavePayload> STREAM_CODEC = StreamCodec.of(
         EnvToolSavePayload::write, EnvToolSavePayload::read);
 

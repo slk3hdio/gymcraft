@@ -27,7 +27,7 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.decoration.ArmorStand;
@@ -35,7 +35,7 @@ import net.minecraft.world.entity.monster.warden.Warden;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
-import net.minecraft.world.level.chunk.PalettedContainerFactory;
+import io.github.mousemeya.gymcraft.gym.compat.BlockStateContainers;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -263,7 +263,7 @@ public final class ScenarioGameTests {
                         // 未 reset 即保存：agent 应为当前实体（husk），options 为空
                         EnvManager.saveScenario("immediate", envA, store);
                         CompoundTag saved = store.load("immediate").definition();
-                        check("minecraft:husk".equals(saved.getCompoundOrEmpty("agent").getStringOr("id", "")),
+                        check("minecraft:husk".equals(io.github.mousemeya.gymcraft.gym.compat.NbtValues.string(saved.getCompound("agent"), "id", "")),
                             "pre-reset capture should snapshot the live agent");
                         check(ScenarioWorldCodec.options(saved).isEmpty(), "pre-reset capture should carry no reset options");
                         EnvManager.close(mobA.getUUID());
@@ -415,7 +415,7 @@ public final class ScenarioGameTests {
             store.save("alpha", emptyScenario(level, "gymcraft:general", Map.of(), true));
             ScenarioStore.LoadedScenario overwritten = store.load("alpha");
             assertEquals(helper, "gymcraft:general", ScenarioWorldCodec.envType(overwritten.definition()), "definition not overwritten");
-            assertTrue(helper, overwritten.definition().getCompoundOrEmpty("agent").getBooleanOr("NoAI", false), "agent NBT not overwritten");
+            assertTrue(helper, io.github.mousemeya.gymcraft.gym.compat.NbtValues.bool(overwritten.definition().getCompound("agent"), "NoAI", false), "agent NBT not overwritten");
             assertEquals(helper, options, ScenarioWorldCodec.options(store.load("beta").definition()), "options type or value changed");
             assertTrue(helper, overwritten.chunks().isEmpty() && !Files.exists(dir.resolve("alpha/region")), "empty scenario wrote world files");
             // 构造参数及访问器均须隔离标签，外部修改不能污染后续读取。
@@ -463,8 +463,8 @@ public final class ScenarioGameTests {
             assertTrue(helper, Files.isRegularFile(dir.resolve("wide/region/r.0.0.mca"))
                 && Files.isRegularFile(dir.resolve("wide/region/r.1.0.mca")), "cross-MCA files missing");
             ScenarioStore.LoadedScenario loaded = store.load("wide");
-            Mob anchor = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
-            anchor.snapTo(-37.5, 80, -21.5, 0, 0);
+            Mob anchor = EntityType.HUSK.create(level);
+            anchor.moveTo(-37.5, 80, -21.5, 0, 0);
             EnvStateSnapshot decoded = ScenarioWorldCodec.decode(level, loaded, anchor);
             BlockPos min = new BlockPos(-41, 79, -25);
             assertEquals(helper, min.getX(), decoded.region().minX(), "region x translation incorrect");
@@ -477,12 +477,12 @@ public final class ScenarioGameTests {
                 check(block == expected, "block translation changed at " + pos);
             });
             CompoundTag chest = decoded.blocks().blockEntities().get(min.asLong());
-            assertEquals(helper, min.getX(), chest.getIntOr("x", 0), "block entity coordinate not translated");
-            assertEquals(helper, 7, chest.getListOrEmpty("Items").getCompoundOrEmpty(0).getIntOr("count", 0), "container contents lost");
+            assertEquals(helper, min.getX(), io.github.mousemeya.gymcraft.gym.compat.NbtValues.integer(chest, "x", 0), "block entity coordinate not translated");
+            assertEquals(helper, 7, io.github.mousemeya.gymcraft.gym.compat.NbtValues.integer(io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(chest, "Items").getCompound(0), "count", 0), "container contents lost");
             UUID[] firstUuid = new UUID[1];
             decoded.entities().forEachEntity((type, data) -> {
                 assertEquals(helper, EntityType.ARMOR_STAND, type, "region entity type changed");
-                assertEquals(helper, min.getX() + 17.5, data.getListOrEmpty("Pos").getDoubleOr(0, 0), "entity position not translated");
+                assertEquals(helper, min.getX() + 17.5, io.github.mousemeya.gymcraft.gym.compat.NbtValues.decimal(io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(data, "Pos"), 0, 0), "entity position not translated");
                 firstUuid[0] = RegionEntitySnapshot.getEntityUuid(data, "UUID");
             });
             ScenarioWorldCodec.decode(level, loaded, anchor).entities().forEachEntity((type, data) ->
@@ -491,15 +491,15 @@ public final class ScenarioGameTests {
             // 区块载荷不能共享可变 NBT；错误段集合与调色板必须拒绝。
             Map<ChunkPos, CompoundTag> modified = loaded.chunks();
             modified.get(ChunkPos.ZERO).putInt("xPos", 99);
-            assertEquals(helper, 0, loaded.chunks().get(ChunkPos.ZERO).getIntOr("xPos", -1), "chunk NBT was shared");
+            assertEquals(helper, 0, io.github.mousemeya.gymcraft.gym.compat.NbtValues.integer(loaded.chunks().get(ChunkPos.ZERO), "xPos", -1), "chunk NBT was shared");
             Map<ChunkPos, CompoundTag> damaged = loaded.chunks();
-            damaged.get(ChunkPos.ZERO).getListOrEmpty("sections").remove(0);
+            io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(damaged.get(ChunkPos.ZERO), "sections").remove(0);
             boolean rejected = false;
             try { ScenarioWorldCodec.decode(level, new ScenarioStore.LoadedScenario(loaded.definition(), damaged), anchor); }
             catch (IllegalArgumentException expected) { rejected = true; }
             assertTrue(helper, rejected, "missing section accepted");
             damaged = loaded.chunks();
-            damaged.get(ChunkPos.ZERO).getListOrEmpty("sections").getCompoundOrEmpty(0).put("block_states", new CompoundTag());
+            io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(damaged.get(ChunkPos.ZERO), "sections").getCompound(0).put("block_states", new CompoundTag());
             rejected = false;
             try { ScenarioWorldCodec.decode(level, new ScenarioStore.LoadedScenario(loaded.definition(), damaged), anchor); }
             catch (IllegalArgumentException expected) { rejected = true; }
@@ -524,10 +524,10 @@ public final class ScenarioGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos min = helper.absolutePos(new BlockPos(1, 1, 1));
         BlockPos outside = min.offset(2, 0, 0);
-        Mob anchor = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
-        anchor.snapTo(min.getX() + 0.5, min.getY(), min.getZ() + 0.5, 0, 0);
+        Mob anchor = EntityType.HUSK.create(level);
+        anchor.moveTo(min.getX() + 0.5, min.getY(), min.getZ() + 0.5, 0, 0);
         BoundingBox box = new BoundingBox(min.getX(), min.getY(), min.getZ(), min.getX() + 1, min.getY() + 1, min.getZ() + 1);
-        RegionBlockSnapshot blocks = RegionBlockSnapshot.of(PalettedContainerFactory.create(level.registryAccess()), box,
+        RegionBlockSnapshot blocks = RegionBlockSnapshot.of(BlockStateContainers.create(level.registryAccess()), box,
             List.of(new RegionBlockSnapshot.BlockEntry(min, Blocks.CHEST.defaultBlockState(), chestData(min))));
         EnvStateSnapshot source = EnvStateSnapshot.of(EntitySnapshot.capture(anchor), box, blocks, null);
         ScenarioStore.LoadedScenario encoded = ScenarioWorldCodec.encode(level, "gymcraft:general", Map.of(), source);
@@ -549,16 +549,16 @@ public final class ScenarioGameTests {
     public static void worldBoundsClipping(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         ScenarioStore.LoadedScenario source = clippingScenario(level);
-        Mob anchor = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
+        Mob anchor = EntityType.HUSK.create(level);
         BlockPos center = helper.absolutePos(new BlockPos(3, 2, 3));
         // 在上下边界各舍弃两层；剩余内容不可随裁剪发生额外平移。
-        for (int y : new int[]{level.getMinY(), level.getMaxY() - 1}) {
-            anchor.snapTo(center.getX() + 0.5, y, center.getZ() + 0.5, 0, 0);
+        for (int y : new int[]{level.getMinBuildHeight(), level.getMaxBuildHeight() - 1}) {
+            anchor.moveTo(center.getX() + 0.5, y, center.getZ() + 0.5, 0, 0);
             EnvStateSnapshot decoded = ScenarioWorldCodec.decode(level, source, anchor);
             BoundingBox box = decoded.region();
-            int minY = Math.max(y - 2, level.getMinY());
+            int minY = Math.max(y - 2, level.getMinBuildHeight());
             assertEquals(helper, minY, box.minY(), "clipped region min Y");
-            assertEquals(helper, Math.min(y + 2, level.getMaxY() - 1), box.maxY(), "clipped region max Y");
+            assertEquals(helper, Math.min(y + 2, level.getMaxBuildHeight() - 1), box.maxY(), "clipped region max Y");
             assertEquals(helper, 27, decoded.blockCount(), "clipped block volume");
             assertEquals(helper, 3, decoded.entityCount(), "out-of-height entities not removed");
             assertEquals(helper, 1, decoded.blocks().blockEntities().size(), "out-of-height container not removed");
@@ -569,26 +569,26 @@ public final class ScenarioGameTests {
                 }
             });
             decoded.entities().forEachEntity((type, data) -> {
-                double entityY = data.getListOrEmpty("Pos").getDoubleOr(1, 0);
+                double entityY = io.github.mousemeya.gymcraft.gym.compat.NbtValues.decimal(io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(data, "Pos"), 1, 0);
                 check(entityY >= box.minY() && entityY < box.maxY() + 1.0, "clipped entity still outside region");
                 check(entityY - Math.floor(entityY) == 0.25, "entity fractional coordinate changed");
             });
             CompoundTag chest = decoded.blocks().blockEntities().values().iterator().next();
-            int chestY = y == level.getMinY() ? y + 2 : y - 2;
-            assertEquals(helper, chestY, chest.getIntOr("y", 0), "retained container shifted");
-            assertEquals(helper, 7, chest.getListOrEmpty("Items").getCompoundOrEmpty(0).getIntOr("count", 0), "clipping lost container contents");
+            int chestY = y == level.getMinBuildHeight() ? y + 2 : y - 2;
+            assertEquals(helper, chestY, io.github.mousemeya.gymcraft.gym.compat.NbtValues.integer(chest, "y", 0), "retained container shifted");
+            assertEquals(helper, 7, io.github.mousemeya.gymcraft.gym.compat.NbtValues.integer(io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(chest, "Items").getCompound(0), "count", 0), "clipping lost container contents");
             // 实际恢复触及最高或最低区块段，验证不越界索引且空气恢复只影响裁剪范围。
             ensureChunksLoaded(level, new BlockPos(box.minX(), minY, box.minZ()),
                 new BlockPos(box.maxX(), box.maxY(), box.maxZ()));
             BlockPos air = new BlockPos(center.getX(), minY + 1, center.getZ() + 1);
-            BlockPos outside = new BlockPos(center.getX(), y == level.getMinY() ? y + 3 : y - 3, center.getZ());
+            BlockPos outside = new BlockPos(center.getX(), y == level.getMinBuildHeight() ? y + 3 : y - 3, center.getZ());
             level.setBlock(air, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
             level.setBlock(outside, Blocks.EMERALD_BLOCK.defaultBlockState(), 3);
             decoded.blocks().restore(level);
             assertTrue(helper, level.getBlockState(air).isAir(), "clipped baseline air not restored");
             assertTrue(helper, level.getBlockState(outside).is(Blocks.EMERALD_BLOCK), "clipped restore touched outside region");
             ChestBlockEntity restoredChest = (ChestBlockEntity) level.getBlockEntity(
-                new BlockPos(chest.getIntOr("x", 0), chestY, chest.getIntOr("z", 0)));
+                new BlockPos(io.github.mousemeya.gymcraft.gym.compat.NbtValues.integer(chest, "x", 0), chestY, io.github.mousemeya.gymcraft.gym.compat.NbtValues.integer(chest, "z", 0)));
             assertTrue(helper, restoredChest != null && restoredChest.getItem(0).getCount() == 7,
                 "world-height container restore failed");
             // 裁剪结果再编码、解码必须仍是相同范围，而非恢复原始超界尺寸。
@@ -606,32 +606,32 @@ public final class ScenarioGameTests {
         int south = (int) Math.ceil(border.getMaxZ()) - 1;
         for (BlockPos pos : List.of(new BlockPos(west, 80, 0), new BlockPos(east, 80, 0),
                 new BlockPos(0, 80, north), new BlockPos(0, 80, south))) {
-            anchor.snapTo(Vec3.atBottomCenterOf(pos));
+            anchor.moveTo(Vec3.atBottomCenterOf(pos));
             EnvStateSnapshot decoded = ScenarioWorldCodec.decode(level, source, anchor);
             assertEquals(helper, 30, decoded.blockCount(), "horizontal clipping volume");
             decoded.blocks().forEachCapturedBlock((target, block) ->
                 check(level.isInWorldBounds(target) && border.isWithinBounds(target), "block outside horizontal boundary"));
             decoded.entities().forEachEntity((type, data) -> {
-                ListTag entityPos = data.getListOrEmpty("Pos");
-                check(border.isWithinBounds(entityPos.getDoubleOr(0, 0), entityPos.getDoubleOr(2, 0)),
+                ListTag entityPos = io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(data, "Pos");
+                check(border.isWithinBounds(io.github.mousemeya.gymcraft.gym.compat.NbtValues.decimal(entityPos, 0, 0), io.github.mousemeya.gymcraft.gym.compat.NbtValues.decimal(entityPos, 2, 0)),
                     "entity outside horizontal boundary");
             });
         }
         // 无交集时不得被 BoundingBox 自动交换上下界，产生假的可恢复范围。
-        for (Vec3 pos : List.of(new Vec3(0.5, level.getMaxY() + 5, 0.5),
-                new Vec3(0.5, level.getMinY() - 5, 0.5), new Vec3(east + 5.5, 80, 0.5))) {
-            anchor.snapTo(pos);
+        for (Vec3 pos : List.of(new Vec3(0.5, level.getMaxBuildHeight() + 5, 0.5),
+                new Vec3(0.5, level.getMinBuildHeight() - 5, 0.5), new Vec3(east + 5.5, 80, 0.5))) {
+            anchor.moveTo(pos);
             EnvStateSnapshot decoded = ScenarioWorldCodec.decode(level, source, anchor);
             assertTrue(helper, decoded.region() == null && decoded.blocks() == null && decoded.entities() == null,
                 "fully out-of-world region did not become empty");
-            assertEquals(helper, pos.y, decoded.agent().data().getListOrEmpty("Pos").getDoubleOr(1, 0), "agent anchor moved");
+            assertEquals(helper, pos.y, io.github.mousemeya.gymcraft.gym.compat.NbtValues.decimal(io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(decoded.agent().data(), "Pos"), 1, 0), "agent anchor moved");
         }
         // 方块和实体捕获相互独立；仅实体场景同样必须裁剪区域与实体。
-        anchor.snapTo(9.5, 40, 9.5, 0, 0);
+        anchor.moveTo(9.5, 40, 9.5, 0, 0);
         EnvStateSnapshot original = ScenarioWorldCodec.decode(level, source, anchor);
         ScenarioStore.LoadedScenario entitiesOnly = ScenarioWorldCodec.encode(level, "gymcraft:general", Map.of(),
             EnvStateSnapshot.of(original.agent(), original.region(), null, original.entities()));
-        anchor.snapTo(center.getX() + 0.5, level.getMinY(), center.getZ() + 0.5, 0, 0);
+        anchor.moveTo(center.getX() + 0.5, level.getMinBuildHeight(), center.getZ() + 0.5, 0, 0);
         EnvStateSnapshot clippedEntities = ScenarioWorldCodec.decode(level, entitiesOnly, anchor);
         assertTrue(helper, clippedEntities.blocks() == null, "entity-only clipping introduced blocks");
         assertEquals(helper, 3, clippedEntities.region().getYSpan(), "entity-only region was not clipped");
@@ -643,7 +643,7 @@ public final class ScenarioGameTests {
     private static ScenarioStore.LoadedScenario clippingScenario(ServerLevel level) {
         BlockPos min = new BlockPos(8, 38, 8);
         BoundingBox box = new BoundingBox(8, 38, 8, 10, 42, 10);
-        RegionBlockSnapshot blocks = RegionBlockSnapshot.of(PalettedContainerFactory.create(level.registryAccess()), box,
+        RegionBlockSnapshot blocks = RegionBlockSnapshot.of(BlockStateContainers.create(level.registryAccess()), box,
             List.of(new RegionBlockSnapshot.BlockEntry(min, Blocks.CHEST.defaultBlockState(), chestData(min)),
                 new RegionBlockSnapshot.BlockEntry(min.offset(2, 4, 2), Blocks.CHEST.defaultBlockState(), chestData(min.offset(2, 4, 2))),
                 new RegionBlockSnapshot.BlockEntry(min.offset(1, 2, 1), Blocks.DIAMOND_BLOCK.defaultBlockState(), null)));
@@ -664,14 +664,14 @@ public final class ScenarioGameTests {
     /** 验证三份内置资源均可加载，重复读取及 UUID 分配互不污染。 */
     public static void bundledIsolation(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        Mob anchor = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
-        anchor.snapTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(2, 1, 2))));
+        Mob anchor = EntityType.HUSK.create(level);
+        anchor.moveTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(2, 1, 2))));
         for (String name : List.of("iron_mining", "iron_golem_warden", "parkour_mob")) {
             ScenarioStore.LoadedScenario first = ScenarioStore.loadBundled(level, name).orElseThrow();
             ScenarioStore.LoadedScenario second = ScenarioStore.loadBundled(level, name).orElseThrow();
             assertEquals(helper, "gymcraft:" + name, ScenarioWorldCodec.envType(first.definition()), "bundled env type changed");
             assertTrue(helper, !first.chunks().isEmpty(), "bundled world empty");
-            first.definition().getCompoundOrEmpty("agent").putString("id", "invalid");
+            first.definition().getCompound("agent").putString("id", "invalid");
             first.chunks().get(ChunkPos.ZERO).putInt("xPos", 99);
             ScenarioWorldCodec.decode(level, second, anchor);
             if (name.equals("iron_golem_warden")) {
@@ -709,7 +709,7 @@ public final class ScenarioGameTests {
     private static ScenarioStore.LoadedScenario wideScenario(ServerLevel level) {
         BoundingBox box = new BoundingBox(12, 39, 12, 524, 55, 13);
         BlockPos min = new BlockPos(12, 39, 12);
-        RegionBlockSnapshot blocks = RegionBlockSnapshot.of(PalettedContainerFactory.create(level.registryAccess()), box, List.of(
+        RegionBlockSnapshot blocks = RegionBlockSnapshot.of(BlockStateContainers.create(level.registryAccess()), box, List.of(
             new RegionBlockSnapshot.BlockEntry(min, Blocks.CHEST.defaultBlockState(), chestData(min)),
             new RegionBlockSnapshot.BlockEntry(min.offset(512, 16, 1), Blocks.DIAMOND_BLOCK.defaultBlockState(), null),
             new RegionBlockSnapshot.BlockEntry(min.offset(1, 0, 1), Blocks.CAVE_AIR.defaultBlockState(), null)));
@@ -762,7 +762,7 @@ public final class ScenarioGameTests {
         store.save("external", new ScenarioStore.LoadedScenario(source.definition(), chunks));
         Path external = dir.resolve("external/region/c.0.0.mcc");
         assertTrue(helper, Files.isRegularFile(external), "oversized chunk did not use MCC");
-        byte[] restored = store.load("external").chunks().get(ChunkPos.ZERO).getByteArray("test_payload").orElseThrow();
+        byte[] restored = store.load("external").chunks().get(ChunkPos.ZERO).getByteArray("test_payload");
         assertTrue(helper, Arrays.equals(payload, restored), "external chunk payload changed");
         Files.delete(external);
         assertTrue(helper, loadRejected(store, "external"), "missing external MCC accepted");
@@ -782,8 +782,8 @@ public final class ScenarioGameTests {
         // 基线内容：区域内一个标记方块与一个盔甲架（捕获进快照）。
         BlockPos marker = helper.absolutePos(new BlockPos(3, 2, 3));
         level.setBlock(marker, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
-        ArmorStand armorStand = EntityType.ARMOR_STAND.create(level, EntitySpawnReason.COMMAND);
-        armorStand.snapTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(5, 2, 3))));
+        ArmorStand armorStand = EntityType.ARMOR_STAND.create(level);
+        armorStand.moveTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(5, 2, 3))));
         level.addFreshEntity(armorStand);
         UUID baselineEntityUuid = armorStand.getUUID();
         BlockPos outside = helper.absolutePos(new BlockPos(1, 2, 1));
@@ -816,8 +816,8 @@ public final class ScenarioGameTests {
                     level.setBlock(marker, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
                     level.setBlock(eastEdge, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
                     armorStand.discard();
-                    Mob intruder = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
-                    intruder.snapTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(5, 2, 5))));
+                    Mob intruder = EntityType.HUSK.create(level);
+                    intruder.moveTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(5, 2, 5))));
                     level.addFreshEntity(intruder);
                     intruderUuid.set(intruder.getUUID());
                     level.setBlock(outside, Blocks.EMERALD_BLOCK.defaultBlockState(), 3);
@@ -862,8 +862,8 @@ public final class ScenarioGameTests {
         UUID agentUuid = agent.getUUID();
         BlockPos marker = helper.absolutePos(new BlockPos(3, 2, 3));
         level.setBlock(marker, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
-        ArmorStand armorStand = EntityType.ARMOR_STAND.create(level, EntitySpawnReason.COMMAND);
-        armorStand.snapTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(5, 2, 3))));
+        ArmorStand armorStand = EntityType.ARMOR_STAND.create(level);
+        armorStand.moveTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(5, 2, 3))));
         level.addFreshEntity(armorStand);
         UUID baselineEntityUuid = armorStand.getUUID();
         AtomicReference<Throwable> failure = new AtomicReference<>();
@@ -933,7 +933,7 @@ public final class ScenarioGameTests {
                     BoundingBox region = env.stateRegion();
                     check(region != null, "full-height scope attach did not capture a region");
                     BlockPos anchor = anchorRef.get();
-                    check(region.minY() == level.getMinY() && region.maxY() == level.getMaxY() - 1,
+                    check(region.minY() == level.getMinBuildHeight() && region.maxY() == level.getMaxBuildHeight() - 1,
                         "vertical extents were not clamped to the world height");
                     check(region.minX() == anchor.getX() - 2 && region.maxX() == anchor.getX() + 3
                         && region.minZ() == anchor.getZ() - 1 && region.maxZ() == anchor.getZ() + 3,
@@ -976,16 +976,16 @@ public final class ScenarioGameTests {
             new EntitySnapshot(EntityType.HUSK, level.dimension(), agentData), box, null, entities);
         ScenarioStore.LoadedScenario encoded = ScenarioWorldCodec.encode(level, "gymcraft:general", Map.of(), state);
         ScenarioWorldCodec.validate(encoded);
-        assertTrue(helper, !encoded.definition().getBooleanOr("capture_blocks", true),
+        assertTrue(helper, !io.github.mousemeya.gymcraft.gym.compat.NbtValues.bool(encoded.definition(), "capture_blocks", true),
             "entities-only scenario must record capture_blocks=false");
         assertTrue(helper, !encoded.chunks().isEmpty(), "entities-only scenario lost its chunks");
         for (CompoundTag chunk : encoded.chunks().values()) {
-            assertTrue(helper, chunk.getListOrEmpty("sections").isEmpty(),
+            assertTrue(helper, io.github.mousemeya.gymcraft.gym.compat.NbtValues.list(chunk, "sections").isEmpty(),
                 "entities-only chunk carries block sections");
         }
         // 解码到结构内的新锚点：区域随锚点平移（min_offset = 区域最小角 - agent 方块位置）。
-        Mob anchor = EntityType.HUSK.create(level, EntitySpawnReason.COMMAND);
-        anchor.snapTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(4, 2, 4))));
+        Mob anchor = EntityType.HUSK.create(level);
+        anchor.moveTo(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(4, 2, 4))));
         EnvStateSnapshot decoded = ScenarioWorldCodec.decode(level, encoded, anchor);
         BlockPos expectedMin = helper.absolutePos(new BlockPos(1, 1, 1));
         assertTrue(helper, decoded.region() != null

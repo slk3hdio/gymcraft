@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.ContainerUser;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.ContainerOpenersCounter;
 import net.minecraft.world.level.block.state.BlockState;
@@ -51,7 +51,20 @@ public abstract class ContainerOpenersCounterMixin {
     protected abstract void openerCountChanged(Level level, BlockPos pos, BlockState blockState, int previous, int current);
 
     @Shadow
-    public abstract List<ContainerUser> getEntitiesWithContainerOpen(Level level, BlockPos pos);
+    protected abstract List<Player> getPlayersWithContainerOpen(Level level, BlockPos pos);
+
+    @Shadow
+    protected abstract boolean isOwnContainer(Player player);
+
+    /**
+     * 目标容器对指定玩家的“是否持有本容器菜单”判定（包装 shadow 的抽象方法）。
+     *
+     * @param player 待判定的玩家
+     * @return 玩家当前打开的菜单是否正是本容器
+     */
+    private boolean gymcraft$isOwnContainer(Player player) {
+        return this.isOwnContainer(player);
+    }
 
     /**
      * 重实现自检：在世界实体扫描结果上并入 GymCraft 活动菜单会话数。
@@ -60,14 +73,16 @@ public abstract class ContainerOpenersCounterMixin {
      */
     @Inject(method = "recheckOpeners", at = @At("HEAD"), cancellable = true)
     private void gymcraft$recheckOpeners(Level level, BlockPos pos, BlockState blockState, CallbackInfo ci) {
-        List<ContainerUser> containerUsers = this.getEntitiesWithContainerOpen(level, pos);
+        List<Player> players = this.getPlayersWithContainerOpen(level, pos);
         this.maxInteractionRange = 0.0;
-        for (ContainerUser containerUser : containerUsers) {
-            this.maxInteractionRange = Math.max(containerUser.getContainerInteractionRange(), this.maxInteractionRange);
+        for (Player player : players) {
+            this.maxInteractionRange = Math.max(player.blockInteractionRange(), this.maxInteractionRange);
         }
 
-        int openCount = containerUsers.size()
-            + MenuOpenersBridge.extraOpeners((ContainerOpenersCounter) (Object) this, level);
+        // 会话补充计数经谓词传入：isOwnContainer 在 1.21.1 为 protected，
+        // 不能用 AT 放开（会破坏原版匿名实现类的窄化覆盖）
+        int openCount = players.size()
+            + MenuOpenersBridge.extraOpeners(this::gymcraft$isOwnContainer, level);
         int prevCount = this.openCount;
         if (prevCount != openCount) {
             boolean isOpen = openCount != 0;

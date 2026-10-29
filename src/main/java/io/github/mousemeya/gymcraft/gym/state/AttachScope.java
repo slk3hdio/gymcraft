@@ -51,8 +51,8 @@ public record AttachScope(@Nullable BoundingBox region, boolean captureBlocks, b
         }
         BlockPos anchor = mob.blockPosition();
         // 垂直方向钳到建筑高度内的可达距离，区域天然不越出世界。
-        int downClamped = Math.min(Math.max(down, 0), anchor.getY() - mob.level().getMinY());
-        int upClamped = Math.min(Math.max(up, 0), mob.level().getMaxY() - 1 - anchor.getY());
+        int downClamped = Math.min(Math.max(down, 0), anchor.getY() - mob.level().getMinBuildHeight());
+        int upClamped = Math.min(Math.max(up, 0), mob.level().getMaxBuildHeight() - 1 - anchor.getY());
         return new AttachScope(
             new BoundingBox(
                 anchor.getX() - clamp(west), anchor.getY() - downClamped, anchor.getZ() - clamp(north),
