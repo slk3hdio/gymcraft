@@ -53,7 +53,7 @@ public final class MiningEnv extends AbstractMcEnv {
     /** 默认决策步数上限。 */
     public static final int DEFAULT_MAX_STEPS = 512;
     /** 原木标签对应的稳定物品 ID，用于匹配背包观测。 */
-    private static final Set<String> LOG_ITEM_IDS = BuiltInRegistries.ITEM.listElements()
+    private static final Set<String> LOG_ITEM_IDS = BuiltInRegistries.ITEM.holders()
         .filter(holder -> holder.is(ItemTags.LOGS))
         .map(holder -> BuiltInRegistries.ITEM.getKey(holder.value()).toString())
         .collect(Collectors.toUnmodifiableSet());
