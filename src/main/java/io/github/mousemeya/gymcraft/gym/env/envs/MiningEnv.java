@@ -4,28 +4,28 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
-import net.minecraft.core.BlockPos;
+import com.google.protobuf.InvalidProtocolBufferException;
+
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.ItemTags;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.action.component.PickUpItemController;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
-import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMenuObservation;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoSelfState;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
@@ -35,16 +35,16 @@ import io.github.mousemeya.gymcraft.registry.ObservationCreators;
  * 天然单区块采矿任务环境：agent 在区块中心地表出生，训练区域为单个区块乘以完整世界
  * 高度（16×16×384），区域内保证至少 5 个原木与至少 1 块铁矿石。
  * <p>
- * 成功条件是做出铁镐（{@link Items#IRON_PICKAXE} 进入统一物品栏）。里程碑按工具链
- * 顺序发放一次性首次完成奖励：原木（任意树种）→ 工作台 → 木镐 → 圆石 → 石镐 →
- * 熔炉 → 粗铁 → 铁锭 → 铁镐（= 成功终止）。工作台与熔炉接受"物品栏持有或区域内已放置"
- * 两种达成方式。失败原因仅有 agent 死亡（{@code agent_dead}）与越出区域水平边界
+ * 成功条件是背包观测中出现铁镐（{@link Items#IRON_PICKAXE}）。里程碑按工具链顺序发放
+ * 一次性首次完成奖励：原木（任意树种）→ 工作台 → 木镐 → 圆石 → 石镐 → 熔炉 →
+ * 粗铁 → 铁锭 → 铁镐（= 成功终止）。所有里程碑只认背包观测中的物品，不接受区域内
+ * 已放置方块。失败原因仅有 agent 死亡（{@code agent_dead}）与越出区域水平边界
  * （{@code out_of_bounds}；无区域的纯挂载不启用越界判定），不做铁矿耗尽判定。
  * </p>
  * <p>
- * 场景创建时，训练区域与资源布局全部来自显式场景文件；无场景挂载仅管理现有 agent，
- * 不扫描训练区域。reset 恢复对应状态基线；close 不恢复世界。任务状态只从真实世界
- * 与 Agent 统一物品栏推导，不依赖 Python 客户端自行判分。
+ * 场景创建时，训练区域与资源布局全部来自显式场景文件；无场景挂载仅管理现有 agent。
+ * reset 恢复对应状态基线；close 不恢复世界。任务评估只读取当前 step 的 protobuf
+ * 观测，不直接读取 Mob、物品栏或世界方块，也不依赖 Python 客户端自行判分。
  * </p>
  */
 public final class MiningEnv extends AbstractMcEnv {
@@ -52,8 +52,12 @@ public final class MiningEnv extends AbstractMcEnv {
     public static final String MAX_STEPS_OPTION = "max_steps";
     /** 默认决策步数上限。 */
     public static final int DEFAULT_MAX_STEPS = 512;
+    /** 原木标签对应的稳定物品 ID，用于匹配背包观测。 */
+    private static final Set<String> LOG_ITEM_IDS = BuiltInRegistries.ITEM.listElements()
+        .filter(holder -> holder.is(ItemTags.LOGS))
+        .map(holder -> BuiltInRegistries.ITEM.getKey(holder.value()).toString())
+        .collect(Collectors.toUnmodifiableSet());
 
-    private final ServerLevel level;
     private final EnumMap<Milestone, Boolean> milestones = new EnumMap<>(Milestone.class);
 
     private int maxSteps = DEFAULT_MAX_STEPS;
@@ -117,10 +121,6 @@ public final class MiningEnv extends AbstractMcEnv {
             scenario,
             scope
         );
-        if (!(mob.level() instanceof ServerLevel serverLevel)) {
-            throw new IllegalArgumentException("mining requires a server-level Mob");
-        }
-        this.level = serverLevel;
         this.resetMilestones();
 
         // 紧凑训练场中的方块掉落常停在方块边缘；略微放宽距离可避免寻路在邻格中心提前结束。
@@ -153,7 +153,7 @@ public final class MiningEnv extends AbstractMcEnv {
     @Override
     protected Map<String, Object> createStepInfo(ProtoMcObservation observation) {
         this.steps++;
-        this.evaluation = this.evaluateStep();
+        this.evaluation = this.evaluateStep(observation);
         return this.evaluation.toInfo(this);
     }
 
@@ -208,51 +208,39 @@ public final class MiningEnv extends AbstractMcEnv {
     }
 
     /**
-     * 从统一物品栏和世界状态推导里程碑、奖励和终止原因。
+     * 只从当前 step 的背包与自身状态观测推导里程碑、奖励和终止原因。
+     * 背包菜单未打开时槽位为空，本步不会新增物品里程碑。
      *
+     * @param observation 动作完成后的组合观测
      * @return 本 step 的不可变评估
      */
-    private StepEvaluation evaluateStep() {
-        Mob mob = this.mob();
+    private StepEvaluation evaluateStep(ProtoMcObservation observation) {
+        ProtoMenuObservation inventory = component(
+            observation, "gymcraft:menu", ProtoMenuObservation.class);
+        ProtoSelfState self = component(observation, "gymcraft:self", ProtoSelfState.class);
         double reward = 0.0;
-        reward += this.completeIfPresent(Milestone.LOG, inventoryContains(mob, ItemTags.LOGS));
+        reward += this.completeIfPresent(Milestone.LOG, inventoryContains(inventory, LOG_ITEM_IDS));
         reward += this.completeIfPresent(Milestone.CRAFTING_TABLE,
-            this.heldOrPlaced(Milestone.CRAFTING_TABLE, mob, Items.CRAFTING_TABLE, Blocks.CRAFTING_TABLE));
-        reward += this.completeIfPresent(Milestone.WOODEN_PICKAXE, inventoryContains(mob, Items.WOODEN_PICKAXE));
-        reward += this.completeIfPresent(Milestone.COBBLESTONE, inventoryContains(mob, Items.COBBLESTONE));
-        reward += this.completeIfPresent(Milestone.STONE_PICKAXE, inventoryContains(mob, Items.STONE_PICKAXE));
-        reward += this.completeIfPresent(Milestone.FURNACE,
-            this.heldOrPlaced(Milestone.FURNACE, mob, Items.FURNACE, Blocks.FURNACE));
-        reward += this.completeIfPresent(Milestone.RAW_IRON, inventoryContains(mob, Items.RAW_IRON));
-        reward += this.completeIfPresent(Milestone.IRON_INGOT, inventoryContains(mob, Items.IRON_INGOT));
-        boolean success = inventoryContains(mob, Items.IRON_PICKAXE);
+            inventoryContains(inventory, Items.CRAFTING_TABLE));
+        reward += this.completeIfPresent(Milestone.WOODEN_PICKAXE,
+            inventoryContains(inventory, Items.WOODEN_PICKAXE));
+        reward += this.completeIfPresent(Milestone.COBBLESTONE,
+            inventoryContains(inventory, Items.COBBLESTONE));
+        reward += this.completeIfPresent(Milestone.STONE_PICKAXE,
+            inventoryContains(inventory, Items.STONE_PICKAXE));
+        reward += this.completeIfPresent(Milestone.FURNACE, inventoryContains(inventory, Items.FURNACE));
+        reward += this.completeIfPresent(Milestone.RAW_IRON, inventoryContains(inventory, Items.RAW_IRON));
+        reward += this.completeIfPresent(Milestone.IRON_INGOT, inventoryContains(inventory, Items.IRON_INGOT));
+        boolean success = inventoryContains(inventory, Items.IRON_PICKAXE);
         reward += this.completeIfPresent(Milestone.IRON_PICKAXE, success);
 
         String failureReason = null;
-        if (!mob.isAlive()) {
+        if (!self.getAlive()) {
             failureReason = "agent_dead";
-        } else if (!this.isInsideArena(mob.position())) {
+        } else if (!this.isInsideArena(self.getX(), self.getZ())) {
             failureReason = "out_of_bounds";
         }
         return new StepEvaluation(this.currentStage(), reward, success, failureReason);
-    }
-
-    /**
-     * 判断"物品栏持有或区域内已放置"类里程碑是否达成；已完成的里程碑直接短路返回
-     * true（结果不影响奖励），物品栏命中时跳过区域扫描——区域为 16×16×384 约十万个
-     * 方块，全量扫描只在物品栏未命中且里程碑未完成时发生。
-     *
-     * @param milestone 待检查里程碑
-     * @param mob 当前受控 Mob
-     * @param item 物品栏匹配物品
-     * @param block 区域扫描目标方块
-     * @return 达成时为 true
-     */
-    private boolean heldOrPlaced(Milestone milestone, Mob mob, Item item, Block block) {
-        if (Boolean.TRUE.equals(this.milestones.get(milestone))) {
-            return true;
-        }
-        return inventoryContains(mob, item) || this.containsBlockInArena(block);
     }
 
     /**
@@ -324,58 +312,42 @@ public final class MiningEnv extends AbstractMcEnv {
     }
 
     /**
-     * 判断指定方块是否存在于训练区域（范围取自场景 scope）。
+     * 判断自身观测中的位置是否仍位于训练区域水平边界内。
      *
-     * @param block 目标方块
-     * @return 区域内至少存在一块时为 true
-     */
-    private boolean containsBlockInArena(Block block) {
-        AABB arena = this.scopeAabb();
-        if (arena == null) return false;
-        for (BlockPos pos : BlockPos.betweenClosed(
-            BlockPos.containing(arena.minX, arena.minY, arena.minZ),
-            BlockPos.containing(arena.maxX - 1, arena.maxY - 1, arena.maxZ - 1)
-        )) {
-            if (this.level.getBlockState(pos).is(block)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 判断 Mob 中心是否仍位于训练区域水平边界内。
-     *
-     * @param position Mob 当前坐标
+     * @param x 当前 X 坐标
+     * @param z 当前 Z 坐标
      * @return 位于边界内或无区域时为 true
      */
-    private boolean isInsideArena(Vec3 position) {
+    private boolean isInsideArena(double x, double z) {
         AABB arena = this.scopeAabb();
         if (arena == null) return true;
-        return position.x >= arena.minX && position.x < arena.maxX
-            && position.z >= arena.minZ && position.z < arena.maxZ;
+        return x >= arena.minX && x < arena.maxX && z >= arena.minZ && z < arena.maxZ;
     }
 
-    /**
-     * 判断 Agent 任一统一槽位是否包含指定物品。
-     *
-     * @param mob 目标 Mob
-     * @param item 要查找的物品
-     * @return 至少存在一个非空匹配堆栈时为 true
-     */
-    private static boolean inventoryContains(Mob mob, Item item) {
-        return AgentInventoryLayout.resolve(mob).slots().stream().anyMatch(slot -> slot.getItem().is(item));
+    /** 判断背包观测的任一槽位是否包含指定物品。 */
+    private static boolean inventoryContains(ProtoMenuObservation inventory, Item item) {
+        return inventoryContains(inventory, Set.of(BuiltInRegistries.ITEM.getKey(item).toString()));
     }
 
-    /**
-     * 判断 Agent 任一统一槽位是否包含指定标签下的物品（如任意树种原木）。
-     *
-     * @param mob 目标 Mob
-     * @param tag 要匹配的物品标签
-     * @return 至少存在一个非空匹配堆栈时为 true
-     */
-    private static boolean inventoryContains(Mob mob, TagKey<Item> tag) {
-        return AgentInventoryLayout.resolve(mob).slots().stream().anyMatch(slot -> slot.getItem().is(tag));
+    /** 判断背包观测的任一槽位是否包含指定 ID 集合中的物品。 */
+    private static boolean inventoryContains(ProtoMenuObservation inventory, Set<String> itemIds) {
+        return inventory.getSlotsList().stream()
+            .filter(slot -> slot.hasItem())
+            .anyMatch(slot -> itemIds.contains(slot.getItem().getItemId()));
+    }
+
+    /** 解包本环境必需的观测组件；缺失或类型错误时使本次 step 明确失败。 */
+    private static <T extends com.google.protobuf.Message> T component(
+            ProtoMcObservation observation, String componentId, Class<T> type) {
+        var packed = observation.getComponentsMap().get(componentId);
+        if (packed == null) {
+            throw new IllegalStateException("Missing observation component: " + componentId);
+        }
+        try {
+            return packed.unpack(type);
+        } catch (InvalidProtocolBufferException error) {
+            throw new IllegalStateException("Invalid observation component: " + componentId, error);
+        }
     }
 
     /**

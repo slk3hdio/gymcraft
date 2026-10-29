@@ -12,6 +12,7 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.profiling.Profiler;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -108,9 +109,11 @@ public final class EnvChunkGuard {
     /** 每 tick 检查 agent 区块迁移：迁入新区块时补票，迁出时释放旧跟随票。 */
     @SubscribeEvent
     private void onServerTickPost(ServerTickEvent.Post event) {
-        Mob mob = this.mobSupplier.get();
-        if (mob != null) {
-            this.trackAgent(mob);
+        try (var zone = Profiler.get().zone("gymcraft_chunk_guard")) {
+            Mob mob = this.mobSupplier.get();
+            if (mob != null) {
+                this.trackAgent(mob);
+            }
         }
     }
 

@@ -27,6 +27,8 @@ import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoOpenMenu;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSelfMenuTarget;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 
 /**
@@ -61,6 +63,7 @@ public final class MiningEnvGameTests {
                     (Mob) helper.getLevel().getEntity(agentUuid))));
                 McEnv env = ref.get();
                 env.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
+                openSelf(env);
                 // 按工具链顺序注入：白桦原木验证 log 里程碑接受任意树种（非橡木）
                 expectMilestone(helper, agentUuid, env, Items.BIRCH_LOG, 0.5, "log");
                 expectMilestone(helper, agentUuid, env, Items.CRAFTING_TABLE, 1.0, "crafting_table");
@@ -178,16 +181,22 @@ public final class MiningEnvGameTests {
         });
     }
 
-    /**
-     * 执行单动作 noop step。
-     *
-     * @param env 任务环境
-     * @return step 响应
-     */
+    /** 打开自身背包，使后续 menu 观测包含统一物品栏槽位。 */
+    private static void openSelf(McEnv env) {
+        step(env, "gymcraft:open_menu", ProtoOpenMenu.newBuilder()
+            .setSelf(ProtoSelfMenuTarget.getDefaultInstance()).build());
+    }
+
+    /** 执行单动作 noop step。 */
     private static StepResponse noop(McEnv env) {
+        return step(env, "gymcraft:noop", ProtoNoop.getDefaultInstance());
+    }
+
+    /** 执行一个 protobuf 动作。 */
+    private static StepResponse step(McEnv env, String componentId, Message payload) {
         ProtoMcAction action = ProtoMcAction.newBuilder()
-            .setComponentId("gymcraft:noop")
-            .setPayload(Any.pack((Message) ProtoNoop.getDefaultInstance()))
+            .setComponentId(componentId)
+            .setPayload(Any.pack(payload))
             .build();
         return env.step(List.of(action), 0.0F);
     }

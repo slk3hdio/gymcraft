@@ -15,6 +15,7 @@ import io.github.mousemeya.gymcraft.gym.entity.PlayerSimTargetingHooks;
 import io.github.mousemeya.gymcraft.gym.env.EnvChunkGuard;
 import io.github.mousemeya.gymcraft.gym.health.DamageLogHooks;
 import io.github.mousemeya.gymcraft.gym.rpc.GymCraftRpcServer;
+import io.github.mousemeya.gymcraft.gym.runtime.TickMetricsCollector;
 import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentHooks;
 import io.github.mousemeya.gymcraft.network.GymCraftNetwork;
@@ -84,6 +85,9 @@ public class GymCraft {
         NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStarted);
         NeoForge.EVENT_BUS.addListener(GymCraftRpcServer::onServerStopping);
         NeoForge.EVENT_BUS.addListener(GymCraftCommands::register);
+        // 测评指标：Pre 尽量最早、Post 尽量最晚，覆盖完整服务端 tick；默认关闭。
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, TickMetricsCollector::onServerTickPre);
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, TickMetricsCollector::onServerTickPost);
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onLivingDeath);
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, MobAttachmentHooks::onLivingDrops);
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onEntityLeaveLevel);
