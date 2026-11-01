@@ -21,18 +21,18 @@ class ProtoLookAtEntityTarget(_message.Message):
     entity_id: int
     def __init__(self, entity_id: _Optional[int] = ...) -> None: ...
 
-class ProtoLookAtItemTarget(_message.Message):
-    __slots__ = ("entity_id",)
-    ENTITY_ID_FIELD_NUMBER: _ClassVar[int]
-    entity_id: int
-    def __init__(self, entity_id: _Optional[int] = ...) -> None: ...
+class ProtoLookAtSlotTarget(_message.Message):
+    __slots__ = ("slot_id",)
+    SLOT_ID_FIELD_NUMBER: _ClassVar[int]
+    slot_id: int
+    def __init__(self, slot_id: _Optional[int] = ...) -> None: ...
 
 class ProtoLookAt(_message.Message):
-    __slots__ = ("entity", "item", "block")
+    __slots__ = ("entity", "block", "slot")
     ENTITY_FIELD_NUMBER: _ClassVar[int]
-    ITEM_FIELD_NUMBER: _ClassVar[int]
     BLOCK_FIELD_NUMBER: _ClassVar[int]
+    SLOT_FIELD_NUMBER: _ClassVar[int]
     entity: ProtoLookAtEntityTarget
-    item: ProtoLookAtItemTarget
     block: ProtoLookAtBlockTarget
-    def __init__(self, entity: _Optional[_Union[ProtoLookAtEntityTarget, _Mapping]] = ..., item: _Optional[_Union[ProtoLookAtItemTarget, _Mapping]] = ..., block: _Optional[_Union[ProtoLookAtBlockTarget, _Mapping]] = ...) -> None: ...
+    slot: ProtoLookAtSlotTarget
+    def __init__(self, entity: _Optional[_Union[ProtoLookAtEntityTarget, _Mapping]] = ..., block: _Optional[_Union[ProtoLookAtBlockTarget, _Mapping]] = ..., slot: _Optional[_Union[ProtoLookAtSlotTarget, _Mapping]] = ...) -> None: ...

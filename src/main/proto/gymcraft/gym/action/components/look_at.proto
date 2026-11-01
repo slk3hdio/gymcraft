@@ -13,21 +13,22 @@ message ProtoLookAtBlockTarget {
   int32 z = 3;
 }
 
-// 普通实体视线目标，以实体眼睛位置作为注视点。
+// 实体视线目标，接受任意已加载实体；普通实体注视眼睛，掉落物注视包围盒中心。
 message ProtoLookAtEntityTarget {
   int32 entity_id = 1;
 }
 
-// 掉落物视线目标，以掉落物包围盒中心作为注视点。
-message ProtoLookAtItemTarget {
-  int32 entity_id = 1;
+// Agent 自身物品栏槽位查询目标；只读返回物品描述，不移动视线。
+message ProtoLookAtSlotTarget {
+  int32 slot_id = 1;
 }
 
-// 将 Agent 当前视线瞬时对准一个已加载目标。
+// 将 Agent 当前视线瞬时对准一个已加载目标，或查询自身物品栏槽位。
 message ProtoLookAt {
+  reserved 2;
   oneof target {
     ProtoLookAtEntityTarget entity = 1;
-    ProtoLookAtItemTarget item = 2;
     ProtoLookAtBlockTarget block = 3;
+    ProtoLookAtSlotTarget slot = 4;
   }
 }

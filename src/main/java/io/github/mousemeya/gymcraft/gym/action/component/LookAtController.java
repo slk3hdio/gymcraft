@@ -1,7 +1,9 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -15,6 +17,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 
+import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.EnvironmentRegionAware;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
@@ -24,17 +27,20 @@ import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoLookAt;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoLookAtBlockTarget;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoLookAtEntityTarget;
-import io.github.mousemeya.gymcraft.gym.action.proto.ProtoLookAtItemTarget;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoLookAtSlotTarget;
+import io.github.mousemeya.gymcraft.gym.describe.TargetDescriber;
+import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
+import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 
 /**
- * 注视目标动作组件 —— 将 Agent 的当前视线瞬时对准实体、掉落物或方块。
+ * 注视目标动作组件 —— 将 Agent 的当前视线瞬时对准实体或方块，或查询自身物品栏槽位。
  * <p>
- * 普通实体目标接受已加载、存活且不是掉落物的 {@link Entity}，注视其眼睛位置；
- * 掉落物目标只接受有效的 {@link ItemEntity}，注视其包围盒中心；方块目标只需位于
- * 已加载区块，空气也可作为目标，注视对应方块坐标中心。动作会同步实体朝向、俯仰角和头部朝向，
- * 同时向 {@code LookControl} 写入同一目标，避免当前实体 tick 把视线立即复位。
+ * 实体目标接受已加载、存活的任意 {@link Entity}，普通实体注视眼睛位置，{@link ItemEntity}
+ * 注视包围盒中心；方块目标只需位于已加载区块，空气也可作为目标，注视对应方块坐标中心。
+ * 视线动作会同步实体朝向、俯仰角和头部朝向，同时向 {@code LookControl} 写入同一目标。
+ * 槽位目标使用统一 slot_id 只读查询 Agent 物品栏，不移动视线。成功反馈携带目标描述。
  * 实现了 {@link EnvironmentRegionAware}：环境区域非空时方块目标坐标空间收紧到区域边界。
  * </p>
  * <p>
@@ -42,7 +48,12 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * </p>
  */
 public class LookAtController extends AbstractActionComponentController<ProtoLookAt>
-    implements EnvironmentRegionAware {
+    implements EnvironmentRegionAware, ComponentOptionAware {
+
+    private static final int DEFAULT_DESCRIPTION_MAX_LINES = 8;
+    private static final Set<String> OPTION_KEYS = Set.of("description_max_lines");
+
+    private int descriptionMaxLines = DEFAULT_DESCRIPTION_MAX_LINES;
 
     /**
      * 创建绑定指定 Agent 的注视动作控制器。
@@ -51,6 +62,28 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
      */
     public LookAtController(Mob mob) {
         super(mob);
+    }
+
+    /** 设置成功反馈的最大描述行数（必须为正整数）。 */
+    public void setDescriptionMaxLines(int descriptionMaxLines) {
+        if (descriptionMaxLines < 1) {
+            throw new IllegalArgumentException("description_max_lines must be positive, got: " + descriptionMaxLines);
+        }
+        this.descriptionMaxLines = descriptionMaxLines;
+    }
+
+    @Override
+    public Set<String> optionKeys() {
+        return OPTION_KEYS;
+    }
+
+    /** 应用 reset options 参数覆盖：{@code description_max_lines}（正整数）。 */
+    @Override
+    public void applyOptions(Map<String, Object> options) {
+        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
+        if (options.containsKey("description_max_lines")) {
+            this.setDescriptionMaxLines(ResetOptionValues.intValue(options, "description_max_lines"));
+        }
     }
 
     /**
@@ -77,7 +110,7 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
 
     /**
      * 构造目标空间：区域非空时 {@code block} 分支 x/y/z 收紧到区域闭区间边界，
-     * 实体/掉落物分支与 oneof 要求不随区域变化。
+     * 实体/槽位分支与 oneof 要求不随区域变化。
      *
      * @param region 环境区域；null 表示无区域约束
      * @return 动作参数空间
@@ -88,8 +121,8 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
             .message("entity", MessageSpace.<ProtoLookAtEntityTarget>builder(ProtoLookAtEntityTarget.getDescriptor())
                 .range("entity_id", 1, Integer.MAX_VALUE)
                 .build())
-            .message("item", MessageSpace.<ProtoLookAtItemTarget>builder(ProtoLookAtItemTarget.getDescriptor())
-                .range("entity_id", 1, Integer.MAX_VALUE)
+            .message("slot", MessageSpace.<ProtoLookAtSlotTarget>builder(ProtoLookAtSlotTarget.getDescriptor())
+                .range("slot_id", 0, Integer.MAX_VALUE)
                 .build())
             .requiredOneof("target")
             .build();
@@ -116,23 +149,21 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
     }
 
     /**
-     * 解析目标并立即更新 Agent 视线。
+     * 解析目标并立即更新 Agent 视线或查询槽位。
      *
      * @param component 注视动作负载
      * @return 动作应用结果；目标无效时返回 FAILED
      */
     @Override
     public ActionApplyResult apply(ProtoLookAt component) {
-        Mob mob = this.mob();
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
         }
 
-        // oneof 的每一类目标分别做运行时类型和加载状态校验。
         return switch (component.getTargetCase()) {
             case ENTITY -> this.lookAtEntity(component.getEntity().getEntityId());
-            case ITEM -> this.lookAtItem(component.getItem().getEntityId());
+            case SLOT -> this.lookAtSlot(component.getSlot().getSlotId());
             case BLOCK -> this.lookAtBlock(new BlockPos(
                 component.getBlock().getX(),
                 component.getBlock().getY(),
@@ -154,7 +185,7 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
     }
 
     /**
-     * 注视已加载的普通实体。
+     * 注视已加载实体；普通实体注视眼睛，掉落物注视包围盒中心。
      *
      * @param entityId 目标网络实体 ID
      * @return 动作应用结果
@@ -172,57 +203,56 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
                 "entity_id", entityId
             )));
         }
-        if (found instanceof ItemEntity) {
-            return ActionApplyResult.none(ActionState.failed("entity target is an item; use the item target variant", Map.of(
-                "entity_id", entityId
-            )));
-        }
         if (!found.isAlive() || found.isRemoved()) {
             return ActionApplyResult.none(ActionState.failed("entity target is dead or removed", Map.of(
                 "entity_id", entityId
             )));
         }
+        if (found instanceof ItemEntity item && item.getItem().isEmpty()) {
+            return ActionApplyResult.none(ActionState.failed("entity target contains no item stack", Map.of(
+                "entity_id", entityId
+            )));
+        }
+
+        String entityType = BuiltInRegistries.ENTITY_TYPE.getKey(found.getType()).toString();
+        String targetId = entityType;
         Vec3 targetPos = EntityAnchorArgument.Anchor.EYES.apply(found);
-        return this.applyLook(targetPos, Map.of(
-            "target_type", "entity",
-            "entity_id", entityId,
-            "entity_type", BuiltInRegistries.ENTITY_TYPE.getKey(found.getType()).toString()
-        ));
+        var targetDetails = new LinkedHashMap<String, Object>();
+        targetDetails.put("target_type", "entity");
+        targetDetails.put("entity_id", entityId);
+        targetDetails.put("entity_type", entityType);
+        if (found instanceof ItemEntity item) {
+            targetPos = item.getBoundingBox().getCenter();
+            targetId = BuiltInRegistries.ITEM.getKey(item.getItem().getItem()).toString();
+            targetDetails.put("item", targetId);
+        }
+        return this.applyLook(targetPos, targetId, TargetDescriber.describeEntity(found), targetDetails);
     }
 
-    /**
-     * 注视已加载且仍包含物品的掉落物实体。
-     *
-     * @param entityId 掉落物网络实体 ID
-     * @return 动作应用结果
-     */
-    private ActionApplyResult lookAtItem(int entityId) {
-        Entity found = this.mob().level().getEntity(entityId);
-        if (found == null) {
-            return ActionApplyResult.none(ActionState.failed("item target was not found or is not loaded", Map.of(
-                "entity_id", entityId
+    /** 只读查询 Agent 统一物品栏槽位，成功反馈物品描述且不改变视线。 */
+    private ActionApplyResult lookAtSlot(int slotId) {
+        var layout = AgentInventoryLayout.resolve(this.mob());
+        if (slotId < 0 || slotId >= layout.size()) {
+            return ActionApplyResult.none(ActionState.failed("slot id out of range", Map.of(
+                "slot_id", slotId,
+                "layout_size", layout.size()
             )));
         }
-        if (!(found instanceof ItemEntity item)) {
-            return ActionApplyResult.none(ActionState.failed("item target ID belongs to a non-item entity", Map.of(
-                "entity_id", entityId
-            )));
-        }
-        if (item.isRemoved() || !item.isAlive()) {
-            return ActionApplyResult.none(ActionState.failed("item target is removed or no longer alive", Map.of(
-                "entity_id", entityId
-            )));
-        }
-        if (item.getItem().isEmpty()) {
-            return ActionApplyResult.none(ActionState.failed("item target contains no item stack", Map.of(
-                "entity_id", entityId
-            )));
-        }
-        return this.applyLook(item.getBoundingBox().getCenter(), Map.of(
-            "target_type", "item",
-            "entity_id", entityId,
-            "item", BuiltInRegistries.ITEM.getKey(item.getItem().getItem()).toString()
-        ));
+
+        var slot = layout.slot(slotId);
+        String category = slot.category();
+        List<String> descriptionLines = TargetDescriber.truncate(
+            TargetDescriber.describeItemStack(this.mob().level(), slot.getItem()),
+            this.descriptionMaxLines
+        );
+        var details = new LinkedHashMap<String, Object>();
+        details.put("target_type", "slot");
+        details.put("slot_id", slotId);
+        details.put("category", category);
+        details.put("target_description", TargetDescriber.join(descriptionLines));
+        details.put("target_description_lines", descriptionLines);
+        String description = "slot " + slotId + " (" + category + "): " + TargetDescriber.join(descriptionLines);
+        return ActionApplyResult.applied(ActionControlPolicy.none(), ActionState.completed(description, details));
     }
 
     /**
@@ -239,21 +269,34 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
             )));
         }
         var state = level.getBlockState(pos);
-        return this.applyLook(Vec3.atCenterOf(pos), Map.of(
-            "target_type", "block",
-            "pos", pos.toShortString(),
-            "block", BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString()
-        ));
+        String blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+        return this.applyLook(
+            Vec3.atCenterOf(pos),
+            blockId,
+            TargetDescriber.describeBlock(level, pos, state),
+            Map.of(
+                "target_type", "block",
+                "pos", pos.toShortString(),
+                "block", blockId
+            )
+        );
     }
 
     /**
      * 同步更新直接旋转和 LookControl，并构造统一成功详情。
      *
      * @param targetPos 世界坐标中的精确注视点
+     * @param targetId 目标注册表 ID
+     * @param rawDescriptionLines 未截断的目标描述
      * @param targetDetails 目标类型相关详情
      * @return COMPLETED 动作应用结果
      */
-    private ActionApplyResult applyLook(Vec3 targetPos, Map<String, Object> targetDetails) {
+    private ActionApplyResult applyLook(
+        Vec3 targetPos,
+        String targetId,
+        List<String> rawDescriptionLines,
+        Map<String, Object> targetDetails
+    ) {
         Mob mob = this.mob();
         if (mob.getEyePosition().distanceToSqr(targetPos) < 1.0E-12) {
             return ActionApplyResult.none(ActionState.failed("look target coincides with agent eyes"));
@@ -262,15 +305,18 @@ public class LookAtController extends AbstractActionComponentController<ProtoLoo
         // 直接旋转保证动作瞬时生效；LookControl 保证当前原版实体 tick 不会复位俯仰角。
         ActionLook.apply(mob, targetPos);
 
+        List<String> descriptionLines = TargetDescriber.truncate(rawDescriptionLines, this.descriptionMaxLines);
         var details = new LinkedHashMap<String, Object>(targetDetails);
         details.put("target_x", targetPos.x);
         details.put("target_y", targetPos.y);
         details.put("target_z", targetPos.z);
         details.put("yaw", mob.getYRot());
         details.put("pitch", mob.getXRot());
+        details.put("target_description", TargetDescriber.join(descriptionLines));
+        details.put("target_description_lines", descriptionLines);
         return ActionApplyResult.applied(
             ActionControlPolicy.none().disableGoalFlags(Goal.Flag.LOOK),
-            ActionState.completed("look target acquired", details)
+            ActionState.completed("look at " + targetId + ": " + TargetDescriber.join(descriptionLines), details)
         );
     }
 

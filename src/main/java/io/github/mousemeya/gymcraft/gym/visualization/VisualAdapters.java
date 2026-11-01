@@ -179,8 +179,11 @@ public final class VisualAdapters {
         var p = payload.unpack(ProtoLookAt.class);
         return switch (p.getTargetCase()) {
             case BLOCK -> VisualGeometry.block(mob, "gymcraft:look_at", new Vec3(p.getBlock().getX(), p.getBlock().getY(), p.getBlock().getZ()));
-            case ENTITY -> VisualGeometry.entity(mob, "gymcraft:look_at", mob.level().getEntity(p.getEntity().getEntityId()), true);
-            case ITEM -> VisualGeometry.entity(mob, "gymcraft:look_at", mob.level().getEntity(p.getItem().getEntityId()), false);
+            case ENTITY -> {
+                Entity target = mob.level().getEntity(p.getEntity().getEntityId());
+                yield VisualGeometry.entity(mob, "gymcraft:look_at", target,
+                    !(target instanceof net.minecraft.world.entity.item.ItemEntity));
+            }
             default -> List.of();
         };
     }
