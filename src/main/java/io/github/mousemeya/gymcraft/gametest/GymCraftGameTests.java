@@ -46,6 +46,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("agent_running_action_death_completes_current_step", () -> AgentDeathGameTests::runningActionDeathCompletesCurrentStep);
         TEST_FUNCTIONS.register("env_termination_independent_from_action_state", () -> AgentDeathGameTests::envTerminationIsIndependentFromActionState);
         TEST_FUNCTIONS.register("removed_entity_fails_in_action_layer", () -> AgentDeathGameTests::removedEntityFailsInActionLayer);
+        TEST_FUNCTIONS.register("agent_dimension_change_rebinds_runtime", () -> DimensionChangeGameTests::stepAfterDimensionChange);
 
         // ===== 环境契约：动作批次语义 =====
         TEST_FUNCTIONS.register("action_timeout_fails", () -> ActionTimeoutGameTests::actionTimeoutFails);

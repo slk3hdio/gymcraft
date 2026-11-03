@@ -57,7 +57,10 @@ public final class EnvChunkGuard {
         event.register(CONTROLLER);
     }
 
-    private final ServerLevel level;
+    /** 状态区域所在维度；区域票不随 agent 跨维度迁移。 */
+    private final ServerLevel regionLevel;
+    /** 当前 agent 跟随票所在维度。 */
+    private ServerLevel agentLevel;
     private final UUID owner;
     private final Supplier<Mob> mobSupplier;
     /** 区域强加载区块集合（{@link ChunkPos#pack}），release 时逐个退票。 */
@@ -74,7 +77,8 @@ public final class EnvChunkGuard {
      * @param mobSupplier 当前 agent 提供者（reset 同 UUID 替换实体后自动指向新实例）
      */
     public EnvChunkGuard(ServerLevel level, UUID owner, Supplier<Mob> mobSupplier) {
-        this.level = level;
+        this.regionLevel = level;
+        this.agentLevel = level;
         this.owner = owner;
         this.mobSupplier = mobSupplier;
         NeoForge.EVENT_BUS.register(this);
@@ -92,7 +96,7 @@ public final class EnvChunkGuard {
         }
         for (int chunkX = region.minX() >> 4; chunkX <= region.maxX() >> 4; chunkX++) {
             for (int chunkZ = region.minZ() >> 4; chunkZ <= region.maxZ() >> 4; chunkZ++) {
-                CONTROLLER.forceChunk(this.level, this.owner, chunkX, chunkZ, true, true);
+                CONTROLLER.forceChunk(this.regionLevel, this.owner, chunkX, chunkZ, true, true);
                 this.regionChunks.add(ChunkPos.pack(chunkX, chunkZ));
             }
         }
@@ -117,23 +121,35 @@ public final class EnvChunkGuard {
         }
     }
 
-    /** 切换 agent 跟随区块：区域集合内的区块不重复持票，迁出时不释放区域票。 */
+    /** 切换 agent 跟随区块；跨维度时先在原维度退票，再在目标维度持票。 */
     private void trackAgent(Mob mob) {
-        if (this.released) {
+        if (this.released || !(mob.level() instanceof ServerLevel currentLevel)) {
             return;
         }
         long current = mob.chunkPosition().pack();
-        if (current == this.agentChunk) {
+        if (currentLevel == this.agentLevel && current == this.agentChunk) {
             return;
         }
-        long previous = this.agentChunk;
+        this.releaseAgentTicket();
+        this.agentLevel = currentLevel;
         this.agentChunk = current;
-        if (!this.regionChunks.contains(current)) {
-            CONTROLLER.forceChunk(this.level, this.owner, ChunkPos.getX(current), ChunkPos.getZ(current), true, true);
+        if (!this.isRegionChunk(currentLevel, current)) {
+            CONTROLLER.forceChunk(currentLevel, this.owner, ChunkPos.getX(current), ChunkPos.getZ(current), true, true);
         }
-        if (previous != ChunkPos.INVALID_CHUNK_POS && !this.regionChunks.contains(previous)) {
-            CONTROLLER.forceChunk(this.level, this.owner, ChunkPos.getX(previous), ChunkPos.getZ(previous), false, true);
+    }
+
+    /** 释放当前 agent 跟随票；与区域同维同区块时未持独立票，无需释放。 */
+    private void releaseAgentTicket() {
+        if (this.agentChunk != ChunkPos.INVALID_CHUNK_POS && !this.isRegionChunk(this.agentLevel, this.agentChunk)) {
+            CONTROLLER.forceChunk(this.agentLevel, this.owner,
+                ChunkPos.getX(this.agentChunk), ChunkPos.getZ(this.agentChunk), false, true);
         }
+        this.agentChunk = ChunkPos.INVALID_CHUNK_POS;
+    }
+
+    /** @return 指定维度中的区块是否已由本环境区域票覆盖。 */
+    private boolean isRegionChunk(ServerLevel level, long chunk) {
+        return level == this.regionLevel && this.regionChunks.contains(chunk);
     }
 
     /** 释放全部区域票与当前跟随票并注销监听；幂等（二次调用直接返回）。 */
@@ -143,15 +159,10 @@ public final class EnvChunkGuard {
         }
         this.released = true;
         NeoForge.EVENT_BUS.unregister(this);
-        long agent = this.agentChunk;
-        boolean agentTicketHeld = agent != ChunkPos.INVALID_CHUNK_POS && !this.regionChunks.contains(agent);
-        this.agentChunk = ChunkPos.INVALID_CHUNK_POS;
+        this.releaseAgentTicket();
         for (long packed : this.regionChunks) {
-            CONTROLLER.forceChunk(this.level, this.owner, ChunkPos.getX(packed), ChunkPos.getZ(packed), false, true);
+            CONTROLLER.forceChunk(this.regionLevel, this.owner, ChunkPos.getX(packed), ChunkPos.getZ(packed), false, true);
         }
         this.regionChunks.clear();
-        if (agentTicketHeld) {
-            CONTROLLER.forceChunk(this.level, this.owner, ChunkPos.getX(agent), ChunkPos.getZ(agent), false, true);
-        }
     }
 }

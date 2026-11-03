@@ -175,7 +175,7 @@ public abstract class AbstractMcEnv implements McEnv {
         }
         // 基线区域确定后一次性推送给区域感知组件（区域随基线不可变，reset 不重推）
         this.pushEnvironmentRegion();
-        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob);
+        this.agentRuntime = new AgentRuntime(actionController, observationCreator, mob, this::onDimensionChange);
         NeoForge.EVENT_BUS.register(this.agentRuntime);
         // 初始跟随：立即强加载当前 agent 所在区块（此后由 tick 回调跟随迁移）
         this.chunkGuard.followAgentNow();
@@ -623,6 +623,12 @@ public abstract class AbstractMcEnv implements McEnv {
     /** 确认环境仍可接收 step；实体死亡由 step 作为正常终态返回。 */
     protected void ensureReady() {
         this.ensureOpen();
+    }
+
+    /** 跨维度后迁移不序列化的环境级实体状态，并立即更新区块跟随票。 */
+    private void onDimensionChange(Mob previous, Mob current) {
+        this.mobLifecycle.rebind(previous, current);
+        this.chunkGuard.followAgentNow();
     }
 
     protected Mob mob() {
