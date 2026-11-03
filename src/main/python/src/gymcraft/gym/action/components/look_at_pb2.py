@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n,gymcraft/gym/action/components/look_at.proto\x12\x13gymcraft.gym.action\"9\n\x16ProtoLookAtBlockTarget\x12\t\n\x01x\x18\x01 \x01(\x05\x12\t\n\x01y\x18\x02 \x01(\x05\x12\t\n\x01z\x18\x03 \x01(\x05\",\n\x17ProtoLookAtEntityTarget\x12\x11\n\tentity_id\x18\x01 \x01(\x05\"*\n\x15ProtoLookAtItemTarget\x12\x11\n\tentity_id\x18\x01 \x01(\x05\"\xd1\x01\n\x0bProtoLookAt\x12>\n\x06\x65ntity\x18\x01 \x01(\x0b\x32,.gymcraft.gym.action.ProtoLookAtEntityTargetH\x00\x12:\n\x04item\x18\x02 \x01(\x0b\x32*.gymcraft.gym.action.ProtoLookAtItemTargetH\x00\x12<\n\x05\x62lock\x18\x03 \x01(\x0b\x32+.gymcraft.gym.action.ProtoLookAtBlockTargetH\x00\x42\x08\n\x06targetB>\n-io.github.mousemeya.gymcraft.gym.action.protoB\x0bLookAtProtoP\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n,gymcraft/gym/action/components/look_at.proto\x12\x13gymcraft.gym.action\"9\n\x16ProtoLookAtBlockTarget\x12\t\n\x01x\x18\x01 \x01(\x05\x12\t\n\x01y\x18\x02 \x01(\x05\x12\t\n\x01z\x18\x03 \x01(\x05\",\n\x17ProtoLookAtEntityTarget\x12\x11\n\tentity_id\x18\x01 \x01(\x05\"(\n\x15ProtoLookAtSlotTarget\x12\x0f\n\x07slot_id\x18\x01 \x01(\x05\"\xd7\x01\n\x0bProtoLookAt\x12>\n\x06\x65ntity\x18\x01 \x01(\x0b\x32,.gymcraft.gym.action.ProtoLookAtEntityTargetH\x00\x12<\n\x05\x62lock\x18\x03 \x01(\x0b\x32+.gymcraft.gym.action.ProtoLookAtBlockTargetH\x00\x12:\n\x04slot\x18\x04 \x01(\x0b\x32*.gymcraft.gym.action.ProtoLookAtSlotTargetH\x00\x42\x08\n\x06targetJ\x04\x08\x02\x10\x03\x42>\n-io.github.mousemeya.gymcraft.gym.action.protoB\x0bLookAtProtoP\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,8 +36,8 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_PROTOLOOKATBLOCKTARGET']._serialized_end=126
   _globals['_PROTOLOOKATENTITYTARGET']._serialized_start=128
   _globals['_PROTOLOOKATENTITYTARGET']._serialized_end=172
-  _globals['_PROTOLOOKATITEMTARGET']._serialized_start=174
-  _globals['_PROTOLOOKATITEMTARGET']._serialized_end=216
-  _globals['_PROTOLOOKAT']._serialized_start=219
-  _globals['_PROTOLOOKAT']._serialized_end=428
+  _globals['_PROTOLOOKATSLOTTARGET']._serialized_start=174
+  _globals['_PROTOLOOKATSLOTTARGET']._serialized_end=214
+  _globals['_PROTOLOOKAT']._serialized_start=217
+  _globals['_PROTOLOOKAT']._serialized_end=432
 # @@protoc_insertion_point(module_scope)

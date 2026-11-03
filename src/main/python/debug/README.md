@@ -20,7 +20,7 @@ uv run python debug/<script>.py --server-properties <服务器>/server.propertie
 | 组件 | 覆盖脚本 |
 |---|---|
 | 动作 `step_move` | `step_move_look_at_debug.py`（前进/后退/侧移、yaw 增量、跳跃） |
-| 动作 `look_at` | `step_move_look_at_debug.py`（block / entity / item 三类目标 + 错误路径） |
+| 动作 `look_at` | `step_move_look_at_debug.py`（block / entity / slot 三类目标、描述反馈 + 错误路径） |
 | 动作 `move_to` | `move_to_debug.py`、`nearby_blocks_move_debug.py` |
 | 动作 `set_attack_target` / `attack_once` | `attack_debug.py` |
 | 动作 `break_block` / `set_block` | `block_place_break_debug.py` |
@@ -35,7 +35,7 @@ uv run python debug/<script>.py --server-properties <服务器>/server.propertie
 | 观测 `world` | `chat_world_debug.py`（dimension、day_time 双重核对、天气翻转、biome/structure 字段） |
 | 观测 `nearby_entities` | `attack_debug.py`、`step_move_look_at_debug.py` |
 | 观测 `nearby_blocks` | `nearby_blocks_move_debug.py`、`interesting_blocks_debug.py` |
-| 观测 `nearby_items` | `item_pickup_drop_debug.py`（掉落物出现/消失）、`step_move_look_at_debug.py`（item 目标） |
+| 观测 `nearby_items` | `item_pickup_drop_debug.py`（掉落物出现/消失）、`step_move_look_at_debug.py`（掉落物 entity 目标） |
 | 观测 `menu` | `menu_debug.py`、`item_pickup_drop_debug.py`（槽位核对） |
 | 观测 `interesting_blocks` | `interesting_blocks_debug.py` |
 | 观测 `chat` | `chat_world_debug.py`（sender/content/game_tick 顺序、窗口上限） |

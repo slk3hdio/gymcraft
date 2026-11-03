@@ -103,6 +103,9 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("set_block_self_obstructed", () -> SetBlockGameTests::selfObstructionBlocksPlacement);
         TEST_FUNCTIONS.register("jump_applied_and_executed", () -> JumpGameTests::jumpAppliedAndExecuted);
         TEST_FUNCTIONS.register("look_at_living_entity_eyes", () -> LookAtGameTests::lookAtLivingEntityEyes);
+        TEST_FUNCTIONS.register("look_at_item_entity_as_entity", () -> LookAtGameTests::lookAtItemEntityAsEntity);
+        TEST_FUNCTIONS.register("look_at_slot_describes_item_and_empty", () -> LookAtGameTests::lookAtSlotDescribesItemAndEmpty);
+        TEST_FUNCTIONS.register("look_at_block_describes_state", () -> LookAtGameTests::lookAtBlockDescribesState);
         TEST_FUNCTIONS.register("navigation_preempts_move_goal", () -> NavigationReliabilityGameTests::runningMoveGoalIsPreemptedBeforeNewPath);
         TEST_FUNCTIONS.register("navigation_zero_stop_distance", () -> NavigationReliabilityGameTests::zeroStopDistanceCompletes);
         TEST_FUNCTIONS.register("navigation_swim_zero_stop_distance", () -> NavigationReliabilityGameTests::swimZeroStopDistanceCompletes);

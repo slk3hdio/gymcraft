@@ -5,7 +5,7 @@
 
 覆盖范围:
     - ``gymcraft:step_move``: 前进/后退/侧移、yaw 增量、跳跃标志
-    - ``gymcraft:look_at``: block / entity / item 三类目标与错误路径
+    - ``gymcraft:look_at``: block / entity / slot 三类目标、描述反馈与错误路径
     - 观测: ``gymcraft:self``（位置、yaw/pitch、on_ground）作为断言来源
 
 场景由 RCON 在 (200..215) 强加载的独立平台上布置；受控尸壳以
@@ -176,7 +176,7 @@ class MovementLookE2E(E2ESuite):
         self.command(f"kill @e[tag={cow_tag}]")
 
     def look_at_item(self) -> None:
-        """从 nearby_items 取掉落物 ID 后验证 item 目标视线。"""
+        """从 nearby_items 取掉落物 ID 后验证 entity 目标视线与物品描述。"""
         self.teleport(AGENT_X, AGENT_Y, AGENT_Z, 0, 0)
         self.command('summon minecraft:item 211.5 100.0 208.5 {Item:{id:"minecraft:stick",count:1}}')
         item_entity_id = 0
@@ -192,7 +192,8 @@ class MovementLookE2E(E2ESuite):
                 item_entity_id = sticks[0].entity_id
                 break
         self.require(item_entity_id != 0, "stick item entity never appeared in nearby_items")
-        self.dsl(f"/look_at item {item_entity_id}")
+        result = self.dsl(f"/look_at entity {item_entity_id}")
+        self.require("minecraft:stick" in result["description"], str(result))
         state = self.self_state
         expected = expected_yaw_to(state.x, state.z, 211.5, 208.5)
         self.require(
@@ -200,6 +201,23 @@ class MovementLookE2E(E2ESuite):
             f"look_at item yaw: expected ~{expected}, got {state.yaw}",
         )
         self.kill_region_items()
+
+    def look_at_slot(self) -> None:
+        """验证槽位描述包含物品或 empty，且查询前后视线不变。"""
+        self.teleport(AGENT_X, AGENT_Y, AGENT_Z, 0, 0)
+        self.equip_mainhand("minecraft:iron_sword")
+        before = self.self_state
+        result = self.dsl("/look_at slot 0")
+        self.require("minecraft:iron_sword" in result["description"], str(result))
+        after = self.self_state
+        self.require(
+            angle_diff(after.yaw, before.yaw) < ANGLE_TOLERANCE
+            and abs(after.pitch - before.pitch) < ANGLE_TOLERANCE,
+            f"look_at slot changed view: before=({before.yaw}, {before.pitch}), after=({after.yaw}, {after.pitch})",
+        )
+        self.command(f"item replace entity {self.entity_uuid} weapon.offhand with minecraft:air")
+        result = self.dsl("/look_at slot 5")
+        self.require("empty" in result["description"], str(result))
 
     def look_at_errors(self) -> None:
         """验证未设置目标与未加载区块目标的失败路径。"""
@@ -219,6 +237,7 @@ class MovementLookE2E(E2ESuite):
             ("look_at_block", self.look_at_block),
             ("look_at_entity", self.look_at_entity),
             ("look_at_item", self.look_at_item),
+            ("look_at_slot", self.look_at_slot),
             ("look_at_errors", self.look_at_errors),
         ]
         results: list[dict[str, Any]] = []

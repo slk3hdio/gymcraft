@@ -348,10 +348,10 @@ class ActionParserTests(unittest.TestCase):
         self.assertEqual(0.0, empty.timeout_seconds)
 
     def test_look_at_parses_all_target_types(self) -> None:
-        """look_at 应区分普通实体、掉落物和方块三个 oneof 分支。"""
+        """look_at 应区分实体、方块和槽位三个 oneof 分支。"""
         commands_and_targets = [
             ("/look_at entity 2", "entity"),
-            ("/look_at item 7", "item"),
+            ("/look_at slot 0", "slot"),
             ("/look_at block 11 64 -2", "block"),
         ]
         parser = ActionParser()
