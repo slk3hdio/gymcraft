@@ -10,6 +10,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.profiling.Profiler;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
@@ -44,6 +45,7 @@ public class AgentRuntime {
     private final ObservationComposer observationCreator;
     private final ActionBatchExecutor actionExecutor;
     private final UUID entityId;
+    private final java.util.function.BiConsumer<Mob, Mob> dimensionChangeHandler;
     private final ArrayBlockingQueue<ActionBatchExecutor.Request> actionBuf = new ArrayBlockingQueue<>(1);
     private final ArrayBlockingQueue<ResetRequest> resetBuf = new ArrayBlockingQueue<>(1);
     private boolean entityPostObserved;
@@ -79,16 +81,19 @@ public class AgentRuntime {
      * @param actionController 动作分发器
      * @param observationCreator 观测生成器
      * @param mob 受控实体
+     * @param dimensionChangeHandler 跨维度后的环境级重绑定回调
      */
     public AgentRuntime(
         ActionDispatcher actionController,
         ObservationComposer observationCreator,
-        Mob mob
+        Mob mob,
+        java.util.function.BiConsumer<Mob, Mob> dimensionChangeHandler
     ) {
         this.actionController = actionController;
         this.observationCreator = observationCreator;
         this.mob = mob;
         this.entityId = mob.getUUID();
+        this.dimensionChangeHandler = dimensionChangeHandler;
         this.actionExecutor = new ActionBatchExecutor(actionController, observationCreator, mob);
     }
 
@@ -195,6 +200,30 @@ public class AgentRuntime {
             ActionState state = ActionState.completed("reset");
             return new RuntimeStepResult(this.observationCreator.create(restoredMob, state), state);
         }
+    }
+
+    /**
+     * 原版非玩家实体跨维度会以同 UUID 新实例加入目标世界；立即重绑定全部动作引用，
+     * 并中断依赖旧维度上下文的在途动作，避免后续 step 继续操作已移除的旧实体。
+     */
+    @SubscribeEvent
+    private void onEntityJoinLevel(EntityJoinLevelEvent event) {
+        if (event.getLevel().isClientSide()
+            || !(event.getEntity() instanceof Mob joined)
+            || !joined.getUUID().equals(this.entityId)
+            || joined == this.mob
+            || joined.level() == this.mob.level()) {
+            return;
+        }
+        Mob previous = this.mob;
+        LOGGER.info("GymCraft runtime rebind dimension change entity={} from={} to={}",
+            this.entityId, previous.level().dimension(), joined.level().dimension());
+        this.mob = joined;
+        this.actionExecutor.setMob(joined);
+        this.dimensionChangeHandler.accept(previous, joined);
+        this.actionExecutor.interrupt("agent changed dimension");
+        this.actionController.releaseComponents("dimension change");
+        this.entityPostObserved = false;
     }
 
     /** 在受控实体 Pre 事件启动批次或下一个动作。 */

@@ -60,6 +60,18 @@ final class AgentMobLifecycle {
     }
 
     /**
+     * 跨维度后把附件访问作用域迁移到同 UUID 的新实体实例；可序列化附件已由原版
+     * 跨维度复制，这里只恢复不序列化的环境访问权并补齐适用的缺失附件。
+     *
+     * @param previous 原维度实体
+     * @param current 新维度实体
+     */
+    void rebind(Mob previous, Mob current) {
+        this.scope.deactivate(previous);
+        this.scope = MobAttachmentAccessScope.activate(current, this.specs);
+    }
+
+    /**
      * close 路径：在服务端线程撤销当前实体的附件访问作用域。
      * 必须在组件释放清算完成后调用（清算经物品栏布局读取背包附件）。
      *
