@@ -39,8 +39,8 @@ import io.github.mousemeya.gymcraft.mixin.MobMoveControlAccessor;
 /**
  * 游泳动作组件 —— 使用两栖寻路把实体导航到指定方块。
  * <p>
- * 与 {@code move_to} 参数、方块中心目标修正和到达判定完全一致（目标统一为
- * {@link MobNavigationTask#blockCenterTarget} 的可站立中心），但寻路使用自有的
+ * 与 {@code move_to} 参数、方块中心目标修正和到达判定（三维欧氏距离）完全一致
+ * （目标统一为 {@link MobNavigationTask#blockCenterTarget} 的可站立中心），但寻路使用自有的
  * {@link net.minecraft.world.entity.ai.navigation.AmphibiousPathNavigation}
  * （原版海龟同款，见 {@link SwimNavigationTask}）：WATER 格可通行、支持水中垂直
  * 移动与水中起点，因此落水、身处深水或目标在彼岸时仍可规划路径；陆地上与
@@ -156,8 +156,8 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
             .disableGoalFlags(Goal.Flag.MOVE)
             .eraseMemory(MemoryModuleType.WALK_TARGET)
             .eraseMemory(MemoryModuleType.PATH);
-        double horizontalDistance = horizontalDistance(mob, target);
-        if (horizontalDistance <= MobNavigationTask.effectiveStopDistance(component.getStopDistance())) {
+        double distance = distanceTo(mob, target);
+        if (distance <= MobNavigationTask.effectiveStopDistance(component.getStopDistance())) {
             return ActionApplyResult.applied(
                 policy,
                 ActionState.completed("reached target", moveDetails(target, component.getStopDistance()))
@@ -198,8 +198,8 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
         }
         Vec3 target = target(component);
         double stop = component.getStopDistance();
-        double horizontalDist = horizontalDistance(mob, target);
-        if (horizontalDist <= MobNavigationTask.effectiveStopDistance(stop)) {
+        double dist = distanceTo(mob, target);
+        if (dist <= MobNavigationTask.effectiveStopDistance(stop)) {
             this.navigationTask.cancel();
             this.restoreMoveControl(mob);
             ActionState state = ActionState.completed("reached target", moveDetails(target, stop));
@@ -283,11 +283,9 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
         return MobNavigationTask.blockCenterTarget(component.getX(), component.getY(), component.getZ());
     }
 
-    /** @return 当前 Mob 到目标的水平中心距离 */
-    private static double horizontalDistance(Mob mob, Vec3 target) {
-        double dx = mob.getX() - target.x;
-        double dz = mob.getZ() - target.z;
-        return Math.sqrt(dx * dx + dz * dz);
+    /** @return 当前 Mob 脚部位置到目标的三维欧氏距离 */
+    private static double distanceTo(Mob mob, Vec3 target) {
+        return mob.position().distanceTo(target);
     }
 
     /**
@@ -310,11 +308,11 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
         };
     }
 
-    /** @return 包含精确距离、垂直差和导航所有权的动作诊断 */
+    /** @return 包含精确三维距离、垂直差和导航所有权的动作诊断 */
     private Map<String, Object> moveDetails(Vec3 target, double stopDistance) {
         Map<String, Object> details = this.navigationTask.details(
             target,
-            horizontalDistance(this.mob(), target),
+            distanceTo(this.mob(), target),
             "stop_distance",
             stopDistance
         );

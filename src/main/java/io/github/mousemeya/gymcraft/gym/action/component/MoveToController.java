@@ -34,6 +34,8 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * <p>
  * 坐标按方块位置解释，目标统一修正为方块中心的可站立点
  * （{@link MobNavigationTask#blockCenterTarget}），到达判定与距离诊断均使用修正后目标。
+ * 到达判定使用三维欧氏距离：Mob 脚部位置到修正后目标的直线距离不大于
+ * {@link MobNavigationTask#effectiveStopDistance} 返回的有效停止距离即完成。
  * 停止距离至少使用 0.1 格的物理精度容差，避免零容差造成末段绕圈。
  * 参数空间包含坐标、速度修正值、停止距离和超时时间。实现了
  * {@link EnvironmentRegionAware}：环境区域非空时目标坐标空间收紧到区域边界。
@@ -136,8 +138,8 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
             .disableGoalFlags(Goal.Flag.MOVE)
             .eraseMemory(MemoryModuleType.WALK_TARGET)
             .eraseMemory(MemoryModuleType.PATH);
-        double horizontalDistance = horizontalDistance(mob, target);
-        if (horizontalDistance <= MobNavigationTask.effectiveStopDistance(component.getStopDistance())) {
+        double distance = distanceTo(mob, target);
+        if (distance <= MobNavigationTask.effectiveStopDistance(component.getStopDistance())) {
             return ActionApplyResult.applied(
                 policy,
                 ActionState.completed("reached target", moveDetails(target, component.getStopDistance()))
@@ -176,8 +178,8 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         }
         Vec3 target = target(component);
         double stop = component.getStopDistance();
-        double horizontalDist = horizontalDistance(mob, target);
-        if (horizontalDist <= MobNavigationTask.effectiveStopDistance(stop)) {
+        double dist = distanceTo(mob, target);
+        if (dist <= MobNavigationTask.effectiveStopDistance(stop)) {
             this.navigationTask.cancel();
             ActionState state = ActionState.completed("reached target", moveDetails(target, stop));
             LOGGER.info("GymCraft MoveTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
@@ -220,11 +222,9 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         return MobNavigationTask.blockCenterTarget(component.getX(), component.getY(), component.getZ());
     }
 
-    /** @return 当前 Mob 到目标的水平中心距离 */
-    private static double horizontalDistance(Mob mob, Vec3 target) {
-        double dx = mob.getX() - target.x;
-        double dz = mob.getZ() - target.z;
-        return Math.sqrt(dx * dx + dz * dz);
+    /** @return 当前 Mob 脚部位置到目标的三维欧氏距离 */
+    private static double distanceTo(Mob mob, Vec3 target) {
+        return mob.position().distanceTo(target);
     }
 
     /**
@@ -247,11 +247,11 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         };
     }
 
-    /** @return 包含精确距离、垂直差和导航所有权的动作诊断 */
+    /** @return 包含精确三维距离、垂直差和导航所有权的动作诊断 */
     private Map<String, Object> moveDetails(Vec3 target, double stopDistance) {
         Map<String, Object> details = this.navigationTask.details(
             target,
-            horizontalDistance(this.mob(), target),
+            distanceTo(this.mob(), target),
             "stop_distance",
             stopDistance
         );

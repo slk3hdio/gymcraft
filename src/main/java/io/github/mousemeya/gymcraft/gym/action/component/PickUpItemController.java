@@ -38,7 +38,9 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * 拾取掉落物动作组件 —— 按实体 ID 寻路到 {@link ItemEntity} 并把物品收入 Mob 统一物品栏。
  * <p>
  * 多 tick 动作：目标在拾取距离外时先经 {@code Navigation.moveTo} 接近（语义对齐
- * {@code move_to}），进入拾取距离后执行转移。落槽规则：先合并进已有相同物品堆叠，
+ * {@code move_to}），进入拾取距离后执行转移。拾取距离判定使用 Mob 脚部位置到
+ * 掉落物位置的三维欧氏距离（与 {@code move_to}/{@code swim_to} 的到达度量一致）。
+ * 落槽规则：先合并进已有相同物品堆叠，
  * 再按 slot_id 升序写入第一个可放且有余量的槽位（含装备槽，空手 Mob 拾到主手属自然行为）；
  * 全部槽位放不下时以 {@code failed} 返回，ItemEntity 原样保留。
  * </p>
@@ -137,7 +139,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
             .disableGoalFlags(Goal.Flag.MOVE)
             .eraseMemory(MemoryModuleType.WALK_TARGET)
             .eraseMemory(MemoryModuleType.PATH);
-        if (horizontalDistance(mob, item) <= this.pickupReach) {
+        if (distanceTo(mob, item) <= this.pickupReach) {
             // 已在拾取距离内：立即拾取，直接返回终态
             ActionState state = this.terminal = tryPickUp(mob, item);
             LOGGER.info("GymCraft PickUpItem apply entity={} item={} immediate state={}",
@@ -178,7 +180,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
                 "entity_id", component.getEntityId()
             ));
         }
-        double distance = horizontalDistance(mob, item);
+        double distance = distanceTo(mob, item);
         if (distance <= this.pickupReach) {
             if (item.hasPickUpDelay()) {
                 this.navigationTask.holdPosition(MobNavigationTask.Reason.WAITING_FOR_PICKUP_DELAY);
@@ -287,10 +289,9 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         return null;
     }
 
-    private static double horizontalDistance(Mob mob, ItemEntity item) {
-        double dx = mob.getX() - item.getX();
-        double dz = mob.getZ() - item.getZ();
-        return Math.sqrt(dx * dx + dz * dz);
+    /** @return 当前 Mob 脚部位置到掉落物位置的三维欧氏距离 */
+    private static double distanceTo(Mob mob, ItemEntity item) {
+        return mob.position().distanceTo(item.position());
     }
 
     /**
@@ -316,7 +317,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
     private Map<String, Object> targetDetails(Mob mob, ItemEntity item) {
         var details = new java.util.LinkedHashMap<String, Object>(this.navigationTask.details(
             item.position(),
-            horizontalDistance(mob, item),
+            distanceTo(mob, item),
             "pickup_reach",
             this.pickupReach
         ));
@@ -326,7 +327,6 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         details.put("x", item.getX());
         details.put("y", item.getY());
         details.put("z", item.getZ());
-        details.put("horizontal_distance", horizontalDistance(mob, item));
         return details;
     }
 
