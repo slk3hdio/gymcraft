@@ -6,6 +6,8 @@ import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.spawnAge
 import java.util.List;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
@@ -17,8 +19,7 @@ import io.github.mousemeya.gymcraft.gym.observation.component.NearbyBlockScanner
 
 /**
  * 附近方块扫描器（{@link NearbyBlockScanner}）GameTest —— 验证双优先级 BFS 的
- * 扫描顺序语义：贴面空气绝对优先、各自 FIFO 环形扩展，预算按沿贴面网络到 Agent
- * 的距离分配，覆盖 Agent 周围多个方向而非沿单一方向深度追击。
+ * 扫描顺序语义，以及无碰撞非空气方块的记录与穿过语义。
  */
 public final class NearbyBlocksGameTests {
     /** 禁止实例化测试工具类。 */
@@ -59,6 +60,56 @@ public final class NearbyBlocksGameTests {
         helper.succeed();
     }
 
+    /**
+     * 验证碰撞体为空的非空气方块（铁轨、蜘蛛网、火把）会进入结果，同时扫描器仍可
+     * 穿过它们发现其后方方块；类型过滤也必须覆盖这些可穿过方块。
+     */
+    public static void scanRecordsAndTraversesNoCollisionBlocks(GameTestHelper helper) {
+        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(4, 1, 4));
+        BlockPos center = BlockPos.containing(mob.getEyePosition());
+        BlockPos rail = center.offset(-2, 0, 0);
+        BlockPos railBeyond = center.offset(-3, 0, 0);
+        BlockPos cobweb = center.offset(2, 0, 0);
+        BlockPos cobwebBeyond = center.offset(3, 0, 0);
+        BlockPos torch = center.offset(0, 0, 2);
+        BlockPos torchBeyond = center.offset(0, 0, 3);
+        // 标志 2 仅同步客户端，避免原版 onPlace 邻接更新在测试 tick 0 移除装饰方块；
+        // 本用例验证的是扫描语义，不验证方块放置后的生存更新。
+        helper.getLevel().setBlock(rail.below(), Blocks.STONE.defaultBlockState(), 2);
+        helper.getLevel().setBlock(torch.below(), Blocks.STONE.defaultBlockState(), 2);
+        helper.getLevel().setBlock(rail, Blocks.RAIL.defaultBlockState(), 2);
+        helper.getLevel().setBlock(cobweb, Blocks.COBWEB.defaultBlockState(), 2);
+        helper.getLevel().setBlock(torch, Blocks.TORCH.defaultBlockState(), 2);
+        helper.getLevel().setBlock(railBeyond, Blocks.DIAMOND_BLOCK.defaultBlockState(), 2);
+        helper.getLevel().setBlock(cobwebBeyond, Blocks.GOLD_BLOCK.defaultBlockState(), 2);
+        helper.getLevel().setBlock(torchBeyond, Blocks.EMERALD_BLOCK.defaultBlockState(), 2);
+
+        var railState = helper.getLevel().getBlockState(rail);
+        assertTrue(helper, railState.is(Blocks.RAIL), "rail placement should survive");
+        assertTrue(helper, railState.getCollisionShape(helper.getLevel(), rail).isEmpty(), "rail should be traversable");
+        boolean railFaceVisible = false;
+        for (Direction direction : Direction.values()) {
+            BlockPos neighbor = rail.relative(direction);
+            railFaceVisible |= Block.shouldRenderFace(
+                helper.getLevel(), rail, railState, helper.getLevel().getBlockState(neighbor), direction.getOpposite());
+        }
+        assertTrue(helper, railFaceVisible, "rail should expose at least one renderable face");
+
+        List<ScannedBlock> result = NearbyBlockScanner.scan(mob, null, 256, 64, state -> true);
+        assertScanned(helper, result, rail, Blocks.RAIL, "rail");
+        assertScanned(helper, result, cobweb, Blocks.COBWEB, "cobweb");
+        assertScanned(helper, result, torch, Blocks.TORCH, "torch");
+        assertScanned(helper, result, railBeyond, Blocks.DIAMOND_BLOCK, "beyond rail");
+        assertScanned(helper, result, cobwebBeyond, Blocks.GOLD_BLOCK, "beyond cobweb");
+        assertScanned(helper, result, torchBeyond, Blocks.EMERALD_BLOCK, "beyond torch");
+
+        List<ScannedBlock> railsOnly = NearbyBlockScanner.scan(mob, null, 256, 64, state -> state.is(Blocks.RAIL));
+        assertScanned(helper, railsOnly, rail, Blocks.RAIL, "filtered rail");
+        assertTrue(helper, railsOnly.stream().noneMatch(scanned -> scanned.state().is(Blocks.COBWEB)),
+            "rail filter must not return cobweb");
+        helper.succeed();
+    }
+
     /** 断言扫描结果在指定位置命中指定方块。 */
     private static void assertScanned(
         GameTestHelper helper,
@@ -67,8 +118,16 @@ public final class NearbyBlocksGameTests {
         Block block,
         String direction
     ) {
+        String nearby = result.stream()
+            .filter(scanned -> Math.abs(scanned.pos().getX() - pos.getX()) <= 1
+                && Math.abs(scanned.pos().getY() - pos.getY()) <= 1
+                && Math.abs(scanned.pos().getZ() - pos.getZ()) <= 1)
+            .map(scanned -> scanned.pos() + "=" + BuiltInRegistries.BLOCK.getKey(scanned.state().getBlock()))
+            .toList()
+            .toString();
         assertTrue(helper,
             result.stream().anyMatch(scanned -> scanned.pos().equals(pos) && scanned.state().is(block)),
-            "scan missed the " + direction + " marker at " + pos + " (scanned " + result.size() + " blocks)");
+            "scan missed the " + direction + " marker at " + pos + " (scanned " + result.size()
+                + " blocks, nearby=" + nearby + ")");
     }
 }

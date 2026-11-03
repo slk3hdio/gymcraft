@@ -25,6 +25,7 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 /**
  * 感兴趣方块观测 —— 返回固定绝对范围内可见表面中类型存在于当前 Mob 兴趣集合的方块。
+ * 可穿过的非空气方块（铁轨、蜘蛛网、火把等）在记录后仍会作为 BFS 节点继续扩展。
  * <p>
  * 扫描范围与结果上限统一声明在观测空间上（blocks 元素 x/y/z 绝对区间 + 长度约束），扫描前
  * 从当前空间读回；实现了 {@link EnvironmentRegionAware}：环境构造期以区域重置扫描范围（直接
