@@ -48,6 +48,9 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * <p>
  * 动作反馈（RUNNING 与终态 details）始终携带 {@code tool}/{@code correct_tool} 字段；
  * 工具不适合目标方块时附 {@code warning}（区分“不掉落”与“仅降速”两种后果）。
+ * 工具不正确导致不掉落时，RUNNING 与完成态的 description 均追加
+ * {@code " (no drops: incorrect tool)"} 后缀——warning 只走 info 调试通道，
+ * description 是该提示进入观测 header {@code last_actions} 的唯一载体。
  * </p>
  * <p>
  * 破坏耗时完全复用原版计算链:每 tick 进度增量为
@@ -223,7 +226,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         this.miningState = mining;
         level.destroyBlockProgress(mob.getId(), pos, crackStage(progress));
         LOGGER.info("GymCraft BreakBlock apply entity={} pos={} initial_progress={}", mob.getUUID(), pos.toShortString(), progress);
-        return ActionApplyResult.applied(policy, ActionState.running("mining", miningDetails(mining)));
+        return ActionApplyResult.applied(policy, ActionState.running("mining" + noDropHintSuffix(toolDetails), miningDetails(mining)));
     }
 
     /**
@@ -278,7 +281,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
             this.miningState = null;
             return finishDestroy(mob, level, mining.pos, mining.ticks, mining.toolDetails);
         }
-        return ActionState.running("mining", miningDetails(mining));
+        return ActionState.running("mining" + noDropHintSuffix(mining.toolDetails), miningDetails(mining));
     }
 
     @Override
@@ -333,7 +336,7 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         details.putAll(toolDetails);
         if (destroyed) {
             LOGGER.info("GymCraft BreakBlock done entity={} pos={} ticks={}", mob.getUUID(), pos.toShortString(), ticks);
-            return ActionState.completed("block broken", details);
+            return ActionState.completed("block broken" + noDropHintSuffix(toolDetails), details);
         }
         // 例如被其他 mod 的 BreakEvent 取消
         level.destroyBlockProgress(mob.getId(), pos, -1);
@@ -368,6 +371,21 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
     /** @return 物品堆的注册表 id，空堆返回 "empty" */
     private static String itemId(ItemStack stack) {
         return stack.isEmpty() ? "empty" : BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+    }
+
+    /**
+     * 工具不正确导致方块不掉落时的 description 后缀。warning 只存在于 details
+     * （info 调试通道），观测 header {@code last_actions} 只携带 status/description——
+     * 把该提示并入 description 才能进入 agent 可见的反馈流。
+     * <p>
+     * {@code correct_tool} 为 false 时按其计算公式（{@code !requires || isCorrect}）
+     * 必然意味着"方块需要正确工具且当前工具不对"，即不掉落情形。
+     *
+     * @param toolDetails 工具反馈字段
+     * @return 不掉落时为 {@code " (no drops: incorrect tool)"}，否则为空串
+     */
+    private static String noDropHintSuffix(Map<String, Object> toolDetails) {
+        return Boolean.FALSE.equals(toolDetails.get("correct_tool")) ? " (no drops: incorrect tool)" : "";
     }
 
     private static Map<String, Object> miningDetails(MiningState mining) {
