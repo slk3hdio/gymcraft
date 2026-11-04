@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package gymcraft.gym.action;
+
+option java_multiple_files = true;
+option java_package = "io.github.mousemeya.gymcraft.gym.action.proto";
+option java_outer_classname = "WaitPlayerMessageProto";
+
+// 待机等待指定玩家在聊天栏发送消息：动作开始前已在聊天栏里的历史消息不触发
+// 完成，只等待开始之后的新消息；等待时长不设上限，超时由 step 的
+// timeout_seconds 统一处理。
+message ProtoWaitPlayerMessage {
+  // 等待的玩家名，匹配忽略大小写（与原版玩家名唯一性规则一致）。
+  string player_name = 1;
+}
