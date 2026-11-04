@@ -127,4 +127,21 @@ public final class RecentChatLog {
             ENTRIES.clear();
         }
     }
+
+    /**
+     * 返回缓冲中最新一条消息的序号（清算 pending 候选后）。
+     * <p>
+     * 供"从现在开始等待新消息"的消费者建立基准游标：以返回值为 {@link #since}
+     * 的 cursor，后续只会看到此之后的新消息。
+     * </p>
+     *
+     * @return 最新消息序号；缓冲为空（含刚清空）时为 0
+     */
+    public static long latestSeq() {
+        ChatCapture.flushPending();
+        synchronized (ENTRIES) {
+            ChatEntry newest = ENTRIES.peekLast();
+            return newest == null ? 0L : newest.seq();
+        }
+    }
 }

@@ -31,9 +31,13 @@ import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
 import net.minecraft.world.level.levelgen.structure.structures.BuriedTreasurePieces;
 
 import io.github.mousemeya.gymcraft.GymCraft;
+import io.github.mousemeya.gymcraft.gym.action.ActionState;
+import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
+import io.github.mousemeya.gymcraft.gym.action.component.WaitPlayerMessageController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSendChat;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoWaitPlayerMessage;
 import io.github.mousemeya.gymcraft.gym.chat.ChatCapture;
 import io.github.mousemeya.gymcraft.gym.chat.RecentChatLog;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
@@ -197,6 +201,44 @@ public final class ChatObservationGameTests {
             } finally {
                 env.close();
             }
+        });
+    }
+
+    /**
+     * 验证 wait_player_message 动作：以动作开始时的聊天栏为基准只等待新消息
+     * （历史消息即使来自目标玩家也不触发完成），其他玩家的消息不触发完成，
+     * 目标玩家的消息（玩家名匹配忽略大小写）触发完成并携带消息内容与发送者。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void waitPlayerMessageActionCompletes(GameTestHelper helper) {
+        Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
+        helper.runAfterDelay(3, () -> {
+            // 动作开始前的历史消息：即使来自目标玩家也不应触发完成
+            RecentChatLog.append(1, "WaitMsgSteve", "gymcraft wait: stale history");
+            var controller = new WaitPlayerMessageController(mob);
+            // 请求玩家名与实际发送者大小写不同，验证匹配忽略大小写
+            var action = ProtoWaitPlayerMessage.newBuilder().setPlayerName("waitmsgsteve").build();
+            assertTrue(helper, !controller.space().contains(ProtoWaitPlayerMessage.newBuilder()
+                .setPlayerName("bad name!").build()), "invalid player name should be rejected by the space");
+            assertTrue(helper, controller.space().contains(action), "valid player name should pass the space");
+            ActionState initial = controller.apply(action).initialState();
+            assertTrue(helper, initial.status() == ActionStatus.RUNNING,
+                "wait action should start running: " + initial);
+            // 其他玩家的消息不触发完成
+            RecentChatLog.append(2, "WaitMsgOther", "gymcraft wait: noise");
+            assertTrue(helper, controller.tick(action).status() == ActionStatus.RUNNING,
+                "other players' messages must not complete the wait");
+            // 目标玩家的新消息触发完成并携带内容
+            RecentChatLog.append(3, "WaitMsgSteve", "gymcraft wait: expected");
+            ActionState done = controller.tick(action);
+            assertTrue(helper, done.status() == ActionStatus.COMPLETED,
+                "target player message should complete the wait: " + done);
+            assertEquals(helper, "gymcraft wait: expected", done.details().get("message"),
+                "completed details should carry the message content");
+            assertEquals(helper, "WaitMsgSteve", done.details().get("sender"),
+                "completed details should carry the sender");
+            helper.succeed();
         });
     }
 

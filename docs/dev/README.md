@@ -92,6 +92,7 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:set_block` | 校验距离和实体碰撞后放置方块；物品栏任一槽位有匹配方块物品即可，放置前自动换到主手 |
 | `gymcraft:update_interesting_blocks` | 原子地批量添加或移除 Agent 感兴趣的方块类型 |
 | `gymcraft:send_chat` | 以受控 Mob 的显示名称向全服聊天栏发送纯文本消息；正文最长 256 个 UTF-16 单元 |
+| `gymcraft:wait_player_message` | 待机（抑制自主行为）等待指定玩家在聊天栏发送消息；只等待动作开始之后的新消息（历史消息不触发完成），玩家名匹配忽略大小写，完成 details 携带消息内容/发送者/序号与游戏刻；等待无自身时限，超时由 step 的 `timeout_seconds` 统一中断 |
 | `gymcraft:open_menu` | 打开方块、实体或自身逻辑菜单 |
 | `gymcraft:close_menu` | 关闭逻辑菜单会话 |
 | `gymcraft:move_menu_item` | 在逻辑菜单槽位之间移动物品 |

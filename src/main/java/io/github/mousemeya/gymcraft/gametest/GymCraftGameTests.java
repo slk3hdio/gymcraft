@@ -114,6 +114,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("pickup_within_reach_collects", () -> PickupGameTests::pickupWithinReachCollects);
         TEST_FUNCTIONS.register("drop_item_requested_count_forward", () -> DropItemGameTests::dropRequestedCountForward);
         TEST_FUNCTIONS.register("chat_send_action_broadcasts", () -> ChatObservationGameTests::sendChatActionBroadcastsAndObserves);
+        TEST_FUNCTIONS.register("chat_wait_player_message", () -> ChatObservationGameTests::waitPlayerMessageActionCompletes);
         TEST_FUNCTIONS.register("use_item_bone_meal", () -> UseItemGameTests::boneMeal);
         TEST_FUNCTIONS.register("use_item_cure_zombie_villager", () -> UseItemGameTests::cureZombieVillager);
         TEST_FUNCTIONS.register("action_feedback_attack_once", () -> ActionFeedbackGameTests::attackOnceReportsSpecificFailures);
