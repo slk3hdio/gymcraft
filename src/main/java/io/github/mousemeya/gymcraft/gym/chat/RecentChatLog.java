@@ -126,10 +126,12 @@ public final class RecentChatLog {
      * 返回共享缓冲的最新序号：现存条目中最大的 seq；条目已被环形容量全部淘汰或
      * 从未有消息时为迄今已分配的最大序号（服务器启动以来从未有消息则为 0）。
      * <p>
-     * 供观测组件在环境 reset 时把自持游标跳到"最新"，实现单环境的聊天历史清空
-     * 语义：reset 之前的全部消息（含该环境尚未消费的）不再进入其后续观测，而
-     * 共享缓冲本身保留，其他环境的游标与未读消息不受影响。读取前先清算捕获
-     * 候选，保证同 tick 已到达但尚未清算的广播也计入被跳过的历史。
+     * 供两类消费者建立基准游标：观测组件在环境 reset 时把自持游标跳到"最新"，
+     * 实现单环境的聊天历史清空语义——reset 之前的全部消息（含该环境尚未消费的）
+     * 不再进入其后续观测，而共享缓冲本身保留，其他环境的游标与未读消息不受影响；
+     * 等待类动作（如 wait_player_message）以此值为 {@link #since} 的 cursor 建立
+     * 基准，只看到此之后的新消息。读取前先清算捕获候选，保证同 tick 已到达但
+     * 尚未清算的广播也计入被跳过的历史。
      * </p>
      *
      * @return 最新序号（单调不减，调用方可直接赋给增量游标）
@@ -145,23 +147,6 @@ public final class RecentChatLog {
     public static void clear() {
         synchronized (ENTRIES) {
             ENTRIES.clear();
-        }
-    }
-
-    /**
-     * 返回缓冲中最新一条消息的序号（清算 pending 候选后）。
-     * <p>
-     * 供"从现在开始等待新消息"的消费者建立基准游标：以返回值为 {@link #since}
-     * 的 cursor，后续只会看到此之后的新消息。
-     * </p>
-     *
-     * @return 最新消息序号；缓冲为空（含刚清空）时为 0
-     */
-    public static long latestSeq() {
-        ChatCapture.flushPending();
-        synchronized (ENTRIES) {
-            ChatEntry newest = ENTRIES.peekLast();
-            return newest == null ? 0L : newest.seq();
         }
     }
 }
