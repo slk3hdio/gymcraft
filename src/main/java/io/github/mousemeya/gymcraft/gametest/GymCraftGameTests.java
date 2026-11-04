@@ -103,6 +103,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("break_block_main_hand_tool", () -> BreakBlockGameTests::minesWithMainHand);
         TEST_FUNCTIONS.register("break_block_air_target_completes", () -> BreakBlockGameTests::airTargetCompletesImmediately);
         TEST_FUNCTIONS.register("break_block_fluid_target_completes", () -> BreakBlockGameTests::fluidTargetCompletesImmediately);
+        TEST_FUNCTIONS.register("break_block_incorrect_tool_hint", () -> BreakBlockGameTests::incorrectToolHintInDescription);
         TEST_FUNCTIONS.register("set_block_self_obstructed", () -> SetBlockGameTests::selfObstructionBlocksPlacement);
         TEST_FUNCTIONS.register("jump_applied_and_executed", () -> JumpGameTests::jumpAppliedAndExecuted);
         TEST_FUNCTIONS.register("look_at_living_entity_eyes", () -> LookAtGameTests::lookAtLivingEntityEyes);
