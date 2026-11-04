@@ -122,6 +122,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("observation_header_batch_feedback", () -> ObservationFeedbackGameTests::headerAggregatesCompletedBatch);
         TEST_FUNCTIONS.register("observation_self_main_hand_item", () -> ObservationFeedbackGameTests::selfObservationReportsMainHandItem);
         TEST_FUNCTIONS.register("chat_observation_shows_recent_messages", () -> ChatObservationGameTests::chatObservationShowsRecentMessages);
+        TEST_FUNCTIONS.register("chat_observation_reset_clears_history", () -> ChatObservationGameTests::chatObservationResetClearsHistory);
         TEST_FUNCTIONS.register("damage_log_incremental", () -> DamageLogGameTests::healthLogObservesDamageBetweenObservations);
         TEST_FUNCTIONS.register("world_state_biome_and_structure", () -> ChatObservationGameTests::worldStateReportsBiomeAndStructure);
         TEST_FUNCTIONS.register("world_state_structure_inside_piece", () -> ChatObservationGameTests::worldStateReportsStructureInsidePiece);

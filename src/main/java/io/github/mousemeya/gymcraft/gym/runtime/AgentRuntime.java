@@ -31,8 +31,9 @@ import java.util.concurrent.CompletableFuture;
  * 后才会在下一个 Pre 阶段启动后一项。
  * </p>
  * <p>
- * reset 只负责动作管线清理、组件释放转发（{@link ActionDispatcher#releaseComponents}）
- * 与实体重绑定；环境状态恢复、实体重建与场景逻辑由环境每次经 {@link ResetHandler}
+ * reset 只负责动作管线清理、组件清理转发（{@link ActionDispatcher#clearComponents}
+ * 与 {@link ObservationComposer#clearComponents}）与实体重绑定；
+ * 环境状态恢复、实体重建与场景逻辑由环境每次经 {@link ResetHandler}
  * 参数传入（实现见 {@code AbstractMcEnv}），运行时不保存任何环境状态。
  * </p>
  */
@@ -178,8 +179,8 @@ public class AgentRuntime {
             this.actionExecutor.interrupt("interrupted by reset");
             this.completeQueuedActions("interrupted by reset");
             this.actionExecutor.clearState();
-            // 组件自我释放跨动作会话状态（菜单会话、消费会话），作用于待替换的旧实体
-            this.actionController.releaseComponents("reset");
+            // 组件自清跨动作会话状态（菜单会话、消费会话），作用于待替换的旧实体
+            this.actionController.clearComponents("reset");
 
             Mob oldMob = this.mob;
             Mob restoredMob;
@@ -190,6 +191,9 @@ public class AgentRuntime {
 
             this.mob = restoredMob;
             this.actionExecutor.setMob(restoredMob);
+            // 观测组件自清跨 episode 历史状态（如 chat 游标跳到最新）：必须位于基线
+            // 恢复之后、reset 观测组装之前，reset 前的消息不进入新 episode 的观测
+            this.observationCreator.clearComponents("reset");
             // 通知可视化代次提升：客户端收到后丢弃旧观测与反馈图形，等待 reset 快照。
             VisualizationService.reset(restoredMob);
             ActionState state = ActionState.completed("reset");
@@ -249,17 +253,21 @@ public class AgentRuntime {
         this.failQueuedResets(closed);
         this.actionExecutor.failPending(closed);
         this.actionExecutor.clearState();
-        this.releaseComponents("clear");
+        this.clearComponents("clear");
     }
 
-    /** 在服务端线程逐组件转发释放回调（reset/环境关闭）。 */
-    private void releaseComponents(String reason) {
+    /** 在服务端线程逐组件转发动作/观测组件的清理回调（reset/环境关闭）。 */
+    private void clearComponents(String reason) {
+        Runnable clear = () -> {
+            this.actionController.clearComponents(reason);
+            this.observationCreator.clearComponents(reason);
+        };
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server != null && !server.isSameThread()) {
-            server.execute(() -> this.actionController.releaseComponents(reason));
+            server.execute(clear);
             return;
         }
-        this.actionController.releaseComponents(reason);
+        clear.run();
     }
 
     /** 以批次中断状态完成所有尚未开始的排队请求。 */
