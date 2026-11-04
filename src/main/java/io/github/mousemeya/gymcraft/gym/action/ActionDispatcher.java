@@ -222,17 +222,17 @@ public class ActionDispatcher {
     }
 
     /**
-     * 逐组件转发释放回调（reset/环境关闭时由运行时调用）；
-     * 单个组件释放异常只记录日志，不阻断其余组件。
+     * 逐组件转发清理回调（reset/环境关闭时由运行时调用）；
+     * 单个组件清理异常只记录日志，不阻断其余组件。
      *
-     * @param reason 释放原因（reset / clear，用于日志）
+     * @param reason 清理原因（reset / clear，用于日志）
      */
-    public void releaseComponents(String reason) {
+    public void clearComponents(String reason) {
         for (var controller : this.components.values()) {
             try {
-                controller.release(reason);
+                controller.clear(reason);
             } catch (Exception e) {
-                LOGGER.warn("Error in release callback of action component: {}", e.getMessage());
+                LOGGER.warn("Error in clear callback of action component: {}", e.getMessage());
             }
         }
     }

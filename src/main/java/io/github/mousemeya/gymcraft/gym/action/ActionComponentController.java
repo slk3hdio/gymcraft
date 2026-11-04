@@ -88,11 +88,12 @@ public interface ActionComponentController<T extends Message> {
     }
 
     /**
-     * 释放回调 —— reset/环境关闭时由运行时调用，在实体替换前清理本组件挂在当前绑定
-     * 实体上的跨动作会话状态（菜单会话、消费会话等）。默认为空实现。
+     * 清理回调 —— reset/环境关闭时由运行时调用，在实体替换前清理本组件挂在当前绑定
+     * 实体上的跨动作会话状态（菜单会话、消费会话等）。默认为空实现，
+     * 与观测侧 {@code ObservationComponentCreator#clear(String)} 对称。
      *
-     * @param reason 释放原因（reset / clear，用于日志）
+     * @param reason 清理原因（reset / clear，用于日志）
      */
-    default void release(String reason) {
+    default void clear(String reason) {
     }
 }

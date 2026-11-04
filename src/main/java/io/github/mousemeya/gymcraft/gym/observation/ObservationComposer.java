@@ -53,6 +53,20 @@ public class ObservationComposer {
     }
 
     /**
+     * 逐组件转发清理回调（reset/环境关闭），观测组件借此自清跨 episode 历史状态
+     * （如 chat 的增量游标）。
+     * <p>
+     * 由运行时转发，与动作侧的 {@code ActionDispatcher.clearComponents(String)} 对称；
+     * reset 路径位于环境基线恢复之后、reset 观测组装之前。
+     * </p>
+     *
+     * @param reason 清理原因（reset / clear，用于日志）
+     */
+    public void clearComponents(String reason) {
+        this.forEachComponent(creator -> creator.clear(reason));
+    }
+
+    /**
      * 按工厂注册 id 获取当前环境的组件 creator 实例，并通过工厂类型令牌校验具体类型。
      *
      * @param factory 目标观测组件工厂
