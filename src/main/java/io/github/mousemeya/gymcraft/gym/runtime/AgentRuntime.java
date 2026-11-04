@@ -226,7 +226,7 @@ public class AgentRuntime {
         this.actionExecutor.setMob(joined);
         this.dimensionChangeHandler.accept(previous, joined);
         this.actionExecutor.interrupt("agent changed dimension");
-        this.actionController.releaseComponents("dimension change");
+        this.actionController.clearComponents("dimension change");
         this.entityPostObserved = false;
     }
 
