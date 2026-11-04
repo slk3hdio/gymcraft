@@ -19,7 +19,7 @@ Gymnasium 式 RL 环境模组 — `McEnv` ≈ Gymnasium `Env`，动作/观测以
 ## Architecture
 
 - **三个自定义 NeoForge registry**（`RegistryKeys`，`RegistryBuilder` + `NewRegistryEvent`）：
-  - `action_components` → `ActionComponents`（18 个控制器：`step_move`/`look_at`/`move_to`/`swim_to`/`set_attack_target`/`attack_once`/`noop`/`jump`/`break_block`/`set_block`/菜单 4 件套/`pick_up_item`/`drop_item`/`use_item`/`update_interesting_blocks`）。`look_at` 支持 entity（含掉落物）/block/slot 三类目标，成功 description 携带目标描述；slot 使用统一 slot_id 只读查询自身物品栏，不移动视线
+  - `action_components` → `ActionComponents`（18 个控制器：`step_move`/`look_at`/`move_to`/`swim_to`/`set_attack_target`/`attack_once`/`noop`/`jump`/`break_block`/`set_block`/菜单 4 件套/`pick_up_item`/`drop_item`/`use_item`/`update_interesting_blocks`）。`look_at` 支持 entity（含掉落物）/block/slot 三类目标，成功 description 携带目标描述；slot 使用统一 slot_id 只读查询自身物品栏，不移动视线；`pick_up_item` 智能体或目标任一在水中时自动切换两栖寻路（`SwimNavigationTask` + 游泳移动控制器换装 `SwimControlSession`，水状态中途翻转时按当前状态切换任务），双方都在陆地时保持地面导航
   - `observation_components` → `ObservationCreators`（9 个生成器：`self`/`world`/`nearby_entities`/`nearby_blocks`/`nearby_items`/`menu`/`interesting_blocks`/`chat`/`health_log`）
   - `env_factories` → `EnvFactories`（`simple_mob`/`parkour_mob`/`iron_mining`/`iron_golem_warden`/`general`/`mining`——`mining` 为天然单区块采矿任务：区块中心地表出生，里程碑稀疏奖励（log→…→furnace→raw_iron→iron_ingot→iron_pickaxe=成功），失败仅 agent_dead/out_of_bounds，`max_steps` 默认 512）
   - 新增类型必须在对应 `*Components`/`EnvFactories` 类中注册 `DeferredHolder`

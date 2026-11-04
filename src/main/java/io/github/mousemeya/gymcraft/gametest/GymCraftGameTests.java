@@ -114,6 +114,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("navigation_circling_exhausts", () -> NavigationReliabilityGameTests::circlingWithoutProgressExhausts);
         TEST_FUNCTIONS.register("swim_water_crossing", () -> NavigationWaterGameTests::crossingCompletes);
         TEST_FUNCTIONS.register("pickup_within_reach_collects", () -> PickupGameTests::pickupWithinReachCollects);
+        TEST_FUNCTIONS.register("pickup_in_water_swim_navigation", () -> PickupGameTests::pickupInWaterUsesSwimNavigation);
         TEST_FUNCTIONS.register("drop_item_requested_count_forward", () -> DropItemGameTests::dropRequestedCountForward);
         TEST_FUNCTIONS.register("chat_send_action_broadcasts", () -> ChatObservationGameTests::sendChatActionBroadcastsAndObserves);
         TEST_FUNCTIONS.register("use_item_bone_meal", () -> UseItemGameTests::boneMeal);
@@ -196,6 +197,7 @@ public final class GymCraftGameTests {
                             // 追击+近战受服务器启动期卡顿影响，100 tick 偶发打满
                             : holder.getId().getPath().equals("player_sim_attack_target") ? 400
                             : holder.getId().getPath().startsWith("navigation_") ? 160
+                            : holder.getId().getPath().equals("pickup_in_water_swim_navigation") ? 600
                             : holder.getId().getPath().startsWith("swim_") ? 600
                             : MAX_TICKS,
                         0,
