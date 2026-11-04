@@ -46,6 +46,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("agent_running_action_death_completes_current_step", () -> AgentDeathGameTests::runningActionDeathCompletesCurrentStep);
         TEST_FUNCTIONS.register("env_termination_independent_from_action_state", () -> AgentDeathGameTests::envTerminationIsIndependentFromActionState);
         TEST_FUNCTIONS.register("removed_entity_fails_in_action_layer", () -> AgentDeathGameTests::removedEntityFailsInActionLayer);
+        TEST_FUNCTIONS.register("agent_dimension_change_rebinds_runtime", () -> DimensionChangeGameTests::stepAfterDimensionChange);
 
         // ===== 环境契约：动作批次语义 =====
         TEST_FUNCTIONS.register("action_timeout_fails", () -> ActionTimeoutGameTests::actionTimeoutFails);
@@ -100,6 +101,7 @@ public final class GymCraftGameTests {
 
         // ===== 动作组件：每族一个代表性用例 =====
         TEST_FUNCTIONS.register("break_block_main_hand_tool", () -> BreakBlockGameTests::minesWithMainHand);
+        TEST_FUNCTIONS.register("break_block_air_target_completes", () -> BreakBlockGameTests::airTargetCompletesImmediately);
         TEST_FUNCTIONS.register("set_block_self_obstructed", () -> SetBlockGameTests::selfObstructionBlocksPlacement);
         TEST_FUNCTIONS.register("jump_applied_and_executed", () -> JumpGameTests::jumpAppliedAndExecuted);
         TEST_FUNCTIONS.register("look_at_living_entity_eyes", () -> LookAtGameTests::lookAtLivingEntityEyes);
@@ -130,6 +132,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("interesting_blocks_update", () -> InterestingBlocksGameTests::updateIsIdempotentAndRemoves);
         TEST_FUNCTIONS.register("nearby_blocks_scan_bounds_clamp", () -> BlockScanGameTests::scanBoundsClampRegion);
         TEST_FUNCTIONS.register("nearby_blocks_scan_prefers_agent_surroundings", () -> NearbyBlocksGameTests::scanPrefersAgentSurroundings);
+        TEST_FUNCTIONS.register("nearby_blocks_records_traversable_blocks", () -> NearbyBlocksGameTests::scanRecordsAndTraversesNoCollisionBlocks);
 
         // ===== 菜单子系统：会话/槽位/按钮/桥接代表用例 =====
         TEST_FUNCTIONS.register("menu_session_id_stable", () -> MenuSessionGameTests::sessionIdStableAcrossObservations);

@@ -93,12 +93,16 @@ public final class NearbyBlockScanner {
      * （Agent 已走出观测区域）直接返回空列表；未声明范围（null，默认空间即如此）时
      * 无边界扫描全世界，实际覆盖由 {@code maxVisited} 遍历预算约束。
      * </p>
+     * <p>
+     * 空气与碰撞体为空的非空气方块都可作为 BFS 空间节点继续扩展；后者在穿过的同时，
+     * 只要其朝向当前空间的面按 Minecraft 面剔除逻辑可见，也会作为方块结果记录。
+     * </p>
      *
      * @param mob 扫描中心所属的 Agent
      * @param bounds 扫描范围（绝对世界坐标闭区间方块盒）；null 表示无界（全世界）
      * @param maxVisited 最多访问的可穿过空间节点数
      * @param maxBlocks 最多返回的匹配方块数
-     * @param filter 方块状态过滤器，只有通过过滤的表面方块才计入结果上限
+     * @param filter 方块状态过滤器，只有通过过滤的方块才计入结果上限
      * @return 按贴面优先、同优先级内近→远的顺序排列的去重扫描结果；声明了范围且眼睛不在范围内时为空列表
      */
     public static List<ScannedBlock> scan(
@@ -127,27 +131,35 @@ public final class NearbyBlockScanner {
         visited.add(center.asLong());
 
         while (visited.size() < maxVisited && visibleBlocks.size() < maxBlocks) {
-            BlockPos airPos;
+            BlockPos spacePos;
             if (!surfaceQueue.isEmpty()) {
-                airPos = surfaceQueue.removeFirst();
+                spacePos = surfaceQueue.removeFirst();
             } else if (!outerQueue.isEmpty()) {
-                airPos = outerQueue.removeFirst();
+                spacePos = outerQueue.removeFirst();
             } else {
                 break;
             }
-            BlockState airState = level.getBlockState(airPos);
+            BlockState spaceState = level.getBlockState(spacePos);
 
             for (Direction direction : Direction.values()) {
-                BlockPos next = airPos.relative(direction);
+                BlockPos next = spacePos.relative(direction);
                 if (searchBox != null && !searchBox.isInside(next)) {
                     continue;
                 }
 
                 BlockState state = level.getBlockState(next);
+                Direction faceTowardSpace = direction.getOpposite();
                 if (canTraverse(level, next, state)) {
-                    long key = next.asLong();
-                    if (visited.add(key)) {
-                        // flood 期间发现的普通空气也入外层队列（低优先级兜底），保证连通性完备
+                    // 可穿过的非空气方块（铁轨/蜘蛛网/火把等）一边记录、一边继续扩展；
+                    // 未命中可见面前仍允许后续相邻空间再次判断，避免只看过一个隐藏面而漏记。
+                    if (!state.isAir() && filter.test(state)
+                        && Block.shouldRenderFace(level, next, state, spaceState, faceTowardSpace)) {
+                        visibleBlocks.putIfAbsent(next.asLong(), new ScannedBlock(next, state, distance(center, next)));
+                        if (visibleBlocks.size() >= maxBlocks) {
+                            break;
+                        }
+                    }
+                    if (visited.add(next.asLong())) {
                         if (touchesVisibleSurface(level, next)) {
                             surfaceQueue.addLast(next);
                         } else {
@@ -157,8 +169,7 @@ public final class NearbyBlockScanner {
                     continue;
                 }
 
-                Direction faceTowardAir = direction.getOpposite();
-                if (filter.test(state) && Block.shouldRenderFace(level, next, state, airState, faceTowardAir)) {
+                if (filter.test(state) && Block.shouldRenderFace(level, next, state, spaceState, faceTowardSpace)) {
                     visibleBlocks.putIfAbsent(next.asLong(), new ScannedBlock(next, state, distance(center, next)));
                     if (visibleBlocks.size() >= maxBlocks) {
                         break;
@@ -174,14 +185,15 @@ public final class NearbyBlockScanner {
         return state.isAir() || state.getCollisionShape(level, pos).isEmpty();
     }
 
-    /** 判断空间节点是否邻接至少一个需要渲染的实体方块表面。 */
-    private static boolean touchesVisibleSurface(Level level, BlockPos airPos) {
-        BlockState airState = level.getBlockState(airPos);
+    /** 判断空间节点是否邻接至少一个需要渲染的方块表面；可见的可穿过非空气方块同样作为贴面锚点。 */
+    private static boolean touchesVisibleSurface(Level level, BlockPos spacePos) {
+        BlockState spaceState = level.getBlockState(spacePos);
         for (Direction direction : Direction.values()) {
-            BlockPos neighborPos = airPos.relative(direction);
+            BlockPos neighborPos = spacePos.relative(direction);
             BlockState neighborState = level.getBlockState(neighborPos);
-            if (!canTraverse(level, neighborPos, neighborState)
-                && Block.shouldRenderFace(level, neighborPos, neighborState, airState, direction.getOpposite())) {
+            boolean traversable = canTraverse(level, neighborPos, neighborState);
+            if (Block.shouldRenderFace(level, neighborPos, neighborState, spaceState, direction.getOpposite())
+                && (!traversable || !neighborState.isAir())) {
                 return true;
             }
         }
