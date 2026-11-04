@@ -23,6 +23,6 @@ COMPONENT = ActionComponent(
     component_id=ACTION_BREAK_BLOCK,
     command="break_block",
     usage="/break_block <x> <y> <z>",
-    help="break the block at <x> <y> <z> using the item in your main hand; Note that items will only drop if the correct tool is used.",
+    help="break the block at <x> <y> <z> using the item in your main hand; Note that items will only drop if the correct tool is used. If there is no block at the target position (air or fluid such as water or lava) the action completes immediately with no inventory change.",
     parse=_parse,
 )

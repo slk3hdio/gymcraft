@@ -48,4 +48,14 @@ public interface ObservationComponentCreator<T extends Message> {
 
     /** 从当前 Mob 的游戏状态构建实时观测数据。 */
     T create(Mob mob);
+
+    /**
+     * 清理回调 —— reset/环境关闭时由运行时经 {@code ObservationComposer#clearComponents(String)}
+     * 转发，组件自清跨 episode 的历史状态（如 chat 观测的增量游标）。默认为空实现，
+     * 与动作侧 {@code ActionComponentController#clear(String)} 对称。
+     *
+     * @param reason 清理原因（reset / clear，用于日志）
+     */
+    default void clear(String reason) {
+    }
 }

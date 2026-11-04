@@ -281,14 +281,14 @@ public class MobNavigationTask {
      * 构造动作结果使用的稳定导航诊断字段。
      *
      * @param target 当前目标
-     * @param horizontalDistance Mob 到目标的水平中心距离
+     * @param distance Mob 到目标的三维欧氏距离
      * @param distanceKey 距离阈值字段名
      * @param distanceLimit 距离阈值
      * @return 有序诊断映射
      */
     public Map<String, Object> details(
         Vec3 target,
-        double horizontalDistance,
+        double distance,
         String distanceKey,
         double distanceLimit
     ) {
@@ -298,7 +298,7 @@ public class MobNavigationTask {
         details.put("path_owned", this.mob != null
             && this.ownedPath != null && this.navigation(this.mob).getPath() == this.ownedPath);
         details.put("path_can_reach", this.lastPathCanReach);
-        details.put("horizontal_distance", horizontalDistance);
+        details.put("distance", distance);
         details.put(distanceKey, distanceLimit);
         details.put("target", coordinates(target));
         details.put("last_path_target", coordinates(this.lastPathTarget));
@@ -458,7 +458,8 @@ public class MobNavigationTask {
     /**
      * 计算看门狗使用的节点距离；默认仅水平距离。
      * <p>
-     * 子类可覆盖以计入垂直距离（如游泳上浮），默认保持 move_to 的判定不变。
+     * 子类可覆盖以计入垂直距离（如游泳上浮），默认保持地面导航的进度度量；
+     * 与 move_to/swim_to 的三维欧氏到达判定无关。
      * </p>
      *
      * @param from 当前位置

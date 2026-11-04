@@ -40,7 +40,10 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * 破坏方块动作组件 —— 让 Mob 用主手持有物按原版规则挖掘指定方块。
  * <p>
  * 动作不选择物品槽位、不交换物品，固定以当前主手持有物为工具；主手为空即空手挖掘。
- * 错误工具不拦截，按原版规则仅影响速度与掉落。
+ * 错误工具不拦截，按原版规则仅影响速度与掉落。目标位置无方块时不视为失败——
+ * 空气与纯流体（{@code BlockState#liquid}：water/lava/bubble_column，含水方块不在此列）
+ * 均无块可挖，动作以 COMPLETED 结束（描述仍提示 {@code no block at target position}，
+ * 与挖掘中目标被外部移除的终态语义一致），不触动物品栏。
  * </p>
  * <p>
  * 动作反馈（RUNNING 与终态 details）始终携带 {@code tool}/{@code correct_tool} 字段；
@@ -184,6 +187,14 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         }
         BlockPos pos = new BlockPos(component.getX(), component.getY(), component.getZ());
         BlockState blockState = level.getBlockState(pos);
+        if (blockState.isAir() || isFluidBlock(blockState)) {
+            // 幂等语义:目标位置本就没有可挖方块（空气或纯流体——water/lava/bubble_column,
+            // 流体 destroyTime=100 会被当作普通方块慢慢磨挖,须前置拦截）视为已完成
+            // （与挖掘中目标被外部移除的终态一致）,不借出假玩家、不触动物品栏,
+            // 反馈描述仍提示无方块,details 的 block 字段指明实际内容
+            return ActionApplyResult.applied(ActionControlPolicy.none(),
+                ActionState.completed("no block at target position", targetDetails(pos, blockState)));
+        }
         ActionState validationError = validateTarget(mob, level, pos, blockState);
         if (validationError != null) {
             return ActionApplyResult.none(validationError);
@@ -249,8 +260,8 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         }
 
         BlockState blockState = level.getBlockState(mining.pos);
-        if (blockState.isAir()) {
-            // 方块被外部因素移除,挖掘目标已消失
+        if (blockState.isAir() || isFluidBlock(blockState)) {
+            // 方块被外部因素移除（空气）或位置被流体灌入,挖掘目标已消失
             this.miningState = null;
             return ActionState.completed("block already removed", miningDetails(mining));
         }
@@ -281,13 +292,10 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
         }
     }
 
-    /** 目标合法性校验,返回 null 表示可挖掘。 */
+    /** 目标合法性校验（空气目标已在 {@link #apply} 中前置短路为完成态）,返回 null 表示可挖掘。 */
     private ActionState validateTarget(Mob mob, ServerLevel level, BlockPos pos, BlockState blockState) {
         if (!level.isLoaded(pos)) {
             return ActionState.failed("target chunk is not loaded", targetDetails(pos, blockState));
-        }
-        if (blockState.isAir()) {
-            return ActionState.failed("no block at target position", targetDetails(pos, blockState));
         }
         if (blockState.getDestroySpeed(level, pos) < 0.0F) {
             // 基岩等 destroyTime = -1 的方块,原版判定为不可破坏
@@ -376,6 +384,20 @@ public class BreakBlockController extends AbstractActionComponentController<Prot
             "pos", pos.toShortString(),
             "block", blockState.getBlock().toString()
         );
+    }
+
+    /**
+     * 目标位置是否为纯流体方块（原版 {@code .liquid()} 标记：water/lava/bubble_column，
+     * 含水方块如水合楼梯不在其列、正常可破坏）。流体的 destroySpeed 是 100 而非 -1，
+     * 不会被"不可破坏"校验拦截，必须单独判定——否则会被当作普通方块慢慢磨挖
+     * 直到超时，甚至最终以 destroyBlock "成功"删掉流体。
+     *
+     * @param state 目标方块状态
+     * @return 纯流体（无实体方块可挖）时为 true
+     */
+    @SuppressWarnings("deprecation") // BlockStateBase#liquid 为 NeoForge 对简单访问器的统一无害弃用，无替代方法
+    private static boolean isFluidBlock(BlockState state) {
+        return state.liquid();
     }
 
     /**

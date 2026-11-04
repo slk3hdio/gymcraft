@@ -14,5 +14,7 @@ message ProtoSwimTo {
   double x = 1;
   double y = 2;
   double z = 3;
+  // 到达判定为三维欧氏距离：与修正后目标的直线距离不大于该值即完成
+  //（服务端实际判定至少取 0.1 格物理容差）。
   double stop_distance = 4;
 }

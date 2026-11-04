@@ -145,10 +145,10 @@ public class OpenMenuController extends AbstractActionComponentController<ProtoO
 
     /**
      * reset/关闭时关闭当前菜单会话；生产路径中会话只能由本组件创建，
-     * 故此处单点释放（底层 {@code closeOnce} 幂等）。
+     * 故此处单点清理（底层 {@code closeOnce} 幂等）。
      */
     @Override
-    public void release(String reason) {
+    public void clear(String reason) {
         MenuSessionHooks.closeFor(this.mob(), reason);
     }
 

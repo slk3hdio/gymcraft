@@ -72,10 +72,10 @@ public final class NavigationReliabilityGameTests {
             try {
                 assertTrue(helper, result.get() != null && result.get().status() == ActionStatus.COMPLETED,
                     "zero stop distance did not complete: " + result.get());
-                assertTrue(helper, ((Number) result.get().details().get("horizontal_distance")).doubleValue() <= 0.1,
+                assertTrue(helper, ((Number) result.get().details().get("distance")).doubleValue() <= 0.1,
                     "navigation completed outside its precision tolerance");
                 // 清输入后仍允许原版惯性自然衰减；最终应留在目标附近而不是继续绕圈。
-                assertTrue(helper, mob.position().subtract(target).horizontalDistance() <= 0.5,
+                assertTrue(helper, mob.position().distanceTo(target) <= 0.5,
                     "agent drifted away after reaching the target: " + mob.position());
                 assertTrue(helper, mob.getMoveControl() == originalControl && !originalControl.hasWanted(),
                     "completed navigation retained a movement target or swimming controller");

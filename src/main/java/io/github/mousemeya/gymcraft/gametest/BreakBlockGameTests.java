@@ -66,4 +66,61 @@ public final class BreakBlockGameTests {
             "stone did not drop cobblestone with a pickaxe");
         helper.succeed();
     }
+
+    /**
+     * 目标位置无方块时动作不报失败，直接以 COMPLETED 结束：
+     * 反馈描述仍提示无方块，主手工具不被触碰、不消耗耐久。
+     *
+     * @param helper 测试场景
+     */
+    public static void airTargetCompletesImmediately(GameTestHelper helper) {
+        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STONE_PICKAXE));
+        BlockPos target = new BlockPos(3, 2, 2);
+        assertTrue(helper, helper.getBlockState(target).isAir(), "precondition: target must be air");
+        BlockPos absolute = helper.absolutePos(target);
+        ProtoBreakBlock action = ProtoBreakBlock.newBuilder()
+            .setX(absolute.getX()).setY(absolute.getY()).setZ(absolute.getZ())
+            .build();
+
+        var controller = new BreakBlockController(mob);
+        var state = controller.apply(action).initialState();
+        assertEquals(helper, ActionStatus.COMPLETED, state.status(), "air target should complete immediately");
+        assertEquals(helper, "no block at target position", state.description(),
+            "feedback should still report the missing block");
+        assertEquals(helper, absolute.toShortString(), state.details().get("pos"), "position feedback missing");
+        assertEquals(helper, "Block{minecraft:air}", state.details().get("block"), "block feedback missing");
+        assertTrue(helper, mob.getMainHandItem().is(Items.STONE_PICKAXE), "main hand must not be touched on air target");
+        assertTrue(helper, mob.getMainHandItem().getDamageValue() == 0, "tool must not take durability on air target");
+        helper.succeed();
+    }
+
+    /**
+     * 目标位置是纯流体（水）时动作不进入挖掘：直接以 COMPLETED 结束（无块可挖，
+     * 否则流体 destroyTime=100 会被慢慢磨挖直到超时），反馈 details 指明流体，
+     * 主手工具不被触碰、水源不被破坏。
+     *
+     * @param helper 测试场景
+     */
+    public static void fluidTargetCompletesImmediately(GameTestHelper helper) {
+        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STONE_PICKAXE));
+        BlockPos target = new BlockPos(3, 2, 2);
+        helper.setBlock(target, Blocks.WATER);
+        assertTrue(helper, helper.getBlockState(target).is(Blocks.WATER), "precondition: target must be water");
+        BlockPos absolute = helper.absolutePos(target);
+        ProtoBreakBlock action = ProtoBreakBlock.newBuilder()
+            .setX(absolute.getX()).setY(absolute.getY()).setZ(absolute.getZ())
+            .build();
+
+        var controller = new BreakBlockController(mob);
+        var state = controller.apply(action).initialState();
+        assertEquals(helper, ActionStatus.COMPLETED, state.status(), "fluid target should complete immediately");
+        assertEquals(helper, "no block at target position", state.description(),
+            "feedback should still report the missing block");
+        assertEquals(helper, "Block{minecraft:water}", state.details().get("block"), "fluid feedback missing");
+        assertTrue(helper, helper.getBlockState(target).is(Blocks.WATER), "water must not be destroyed by mining");
+        assertTrue(helper, mob.getMainHandItem().getDamageValue() == 0, "tool must not take durability on fluid target");
+        helper.succeed();
+    }
 }
