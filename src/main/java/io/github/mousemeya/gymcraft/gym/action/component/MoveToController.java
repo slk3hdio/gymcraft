@@ -32,8 +32,11 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 /**
  * 寻路动作组件 —— 将实体导航到指定方块。
  * <p>
- * 坐标按方块位置解释，目标统一修正为方块中心的可站立点
- * （{@link MobNavigationTask#blockCenterTarget}），到达判定与距离诊断均使用修正后目标。
+ * 坐标按方块位置解释，目标统一经 {@link MobNavigationTask#surfaceTarget} 复刻原版
+ * {@code findSurfacePosition} 语义修正为可站立位置（实心方块上移到其上方可站面、
+ * 空气格吸附到支撑面、液体等非固体格保持），到达判定与距离诊断均使用修正后目标；
+ * 发生方块层面修正时完成 description 携带提示、details 的 {@code target_correction}
+ * 报告修正码、{@code requested} 报告原始请求坐标。
  * 到达判定使用三维欧氏距离：Mob 脚部位置到修正后目标的直线距离不大于
  * {@link MobNavigationTask#effectiveStopDistance} 返回的有效停止距离即完成。
  * 停止距离至少使用 0.1 格的物理精度容差，避免零容差造成末段绕圈。
@@ -133,22 +136,23 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
         }
-        Vec3 target = target(component);
+        MobNavigationTask.BlockTarget target = this.target(component);
+        Vec3 targetPos = target.position();
         var policy = ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE)
             .eraseMemory(MemoryModuleType.WALK_TARGET)
             .eraseMemory(MemoryModuleType.PATH);
-        double distance = distanceTo(mob, target);
+        double distance = distanceTo(mob, targetPos);
         if (distance <= MobNavigationTask.effectiveStopDistance(component.getStopDistance())) {
             return ActionApplyResult.applied(
                 policy,
-                ActionState.completed("reached target", moveDetails(target, component.getStopDistance()))
+                ActionState.completed(reachedDescription(target), moveDetails(component, target))
             );
         }
-        this.navigationTask.begin(mob, target, this.speed, true);
+        this.navigationTask.begin(mob, targetPos, this.speed, true);
         ActionState initialState = ActionState.running(
             "navigating to target",
-            moveDetails(target, component.getStopDistance())
+            moveDetails(component, target)
         );
         LOGGER.info(
             "GymCraft MoveTo apply entity={} target=({}, {}, {}) state={} details={}",
@@ -176,26 +180,27 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
             this.navigationTask.cancel();
             return agentError;
         }
-        Vec3 target = target(component);
+        MobNavigationTask.BlockTarget target = this.target(component);
+        Vec3 targetPos = target.position();
         double stop = component.getStopDistance();
-        double dist = distanceTo(mob, target);
+        double dist = distanceTo(mob, targetPos);
         if (dist <= MobNavigationTask.effectiveStopDistance(stop)) {
             this.navigationTask.cancel();
-            ActionState state = ActionState.completed("reached target", moveDetails(target, stop));
+            ActionState state = ActionState.completed(reachedDescription(target), moveDetails(component, target));
             LOGGER.info("GymCraft MoveTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
             return state;
         }
-        MobNavigationTask.Update update = this.navigationTask.advance(target, false);
+        MobNavigationTask.Update update = this.navigationTask.advance(targetPos, false);
         if (update.exhausted()) {
             ActionState state = ActionState.failed(
                 navigationFailureDescription(update.reason()),
-                moveDetails(target, stop)
+                moveDetails(component, target)
             );
             this.navigationTask.cancel();
             LOGGER.info("GymCraft MoveTo state entity={} status={} description={} details={}", mob.getUUID(), state.status(), state.description(), state.details());
             return state;
         }
-        ActionState state = ActionState.running("navigating", moveDetails(target, stop));
+        ActionState state = ActionState.running("navigating", moveDetails(component, target));
         LOGGER.info("GymCraft MoveTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
         return state;
     }
@@ -217,9 +222,14 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         return this.navigationTask.currentPath();
     }
 
-    /** @return 坐标所在方块的可站立中心；见 {@link MobNavigationTask#blockCenterTarget} */
-    private static Vec3 target(ProtoMoveTo component) {
-        return MobNavigationTask.blockCenterTarget(component.getX(), component.getY(), component.getZ());
+    /** @return 请求坐标按可站立语义修正后的导航目标与修正诊断；见 {@link MobNavigationTask#surfaceTarget} */
+    private MobNavigationTask.BlockTarget target(ProtoMoveTo component) {
+        return MobNavigationTask.surfaceTarget(this.mob().level(), component.getX(), component.getY(), component.getZ());
+    }
+
+    /** @return 完成描述：发生方块层面修正时携带简短提示 */
+    private static String reachedDescription(MobNavigationTask.BlockTarget target) {
+        return target.adjusted() ? "reached target (adjusted to standable surface)" : "reached target";
     }
 
     /** @return 当前 Mob 脚部位置到目标的三维欧氏距离 */
@@ -247,16 +257,24 @@ public class MoveToController extends AbstractActionComponentController<ProtoMov
         };
     }
 
-    /** @return 包含精确三维距离、垂直差和导航所有权的动作诊断 */
-    private Map<String, Object> moveDetails(Vec3 target, double stopDistance) {
+    /** @return 包含请求与修正目标对照、修正码、精确三维距离、垂直差和导航所有权的动作诊断 */
+    private Map<String, Object> moveDetails(ProtoMoveTo component, MobNavigationTask.BlockTarget target) {
         Map<String, Object> details = this.navigationTask.details(
-            target,
-            distanceTo(this.mob(), target),
+            target.position(),
+            distanceTo(this.mob(), target.position()),
             "stop_distance",
-            stopDistance
+            component.getStopDistance()
         );
-        details.put("vertical_delta", this.mob().getY() - target.y);
-        details.put("effective_stop_distance", MobNavigationTask.effectiveStopDistance(stopDistance));
+        details.put("requested", Map.of(
+            "x", component.getX(),
+            "y", component.getY(),
+            "z", component.getZ()
+        ));
+        if (target.adjusted()) {
+            details.put("target_correction", target.correction());
+        }
+        details.put("vertical_delta", this.mob().getY() - target.position().y);
+        details.put("effective_stop_distance", MobNavigationTask.effectiveStopDistance(component.getStopDistance()));
         return details;
     }
 

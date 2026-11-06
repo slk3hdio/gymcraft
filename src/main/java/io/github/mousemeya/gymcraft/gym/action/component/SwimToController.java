@@ -34,12 +34,13 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 /**
  * 游泳动作组件 —— 使用两栖寻路把实体导航到指定方块。
  * <p>
- * 与 {@code move_to} 参数、方块中心目标修正和到达判定（三维欧氏距离）完全一致
- * （目标统一为 {@link MobNavigationTask#blockCenterTarget} 的可站立中心），但寻路使用自有的
+ * 与 {@code move_to} 参数、方块目标修正（{@link MobNavigationTask#surfaceTarget}
+ * 复刻原版 findSurfacePosition 语义）和到达判定（三维欧氏距离）完全一致，但寻路使用自有的
  * {@link net.minecraft.world.entity.ai.navigation.AmphibiousPathNavigation}
  * （原版海龟同款，见 {@link SwimNavigationTask}）：WATER 格可通行、支持水中垂直
  * 移动与水中起点，因此落水、身处深水或目标在彼岸时仍可规划路径；陆地上与
- * move_to 等价。动作期间经 {@link SwimControlSession} 临时把 Mob 的移动控制器
+ * move_to 等价。注意两栖导航本身不做终点列扫描修正（原版无此入口），统一由
+ * {@link MobNavigationTask#surfaceTarget} 补齐。动作期间经 {@link SwimControlSession} 临时把 Mob 的移动控制器
  * 替换为游泳版本（水中按俯仰角做原版平滑三维游泳，海豚/青蛙同款；陆地完全委托
  * 原控制器，动作结束/打断时恢复），不上浮切换游泳 pose，保持命中箱与眼高稳定。
  * 实现了 {@link EnvironmentRegionAware}：环境区域非空时目标坐标空间收紧到区域边界。
@@ -139,23 +140,24 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
         }
-        Vec3 target = target(component);
+        MobNavigationTask.BlockTarget target = this.target(component);
+        Vec3 targetPos = target.position();
         var policy = ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE)
             .eraseMemory(MemoryModuleType.WALK_TARGET)
             .eraseMemory(MemoryModuleType.PATH);
-        double distance = distanceTo(mob, target);
+        double distance = distanceTo(mob, targetPos);
         if (distance <= MobNavigationTask.effectiveStopDistance(component.getStopDistance())) {
             return ActionApplyResult.applied(
                 policy,
-                ActionState.completed("reached target", moveDetails(target, component.getStopDistance()))
+                ActionState.completed(reachedDescription(target), moveDetails(component, target))
             );
         }
         this.swimControls.install(mob);
-        this.navigationTask.begin(mob, target, this.speed, true);
+        this.navigationTask.begin(mob, targetPos, this.speed, true);
         ActionState initialState = ActionState.running(
             "swimming to target",
-            moveDetails(target, component.getStopDistance())
+            moveDetails(component, target)
         );
         LOGGER.info(
             "GymCraft SwimTo apply entity={} target=({}, {}, {}) state={} details={}",
@@ -184,28 +186,29 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
             this.swimControls.restore(mob);
             return agentError;
         }
-        Vec3 target = target(component);
+        MobNavigationTask.BlockTarget target = this.target(component);
+        Vec3 targetPos = target.position();
         double stop = component.getStopDistance();
-        double dist = distanceTo(mob, target);
+        double dist = distanceTo(mob, targetPos);
         if (dist <= MobNavigationTask.effectiveStopDistance(stop)) {
             this.navigationTask.cancel();
             this.swimControls.restore(mob);
-            ActionState state = ActionState.completed("reached target", moveDetails(target, stop));
+            ActionState state = ActionState.completed(reachedDescription(target), moveDetails(component, target));
             LOGGER.info("GymCraft SwimTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
             return state;
         }
-        MobNavigationTask.Update update = this.navigationTask.advance(target, false);
+        MobNavigationTask.Update update = this.navigationTask.advance(targetPos, false);
         if (update.exhausted()) {
             ActionState state = ActionState.failed(
                 navigationFailureDescription(update.reason()),
-                moveDetails(target, stop)
+                moveDetails(component, target)
             );
             this.navigationTask.cancel();
             this.swimControls.restore(mob);
             LOGGER.info("GymCraft SwimTo state entity={} status={} description={} details={}", mob.getUUID(), state.status(), state.description(), state.details());
             return state;
         }
-        ActionState state = ActionState.running("swimming", moveDetails(target, stop));
+        ActionState state = ActionState.running("swimming", moveDetails(component, target));
         LOGGER.info("GymCraft SwimTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
         return state;
     }
@@ -228,9 +231,14 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
         return this.navigationTask.currentPath();
     }
 
-    /** @return 坐标所在方块的可站立中心（与 move_to 同一修正）；见 {@link MobNavigationTask#blockCenterTarget} */
-    private static Vec3 target(ProtoSwimTo component) {
-        return MobNavigationTask.blockCenterTarget(component.getX(), component.getY(), component.getZ());
+    /** @return 请求坐标按可站立语义修正后的导航目标与修正诊断（与 move_to 同一修正）；见 {@link MobNavigationTask#surfaceTarget} */
+    private MobNavigationTask.BlockTarget target(ProtoSwimTo component) {
+        return MobNavigationTask.surfaceTarget(this.mob().level(), component.getX(), component.getY(), component.getZ());
+    }
+
+    /** @return 完成描述：发生方块层面修正时携带简短提示（与 move_to 一致） */
+    private static String reachedDescription(MobNavigationTask.BlockTarget target) {
+        return target.adjusted() ? "reached target (adjusted to standable surface)" : "reached target";
     }
 
     /** @return 当前 Mob 脚部位置到目标的三维欧氏距离 */
@@ -259,15 +267,23 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
     }
 
     /** @return 包含精确三维距离、垂直差和导航所有权的动作诊断 */
-    private Map<String, Object> moveDetails(Vec3 target, double stopDistance) {
+    private Map<String, Object> moveDetails(ProtoSwimTo component, MobNavigationTask.BlockTarget target) {
         Map<String, Object> details = this.navigationTask.details(
-            target,
-            distanceTo(this.mob(), target),
+            target.position(),
+            distanceTo(this.mob(), target.position()),
             "stop_distance",
-            stopDistance
+            component.getStopDistance()
         );
-        details.put("vertical_delta", this.mob().getY() - target.y);
-        details.put("effective_stop_distance", MobNavigationTask.effectiveStopDistance(stopDistance));
+        details.put("requested", Map.of(
+            "x", component.getX(),
+            "y", component.getY(),
+            "z", component.getZ()
+        ));
+        if (target.adjusted()) {
+            details.put("target_correction", target.correction());
+        }
+        details.put("vertical_delta", this.mob().getY() - target.position().y);
+        details.put("effective_stop_distance", MobNavigationTask.effectiveStopDistance(component.getStopDistance()));
         return details;
     }
 

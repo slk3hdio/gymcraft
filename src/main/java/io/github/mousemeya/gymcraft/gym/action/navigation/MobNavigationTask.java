@@ -6,12 +6,14 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.goal.GoalSelector;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
@@ -98,21 +100,91 @@ public class MobNavigationTask {
     }
 
     /**
-     * 把请求坐标按方块位置解释，返回该方块中心的可站立点。
+     * 按方块目标修正的结果：修正后的导航目标与发生方块层面修正时的诊断码。
+     *
+     * @param position 修正后的导航目标（x/z 半格中心、y 为该格底部）
+     * @param correction 修正码；未发生修正（请求格即目标格）时为 null
+     */
+    public record BlockTarget(Vec3 position, @Nullable String correction) {
+        /** 修正码：请求方块为实心，目标上移到其上方的第一个非固体格（站在方块上）。 */
+        public static final String RAISED_ABOVE_SOLID = "raised_above_solid";
+        /** 修正码：请求方块为空气，目标吸附到下方支撑面（无支撑时吸附上方第一个非空气格）。 */
+        public static final String SNAPPED_TO_SUPPORT = "snapped_to_support";
+
+        /** @return 是否发生了方块层面的修正 */
+        public boolean adjusted() {
+            return this.correction != null;
+        }
+    }
+
+    /**
+     * 把请求坐标按方块位置解释，复刻原版 {@code GroundPathNavigation.findSurfacePosition}
+     * 的语义修正为可站立位置。
      * <p>
-     * 整数方块坐标是方块的西北下角（四块交界），直接当作目标会把实体引向边角；
-     * 统一修正为 {@code Vec3.atBottomCenterOf}（x/z 半格中心、y 为方块底部，与
-     * 原版路径节点到达语义一致）。分数坐标向下取整到所在方块后再修正。
-     * move_to/swim_to 的到达判定与可视化共用本修正，保证绘制目标与实际导航目标一致。
+     * 整数方块坐标是方块的西北下角（四块交界），直接当作目标会把实体引向边角；统一
+     * 修正为 {@code Vec3.atBottomCenterOf}（x/z 半格中心、y 为该格底部，与实体脚底及
+     * 原版路径节点同一参照系）。y 按请求格的方块状态分三支：实心方块上移到其上方
+     * 第一个非固体格（站在方块上，而非方块内部）；空气格向下吸附到支撑面之上，一路
+     * 到世界底部无支撑时反向吸附上方第一个非空气格；液体等非空气非固体格保持原格。
+     * 修正结果与原版寻路在 createPath 入口做的终点修正一致，避免出现"判定目标在
+     * 实心方块内、路径终点在其上表面"的错位。move_to/swim_to 的到达判定与可视化
+     * 共用本修正，保证绘制目标与实际导航目标一致。
      * </p>
      *
+     * @param level 读取方块状态的世界（目标区块须已加载，环境由 EnvChunkGuard 保证）
      * @param x 请求坐标 X
      * @param y 请求坐标 Y
      * @param z 请求坐标 Z
-     * @return 修正后的导航目标
+     * @return 修正后的导航目标与修正诊断
      */
-    public static Vec3 blockCenterTarget(double x, double y, double z) {
-        return Vec3.atBottomCenterOf(BlockPos.containing(x, y, z));
+    @SuppressWarnings("deprecation")
+    public static BlockTarget surfaceTarget(Level level, double x, double y, double z) {
+        BlockPos requested = BlockPos.containing(x, y, z);
+        BlockPos adjusted = surfacePositionOf(level, requested);
+        String correction = null;
+        if (!adjusted.equals(requested)) {
+            correction = level.getBlockState(requested).isSolid()
+                ? BlockTarget.RAISED_ABOVE_SOLID
+                : BlockTarget.SNAPPED_TO_SUPPORT;
+        }
+        return new BlockTarget(Vec3.atBottomCenterOf(adjusted), correction);
+    }
+
+    /**
+     * 复刻原版 findSurfacePosition 的三分支列扫描。
+     * <p>
+     * 使用与原版完全相同的谓词（{@code isAir()} 与无参 {@code isSolid()}，后者虽被
+     * 标记弃用但原版导航自身仍在使用，此处保持同源判定）。
+     * </p>
+     *
+     * @param level 读取方块状态的世界
+     * @param pos 请求目标格
+     * @return 同列的可站立格（实心上移 / 空气下吸附 / 非空气非固体原样）
+     */
+    @SuppressWarnings("deprecation")
+    private static BlockPos surfacePositionOf(Level level, BlockPos pos) {
+        if (level.getBlockState(pos).isAir()) {
+            BlockPos.MutableBlockPos cursor = pos.mutable().move(Direction.DOWN);
+            while (cursor.getY() >= level.getMinY() && level.getBlockState(cursor).isAir()) {
+                cursor.move(Direction.DOWN);
+            }
+            if (cursor.getY() >= level.getMinY()) {
+                return cursor.above();
+            }
+            cursor.setY(pos.getY() + 1);
+            while (cursor.getY() <= level.getMaxY() && level.getBlockState(cursor).isAir()) {
+                cursor.move(Direction.UP);
+            }
+            pos = cursor.immutable();
+        }
+        if (!level.getBlockState(pos).isSolid()) {
+            return pos;
+        }
+        BlockPos.MutableBlockPos cursor = pos.mutable().move(Direction.UP);
+        while (cursor.getY() <= level.getMaxY() && level.getBlockState(cursor).isSolid()) {
+            cursor.move(Direction.UP);
+        }
+        return cursor.immutable();
     }
 
     /**
