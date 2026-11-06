@@ -122,14 +122,14 @@ public final class VisualAdapters {
             return VisualGeometry.block(mob, "gymcraft:set_block", new Vec3(p.getX(), p.getY(), p.getZ()));
         });
         // 寻路类：目标点 + 实际规划路径（无活动路径时退回目标点 + 视线连线）。
-        // move_to/swim_to 目标点与 controller 一致修正到方块中心，避免画在边角。
+        // move_to/swim_to 目标点与 controller 一致修正到可站立面，避免画在边角或实心方块内部。
         registerAction("gymcraft:move_to", (mob, payload, state) -> {
             var p = payload.unpack(ProtoMoveTo.class);
-            return navigation(mob, "gymcraft:move_to", MobNavigationTask.blockCenterTarget(p.getX(), p.getY(), p.getZ()));
+            return navigation(mob, "gymcraft:move_to", MobNavigationTask.surfaceTarget(mob.level(), p.getX(), p.getY(), p.getZ()).position());
         });
         registerAction("gymcraft:swim_to", (mob, payload, state) -> {
             var p = payload.unpack(ProtoSwimTo.class);
-            return navigation(mob, "gymcraft:swim_to", MobNavigationTask.blockCenterTarget(p.getX(), p.getY(), p.getZ()));
+            return navigation(mob, "gymcraft:swim_to", MobNavigationTask.surfaceTarget(mob.level(), p.getX(), p.getY(), p.getZ()).position());
         });
         registerAction("gymcraft:jump", (mob, payload, state) -> {
             payload.unpack(ProtoJump.class);
