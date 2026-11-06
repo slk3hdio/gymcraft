@@ -114,6 +114,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("navigation_zero_stop_distance", () -> NavigationReliabilityGameTests::zeroStopDistanceCompletes);
         TEST_FUNCTIONS.register("navigation_swim_zero_stop_distance", () -> NavigationReliabilityGameTests::swimZeroStopDistanceCompletes);
         TEST_FUNCTIONS.register("navigation_circling_exhausts", () -> NavigationReliabilityGameTests::circlingWithoutProgressExhausts);
+        TEST_FUNCTIONS.register("navigation_solid_target_adjusts", () -> NavigationReliabilityGameTests::solidBlockTargetAdjustsToSurface);
         TEST_FUNCTIONS.register("swim_water_crossing", () -> NavigationWaterGameTests::crossingCompletes);
         TEST_FUNCTIONS.register("pickup_within_reach_collects", () -> PickupGameTests::pickupWithinReachCollects);
         TEST_FUNCTIONS.register("pickup_in_water_swim_navigation", () -> PickupGameTests::pickupInWaterUsesSwimNavigation);

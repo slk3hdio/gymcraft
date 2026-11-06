@@ -1,7 +1,9 @@
 package io.github.mousemeya.gymcraft.gametest;
 
+import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertEquals;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
 
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import net.minecraft.core.BlockPos;
@@ -42,6 +44,58 @@ public final class NavigationReliabilityGameTests {
     /** @param helper 测试场景；验证两栖导航在陆地上的同一到达契约。 */
     public static void swimZeroStopDistanceCompletes(GameTestHelper helper) {
         verifyZeroStopDistance(helper, true);
+    }
+
+    /**
+     * 验证实心方块目标按原版 findSurfacePosition 语义修正到其上方可站面：
+     * 站在目标方块正上方请求该方块时 apply 立即完成（修正前该场景三维距离恒大于
+     * 停止距离、永不可能完成），导航到远处实心方块同样在修正后目标上完成；
+     * 完成 description 携带提示、details 报告修正码与请求/目标对照。
+     *
+     * @param helper 测试场景
+     */
+    public static void solidBlockTargetAdjustsToSurface(GameTestHelper helper) {
+        prepareFloor(helper);
+        Mob mob = helper.spawn(ModEntities.PLAYER_SIM.get(), new BlockPos(1, 2, 2));
+        var controller = new MoveToController(mob);
+        // 场景一（真实故障复现）：请求 Mob 正站着的脚下实心方块，立即完成且带修正信息
+        var onOwnBlock = ProtoMoveTo.newBuilder().setX(1).setY(1).setZ(2).setStopDistance(1.0).build();
+        ActionState immediate = controller.apply(onOwnBlock).initialState();
+        try {
+            assertTrue(helper, immediate.status() == ActionStatus.COMPLETED,
+                "standing on the requested solid block should complete instantly: " + immediate);
+            assertTrue(helper, immediate.description().contains("adjusted"),
+                "completion description should mention the adjustment: " + immediate.description());
+            assertEquals(helper, "raised_above_solid", immediate.details().get("target_correction"),
+                "correction code mismatch");
+            assertEquals(helper, 2.0, ((Number) ((Map<?, ?>) immediate.details().get("target")).get("y")).doubleValue(),
+                "adjusted target should stand on the solid block");
+        } finally {
+            controller.onInterrupt(onOwnBlock);
+        }
+        // 场景二：导航到远处实心方块，最终在修正后的可站面上完成
+        var action = ProtoMoveTo.newBuilder().setX(5).setY(1).setZ(3).setStopDistance(1.0).build();
+        AtomicReference<ActionState> result = new AtomicReference<>();
+        helper.runAfterDelay(3, () -> result.set(controller.apply(action).initialState()));
+        helper.onEachTick(() -> {
+            if (result.get() != null && !result.get().isTerminal()) {
+                result.set(controller.tick(action));
+            }
+        });
+        helper.runAfterDelay(140, () -> {
+            try {
+                assertTrue(helper, result.get() != null && result.get().status() == ActionStatus.COMPLETED,
+                    "navigation to a solid block did not complete: " + result.get());
+                assertEquals(helper, "raised_above_solid", result.get().details().get("target_correction"),
+                    "correction code mismatch after navigation");
+                assertEquals(helper, 2.0,
+                    ((Number) ((Map<?, ?>) result.get().details().get("target")).get("y")).doubleValue(),
+                    "navigation should complete on the adjusted standable surface");
+                helper.succeed();
+            } finally {
+                controller.onInterrupt(action);
+            }
+        });
     }
 
     /**
