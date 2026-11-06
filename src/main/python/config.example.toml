@@ -1,6 +1,7 @@
 # GymCraft Python 端示例配置（TOML）。
-# 复制为 config.toml 后按需修改；未显式给出的键使用框架内置默认值。
-# 所有内置 demo 都可用 `--config <本文件>` 指定；命令行显式参数优先于本文件。
+# 复制为同目录的 config.toml 后按需修改；未传 --config 时 demo 默认读取该文件。
+# 未显式给出的键使用框架内置默认值；命令行显式参数优先于配置文件。
+# 所有内置 demo 都可用 `--config <路径>` 指定其他配置文件。
 
 # 所有环境共享的默认任务提示词；命令行 --task 可覆盖。
 task = """Gather enough resources to craft an iron pickaxe. Keep yourself alive."""

@@ -5,8 +5,10 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from gymcraft.config import (
+    DEFAULT_CONFIG_PATH,
     CompletionsConfig,
     EnvironmentConfig,
     GymCraftConfig,
@@ -139,6 +141,46 @@ class DefaultValueTests(ConfigTestCase):
             },
             config.reset_options(),
         )
+
+
+# 覆盖默认 config.toml 的路径与缺失回退。
+class DefaultConfigPathTests(ConfigTestCase):
+    """load_config() 省略 path 时应读取源码 python 目录下的 config.toml。"""
+
+    def test_default_path_points_to_python_directory(self) -> None:
+        """默认路径固定为 src/main/python/config.toml。"""
+        expected = Path(__file__).resolve().parent.parent / "config.toml"
+
+        self.assertEqual(expected, DEFAULT_CONFIG_PATH)
+
+    def test_load_config_without_path_reads_default_file(self) -> None:
+        """默认文件存在时应加载其内容。"""
+        path = write_config(
+            'task = "default task"\n[environment]\naddress = "default:1"\n'
+        )
+        self.addCleanup(Path(path).unlink, missing_ok=True)
+
+        with patch("gymcraft.config.DEFAULT_CONFIG_PATH", Path(path)):
+            config = load_config()
+
+        self.assertEqual("default task", config.task)
+        self.assertEqual("default:1", config.environment.address)
+
+    def test_missing_default_file_returns_builtin_defaults(self) -> None:
+        """默认文件不存在时静默回退到内置默认。"""
+        with tempfile.NamedTemporaryFile(suffix=".toml") as handle:
+            missing = Path(handle.name)
+
+        with patch("gymcraft.config.DEFAULT_CONFIG_PATH", missing):
+            self.assertEqual(GymCraftConfig(), load_config())
+
+    def test_explicit_missing_path_still_raises(self) -> None:
+        """显式路径不存在时仍应报错，避免掩盖路径拼写错误。"""
+        with tempfile.NamedTemporaryFile(suffix=".toml") as handle:
+            missing = Path(handle.name)
+
+        with self.assertRaises(FileNotFoundError):
+            load_config(missing)
 
 
 # 覆盖未知键、类型错误与非法 TOML 的报错。

@@ -109,7 +109,7 @@ uv run python debug/interesting_blocks_debug.py <entity_uuid> --add minecraft:di
 
 ## 配置文件（TOML）
 
-`gymcraft` 支持可选的 TOML 配置文件，一次声明任务提示词、gRPC 连接、reset 参数、LLM wrapper 配置与 Chat Completions 参数；不传 `--config` 时行为与原来一致。示例见 [`config.example.toml`](config.example.toml)。
+`gymcraft` 支持可选的 TOML 配置文件，一次声明任务提示词、gRPC 连接、reset 参数、LLM wrapper 配置与 Chat Completions 参数。不传 `--config` 时默认读取源码仓库的 `src/main/python/config.toml`；该文件不存在则使用内置默认。可复制 `config.example.toml` 为同目录的 `config.toml` 后按需修改。
 
 ```toml
 task = """Gather enough resources to craft an iron pickaxe. Keep yourself alive."""
@@ -168,12 +168,12 @@ env = LLMGymCraftEnv(base_env, config)    # task 取配置或显式传入
 context, info = env.reset(seed=config.reset.seed, options=config.reset_options())
 ```
 
-- 取值优先级：CLI 显式值 > 配置文件 > 环境变量/内置默认；`reset.options` 原样透传给服务端（服务端为权威校验方）。
+- 取值优先级：CLI 显式值 > `--config` > 默认 `src/main/python/config.toml` > 环境变量/内置默认；默认文件不存在时静默使用内置默认，显式路径不存在则报错。`reset.options` 原样透传给服务端（服务端为权威校验方）。
 - `GymCraftEnv` 与 `LLMGymCraftEnv` 的构造函数直接接收 `GymCraftConfig`，配置模块本身不创建环境或客户端。
 - `components` 的组件 ID 可省略 `gymcraft:` 前缀；带冒号的键在 TOML 中写成 `[reset.options.components."gymcraft:move_to"]`。
 - `[llm]` / `[llm.render]` / `[llm.completions]` 直接映射 `LLMEnvConfig` / `RenderConfig` / `CompletionsConfig`；未知键、类型错误、非法字段名在加载期抛 `ValueError`。
 - `completions.params` 可写任意 `chat.completions.create` 参数（`model`/`messages`/`stream`/`extra_body` 由框架管理，不可出现在这里）；`completions.extra_body` 用于 `reasoning_effort` 等供应商私有字段。
-- 文件不存在抛 `FileNotFoundError`，TOML 语法错误转 `ValueError`；`reset.options` 与 `completions.params`/`extra_body` 中的值必须可被 protobuf Struct 表示（不接受 TOML 日期/时间类型）。
+- 显式传入的文件不存在抛 `FileNotFoundError`；默认 `config.toml` 不存在则使用内置默认。TOML 语法错误转 `ValueError`；`reset.options` 与 `completions.params`/`extra_body` 中的值必须可被 protobuf Struct 表示（不接受 TOML 日期/时间类型）。
 
 ## Chat Completions 闭环 Demo
 
@@ -195,10 +195,13 @@ gymcraft-demo llm-chat `
   --task "找到最近的箱子并查看其中的物品"
 ```
 
-也可以把任务、地址、reset 参数、LLM wrapper 与 Chat Completions 参数写入 TOML 后直接运行（实体 UUID 也可写在配置里）：
+也可以把任务、地址、reset 参数、LLM wrapper 与 Chat Completions 参数写入 `src/main/python/config.toml` 后直接运行（实体 UUID 也可写在配置里）：
 
 ```powershell
-gymcraft-demo llm-chat --config config.toml
+gymcraft-demo llm-chat
+
+# 或指定其他配置文件
+gymcraft-demo llm-chat --config path/to/config.toml
 ```
 
 demo 使用通用的 `client.chat.completions.create(model=..., messages=...)` 接口，不启用 Responses API、厂商工具调用或服务端会话存储。

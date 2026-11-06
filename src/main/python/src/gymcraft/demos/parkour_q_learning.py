@@ -7,7 +7,14 @@ import random
 from collections import defaultdict
 from typing import Any, cast
 
-from gymcraft import EnvironmentConfig, GymCraftConfig, GymCraftEnv, ResetConfig, single_action
+from gymcraft import (
+    EnvironmentConfig,
+    GymCraftConfig,
+    GymCraftEnv,
+    ResetConfig,
+    load_config,
+    single_action,
+)
 from gymcraft.gym.action.components import jump_pb2, noop_pb2, set_block_pb2, step_move_pb2
 from gymcraft.gym.observation.components import nearby_blocks_pb2, self_pb2
 from gymcraft.types import (
@@ -121,7 +128,10 @@ def main() -> None:
     """解析命令行参数并启动训练。"""
     parser = argparse.ArgumentParser(description="Train a mob to parkour upward with blocks")
     parser.add_argument("entity_uuid", nargs="?", help="受控实体 UUID（省略时取配置文件 environment.entity_uuid）")
-    parser.add_argument("--config", help="TOML 配置文件路径（示例见 config.example.toml）")
+    parser.add_argument(
+        "--config",
+        help="TOML 配置文件路径（默认 src/main/python/config.toml；示例见 config.example.toml）",
+    )
     parser.add_argument("--address", help="GymCraft gRPC 地址（省略时取配置文件 environment.address）")
     parser.add_argument("--block", default="minecraft:stone")
     parser.add_argument("--block-count", type=int, default=32)
@@ -135,7 +145,7 @@ def main() -> None:
     parser.add_argument("--log-interval", type=int, default=10)
     args = parser.parse_args()
 
-    base = _load_config(parser, args.config) or GymCraftConfig()
+    base = _load_config(parser, args.config)
 
     # 取值优先级：CLI 显式值 > 配置文件 > 内置默认。
     entity_uuid = args.entity_uuid or base.environment.entity_uuid
@@ -169,12 +179,10 @@ def main() -> None:
     train(args)
 
 
-def _load_config(parser: argparse.ArgumentParser, path: str | None) -> GymCraftConfig | None:
-    """读取 --config 指定的 TOML；未指定返回 None，读取失败交给 argparse 报错。"""
-    if path is None:
-        return None
+def _load_config(parser: argparse.ArgumentParser, path: str | None) -> GymCraftConfig:
+    """读取 --config；未指定时读取默认 config.toml，读取失败交给 argparse 报错。"""
     try:
-        return GymCraftConfig.load(path)
+        return load_config(path)
     except (OSError, ValueError) as exc:
         parser.error(f"读取配置文件失败: {exc}")
 

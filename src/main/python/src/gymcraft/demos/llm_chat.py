@@ -9,7 +9,14 @@ from dataclasses import replace
 from openai import OpenAI
 from dotenv import load_dotenv
 
-from gymcraft import EnvironmentConfig, GymCraftConfig, GymCraftEnv, LLMGymCraftEnv, ResetConfig
+from gymcraft import (
+    EnvironmentConfig,
+    GymCraftConfig,
+    GymCraftEnv,
+    LLMGymCraftEnv,
+    ResetConfig,
+    load_config,
+)
 from gymcraft.llm import chat_completion_text
 
 
@@ -53,7 +60,10 @@ def main() -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(description="Run a real Chat Completions LLM against GymCraft")
     parser.add_argument("entity_uuid", nargs="?", help="受控实体 UUID（省略时取配置文件 environment.entity_uuid）")
-    parser.add_argument("--config", help="TOML 配置文件路径（示例见 config.example.toml）")
+    parser.add_argument(
+        "--config",
+        help="TOML 配置文件路径（默认 src/main/python/config.toml；示例见 config.example.toml）",
+    )
     parser.add_argument("--task", help="发送给 LLM 的任务描述（省略时取配置文件 task）")
     parser.add_argument("--address", help="GymCraft gRPC 地址（省略时取配置文件 environment.address）")
     parser.add_argument("--base-url", help="Chat Completions base URL（省略时取配置或环境变量）")
@@ -64,7 +74,7 @@ def main() -> None:
     parser.add_argument("--disable-vanilla-ai", action=argparse.BooleanOptionalAction)
     args = parser.parse_args()
 
-    base = _load_config(parser, args.config) or GymCraftConfig()
+    base = _load_config(parser, args.config)
 
     # 取值优先级：CLI 显式值 > 配置文件 > 环境变量 / 内置默认。
     entity_uuid = args.entity_uuid or base.environment.entity_uuid
@@ -114,12 +124,10 @@ def main() -> None:
     run(args)
 
 
-def _load_config(parser: argparse.ArgumentParser, path: str | None) -> GymCraftConfig | None:
-    """读取 --config 指定的 TOML；未指定返回 None，读取失败交给 argparse 报错。"""
-    if path is None:
-        return None
+def _load_config(parser: argparse.ArgumentParser, path: str | None) -> GymCraftConfig:
+    """读取 --config；未指定时读取默认 config.toml，读取失败交给 argparse 报错。"""
     try:
-        return GymCraftConfig.load(path)
+        return load_config(path)
     except (OSError, ValueError) as exc:
         parser.error(f"读取配置文件失败: {exc}")
 

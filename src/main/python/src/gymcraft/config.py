@@ -22,6 +22,8 @@ from gymcraft.types import LAST_ACTIONS_FIELD, OBS_CHAT, OBS_HEALTH_LOG
 
 # 默认 gRPC 地址；与 GymCraftEnv 构造器默认值保持一致。
 DEFAULT_ADDRESS = "localhost:50051"
+# 默认配置文件：源码仓库的 src/main/python/config.toml；不存在时回退内置默认。
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.toml"
 # 顶层允许的配置分区；未列出的键在加载期报错，避免拼写错误被静默忽略。
 _ROOT_KEYS = frozenset({"task", "environment", "reset", "llm"})
 
@@ -200,8 +202,16 @@ class GymCraftConfig:
         return copy.deepcopy(self.reset.options)
 
 
-def load_config(path: str | Path) -> GymCraftConfig:
-    """加载 TOML 配置文件的便捷函数，等价于 ``GymCraftConfig.load(path)``。"""
+def load_config(path: str | Path | None = None) -> GymCraftConfig:
+    """加载 TOML 配置；省略 path 时读取默认的 ``config.toml``。
+
+    默认文件不存在时返回内置默认配置；显式传入的 path 不存在时仍抛
+    ``FileNotFoundError``，便于调用方区分“没写配置”和“路径写错”。
+    """
+    if path is None:
+        if not DEFAULT_CONFIG_PATH.is_file():
+            return GymCraftConfig()
+        path = DEFAULT_CONFIG_PATH
     return GymCraftConfig.load(path)
 
 

@@ -55,6 +55,12 @@ class DemoConfigTests(unittest.TestCase):
             loader = patch.object(module, "load_dotenv", lambda: None)
             loader.start()
             self.addCleanup(loader.stop)
+        # 默认配置文件指向测试临时文件，避免读取开发者本地 config.toml。
+        self.default_path = Path(write_config(""))
+        self.addCleanup(self.default_path.unlink, missing_ok=True)
+        default_patch = patch("gymcraft.config.DEFAULT_CONFIG_PATH", self.default_path)
+        default_patch.start()
+        self.addCleanup(default_patch.stop)
 
     def _run_main(self, module: Any, entry_name: str, argv: list[str], config: str | None) -> Any:
         """调用 demo 的 main()，拦截入口函数并返回其解析后的 args。"""
@@ -68,6 +74,29 @@ class DemoConfigTests(unittest.TestCase):
             module.main()
         entry.assert_called_once()
         return entry.call_args.args[0]
+
+    def test_default_config_file_is_loaded_without_flag(self) -> None:
+        """未传 --config 时读取默认的 python 目录 config.toml。"""
+        path = write_config(
+            'task = "default file task"\n[environment]\naddress = "default:1"\n'
+        )
+        self.addCleanup(Path(path).unlink, missing_ok=True)
+
+        with patch("gymcraft.config.DEFAULT_CONFIG_PATH", Path(path)):
+            args = self._run_main(iron_mining, "run", ["entity-uuid"], None)
+
+        self.assertEqual("default file task", args.config.task)
+        self.assertEqual("default:1", args.config.environment.address)
+
+    def test_explicit_config_overrides_default_file(self) -> None:
+        """显式 --config 优先于默认 config.toml。"""
+        path = write_config('task = "default file task"\n')
+        self.addCleanup(Path(path).unlink, missing_ok=True)
+
+        with patch("gymcraft.config.DEFAULT_CONFIG_PATH", Path(path)):
+            args = self._run_main(iron_mining, "run", ["entity-uuid"], CONFIG_TEXT)
+
+        self.assertEqual("config task", args.config.task)
 
     def test_iron_mining_reads_config_and_fills_demo_defaults(self) -> None:
         """配置提供的值生效，demo 必需的组件默认值只在缺省时补齐。"""
