@@ -28,6 +28,16 @@ max_steps = 512
 [reset.options.components.move_to]
 speed = 1.0
 
+# 攻击距离（原版 ENTITY_INTERACTION_RANGE 属性值，单位格，范围 (0, 64]）；
+# 不设置时保持原版近战范围。attack_once 控制即时攻击判定；
+# set_attack_target 设置该 Mob 的共享攻击距离，同时影响其追击后的原版 MeleeAttackGoal。
+# 两个组件共享同一属性，同时配置时后应用者生效。
+# [reset.options.components.attack_once]
+# attack_distance = 3.0
+#
+# [reset.options.components.set_attack_target]
+# attack_distance = 3.0
+
 [reset.options.components.break_block]
 reach_distance = 4.5
 

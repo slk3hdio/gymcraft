@@ -84,8 +84,8 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:use_item` | 固定使用主手持有物向方块、实体或自身使用物品（不选槽位、不换物品）；食物药水等待消费完成，详见[使用物品动作](../use-item-action.md) |
 | `gymcraft:move_to` | 使用寻路移动到目标方块，目标按原版 `findSurfacePosition` 语义修正为可站立位置（实心方块上移到其上方可站面、空气格吸附到支撑面、液体等非固体格保持原格），按 Mob 脚部位置到修正后目标的三维欧氏距离判定到达；实际停止距离为 `max(stop_distance, 0.1)` 格（含请求为 0 的情况），避免浮点精确相等和末段越过中心导致绕圈。目标发生方块层面修正时完成 description 携带 `(adjusted to standable surface)` 提示、details 的 `target_correction` 报告修正码（`raised_above_solid`/`snapped_to_support`）、`requested` 报告原始请求坐标；诊断同时保留请求值与 `effective_stop_distance`；连续 40 tick 未接近当前路径节点或最终目标时有限重规划，最多重试 3 次后失败 |
 | `gymcraft:swim_to` | 参数、目标修正与判定同 `move_to`（两栖导航自身无终点列扫描修正，由 GymCraft 统一补齐），但使用两栖寻路（原版海龟同款）：水中、深水起点或目标在彼岸时仍可规划路径，陆地等价 `move_to`；动作期间临时换用三维游泳移动控制（海豚/青蛙同款，结束自动恢复），不切换游泳姿态。深水垂直岸沿（无坡度直壁）爬升能力有限，优先经岸坡/台阶出水 |
-| `gymcraft:set_attack_target` | 设置实体攻击目标 |
-| `gymcraft:attack_once` | 执行一次近战攻击 |
+| `gymcraft:set_attack_target` | 设置实体攻击目标；支持 `attack_distance` 参数配置该 Mob 的共享近战距离（写入原版 `ENTITY_INTERACTION_RANGE` 属性；目标设置本身不受距离限制，由后续原版 `MeleeAttackGoal` 在距离内攻击） |
+| `gymcraft:attack_once` | 执行一次近战攻击；支持 `attack_distance` 参数覆盖该 Mob 的攻击距离属性（与 `set_attack_target` 共享） |
 | `gymcraft:noop` | 空操作 |
 | `gymcraft:jump` | 提交一次跳跃意图 |
 | `gymcraft:break_block` | 固定使用主手持有物挖掘（不选槽位、不换物品），通过 FakePlayer 复用原版方块破坏逻辑；空手主手即空手挖掘 |
@@ -102,6 +102,7 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 `move_to` 与 `pick_up_item` 在路径被清除、替换或卡住时最多自动重规划 3 次；终态的 `action_state.details`
 包含 `navigation_reason`、`repath_attempts`、`path_owned`、`path_can_reach`、当前距离（`distance`，三维欧氏距离）与最后路径终点，可用于区分不可达、外部清路和无进展。
 `pick_up_item` 在智能体或目标掉落物任一处于水中时自动切换两栖寻路与游泳移动控制器（语义对齐 `swim_to`），下水/上岸、物品被水流冲上岸/入水等水状态中途翻转时按当前状态切换导航任务；双方都在陆地时保持地面导航（语义对齐 `move_to`）。
+`attack_once` 与 `set_attack_target` 均支持 reset options 的 `attack_distance`：数值为原版 `Attributes.ENTITY_INTERACTION_RANGE` 属性值（格），需满足 `0 < distance <= 64`；不设置时完全沿用原版近战范围。实现上通过修改该属性基础值并附加覆盖标记，攻击判定使用原版 `AttackRange.defaultFor` 读取属性。两个组件共享同一属性，同时配置时后应用者生效；`attack_once` 在每次执行前重新应用自身值，`set_attack_target` 在每次应用/跟踪时重新应用自身值。
 
 ### 观测组件
 
