@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Final
+from typing import Any
 
 from google.protobuf.message import Message as ProtoMessage
 
 from gymcraft.gym.observation.observation_pb2 import ProtoObservationHeader
 from gymcraft.llm.components.base import ObservationComponent
-
-# 上批动作逐条反馈的虚拟字段名：内容来自观测 header，不属于任何观测组件。
-LAST_ACTIONS_FIELD: Final = "last_actions"
+from gymcraft.types import LAST_ACTIONS_FIELD
 
 
 def _prepare(message: ProtoMessage) -> dict[str, Any]:

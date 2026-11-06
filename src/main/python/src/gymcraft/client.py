@@ -10,6 +10,7 @@ from google.protobuf import message
 from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.struct_pb2 import Struct
 
+from gymcraft.config import DEFAULT_ADDRESS, GymCraftConfig
 from gymcraft.gym.action.action_pb2 import ProtoMcAction
 from gymcraft.gym.observation.observation_pb2 import ProtoMcObservation
 from gymcraft.gym.rpc.env_service_pb2 import (
@@ -38,16 +39,56 @@ _TMessage = TypeVar("_TMessage", bound=message.Message)
 _OBSERVATION_COMPONENT_TYPES: dict[str, type[message.Message]] = OBSERVATION_REGISTRY.unpack_map()
 
 
+# Gymnasium 式 gRPC 客户端：连接已存在的环境并转发 reset/step。
 class GymCraftEnv(gym.Env[Any, Any]):
     metadata = {"render_modes": []}
 
-    def __init__(self, entity_uuid: str, address: str = "localhost:50051") -> None:
-        self.entity_uuid = entity_uuid
-        self.address = address
-        self.channel = grpc.insecure_channel(address)
+    def __init__(
+        self,
+        config: GymCraftConfig | str,
+        entity_uuid: str | None = None,
+        *,
+        address: str | None = None,
+    ) -> None:
+        """连接配置指定的实体环境。
+
+        参数:
+            config: 总配置；也兼容旧写法直接传实体 UUID 字符串。
+            entity_uuid: 总配置模式下为实体 UUID 覆盖；字符串模式下第二个位置参数
+                按旧签名解释为 address。
+            address: 可选 gRPC 地址，优先于配置中的 ``environment.address``。
+        抛出:
+            ValueError: 参数与配置都没有提供非空实体 UUID 或地址。
+            TypeError: 旧签名的第二个位置参数与 ``address`` 同时提供。
+        """
+        if isinstance(config, str):
+            # 兼容旧签名 GymCraftEnv(entity_uuid, address)：第一个位置参数是 UUID，
+            # 第二个位置参数在旧签名中是 address；新签名请用关键字传 entity_uuid。
+            if entity_uuid is not None:
+                if address is not None:
+                    raise TypeError("旧签名的第二个位置参数与 address 不能同时提供")
+                resolved_uuid: str | None = config
+                resolved_address = entity_uuid
+            else:
+                resolved_uuid = config
+                resolved_address = address or DEFAULT_ADDRESS
+        else:
+            resolved_uuid = (
+                entity_uuid if entity_uuid is not None else config.environment.entity_uuid
+            )
+            resolved_address = (
+                address if address is not None else config.environment.address
+            )
+        if resolved_uuid is None or not resolved_uuid.strip():
+            raise ValueError("未提供 entity_uuid：请传入参数或配置 environment.entity_uuid")
+        if not resolved_address.strip():
+            raise ValueError("未提供 address：请传入参数或配置 environment.address")
+        self.entity_uuid = resolved_uuid
+        self.address = resolved_address
+        self.channel = grpc.insecure_channel(resolved_address)
         self.stub = GymEnvServiceStub(self.channel)
 
-        response = self.stub.Connect(ConnectRequest(entity_uuid=entity_uuid))
+        response = self.stub.Connect(ConnectRequest(entity_uuid=resolved_uuid))
         self.session_id = response.session_id
         self.entity_uuid = response.entity_uuid
         self.remote_metadata = MessageToDict(response.metadata)
@@ -88,7 +129,7 @@ class GymCraftEnv(gym.Env[Any, Any]):
         self.channel.close()
 
 
-def list_environments(address: str = "localhost:50051") -> list[dict[str, Any]]:
+def list_environments(address: str = DEFAULT_ADDRESS) -> list[dict[str, Any]]:
     """列出服务端当前所有已注册环境。
 
     返回按 ``entity_uuid`` 排序的列表，每项含 ``entity_uuid``（可直接用于

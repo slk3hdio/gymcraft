@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from gymcraft.config import GymCraftConfig, LLMEnvConfig
 from gymcraft.gym.space.space_spec_pb2 import ProtoComponentSpaceSet
-from gymcraft.llm.context import ContextAssembler, RenderConfig
+from gymcraft.llm.context import ContextAssembler
 from gymcraft.llm.errors import ActionParseError
 from gymcraft.llm.history import ConversationHistory
 from gymcraft.llm.parser import ActionParser, encode_action_batch
@@ -42,25 +42,6 @@ class GymCraftEnvLike(Protocol):
         ...
 
 
-# LLM wrapper 的回合、超时、历史和观测渲染默认配置。
-@dataclass(frozen=True)
-class LLMEnvConfig:
-    """集中配置薄 wrapper 使用的可复用工具组件。"""
-
-    history_turns: int = 500
-    default_timeout_seconds: float = 10.0
-    max_timeout_seconds: float = 60.0
-    max_invalid_retries: int = 2
-    render: RenderConfig = field(default_factory=RenderConfig)
-
-    def __post_init__(self) -> None:
-        """校验历史容量和非法输出重试次数。"""
-        if self.history_turns < 0:
-            raise ValueError("history_turns must not be negative")
-        if self.max_invalid_retries < 0:
-            raise ValueError("max_invalid_retries must not be negative")
-
-
 # 只负责串联独立工具组件的 LLM GymCraft wrapper。
 class LLMGymCraftEnv:
     """接收模型原始文本并返回下一轮通用 Chat Completions 上下文。
@@ -74,19 +55,36 @@ class LLMGymCraftEnv:
     def __init__(
         self,
         env: GymCraftEnvLike,
+        config: GymCraftConfig | LLMEnvConfig | None = None,
         *,
-        task: str,
-        config: LLMEnvConfig | None = None,
+        task: str | None = None,
         action_parser: ActionParser | None = None,
         context_assembler: ContextAssembler | None = None,
         history: ConversationHistory | None = None,
     ) -> None:
-        """注入底层环境和可替换工具；wrapper 本身不实现协议细节。"""
-        if not task.strip():
+        """注入底层环境、配置和可替换工具；wrapper 本身不实现协议细节。
+
+        参数:
+            env: 已连接的底层 GymCraft 环境。
+            config: 总配置（同时提供任务与 ``llm`` 子配置），或仅 ``LLMEnvConfig``。
+            task: 显式任务提示；缺省时取总配置的 ``task``。
+            action_parser: 可选动作解析器替换。
+            context_assembler: 可选上下文组装器替换。
+            history: 可选对话历史替换。
+        抛出:
+            ValueError: 无法从参数或配置得到非空任务。
+        """
+        if isinstance(config, GymCraftConfig):
+            llm_config = config.llm
+            resolved_task = task if task is not None else config.task
+        else:
+            llm_config = config or LLMEnvConfig()
+            resolved_task = task
+        if resolved_task is None or not resolved_task.strip():
             raise ValueError("task must not be empty")
         self.env = env
-        self.task = task
-        self.config = config or LLMEnvConfig()
+        self.task = resolved_task
+        self.config = llm_config
         self.action_parser = action_parser or ActionParser(
             env.action_space_spec,
             default_timeout_seconds=self.config.default_timeout_seconds,

@@ -192,7 +192,7 @@ gymcraft-demo --help
 | `gymcraft-demo iron-mining <entity_uuid>` | `gymcraft:iron_mining` | 从空手完成采集、合成并取得粗铁 |
 | `gymcraft-demo iron-golem-warden <entity_uuid>` | `gymcraft:iron_golem_warden` | Reflexion 多轮规划与铁傀儡战斗任务 |
 
-使用 `gymcraft-demo <demo> --help` 可以查看该 demo 的完整参数。源码仓库的
+使用 `gymcraft-demo <demo> --help` 可以查看该 demo 的完整参数。四个 demo 都支持 `--config <path>`：任务提示词、gRPC 地址、reset 参数、LLM wrapper 与 Chat Completions 参数可统一写在 TOML 中（示例见 `src/main/python/config.example.toml`），命令行显式参数优先。源码仓库的
 `src/main/python/debug/` 目录还包含移动、攻击、方块和菜单等动作的专项调试脚本。
 
 ### LLM 演示示例
@@ -200,6 +200,8 @@ gymcraft-demo --help
 ```powershell
 gymcraft-demo llm-chat <entity_uuid> --max-steps 200 --task "beat the game" --api-key <api-key> --base-url https://api.deepseek.com --model deepseek-v4-flash
 ```
+
+也可以把任务、地址、reset、LLM wrapper 与 Chat Completions 参数写入 TOML，再以 `--config config.toml` 运行；实体 UUID 可省略并写在配置文件的 `[environment]` 中。
 
 ## 更多文档
 

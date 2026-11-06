@@ -5,12 +5,13 @@
 一个 Jinja 模板）并登记进对应注册表。
 """
 
+from gymcraft.config import CompletionsConfig, LLMEnvConfig, RenderConfig
 from gymcraft.llm.blocks import wrap_commands
 from gymcraft.llm.completions import chat_completion_text
 from gymcraft.llm.components.actions import ACTION_REGISTRY
 from gymcraft.llm.components.observations import LAST_ACTIONS_FIELD, OBSERVATION_REGISTRY
-from gymcraft.llm.context import ContextAssembler, RenderConfig, render_chat_transcript
-from gymcraft.llm.env import LLMEnvConfig, LLMGymCraftEnv
+from gymcraft.llm.context import ContextAssembler, render_chat_transcript
+from gymcraft.llm.env import LLMGymCraftEnv
 from gymcraft.llm.errors import ActionParseError
 from gymcraft.llm.history import ConversationHistory
 from gymcraft.llm.parser import ActionParser, encode_action_batch
@@ -30,6 +31,7 @@ __all__ = [
     "ActionParseError",
     "ActionParser",
     "ChatMessage",
+    "CompletionsConfig",
     "ContextAssembler",
     "ConversationHistory",
     "ConversationTurn",
