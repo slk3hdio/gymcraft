@@ -73,9 +73,41 @@ public final class MenuSessionGameTests {
         helper.succeed();
     }
 
+    /**
+     * 打开菜单后尚未产生任何 menu 观测（open 与 move 同批）时，失败按"未观测"报因，
+     * 与"状态已变"区分；产生观测后同一移动成功。
+     *
+     * @param helper 测试上下文
+     */
+    public static void moveBeforeObservationReportsUnobserved(GameTestHelper helper) {
+        var mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        var chest = placeChest(helper, new BlockPos(0, 1, 2));
+        chest.setItem(0, new ItemStack(Items.COBBLESTONE, 10));
+        var session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
+        int sourceSlot = sessionSlotId(session, 0);
+
+        // 不 observe：基线从未提交，按"未观测"失败而非误导性的"状态已变"
+        ActionState unobserved = moveMenuItem(mob, session.sessionId(), sourceSlot, 0, 5);
+        assertEquals(helper, ActionStatus.FAILED, unobserved.status(), "move before observation should fail");
+        assertTrue(helper, unobserved.description().startsWith("menu not yet observed"),
+            "unexpected unobserved description: " + unobserved.description());
+        assertEquals(helper, 10, chest.getItem(0).getCount(), "failed move must not touch items");
+
+        observe(mob);
+        ActionState moved = moveMenuItem(mob, session.sessionId(), sourceSlot, 0, 5);
+        assertEquals(helper, ActionStatus.COMPLETED, moved.status(),
+            "move after observation failed: " + moved.description());
+        helper.succeed();
+    }
+
     /** @param helper 测试上下文；验证后一项读取前一项的产出。 */
     public static void batchMovesInOrder(GameTestHelper helper) {
         checkBatchMoves(helper, false, false);
+    }
+
+    /** @param helper 测试上下文；验证部分成功时报告已完成进度。 */
+    public static void batchMovesPartialFailureReportsProgress(GameTestHelper helper) {
+        checkBatchMoves(helper, true, false);
     }
 
     /**
@@ -112,6 +144,11 @@ public final class MenuSessionGameTests {
         if (!stale) {
             assertEquals(helper, failSecond ? 1 : 3, result.initialState().details().get("completed_moves"),
                 "incorrect completed moves");
+            if (failSecond) {
+                // 部分成功时 description 必须带上进度，避免调用方误以为整批未生效
+                assertTrue(helper, result.initialState().description().endsWith("(1/3 moves completed)"),
+                    "partial completion missing from description: " + result.initialState().description());
+            }
         }
         helper.succeed();
     }

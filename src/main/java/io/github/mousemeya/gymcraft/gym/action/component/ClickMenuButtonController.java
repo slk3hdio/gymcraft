@@ -117,15 +117,22 @@ public class ClickMenuButtonController extends AbstractActionComponentController
                 "button_name", button.name()
             )));
         }
-        // 适配器级 stale 校验（计划 5.3）：依赖槽位快照变化时不调用按钮方法
+        // 适配器级 stale 校验（计划 5.3）：依赖槽位快照变化时不调用按钮方法。
+        // 基线从未提交（open_menu 与 click 同批、尚未产生任何 menu 观测）与状态已变分开报因，
+        // 措辞与 MoveMenuItemController 的 stale 校验保持一致
         for (int slotId : adapter.staleCheckedSlotIds(menu, session)) {
             LogicalMenuSession.SlotSnapshot current = session.currentSnapshot(slotId);
-            if (current == null || !current.matches(session.lastObservedSnapshot(slotId))) {
-                return ActionApplyResult.none(ActionState.failed("menu state changed; refresh observation", Map.of(
-                    "stale_menu_state", true,
-                    "button_id", buttonId,
-                    "slot_id", slotId
-                )));
+            LogicalMenuSession.SlotSnapshot observed = session.lastObservedSnapshot(slotId);
+            if (current == null || !current.matches(observed)) {
+                return ActionApplyResult.none(ActionState.failed(
+                    observed == null
+                        ? "menu not yet observed; wait for the observation of the step that opened the menu"
+                        : "menu state changed; refresh observation",
+                    Map.of(
+                        "stale_menu_state", true,
+                        "button_id", buttonId,
+                        "slot_id", slotId
+                    )));
             }
         }
         ButtonClickResult result = adapter.clickButton(menu, session.agentPlayer().player(), buttonId, mob);

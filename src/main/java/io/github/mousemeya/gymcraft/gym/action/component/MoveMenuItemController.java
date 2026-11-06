@@ -149,13 +149,19 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
                 ));
             }
             // 4/5. stale 校验：currentSnapshot 必须匹配最近一次 observation 基线（基线缺失视为不匹配）；
-            // 不匹配时不修改任何物品、不提交基线，仅标记 stale_menu_state
+            // 不匹配时不修改任何物品、不提交基线，仅标记 stale_menu_state。
+            // 基线从未提交（open_menu 与 move 同批、尚未产生任何 menu 观测）与状态已变分开报因：
+            // 前者提示等待打开菜单那一步的观测，后者提示刷新观测
             LogicalMenuSession.SlotSnapshot sourceCurrent = session.currentSnapshot(sourceSlotId);
             LogicalMenuSession.SlotSnapshot targetCurrent = session.currentSnapshot(targetSlotId);
-            if (sourceCurrent == null || !sourceCurrent.matches(session.lastObservedSnapshot(sourceSlotId))
-                || targetCurrent == null || !targetCurrent.matches(session.lastObservedSnapshot(targetSlotId))) {
+            LogicalMenuSession.SlotSnapshot sourceObserved = session.lastObservedSnapshot(sourceSlotId);
+            LogicalMenuSession.SlotSnapshot targetObserved = session.lastObservedSnapshot(targetSlotId);
+            if (sourceCurrent == null || targetCurrent == null
+                || !sourceCurrent.matches(sourceObserved) || !targetCurrent.matches(targetObserved)) {
                 return ActionApplyResult.none(ActionState.failed(
-                    "menu state changed; refresh observation",
+                    sourceObserved == null || targetObserved == null
+                        ? "menu not yet observed; wait for the observation of the step that opened the menu"
+                        : "menu state changed; refresh observation",
                     staleDetails(sourceSlotId, targetSlotId)
                 ));
             }
@@ -180,11 +186,14 @@ public class MoveMenuItemController extends AbstractActionComponentController<Pr
         details.put("requested_moves", component.getMovesCount());
         details.put("completed_moves", completed);
         details.put("results", results);
+        String description = state.description();
         if (completed < component.getMovesCount()) {
             details.put("failed_move_index", completed);
+            // 部分成功时在描述中带上进度，避免调用方误以为整批未生效而原样重发
+            description = description + " (" + completed + "/" + component.getMovesCount() + " moves completed)";
         }
         return new ActionApplyResult(ActionControlPolicy.none(), applied,
-            new ActionState(state.status(), state.description(), details));
+            new ActionState(state.status(), description, details));
     }
 
     /**
