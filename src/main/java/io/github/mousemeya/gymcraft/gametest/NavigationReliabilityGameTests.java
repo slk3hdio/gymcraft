@@ -59,7 +59,10 @@ public final class NavigationReliabilityGameTests {
         Mob mob = helper.spawn(ModEntities.PLAYER_SIM.get(), new BlockPos(1, 2, 2));
         var controller = new MoveToController(mob);
         // 场景一（真实故障复现）：请求 Mob 正站着的脚下实心方块，立即完成且带修正信息
-        var onOwnBlock = ProtoMoveTo.newBuilder().setX(1).setY(1).setZ(2).setStopDistance(1.0).build();
+        BlockPos ownBlock = helper.absolutePos(new BlockPos(1, 1, 2));
+        var onOwnBlock = ProtoMoveTo.newBuilder()
+            .setX(ownBlock.getX()).setY(ownBlock.getY()).setZ(ownBlock.getZ())
+            .setStopDistance(1.0).build();
         ActionState immediate = controller.apply(onOwnBlock).initialState();
         try {
             assertTrue(helper, immediate.status() == ActionStatus.COMPLETED,
@@ -68,13 +71,17 @@ public final class NavigationReliabilityGameTests {
                 "completion description should mention the adjustment: " + immediate.description());
             assertEquals(helper, "raised_above_solid", immediate.details().get("target_correction"),
                 "correction code mismatch");
-            assertEquals(helper, 2.0, ((Number) ((Map<?, ?>) immediate.details().get("target")).get("y")).doubleValue(),
+            assertEquals(helper, ownBlock.getY() + 1.0,
+                ((Number) ((Map<?, ?>) immediate.details().get("target")).get("y")).doubleValue(),
                 "adjusted target should stand on the solid block");
         } finally {
             controller.onInterrupt(onOwnBlock);
         }
         // 场景二：导航到远处实心方块，最终在修正后的可站面上完成
-        var action = ProtoMoveTo.newBuilder().setX(5).setY(1).setZ(3).setStopDistance(1.0).build();
+        BlockPos dest = helper.absolutePos(new BlockPos(5, 1, 3));
+        var action = ProtoMoveTo.newBuilder()
+            .setX(dest.getX()).setY(dest.getY()).setZ(dest.getZ())
+            .setStopDistance(1.0).build();
         AtomicReference<ActionState> result = new AtomicReference<>();
         helper.runAfterDelay(3, () -> result.set(controller.apply(action).initialState()));
         helper.onEachTick(() -> {
@@ -88,7 +95,7 @@ public final class NavigationReliabilityGameTests {
                     "navigation to a solid block did not complete: " + result.get());
                 assertEquals(helper, "raised_above_solid", result.get().details().get("target_correction"),
                     "correction code mismatch after navigation");
-                assertEquals(helper, 2.0,
+                assertEquals(helper, dest.getY() + 1.0,
                     ((Number) ((Map<?, ?>) result.get().details().get("target")).get("y")).doubleValue(),
                     "navigation should complete on the adjusted standable surface");
                 helper.succeed();
