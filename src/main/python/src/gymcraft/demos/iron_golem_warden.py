@@ -121,7 +121,7 @@ def run_trial(
     trial_index: int,
     trace_handle: TextIO | None,
 ) -> tuple[bool, dict[str, Any], list[dict[str, Any]]]:
-    """执行一个完整回合，返回成功标志、终局 info 与逐步轨迹摘要。
+    """执行一个完整回合，直到环境返回 terminated/truncated，返回成功标志、终局 info 与逐步轨迹摘要。
 
     参数:
         client: OpenAI 兼容客户端。
@@ -141,13 +141,16 @@ def run_trial(
     write_trace(trace_handle, {"event": "reset", "trial": trial_index, "task": task, "info": reset_info})
     trajectory: list[dict[str, Any]] = []
     info: dict[str, Any] = reset_info
-    for step_index in range(args.max_steps):
+    # 不在客户端计步：每个 trial 只在环境返回 terminated/truncated 时结束。
+    turn = 0
+    while True:
+        turn += 1
         model_text = chat(client, args, context["messages"])
         obs_before_action = context['messages'][-1]['content']
         context, reward, terminated, truncated, info = env.step(model_text)
         action_state = info.get("action_state", {})
         record = {
-            "turn": step_index + 1,
+            "turn": turn,
             "action_block": extract_action_block(model_text),
             "actions": info.get("parsed_actions", []),
             "reward": reward,
@@ -161,7 +164,7 @@ def run_trial(
 
         print(
             "========================================================================\n"
-            f"[trial {trial_index + 1} turn {step_index + 1}] reward={reward:+.3f} "
+            f"[trial {trial_index + 1} turn {turn}] reward={reward:+.3f} "
             f"observation:\n{obs_before_action}\n"
             f"model_text:\n{model_text}\n"
             f"stage={record['stage']} terminated={terminated} truncated={truncated}"
@@ -247,7 +250,7 @@ def reflect(
     prompt = REFLECTION_PROMPT.format(
         task=task,
         stage=info.get("stage", "unknown"),
-        failure_reason=info.get("failure_reason", "") or "(truncated at step limit)",
+        failure_reason=info.get("failure_reason", "") or "(truncated by server)",
         milestones=format_milestones(info),
         steps=info.get("steps", len(trajectory)),
         trajectory=format_trajectory(trajectory),
@@ -314,7 +317,6 @@ def main() -> None:
     parser.add_argument("--base-url", help="Chat Completions base URL（省略时取配置或环境变量）")
     parser.add_argument("--api-key", help="Chat Completions API key（省略时取配置或环境变量）")
     parser.add_argument("--model", help="模型名（省略时取配置或环境变量）")
-    parser.add_argument("--max-steps", type=int, default=256, help="每个 trial 的外层 rollout 循环步数")
     parser.add_argument("--max-trials", type=int, default=20)
     parser.add_argument("--seed", type=int, help="reset seed（省略时取配置文件 reset.seed）")
     parser.add_argument("--trace", help="可选 JSONL 轨迹输出路径")
@@ -333,8 +335,7 @@ def main() -> None:
     # 配置文件中的 reset options 优先；缺省键补 demo 原有的默认值。
     reset_options = base.reset_options()
     reset_options.setdefault("disable_vanilla_ai", True)
-    # 与旧行为兼容：服务端步数上限默认跟随 --max-steps，配置显式给出时以配置为准。
-    reset_options.setdefault("max_steps", args.max_steps)
+    # 服务端步数上限由 reset.options.max_steps 控制；demo 不注入客户端默认值。
     components = reset_options.setdefault("components", {})
     components.setdefault("nearby_blocks", {}).setdefault("max_blocks", 20)
 
@@ -357,8 +358,6 @@ def main() -> None:
         parser.error("请通过 --api-key、配置文件 llm.completions.api_key、LLM_API_KEY 或 OPENAI_API_KEY 提供 API key")
     if not completions.model:
         parser.error("请通过 --model、配置文件 llm.completions.model、LLM_MODEL 或 OPENAI_MODEL 指定模型")
-    if args.max_steps <= 0:
-        parser.error("max-steps 必须大于 0")
     if args.max_trials <= 0:
         parser.error("max-trials 必须大于 0")
 

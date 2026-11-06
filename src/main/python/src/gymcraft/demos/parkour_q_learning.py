@@ -86,7 +86,7 @@ def choose_action(q_values: list[float], epsilon: float, rng: random.Random) -> 
 
 
 def train(args: argparse.Namespace) -> None:
-    """运行 Q-learning 训练和评估回合。"""
+    """运行 Q-learning 训练和评估回合；每个 episode 仅由服务端 terminated/truncated 结束。"""
     config = args.config
     env = GymCraftEnv(config)
     actions = ["noop", "jump", "set_block", "move_forward", "move_back", "move_left", "move_right"]
@@ -101,7 +101,8 @@ def train(args: argparse.Namespace) -> None:
             origin_x, origin_z, base_y = math.floor(initial.x), math.floor(initial.z), initial.y
             state = encode_state(obs, args.block_count, origin_x, origin_z, base_y)
             total_reward = 0.0
-            for _ in range(args.max_steps):
+            # 不在客户端计步：每个 episode 只在服务端返回 terminated/truncated 时结束。
+            while True:
                 action_index = choose_action(q_table[state], args.epsilon, rng)
                 obs, reward, terminated, truncated, info = env.step(
                     make_action(actions[action_index], obs, args.block)
@@ -137,7 +138,6 @@ def main() -> None:
     parser.add_argument("--block-count", type=int, default=32)
     parser.add_argument("--target-height", type=int, default=8)
     parser.add_argument("--episodes", type=int, default=200)
-    parser.add_argument("--max-steps", type=int, default=256)
     parser.add_argument("--alpha", type=float, default=0.2)
     parser.add_argument("--gamma", type=float, default=0.95)
     parser.add_argument("--epsilon", type=float, default=0.2)

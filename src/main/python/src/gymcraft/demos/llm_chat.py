@@ -21,7 +21,7 @@ from gymcraft.llm import chat_completion_text
 
 
 def run(args: argparse.Namespace) -> None:
-    """连接 Minecraft 与 Chat Completions 服务，并运行一个有限长度 episode。"""
+    """连接 Minecraft 与 Chat Completions 服务，并运行一个由服务端决定长度的 episode。"""
     config = args.config
     completions = config.llm.completions
     client = OpenAI(api_key=completions.api_key, base_url=completions.base_url)
@@ -32,7 +32,10 @@ def run(args: argparse.Namespace) -> None:
             seed=config.reset.seed,
             options=config.reset_options(),
         )
-        for step_index in range(args.max_steps):
+        # 不在客户端计步：循环只在环境返回 terminated/truncated 时结束。
+        turn = 0
+        while True:
+            turn += 1
             model_text = chat_completion_text(
                 client,
                 completions.model or "",
@@ -42,7 +45,7 @@ def run(args: argparse.Namespace) -> None:
                 max_retries=completions.max_retries,
                 retry_delay=completions.retry_delay,
             )
-            print(f"\n===== LLM turn {step_index + 1} =====\n{model_text}")
+            print(f"\n===== LLM turn {turn} =====\n{model_text}")
             context, reward, terminated, truncated, info = env.step(model_text)
             print(
                 f"{info.get('action_state', {}).get('description', info.get('action_error', ''))}\n"
@@ -69,7 +72,6 @@ def main() -> None:
     parser.add_argument("--base-url", help="Chat Completions base URL（省略时取配置或环境变量）")
     parser.add_argument("--api-key", help="Chat Completions API key（省略时取配置或环境变量）")
     parser.add_argument("--model", help="模型名（省略时取配置或环境变量）")
-    parser.add_argument("--max-steps", type=int, default=64)
     parser.add_argument("--seed", type=int, help="reset seed（省略时取配置文件 reset.seed）")
     parser.add_argument("--disable-vanilla-ai", action=argparse.BooleanOptionalAction)
     args = parser.parse_args()
@@ -109,8 +111,6 @@ def main() -> None:
         parser.error("请通过 --api-key、配置文件 llm.completions.api_key、LLM_API_KEY 或 OPENAI_API_KEY 提供 API key")
     if not completions.model:
         parser.error("请通过 --model、配置文件 llm.completions.model、LLM_MODEL 或 OPENAI_MODEL 指定模型")
-    if args.max_steps <= 0:
-        parser.error("max-steps 必须大于 0")
 
     args.config = GymCraftConfig(
         task=task,

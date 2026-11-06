@@ -21,7 +21,7 @@ address = "localhost:50051"
 disable_vanilla_ai = true
 # 每个 step 最多接受的实际 action 数；0 或负数表示不限制。
 max_actions_per_step = 5
-# 服务端决策步数上限（gymcraft:mining 等任务环境使用），独立于外层 rollout 步数。
+# 服务端决策步数上限（gymcraft:mining 等任务环境使用）；客户端 demo 不再另设步数限制。
 max_steps = 512
 
 # 动作组件参数；组件 ID 可省略 gymcraft: 前缀（服务端自动补全）。

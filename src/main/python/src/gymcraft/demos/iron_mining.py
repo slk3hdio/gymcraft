@@ -42,7 +42,7 @@ def write_trace(handle: TextIO | None, record: dict[str, Any]) -> None:
 
 
 def run(args: argparse.Namespace) -> None:
-    """连接铁矿任务环境并驱动一个有限长度的 LLM 回合。
+    """连接铁矿任务环境并驱动一个由服务端决定长度的 LLM 回合。
 
     参数:
         args: 命令行解析后的连接、模型和回合配置。
@@ -68,7 +68,10 @@ def run(args: argparse.Namespace) -> None:
             options=config.reset_options(),
         )
         write_trace(trace_handle, {"event": "reset", "context": context, "info": reset_info})
-        for step_index in range(args.max_steps):
+        # 不在客户端计步：循环只在环境返回 terminated/truncated 时结束。
+        turn = 0
+        while True:
+            turn += 1
             model_text = chat_completion_text(
                 client,
                 completions.model or "",
@@ -78,7 +81,7 @@ def run(args: argparse.Namespace) -> None:
                 max_retries=completions.max_retries,
                 retry_delay=completions.retry_delay,
             )
-            print(f"\n===== LLM turn {step_index + 1} =====\n{json.dumps(context['messages'], indent=2)}\n{model_text}")
+            print(f"\n===== LLM turn {turn} =====\n{json.dumps(context['messages'], indent=2)}\n{model_text}")
             context, reward, terminated, truncated, info = env.step(model_text)
             action_state = info.get("action_state", {})
             print(
@@ -91,7 +94,7 @@ def run(args: argparse.Namespace) -> None:
                 trace_handle,
                 {
                     "event": "step",
-                    "turn": step_index + 1,
+                    "turn": turn,
                     "model_text": model_text,
                     "reward": reward,
                     "terminated": terminated,
@@ -122,7 +125,6 @@ def main() -> None:
     parser.add_argument("--base-url", help="Chat Completions base URL（省略时取配置或环境变量）")
     parser.add_argument("--api-key", help="Chat Completions API key（省略时取配置或环境变量）")
     parser.add_argument("--model", help="模型名（省略时取配置或环境变量）")
-    parser.add_argument("--max-steps", type=int, default=64, help="外层 rollout 循环步数；服务端步数上限见 reset.options.max_steps")
     parser.add_argument("--seed", type=int, help="reset seed（省略时取配置文件 reset.seed）")
     parser.add_argument("--trace", help="可选 JSONL 轨迹输出路径")
     args = parser.parse_args()
@@ -140,8 +142,7 @@ def main() -> None:
     # 配置文件中的 reset options 优先；缺省键补 demo 原有的默认值。
     reset_options = base.reset_options()
     reset_options.setdefault("disable_vanilla_ai", True)
-    # 服务端步数上限与外层 rollout 步数是两回事：配置未给出时才沿用 --max-steps。
-    reset_options.setdefault("max_steps", args.max_steps)
+    # 服务端步数上限由 reset.options.max_steps 控制；demo 不注入客户端默认值。
     components = reset_options.setdefault("components", {})
     components.setdefault("nearby_blocks", {}).setdefault("max_blocks", 20)
     components.setdefault("interesting_blocks", {}).setdefault("max_blocks", 20)
@@ -165,8 +166,6 @@ def main() -> None:
         parser.error("请通过 --api-key、配置文件 llm.completions.api_key、LLM_API_KEY 或 OPENAI_API_KEY 提供 API key")
     if not completions.model:
         parser.error("请通过 --model、配置文件 llm.completions.model、LLM_MODEL 或 OPENAI_MODEL 指定模型")
-    if args.max_steps <= 0:
-        parser.error("max-steps 必须大于 0")
 
     args.config = GymCraftConfig(
         task=task,

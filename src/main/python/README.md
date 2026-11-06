@@ -212,11 +212,10 @@ demo 使用通用的 `client.chat.completions.create(model=..., messages=...)` �
 gymcraft-demo iron-mining `
   <entity_uuid> `
   --config config.toml `
-  --max-steps 64 `
   --trace traces/iron-mining.jsonl
 ```
 
-该 demo 内置从空手采集原木、使用 self 菜单 $2\times2$ 合成、放置工作台、制作石镐并拾取粗铁的任务提示。`--task` 可覆盖提示，`--trace` 可保存完整 JSONL 轨迹；`--max-steps` 是外层 rollout 循环步数，服务端步数上限由 `reset.options.max_steps` 控制。
+该 demo 内置从空手采集原木、使用 self 菜单 $2\times2$ 合成、放置工作台、制作石镐并拾取粗铁的任务提示。`--task` 可覆盖提示，`--trace` 可保存完整 JSONL 轨迹；demo 不再在客户端按步数截断，episode 由环境返回的 `terminated`/`truncated` 决定，服务端步数上限由 `reset.options.max_steps` 控制。
 
 ## 人工终端交互
 

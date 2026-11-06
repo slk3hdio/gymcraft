@@ -198,8 +198,10 @@ gymcraft-demo --help
 ### LLM 演示示例
 
 ```powershell
-gymcraft-demo llm-chat <entity_uuid> --max-steps 200 --task "beat the game" --api-key <api-key> --base-url https://api.deepseek.com --model deepseek-v4-flash
+gymcraft-demo llm-chat <entity_uuid> --task "beat the game" --api-key <api-key> --base-url https://api.deepseek.com --model deepseek-v4-flash
 ```
+
+demo 不再在客户端按步数截断，episode 由环境返回的 `terminated`/`truncated` 决定；服务端步数上限由 `reset.options.max_steps` 控制。
 
 也可以把任务、地址、reset、LLM wrapper 与 Chat Completions 参数写入 `src/main/python/config.toml`，随后直接运行 demo；实体 UUID 可省略并写在配置文件的 `[environment]` 中。需要多份配置时用 `--config <path>` 指定。
 

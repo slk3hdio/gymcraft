@@ -139,7 +139,8 @@ class DemoConfigTests(unittest.TestCase):
         self.assertEqual("localhost:50051", config.environment.address)
         self.assertIsNone(config.reset.seed)
         options = config.reset_options()
-        self.assertEqual(64, options["max_steps"])
+        # demo 不再注入客户端步数上限；缺省时完全交给服务端。
+        self.assertNotIn("max_steps", options)
         self.assertEqual(20, options["components"]["nearby_blocks"]["max_blocks"])
         self.assertEqual(20, options["components"]["interesting_blocks"]["max_blocks"])
         self.assertEqual("test-key", config.llm.completions.api_key)
@@ -217,6 +218,21 @@ class DemoConfigTests(unittest.TestCase):
         )
 
         self.assertFalse(args.config.reset_options()["disable_vanilla_ai"])
+
+    def test_demos_do_not_parse_client_side_max_steps(self) -> None:
+        """demo 不再暴露 --max-steps；步数上限只由服务端 reset.options.max_steps 控制。"""
+        cases = (
+            (llm_chat, "run"),
+            (iron_mining, "run"),
+            (iron_golem_warden, "run"),
+            (parkour_q_learning, "train"),
+        )
+        for module, entry in cases:
+            with self.subTest(module=module.__name__):
+                args = self._run_main(module, entry, ["entity-uuid"], CONFIG_TEXT)
+
+                self.assertFalse(hasattr(args, "max_steps"))
+                self.assertEqual(512, args.config.reset_options()["max_steps"])
 
 
 if __name__ == "__main__":
