@@ -1,10 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
-
-import javax.annotation.Nullable;
+import java.util.LinkedHashMap;
 
 import net.minecraft.world.entity.Entity;
 import net.minecraft.server.level.ServerLevel;
@@ -15,80 +12,31 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
-import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
-import io.github.mousemeya.gymcraft.gym.action.AttackDistance;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoAttackOnce;
-import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
+
+
 
 /**
  * 单次攻击组件 —— 对目标实体执行一次近战攻击。
  * <p>
  * 如果组件中未指定目标 ID，则回退使用 Mob 当前的攻击目标。
- * 仅在攻击范围内才实际执行攻击；攻击距离可由 reset options 的
- * {@code components.attack_once.attack_distance} 覆盖。覆盖通过修改原版
- * {@code Attributes.ENTITY_INTERACTION_RANGE} 属性实现，未配置时沿用原版
- * 近战范围。该属性由 {@code attack_once} 与 {@code set_attack_target} 共享，
- * 同时配置时后应用者生效。
+ * 仅在近战攻击范围内才实际执行攻击。
  * </p>
  */
 public class AttackOnceController extends AbstractActionComponentController<ProtoAttackOnce> {
-    /** reset options 支持的参数键。 */
-    private static final Set<String> OPTION_KEYS = Set.of("attack_distance");
-
     private static final McSpace<ProtoAttackOnce> DEFAULT_SPACE = MessageSpace.<ProtoAttackOnce>builder(ProtoAttackOnce.getDescriptor())
         .range("target_entity_id", 0, Integer.MAX_VALUE)
         .build();
 
-    /** 当前环境实例的攻击距离覆盖；null 表示沿用原版或 Mob 共享覆盖。 */
-    @Nullable
-    private Double attackDistance;
-
     public AttackOnceController(Mob mob) {
         super(mob);
-    }
-
-    /**
-     * 设置当前动作实例的攻击距离覆盖，并立即写入当前 Mob 的属性。
-     *
-     * @param distance 有限正数，且不超过 {@link AttackDistance#MAX_DISTANCE}
-     */
-    public void setAttackDistance(double distance) {
-        AttackDistance.requireValid(distance);
-        this.attackDistance = distance;
-        AttackDistance.apply(this.mob(), distance);
-    }
-
-    /**
-     * 将已保存的攻击距离重新写入当前 Mob。
-     * <p>
-     * reset 会替换 Agent 实体，因此每次执行动作前重新应用，保证覆盖跨 reset 持久。
-     * </p>
-     */
-    private void applyAttackDistance() {
-        if (this.attackDistance != null) {
-            AttackDistance.apply(this.mob(), this.attackDistance);
-        }
-    }
-
-    @Override
-    public Set<String> optionKeys() {
-        return OPTION_KEYS;
-    }
-
-    /** 应用 reset options 参数覆盖：{@code attack_distance}（有限正数，最大 64）。 */
-    @Override
-    public void applyOptions(Map<String, Object> options) {
-        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
-        if (options.containsKey("attack_distance")) {
-            this.setAttackDistance(ResetOptionValues.doubleValue(options, "attack_distance"));
-        }
     }
 
     @Override
@@ -110,7 +58,6 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
     @Override
     public ActionApplyResult apply(ProtoAttackOnce component) {
         Mob mob = this.mob();
-        this.applyAttackDistance();
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
@@ -181,10 +128,6 @@ public class AttackOnceController extends AbstractActionComponentController<Prot
         details.put("target_alive", target.isAlive());
         details.put("distance", mob.distanceTo(target));
         details.put("in_melee_range", mob.isWithinMeleeAttackRange(target));
-        Double attackDistance = AttackDistance.overrideValue(mob);
-        if (attackDistance != null) {
-            details.put("attack_distance", attackDistance);
-        }
         return details;
     }
 

@@ -7,8 +7,7 @@
     "ServerCommonPacketListenerMixin",
     "ContainerOpenersCounterMixin",
     "MobMoveControlAccessor",
-    "MobLookControlAccessor",
-    "MobAttackDistanceMixin"
+    "MobLookControlAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

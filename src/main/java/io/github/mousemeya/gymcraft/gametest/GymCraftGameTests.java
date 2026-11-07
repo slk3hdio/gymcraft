@@ -125,7 +125,6 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("use_item_bone_meal", () -> UseItemGameTests::boneMeal);
         TEST_FUNCTIONS.register("use_item_cure_zombie_villager", () -> UseItemGameTests::cureZombieVillager);
         TEST_FUNCTIONS.register("action_feedback_attack_once", () -> ActionFeedbackGameTests::attackOnceReportsSpecificFailures);
-        TEST_FUNCTIONS.register("action_feedback_attack_distance", () -> ActionFeedbackGameTests::attackDistanceOptionOverridesMeleeRange);
 
         // ===== 观测组件：每族一个代表性用例 =====
         TEST_FUNCTIONS.register("observation_header_batch_feedback", () -> ObservationFeedbackGameTests::headerAggregatesCompletedBatch);

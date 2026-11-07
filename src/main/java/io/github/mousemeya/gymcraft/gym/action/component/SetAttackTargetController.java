@@ -1,10 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.action.component;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-
-import javax.annotation.Nullable;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -12,15 +9,12 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 
-import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
 import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.AbstractActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
-import io.github.mousemeya.gymcraft.gym.action.AttackDistance;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetAttackTarget;
-import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -31,65 +25,16 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
  * <p>
  * 支持通过 UUID 或实体 ID 两种方式指定目标。通过 UUID 查找时会在所有已加载维度中搜索。
  * apply() 同时更新 Mob 的 target 和 AgentControlState 中的 attackTargetUuid。
- * 可通过 reset options 的 {@code components.set_attack_target.attack_distance}
- * 配置该 Mob 的共享近战攻击距离（写入原版
- * {@code Attributes.ENTITY_INTERACTION_RANGE} 属性）；目标设置本身不受距离限制，
- * 原版近战 Goal 会在配置距离内执行攻击。该属性与 {@code attack_once} 共享，
- * 同时配置时后应用者生效。
  * </p>
  */
 public class SetAttackTargetController extends AbstractActionComponentController<ProtoSetAttackTarget> {
-    /** reset options 支持的参数键。 */
-    private static final Set<String> OPTION_KEYS = Set.of("attack_distance");
-
     private static final McSpace<ProtoSetAttackTarget> DEFAULT_SPACE = MessageSpace.<ProtoSetAttackTarget>builder(ProtoSetAttackTarget.getDescriptor())
         .text("target_uuid")
         .range("target_entity_id", 0, Integer.MAX_VALUE)
         .build();
 
-    /** 当前环境实例的攻击距离覆盖；跨 reset 持久，并在实体替换后重新写入。 */
-    @Nullable
-    private Double attackDistance;
-
     public SetAttackTargetController(Mob mob) {
         super(mob);
-    }
-
-    @Override
-    public Set<String> optionKeys() {
-        return OPTION_KEYS;
-    }
-
-    /**
-     * 应用 reset options 参数覆盖：{@code attack_distance}（有限正数，最大 64）。
-     * <p>
-     * 距离写入 Mob 的原版 {@code ENTITY_INTERACTION_RANGE} 属性，由原版
-     * {@code MeleeAttackGoal} 使用；设置目标本身不受距离限制，远处目标仍会先寻路接近。
-     * </p>
-     */
-    @Override
-    public void applyOptions(Map<String, Object> options) {
-        ComponentOptionAware.rejectUnknownKeys(this.getClass().getSimpleName(), OPTION_KEYS, options);
-        if (!options.containsKey("attack_distance")) {
-            return;
-        }
-        double distance = ResetOptionValues.doubleValue(options, "attack_distance");
-        AttackDistance.requireValid(distance);
-        this.attackDistance = distance;
-        this.applyAttackDistance();
-    }
-
-    /**
-     * 将已配置的攻击距离重新写入当前 Mob 的原版属性。
-     * <p>
-     * reset 会替换 Agent 实体，因此每次应用动作或推进跟踪时都重新写入，
-     * 保证参数覆盖跨 reset 持久。
-     * </p>
-     */
-    private void applyAttackDistance() {
-        if (this.attackDistance != null) {
-            AttackDistance.apply(this.mob(), this.attackDistance);
-        }
     }
 
     @Override
@@ -132,7 +77,6 @@ public class SetAttackTargetController extends AbstractActionComponentController
     @Override
     public ActionApplyResult apply(ProtoSetAttackTarget component) {
         Mob mob = this.mob();
-        this.applyAttackDistance();
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
@@ -188,7 +132,6 @@ public class SetAttackTargetController extends AbstractActionComponentController
     @Override
     public ActionState tick(ProtoSetAttackTarget component) {
         Mob mob = this.mob();
-        this.applyAttackDistance();
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
             mob.setTarget(null);
