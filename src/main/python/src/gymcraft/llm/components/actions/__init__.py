@@ -13,6 +13,7 @@ from gymcraft.llm.components.actions import (
     noop,
     open_menu,
     pick_up_item,
+    respawn,
     send_chat,
     set_attack_target,
     set_block,
@@ -43,6 +44,7 @@ ACTION_REGISTRY = ActionRegistry([
     use_item.COMPONENT,
     update_interesting_blocks.COMPONENT,
     send_chat.COMPONENT,
+    respawn.COMPONENT,
 ])
 
 __all__ = ["ACTION_REGISTRY"]

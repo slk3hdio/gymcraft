@@ -5,6 +5,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import io.github.mousemeya.gymcraft.GymCraft;
+import io.github.mousemeya.gymcraft.gym.action.component.DeathInventorySnapshot;
 import io.github.mousemeya.gymcraft.gym.action.component.UseItemConsumption;
 import io.github.mousemeya.gymcraft.gym.health.DamageLog;
 import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
@@ -85,6 +86,18 @@ public final class ModAttachments {
         "env_attachment_scope",
         () -> AttachmentType.<MobAttachmentAccessScope>builder(() -> {
             throw new IllegalStateException("Environment attachment scope must be explicitly activated");
+        }).build()
+    );
+
+    /**
+     * agent 死亡瞬间的物品栏快照；纯运行时、不序列化。
+     * 由 {@code RespawnDeathHooks} 在 {@code LivingDeathEvent} 显式创建，
+     * 读取前必须 {@code hasData} 守卫；reset 换实体后自然消失。
+     */
+    public static final DeferredHolder<AttachmentType<?>, AttachmentType<DeathInventorySnapshot>> DEATH_INVENTORY = REGISTRY.register(
+        "death_inventory",
+        () -> AttachmentType.<DeathInventorySnapshot>builder(() -> {
+            throw new IllegalStateException("Death inventory snapshot must be captured at death");
         }).build()
     );
 

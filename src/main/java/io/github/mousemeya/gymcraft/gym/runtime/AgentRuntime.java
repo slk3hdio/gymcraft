@@ -8,6 +8,7 @@ import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.visualization.VisualizationService;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.profiling.Profiler;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
@@ -203,27 +204,47 @@ public class AgentRuntime {
     }
 
     /**
-     * 原版非玩家实体跨维度会以同 UUID 新实例加入目标世界；立即重绑定全部动作引用，
+     * 原版非玩家实体跨维度会以同 UUID 新实例加入目标世界；立即重绑全部动作引用，
      * 并中断依赖旧维度上下文的在途动作，避免后续 step 继续操作已移除的旧实体。
+     * <p>
+     * 同维度的同 UUID 新实例加入同样触发重绑：{@code gymcraft:respawn} 动作以重新召唤
+     * 方式复活死亡 agent（旧实例已死亡或被移出世界，新实例加入世界时在本监听器完成
+     * 运行时重绑）。该分支只重绑不中断——join 事件在 respawn 的 apply 内部同步触发，
+     * 此时批次 {@code activeState} 尚未赋值，中断会把 respawn 自身的批次发布成
+     * INTERRUPTED 丢失 step 结果；组件跨动作会话已由死亡事件清理，控制器引用随
+     * {@code setMob} 更新。
+     * </p>
      */
     @SubscribeEvent
     private void onEntityJoinLevel(EntityJoinLevelEvent event) {
         if (event.getLevel().isClientSide()
             || !(event.getEntity() instanceof Mob joined)
             || !joined.getUUID().equals(this.entityId)
-            || joined == this.mob
-            || joined.level() == this.mob.level()) {
+            || joined == this.mob) {
             return;
         }
         Mob previous = this.mob;
-        LOGGER.info("GymCraft runtime rebind dimension change entity={} from={} to={}",
-            this.entityId, previous.level().dimension(), joined.level().dimension());
+        if (joined.level() != previous.level()) {
+            LOGGER.info("GymCraft runtime rebind dimension change entity={} from={} to={}",
+                this.entityId, previous.level().dimension(), joined.level().dimension());
+            this.mob = joined;
+            this.actionExecutor.setMob(joined);
+            this.dimensionChangeHandler.accept(previous, joined);
+            this.actionExecutor.interrupt("agent changed dimension");
+            this.actionController.releaseComponents("dimension change");
+            this.entityPostObserved = false;
+            return;
+        }
+        if (previous.isAlive()
+            || previous.getRemovalReason() == Entity.RemovalReason.DISCARDED) {
+            // DISCARDED 是 reset/实体替换路径（AgentMobLifecycle.replace 自行处理作用域迁移）
+            return;
+        }
+        LOGGER.info("GymCraft runtime rebind respawned agent entity={} previous_removed={}",
+            this.entityId, previous.isRemoved());
         this.mob = joined;
         this.actionExecutor.setMob(joined);
         this.dimensionChangeHandler.accept(previous, joined);
-        this.actionExecutor.interrupt("agent changed dimension");
-        this.actionController.releaseComponents("dimension change");
-        this.entityPostObserved = false;
     }
 
     /** 在受控实体 Pre 事件启动批次或下一个动作。 */

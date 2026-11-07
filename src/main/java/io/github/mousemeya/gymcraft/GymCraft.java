@@ -11,6 +11,7 @@ import io.github.mousemeya.gymcraft.item.UuidCopierItem;
 import io.github.mousemeya.gymcraft.command.GymCraftCommands;
 import io.github.mousemeya.gymcraft.gametest.GymCraftGameTests;
 import io.github.mousemeya.gymcraft.gym.chat.ChatCapture;
+import io.github.mousemeya.gymcraft.gym.action.component.RespawnDeathHooks;
 import io.github.mousemeya.gymcraft.gym.entity.PlayerSimTargetingHooks;
 import io.github.mousemeya.gymcraft.gym.env.EnvChunkGuard;
 import io.github.mousemeya.gymcraft.gym.health.DamageLogHooks;
@@ -90,6 +91,9 @@ public class GymCraft {
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, TickMetricsCollector::onServerTickPost);
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onLivingDeath);
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, MobAttachmentHooks::onLivingDrops);
+        // respawn 死亡钩子：掉落登记必须排在 MobAttachmentHooks（背包并入掉落）之后，同 LOWEST 按注册顺序派发
+        NeoForge.EVENT_BUS.addListener(RespawnDeathHooks::onLivingDeath);
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, RespawnDeathHooks::onLivingDrops);
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onEntityLeaveLevel);
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onServerTickPost);
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onServerStopping);

@@ -1,6 +1,7 @@
 package io.github.mousemeya.gymcraft.gym.state;
 
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -12,6 +13,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,5 +51,17 @@ public record EntitySnapshot(EntityType<?> type, ResourceKey<Level> dimension, C
             }
             throw new IllegalStateException("Restored entity is not a Mob: " + entity);
         }
+    }
+
+    /**
+     * @return 快照捕获时的实体位置（解析 NBT {@code Pos}）
+     */
+    public Vec3 position() {
+        ListTag pos = this.data.getList("Pos")
+            .orElseThrow(() -> new IllegalStateException("Entity snapshot is missing Pos"));
+        return new Vec3(
+            pos.getDouble(0).orElseThrow(() -> new IllegalStateException("Entity snapshot Pos is invalid")),
+            pos.getDouble(1).orElseThrow(() -> new IllegalStateException("Entity snapshot Pos is invalid")),
+            pos.getDouble(2).orElseThrow(() -> new IllegalStateException("Entity snapshot Pos is invalid")));
     }
 }

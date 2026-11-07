@@ -15,6 +15,7 @@ import io.github.mousemeya.gymcraft.gym.action.component.MoveToController;
 import io.github.mousemeya.gymcraft.gym.action.component.NoopController;
 import io.github.mousemeya.gymcraft.gym.action.component.OpenMenuController;
 import io.github.mousemeya.gymcraft.gym.action.component.PickUpItemController;
+import io.github.mousemeya.gymcraft.gym.action.component.RespawnController;
 import io.github.mousemeya.gymcraft.gym.action.component.SetAttackTargetController;
 import io.github.mousemeya.gymcraft.gym.action.component.SetBlockController;
 import io.github.mousemeya.gymcraft.gym.action.component.SendChatController;
@@ -36,6 +37,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMoveTo;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoOpenMenu;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoPickUpItem;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoRespawn;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetAttackTarget;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSendChat;
@@ -137,6 +139,11 @@ public final class ActionComponents {
     public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoSendChat, SendChatController>> SEND_CHAT = REGISTRY.register(
         "send_chat",
         SendChatController.Factory::new
+    );
+
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoRespawn, RespawnController>> RESPAWN = REGISTRY.register(
+        "respawn",
+        RespawnController.Factory::new
     );
 
     /** 禁止实例化纯注册入口类。 */
