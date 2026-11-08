@@ -98,6 +98,7 @@ public final class GymCraftGameTests {
         // ===== PlayerSim 受控实体 =====
         TEST_FUNCTIONS.register("player_sim_profile", () -> PlayerSimGameTests::playerSimHasPlayerLikeProfile);
         TEST_FUNCTIONS.register("player_sim_env_agent", () -> PlayerSimGameTests::playerSimWorksAsEnvAgent);
+        TEST_FUNCTIONS.register("player_sim_attack_range", () -> PlayerSimGameTests::playerSimUsesPlayerAttackRange);
         TEST_FUNCTIONS.register("player_sim_attack_target", () -> PlayerSimGameTests::playerSimPursuesConfiguredAttackTarget);
 
         // ===== 动作组件：每族一个代表性用例 =====
