@@ -9,7 +9,6 @@ import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 
 import io.github.mousemeya.gymcraft.gym.EnvManager;
-import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
@@ -71,8 +70,6 @@ public final class RespawnDeathHooks {
      */
     private static boolean shouldKeepInventory(Mob mob) {
         return EnvManager.get(mob.getUUID())
-            .filter(AbstractMcEnv.class::isInstance)
-            .map(AbstractMcEnv.class::cast)
             .flatMap(env -> env.findActionComponent(RESPAWN_COMPONENT_ID))
             .filter(RespawnController.class::isInstance)
             .map(RespawnController.class::cast)
