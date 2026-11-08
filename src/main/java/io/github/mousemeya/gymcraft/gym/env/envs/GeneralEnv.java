@@ -2,6 +2,7 @@ package io.github.mousemeya.gymcraft.gym.env.envs;
 
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
+import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
@@ -81,17 +82,13 @@ public class GeneralEnv extends AbstractMcEnv {
                 ObservationCreators.CHAT.get(),
                 ObservationCreators.HEALTH_LOG.get()
             ),
+            // 构造期为无原生容器的 agent 创建 27 格专属背包（进基线快照）
+            AgentInventoryLayout::ensureBackpack,
             // 状态区域来自显式场景或挂载作用域；两者都为空时只捕获 agent。
             scenario,
             scope
         );
         this.observationComponent(ObservationCreators.NEARBY_BLOCKS.get()).setMaxBlocks(32);
-    }
-
-    /** agent 使用 27 格专属背包（无原生容器时的统一存储槽）。 */
-    @Override
-    protected boolean usesAgentBackpack() {
-        return true;
     }
 
     /**

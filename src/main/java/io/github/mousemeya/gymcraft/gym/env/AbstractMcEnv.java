@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -51,7 +52,6 @@ import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.gym.state.EnvStateSnapshot;
 import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
-import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 
 
@@ -111,7 +111,7 @@ public abstract class AbstractMcEnv implements McEnv {
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents
     ) {
         this(envTypeId, mob, actionComponentFactories, observationComponents,
-            null, new AttachScope(null, false, false));
+            null, null, new AttachScope(null, false, false));
     }
 
     /**
@@ -123,6 +123,8 @@ public abstract class AbstractMcEnv implements McEnv {
      * @param mob 受控 Mob（须位于服务端世界）
      * @param actionComponentFactories 动作组件工厂
      * @param observationComponents 观测组件工厂
+     * @param agentInitializer 构造期初始化函数，在基线冻结前对受控 Mob 执行一次
+     *                          （如创建专属背包附件，使其进入基线快照）；null 表示无初始化
      * @param scenarioSource 显式完整场景；null 表示已有 Mob 挂载
      * @param scope 挂载作用域；scenarioSource 非空时被忽略
      */
@@ -131,6 +133,7 @@ public abstract class AbstractMcEnv implements McEnv {
         Mob mob,
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents,
+        @Nullable Consumer<Mob> agentInitializer,
         @Nullable ScenarioStore.LoadedScenario scenarioSource,
         AttachScope scope
     ) {
@@ -138,12 +141,6 @@ public abstract class AbstractMcEnv implements McEnv {
         this.envId = UUID.randomUUID();
         this.actionController = new ActionDispatcher(mob, actionComponentFactories);
         this.observationCreator = new ObservationComposer(mob, observationComponents);
-        ensureAgentAttachments(mob);
-        if (this.usesAgentBackpack()) {
-            // 背包只在构造期创建一次：挂载路径需赶在基线捕获前进快照 NBT，场景路径由
-            // 文件 agent NBT 自带；此后凭实体 NBT 存活（快照恢复与原版跨维度复制）
-            AgentInventoryLayout.ensureBackpack(mob);
-        }
         if (!(mob.level() instanceof ServerLevel level)) {
             throw new IllegalArgumentException("GymCraft environments require a server-level Mob: " + envTypeId);
         }
@@ -151,6 +148,12 @@ public abstract class AbstractMcEnv implements McEnv {
         // 抗卸载守卫紧随 level 校验创建；tick 事件只发生在服务端线程，构造完成前不会触发，
         // mob 经 Supplier 延迟取值（此时尚无 agentRuntime）是安全的。
         this.chunkGuard = new EnvChunkGuard(level, this.envId, () -> this.mob());
+        // 子类初始化在基线冻结前执行：写入的实体数据（如专属背包附件）随之进入基线快照，
+        // 成为挂载路径每次 reset 的恢复来源；场景路径的 agent 来自文件 NBT，
+        // 初始化只作用于锚定 Mob（首轮 reset 即被替换）
+        if (agentInitializer != null) {
+            agentInitializer.accept(mob);
+        }
         try {
             if (scenarioSource == null) {
                 // 挂载路径：先强加载区域区块再现场捕获基线（capture 要求区块已加载）
@@ -425,7 +428,6 @@ public abstract class AbstractMcEnv implements McEnv {
         Mob newMob;
         try (var zone = profiler.zone("reset_mob_replace")) {
             newMob = this.replaceMob(currentMob, restored);
-            ensureAgentAttachments(newMob);
         }
         try (var zone = profiler.zone("reset_agent")) {
             this.resetAgent(newMob, seed, options);
@@ -453,28 +455,6 @@ public abstract class AbstractMcEnv implements McEnv {
             throw new IllegalStateException("Failed to add restored entity to level: " + restored.getUUID());
         }
         return restored;
-    }
-
-    /**
-     * 懒创建受控 agent 的纯运行时附件（不进实体 NBT，新实体来自快照或场景文件，
-     * 需在构造、reset 实体替换与跨维度后各补建一次；已存在时不重复创建）。
-     *
-     * @param mob 当前受控实体
-     */
-    private void ensureAgentAttachments(Mob mob) {
-        // 伤害日志：health_log 观测数据源；事件钩子经 hasData 守卫，野生实体不建附件
-        mob.getData(ModAttachments.DAMAGE_LOG);
-    }
-
-    /**
-     * 当前环境的 agent 是否使用 27 格专属背包（无原生容器时的统一存储槽）。
-     * 默认不使用；需要的环境覆写返回 true。背包随环境 NBT 持久化，只在构造期
-     * 创建一次，此后凭实体 NBT 存活（基线快照恢复、原版跨维度复制）。
-     *
-     * @return 是否为 agent 创建专属背包
-     */
-    protected boolean usesAgentBackpack() {
-        return false;
     }
 
     /** 应用通用 reset 行为：合并场景 preset options、应用组件参数覆盖、执行每回合逻辑、记录生效 options，最后提交动作间空闲期 AI 选项。 */
@@ -666,9 +646,8 @@ public abstract class AbstractMcEnv implements McEnv {
         this.ensureOpen();
     }
 
-    /** 跨维度后重建不随实体复制的运行时附件，并立即更新区块跟随票。 */
+    /** 跨维度后立即更新区块跟随票；可序列化附件（专属背包）由原版跨维度复制。 */
     private void onDimensionChange(Mob previous, Mob current) {
-        ensureAgentAttachments(current);
         this.chunkGuard.followAgentNow();
     }
 

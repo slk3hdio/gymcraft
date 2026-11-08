@@ -21,9 +21,10 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
 /**
  * 生命日志观测组件 —— 返回 agent 自上次观测以来受到的伤害记录（{@code gymcraft:health_log}）。
  * <p>
- * 数据源是挂在 Mob 附件上的 {@link DamageLog}（由 {@code DamageLogHooks} 从
- * {@code LivingDamageEvent.Post} 写入）。组件语义为增量消费：每次 create 取出并
- * 清空上次观测之后的新增记录，无新伤害时返回空列表；reset 替换实体后日志归零，
+ * 数据源是挂在 Mob 附件上的 {@link DamageLog}：附件由本组件在每次观测时懒创建
+ * （新实体在首个观测处重建空日志），{@code DamageLogHooks} 从
+ * {@code LivingDamageEvent.Post} 写入已存在的日志。组件语义为增量消费：每次 create
+ * 取出并清空上次观测之后的新增记录，无新伤害时返回空列表；reset 替换实体后日志归零，
  * 首个观测必为空。单次返回条数上限可在环境构造期经 {@link #setMaxRecords} 覆盖，
  * 超出上限保留最新记录。将来扩展回血记录时在同一 proto 消息内追加字段。
  * </p>
@@ -83,10 +84,8 @@ public class HealthLogObservationCreator extends AbstractObservationComponentCre
     /** 从 Mob 附件取出上次观测以来的新增伤害记录（读后清空）。 */
     @Override
     public ProtoHealthLog create(Mob mob) {
-        // 附件由 DamageLogHooks 对受控 Agent 懒创建；未挂附件的 Mob 无伤害可报
-        if (!mob.hasData(ModAttachments.DAMAGE_LOG)) {
-            return ProtoHealthLog.getDefaultInstance();
-        }
+        // 数据源由本组件观测时懒创建：reset/跨维度换出的新实体在首个观测处重建空日志；
+        // 事件钩子经 hasData 守卫只写已存在的日志，野生实体不会建立附件
         List<DamageLog.DamageEntry> entries = mob.getData(ModAttachments.DAMAGE_LOG).drainNew();
         var builder = ProtoHealthLog.newBuilder();
         // 观测间隔内的记录超出上限时丢弃最旧，保留最新的 maxRecords 条

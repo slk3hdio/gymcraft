@@ -102,6 +102,8 @@ public final class IronMiningEnv extends AbstractMcEnv {
                 ObservationCreators.MENU.get(),
                 ObservationCreators.WORLD.get()
             ),
+            // 构造期为无原生容器的 agent 创建 27 格专属背包（进基线快照）
+            AgentInventoryLayout::ensureBackpack,
             scenario,
             scope
         );
@@ -114,12 +116,6 @@ public final class IronMiningEnv extends AbstractMcEnv {
         // 紧凑训练场中的方块掉落常停在方块边缘；略微放宽距离可避免寻路在邻格中心提前结束。
         PickUpItemController pickUp = this.actionComponent(ActionComponents.PICK_UP_ITEM.get());
         pickUp.setPickupReach(2.0);
-    }
-
-    /** agent 使用 27 格专属背包（无原生容器时的统一存储槽）。 */
-    @Override
-    protected boolean usesAgentBackpack() {
-        return true;
     }
 
     /**

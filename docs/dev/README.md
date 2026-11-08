@@ -59,14 +59,15 @@ src/main/
 组件会话状态直接以 NeoForge attachment 挂在 Mob 上（`registry/ModAttachments` 注册，
 经 `mob.getData`/`setData`/`removeData` 读写），每次操作取当前实体实例，reset 换实体后天然归零。
 
-`AGENT_BACKPACK` 为 27 格持久化专属背包：由环境声明创建（覆写 `AbstractMcEnv.usesAgentBackpack`
-返回 true，环境在构造期、基线捕获前经 `AgentInventoryLayout.ensureBackpack` 为无原生容器的
-Mob 建立一次；场景环境的 agent 背包随场景文件 NBT 自带），此后凭实体 NBT 存活——
-reset 从基线快照恢复、跨维度由原版复制。槽位编号为装备槽 `0..7` 之后的 `8..34`；
-未声明环境的 Mob 只有装备槽，村民、马等继续使用原生容器。
+`AGENT_BACKPACK` 为 27 格持久化专属背包：由环境在构造器经初始化参数（`Consumer<Mob>`，
+基线冻结前执行）传入 `AgentInventoryLayout::ensureBackpack` 为无原生容器的 Mob 建立一次
+（场景环境的 agent 背包随场景文件 NBT 自带），此后凭实体 NBT 存活——reset 从基线快照
+恢复、跨维度由原版复制。槽位编号为装备槽 `0..7` 之后的 `8..34`；不初始化背包的环境
+（如 parkour_mob）agent 只有装备槽，村民、马等继续使用原生容器。
 背包死亡时由 `AgentBackpackHooks` 进入正常掉落；环境 reset 恢复创建
-环境时的快照。`DAMAGE_LOG` 为纯运行时附件，由环境在构造/reset 实体替换/跨维度时补建，
-供 `gymcraft:health_log` 观测增量消费。
+环境时的快照。`DAMAGE_LOG` 为纯运行时附件，由 `gymcraft:health_log` 观测组件在
+观测时懒创建并增量消费（reset 换实体后归零）；各组件所需的附件一律由组件自建自理，
+环境侧只负责声明背包。
 
 ## 注册表与组件
 

@@ -117,6 +117,8 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
                 ObservationCreators.MENU.get(),
                 ObservationCreators.WORLD.get()
             ),
+            // 构造期为无原生容器的 agent 创建 27 格专属背包（进基线快照）
+            AgentInventoryLayout::ensureBackpack,
             scenario,
             scope
         );
@@ -128,12 +130,6 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
         // 坐标类动作/观测组件的范围由 EnvironmentRegionAware 统一裁剪到战斗场区域
         // （move_to/swim_to/break_block/set_block/look_at/use_item/open_menu 与方块/实体观测），
         // 组件空间在基类构造期已按区域收紧，本环境无须再手写。
-    }
-
-    /** agent 使用 27 格专属背包（无原生容器时的统一存储槽）。 */
-    @Override
-    protected boolean usesAgentBackpack() {
-        return true;
     }
 
     /**

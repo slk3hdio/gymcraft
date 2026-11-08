@@ -63,7 +63,7 @@ public final class ModAttachments {
     /** 专属背包固定容量。 */
     public static final int AGENT_BACKPACK_SIZE = 27;
 
-    /** 27 格专属背包持久化附件，由环境显式创建（见 {@code AbstractMcEnv#usesAgentBackpack}）；死亡时不复制，由掉落事件转移其内容。 */
+    /** 27 格专属背包持久化附件，由环境构造器经初始化函数创建（基线冻结前，见 {@code AbstractMcEnv} 构造参数）；死亡时不复制，由掉落事件转移其内容。 */
     public static final DeferredHolder<AttachmentType<?>, AttachmentType<ItemStacksResourceHandler>> AGENT_BACKPACK = REGISTRY.register(
         "agent_backpack",
         () -> AttachmentType.serializable(
@@ -73,7 +73,7 @@ public final class ModAttachments {
 
     /**
      * 当前 Mob 的伤害待读日志；纯运行时、不序列化。
-     * 由环境在构造/reset 实体替换/跨维度时懒创建（{@code getData} 触发默认供应商），
+     * 由 health_log 观测组件在观测时懒创建（{@code getData} 触发默认供应商），
      * 事件钩子经 {@code hasData} 守卫避免给野生实体误建附件；
      * reset 更换实体后日志自然归零（首个观测必为空）。
      */
