@@ -13,8 +13,9 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  * <p>
  * 监听 {@link LivingDamageEvent.Post}：扣血完成后触发、不可取消，携带减免后的最终
  * 生命伤害与伤害来源。只读记录、不干预伤害流程。仅当受伤实体是挂有
- * {@code gymcraft:damage_log} 附件的 Mob（即受控 Agent）时写入；野生实体的伤害
- * 事件被 {@code hasData} 守卫直接跳过，不会创建附件实例。
+ * {@code gymcraft:damage_log} 附件的 Mob（即受控 Agent，附件由环境构造/reset
+ * 替换时懒创建）时写入；野生实体的伤害事件被 {@code hasData} 守卫直接跳过，
+ * 不会创建附件实例。
  * </p>
  */
 public final class DamageLogHooks {

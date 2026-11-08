@@ -19,7 +19,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.action.component.PickUpItemController;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
@@ -117,7 +116,6 @@ public final class MiningEnv extends AbstractMcEnv {
                 ObservationCreators.MENU.get(),
                 ObservationCreators.WORLD.get()
             ),
-            List.of(MobAttachments.AGENT_BACKPACK),
             scenario,
             scope
         );

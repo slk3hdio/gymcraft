@@ -30,7 +30,6 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
@@ -118,7 +117,6 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
                 ObservationCreators.MENU.get(),
                 ObservationCreators.WORLD.get()
             ),
-            List.of(MobAttachments.AGENT_BACKPACK),
             scenario,
             scope
         );

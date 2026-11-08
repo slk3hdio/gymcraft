@@ -11,7 +11,6 @@ import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
 import io.github.mousemeya.gymcraft.registry.ObservationCreators;
@@ -88,7 +87,6 @@ public class SimpleMobEnv extends AbstractMcEnv {
                 ObservationCreators.CHAT.get(),
                 ObservationCreators.HEALTH_LOG.get()
             ),
-            List.of(MobAttachments.AGENT_BACKPACK, MobAttachments.DAMAGE_LOG),
             // 状态区域来自显式场景或挂载作用域；两者都为空时只捕获 agent。
             scenario,
             scope

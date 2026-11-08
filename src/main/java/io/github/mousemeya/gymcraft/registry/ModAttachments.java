@@ -7,7 +7,6 @@ import java.util.function.Supplier;
 import io.github.mousemeya.gymcraft.GymCraft;
 import io.github.mousemeya.gymcraft.gym.action.component.UseItemConsumption;
 import io.github.mousemeya.gymcraft.gym.health.DamageLog;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -61,31 +60,26 @@ public final class ModAttachments {
         () -> AttachmentType.<Set<Block>>builder((Supplier<Set<Block>>) HashSet::new).build()
     );
 
+    /** 专属背包固定容量。 */
+    public static final int AGENT_BACKPACK_SIZE = 27;
+
     /** 27 格专属背包持久化附件；死亡时不复制，由掉落事件转移其内容。 */
     public static final DeferredHolder<AttachmentType<?>, AttachmentType<ItemStacksResourceHandler>> AGENT_BACKPACK = REGISTRY.register(
         "agent_backpack",
         () -> AttachmentType.serializable(
-            () -> new ItemStacksResourceHandler(io.github.mousemeya.gymcraft.gym.attachment.MobAttachments.AGENT_BACKPACK_SIZE)
+            () -> new ItemStacksResourceHandler(AGENT_BACKPACK_SIZE)
         ).build()
     );
 
     /**
      * 当前 Mob 的伤害待读日志；纯运行时、不序列化。
-     * 默认供应商只在环境访问作用域激活（{@code getData}）时创建实例，
+     * 由环境在构造/reset 实体替换/跨维度时懒创建（{@code getData} 触发默认供应商），
      * 事件钩子经 {@code hasData} 守卫避免给野生实体误建附件；
      * reset 更换实体后日志自然归零（首个观测必为空）。
      */
     public static final DeferredHolder<AttachmentType<?>, AttachmentType<DamageLog>> DAMAGE_LOG = REGISTRY.register(
         "damage_log",
         () -> AttachmentType.<DamageLog>builder(DamageLog::new).build()
-    );
-
-    /** 当前 env 的临时附件访问作用域；不序列化，也不随实体快照复制。 */
-    public static final DeferredHolder<AttachmentType<?>, AttachmentType<MobAttachmentAccessScope>> ENV_ATTACHMENT_SCOPE = REGISTRY.register(
-        "env_attachment_scope",
-        () -> AttachmentType.<MobAttachmentAccessScope>builder(() -> {
-            throw new IllegalStateException("Environment attachment scope must be explicitly activated");
-        }).build()
     );
 
     /** 禁止实例化注册入口。 */

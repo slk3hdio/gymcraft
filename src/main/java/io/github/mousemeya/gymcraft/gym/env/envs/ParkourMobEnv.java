@@ -72,7 +72,6 @@ public class ParkourMobEnv extends AbstractMcEnv {
                 ActionComponents.SET_BLOCK.get(), ActionComponents.STEP_MOVE.get()),
             List.of(ObservationCreators.SELF.get(), ObservationCreators.NEARBY_BLOCKS.get(),
                 ObservationCreators.WORLD.get()),
-            List.of(),
             scenario,
             scope);
 

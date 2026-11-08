@@ -83,7 +83,7 @@ public class HealthLogObservationCreator extends AbstractObservationComponentCre
     /** 从 Mob 附件取出上次观测以来的新增伤害记录（读后清空）。 */
     @Override
     public ProtoHealthLog create(Mob mob) {
-        // 附件由环境构造/reset 时的访问作用域激活；未挂附件的 Mob 无伤害可报
+        // 附件由 DamageLogHooks 对受控 Agent 懒创建；未挂附件的 Mob 无伤害可报
         if (!mob.hasData(ModAttachments.DAMAGE_LOG)) {
             return ProtoHealthLog.getDefaultInstance();
         }

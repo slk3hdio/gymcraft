@@ -20,11 +20,11 @@ import net.minecraft.world.phys.Vec3;
 import io.github.mousemeya.gymcraft.gym.EnvManager;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
+import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoSelfState;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
+import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertEquals;
 import static io.github.mousemeya.gymcraft.gametest.MenuGameTestSupport.assertTrue;
@@ -37,7 +37,7 @@ public final class DimensionChangeGameTests {
 
     /**
      * 原版跨维度传送会创建同 UUID 的新 Mob；验证运行时改绑新实例后仍能在目标维度
-     * 完成动作与观测，且环境注册和附件访问作用域均保持有效。
+     * 完成动作与观测，且环境注册与专属背包布局均保持有效。
      *
      * @param helper GameTest 辅助对象
      */
@@ -82,8 +82,9 @@ public final class DimensionChangeGameTests {
                     assertTrue(helper, !step.getTerminated(), "dimension change must not kill the episode");
                     assertTrue(helper, EnvManager.get(agentUuid).orElse(null) == env,
                         "dimension change unregistered the environment");
-                    assertTrue(helper, MobAttachmentAccessScope.canAccess(transferred, MobAttachments.AGENT_BACKPACK),
-                        "attachment access scope was not rebound after dimension change");
+                    assertEquals(helper, ModAttachments.AGENT_BACKPACK_SIZE,
+                        AgentInventoryLayout.resolve(transferred).storageSlotCount(),
+                        "agent backpack slots are unavailable after dimension change");
                     ProtoSelfState self = step.getObservation().getComponentsMap()
                         .get("gymcraft:self").unpack(ProtoSelfState.class);
                     assertEquals(helper, 0.5, self.getX(), "observation still uses the old entity x position");

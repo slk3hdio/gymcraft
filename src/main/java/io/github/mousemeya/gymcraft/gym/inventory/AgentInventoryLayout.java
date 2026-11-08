@@ -15,9 +15,7 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.transfer.item.ItemResource;
 import net.neoforged.neoforge.transfer.item.ItemStacksResourceHandler;
 
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentService;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
+import io.github.mousemeya.gymcraft.registry.ModAttachments;
 
 /**
  * Agent 统一物品栏布局 —— 由 Mob 结构确定性导出的无状态 slot_id 映射快照。
@@ -25,7 +23,7 @@ import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
  * 编号规则（GymCraft 自定义索引，非 Minecraft 全局槽位编号）：
  * <ul>
  *   <li>{@code 0..7} —— {@link EquipmentSlot#getId()} 对应的八个装备槽</li>
- *   <li>{@code 8..N} —— Mob 自带 {@link Container} 或 env 授权专属背包的局部槽位</li>
+ *   <li>{@code 8..N} —— Mob 自带 {@link Container} 或专属背包的局部槽位</li>
  * </ul>
  * Mob 自带容器的发现顺序：
  * <ol>
@@ -67,10 +65,9 @@ public final class AgentInventoryLayout {
             for (int i = 0; i < nativeContainer.container().getContainerSize(); i++) {
                 slots.add(new NativeContainerAgentSlot(mob, nativeContainer, i));
             }
-        } else if (MobAttachmentAccessScope.canAccess(mob, MobAttachments.AGENT_BACKPACK)) {
-            ItemStacksResourceHandler backpack = MobAttachmentService
-                .getIfPresent(mob, MobAttachments.AGENT_BACKPACK)
-                .orElseThrow(() -> new IllegalStateException("Backpack access granted without attachment: " + mob.getUUID()));
+        } else {
+            // 无原生容器的 Mob 一律使用 27 格专属背包（首次解析时懒创建，随实体 NBT 持久化）
+            ItemStacksResourceHandler backpack = mob.getData(ModAttachments.AGENT_BACKPACK);
             for (int i = 0; i < backpack.size(); i++) {
                 slots.add(new BackpackAgentSlot(mob, backpack, i));
             }

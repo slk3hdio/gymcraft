@@ -1,6 +1,5 @@
 package io.github.mousemeya.gymcraft.gym.env.envs;
 
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
@@ -16,7 +15,7 @@ import javax.annotation.Nullable;
 
 
 /**
- * 通用 LLM 控制环境，装配全部通用动作与观测并管理所需附件。
+ * 通用 LLM 控制环境，装配全部通用动作与观测组件。
  * 受控 Mob 必须位于服务端世界；未提供外部场景时仅捕获 agent，不维护世界区域。
  */
 public class GeneralEnv extends AbstractMcEnv {
@@ -82,7 +81,6 @@ public class GeneralEnv extends AbstractMcEnv {
                 ObservationCreators.CHAT.get(),
                 ObservationCreators.HEALTH_LOG.get()
             ),
-            List.of(MobAttachments.AGENT_BACKPACK, MobAttachments.DAMAGE_LOG),
             // 状态区域来自显式场景或挂载作用域；两者都为空时只捕获 agent。
             scenario,
             scope
