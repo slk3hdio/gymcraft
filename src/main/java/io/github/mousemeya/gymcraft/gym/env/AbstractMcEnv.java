@@ -139,6 +139,11 @@ public abstract class AbstractMcEnv implements McEnv {
         this.actionController = new ActionDispatcher(mob, actionComponentFactories);
         this.observationCreator = new ObservationComposer(mob, observationComponents);
         ensureAgentAttachments(mob);
+        if (this.usesAgentBackpack()) {
+            // 背包只在构造期创建一次：挂载路径需赶在基线捕获前进快照 NBT，场景路径由
+            // 文件 agent NBT 自带；此后凭实体 NBT 存活（快照恢复与原版跨维度复制）
+            AgentInventoryLayout.ensureBackpack(mob);
+        }
         if (!(mob.level() instanceof ServerLevel level)) {
             throw new IllegalArgumentException("GymCraft environments require a server-level Mob: " + envTypeId);
         }
@@ -451,22 +456,20 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     /**
-     * 懒创建受控 agent 的 Mob 附件：构造、reset 实体替换与跨维度后各调用一次
-     * （新实体来自基线快照或场景文件 NBT，可能缺失所需附件；已存在时不重复创建）。
+     * 懒创建受控 agent 的纯运行时附件（不进实体 NBT，新实体来自快照或场景文件，
+     * 需在构造、reset 实体替换与跨维度后各补建一次；已存在时不重复创建）。
      *
      * @param mob 当前受控实体
      */
     private void ensureAgentAttachments(Mob mob) {
         // 伤害日志：health_log 观测数据源；事件钩子经 hasData 守卫，野生实体不建附件
         mob.getData(ModAttachments.DAMAGE_LOG);
-        if (this.usesAgentBackpack()) {
-            AgentInventoryLayout.ensureBackpack(mob);
-        }
     }
 
     /**
      * 当前环境的 agent 是否使用 27 格专属背包（无原生容器时的统一存储槽）。
-     * 默认不使用；需要的环境覆写返回 true，背包随环境生命周期创建并随实体 NBT 持久化。
+     * 默认不使用；需要的环境覆写返回 true。背包随环境 NBT 持久化，只在构造期
+     * 创建一次，此后凭实体 NBT 存活（基线快照恢复、原版跨维度复制）。
      *
      * @return 是否为 agent 创建专属背包
      */
