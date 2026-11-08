@@ -92,7 +92,8 @@ public class GymCraft {
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onLivingDeath);
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onLivingDeath);
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, AgentBackpackHooks::onLivingDrops);
-        // respawn 死亡钩子：掉落登记必须排在 AgentBackpackHooks（背包并入掉落）之后，同 LOWEST 按注册顺序派发
+        // respawn 死亡钩子：取消 keep_inventory agent 的死亡掉落（快照已托管物品），
+        // 与 AgentBackpackHooks 同 LOWEST，取消对并入集合前后的顺序不敏感
         NeoForge.EVENT_BUS.addListener(RespawnDeathHooks::onLivingDeath);
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, RespawnDeathHooks::onLivingDrops);
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onEntityLeaveLevel);

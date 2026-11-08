@@ -60,16 +60,17 @@ public final class RespawnGameTests {
      * @param helper GameTest 辅助对象
      */
     public static void respawnRestoresInventoryAndClearsDrops(GameTestHelper helper) {
-        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
         UUID agentUuid = mob.getUUID();
         Vec3 baseline = mob.position();
         McEnv env = EnvManager.attach("gymcraft:general", mob);
-        // 基线捕获后再给物品：证明恢复来自死亡快照而非基线。
-        // 用背包（死亡必掉且槽位必清空）而非装备——helper.kill 无玩家来源，
-        // Mob.dropCustomDeathLoot 的 killedByPlayer 门禁使装备掉落不确定。
+        // 基线捕获后再给物品：证明恢复来自死亡快照而非基线
         putIntoBackpack(mob, new ItemStack(Items.DIAMOND, 3));
         mob.teleportTo(baseline.x + 2.0, baseline.y, baseline.z);
         helper.kill(mob);
+        // die() 同步完成掉落流程：keep_inventory=true 的死亡掉落被整体取消，物品只在快照里
+        assertEquals(helper, 0, countDroppedItems(helper, mob.position(), Items.DIAMOND),
+            "keep_inventory=true must cancel death drops entirely");
 
         AtomicReference<StepResponse> response = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
@@ -100,9 +101,9 @@ public final class RespawnGameTests {
                         .get("gymcraft:self").unpack(ProtoSelfState.class);
                     assertTrue(helper, self.getAlive(), "self observation must report the respawned agent alive");
                     assertEquals(helper, 20.0, (double) self.getHealth(), "self observation health after respawn");
-                    // 死亡掉落物必须被清理，防止物品复制
+                    // 复活后仍无掉落物（被取消而非事后清理）
                     assertEquals(helper, 0, countDroppedItems(helper, baseline, Items.DIAMOND),
-                        "death drops must be cleared when keep_inventory restores the inventory");
+                        "no diamond drops may appear for keep_inventory=true respawn");
                     helper.succeed();
                 } catch (InvalidProtocolBufferException error) {
                     throw new IllegalStateException("Cannot unpack self observation", error);
@@ -120,7 +121,7 @@ public final class RespawnGameTests {
      * @param helper GameTest 辅助对象
      */
     public static void respawnAfterRemovalRebindsRuntime(GameTestHelper helper) {
-        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
         UUID agentUuid = mob.getUUID();
         McEnv env = EnvManager.attach("gymcraft:general", mob);
         helper.kill(mob);
@@ -180,7 +181,7 @@ public final class RespawnGameTests {
      * @param helper GameTest 辅助对象
      */
     public static void respawnWithoutInventoryKeepsDrops(GameTestHelper helper) {
-        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
         UUID agentUuid = mob.getUUID();
         McEnv env = EnvManager.attach("gymcraft:general", mob);
 
@@ -203,6 +204,9 @@ public final class RespawnGameTests {
             assertTrue(helper, current != null && current != mob, "reset did not replace the agent entity");
             putIntoBackpack(current, new ItemStack(Items.DIAMOND, 3));
             helper.kill(current);
+            // keep_inventory=false 不捕获快照也不取消掉落：死亡瞬间即原版掉落
+            assertEquals(helper, 1, countDroppedItems(helper, current.position(), Items.DIAMOND),
+                "keep_inventory=false death must drop the vanilla way");
 
             AtomicReference<StepResponse> response = new AtomicReference<>();
             AtomicReference<Throwable> failure = new AtomicReference<>();
@@ -235,7 +239,7 @@ public final class RespawnGameTests {
      * @param helper GameTest 辅助对象
      */
     public static void respawnFailsWhenAlive(GameTestHelper helper) {
-        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
         ActionDispatcher dispatcher = new ActionDispatcher(mob, List.of(ActionComponents.RESPAWN.get()));
 
         var state = dispatcher.apply(respawnAction()).initialState();

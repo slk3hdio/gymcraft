@@ -4,7 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 import javax.annotation.Nullable;
 
@@ -12,7 +11,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.Pose;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
@@ -37,15 +35,17 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  * 死亡（health&le;0 或已被移出世界）不再阻断本动作——批次在实体移除后仍由
  * 服务端 tick 兜底推进送达。执行序列：按 {@link EntitySnapshot} 从旧实体 NBT
  * 重建同 UUID 新实例（复用 reset 路径机制），程序化修正 NBT 携带的死亡状态
- * （满血、清死亡/受击计时、站姿、清药水效果、复位下落距离），再按配置恢复
- * 物品栏，最后旧实体移出世界、新实体加入并经 {@code EntityJoinLevelEvent}
- * 触发运行时重绑（同维度死亡重绑，见 {@code AgentRuntime}）。
+ * （满血、清死亡/受击计时、站姿、清药水效果、复位下落距离），最后旧实体移出
+ * 世界、新实体加入并经 {@code EntityJoinLevelEvent} 触发运行时重绑
+ * （同维度死亡重绑，见 {@code AgentRuntime}）。
  * </p>
  * <p>
  * 组件配置（reset options 的 {@code components} 通道，跨 reset 持久）：
- * {@code keep_inventory}（默认 true）—— 恢复死亡快照物品栏并清除死亡掉落物
- * （防止物品复制）；false 时保持原版语义，物品留在死亡点可走回捡拾。
- * 复活位置经 {@link #setRespawnPosition} 由环境构造期配置（null = 原地复活）。
+ * {@code keep_inventory}（默认 true）—— true 时 {@code RespawnDeathHooks} 在
+ * 死亡瞬间捕获物品栏快照并整体取消死亡掉落（物品只存在于快照里，复活时恢复，
+ * 天然杜绝复制）；false 时死亡完全走原版掉落流程，物品留在死亡点可走回捡拾、
+ * 复活后空手。复活位置经 {@link #setRespawnPosition} 由环境构造期配置
+ * （null = 原地复活）。
  * </p>
  * <p>
  * 批内建议单独或首位发送本动作：动作批次在首个非 COMPLETED 项处停止，
@@ -72,12 +72,17 @@ public class RespawnController extends AbstractActionComponentController<ProtoRe
     }
 
     /**
-     * 设置复活时是否恢复死亡物品栏快照。
+     * 设置复活时是否保留死亡物品栏（true 时死亡掉落被取消、复活从快照恢复）。
      *
-     * @param keepInventory true 恢复物品栏并清除死亡掉落物
+     * @param keepInventory true 取消死亡掉落并从快照恢复物品栏
      */
     public void setKeepInventory(boolean keepInventory) {
         this.keepInventory = keepInventory;
+    }
+
+    /** @return 死亡时是否保留物品栏（供 {@code RespawnDeathHooks} 在死亡瞬间判定） */
+    public boolean shouldKeepInventory() {
+        return this.keepInventory;
     }
 
     /**
@@ -151,25 +156,21 @@ public class RespawnController extends AbstractActionComponentController<ProtoRe
         // 加入前后均可，此顺序沿用验证过的时序并保持与重绑在同一动作内完成。
 
         int restoredItems = 0;
-        int clearedDrops = 0;
         if (this.keepInventory && snapshot != null) {
             restoredItems = restoreInventory(newMob, snapshot);
-            clearedDrops = clearTrackedDrops(level, snapshot);
         }
         if (snapshot != null) {
             oldMob.removeData(ModAttachments.DEATH_INVENTORY);
         }
         details.put("keep_inventory", this.keepInventory);
         details.put("restored_items", restoredItems);
-        details.put("cleared_drops", clearedDrops);
         details.put("respawn_position", this.respawnPosition != null
             ? List.of(this.respawnPosition.x, this.respawnPosition.y, this.respawnPosition.z)
             : "death_position");
 
         String description;
         if (restoredItems > 0) {
-            description = "agent respawned, inventory restored (" + restoredItems + " items, "
-                + clearedDrops + " drops cleared)";
+            description = "agent respawned, inventory restored (" + restoredItems + " items)";
         } else if (this.keepInventory && snapshot == null) {
             description = "agent respawned, no death inventory captured";
         } else {
@@ -215,25 +216,6 @@ public class RespawnController extends AbstractActionComponentController<ProtoRe
             slots.get(index).setItem(stack);
         }
         return restoredItems;
-    }
-
-    /**
-     * 清除死亡掉落流程登记的掉落物实体（防止 keep_inventory 恢复造成物品复制）；
-     * 已被第三方拾取或合并销毁的登记项自然落空。
-     *
-     * @param level 服务端世界
-     * @param snapshot 死亡物品快照
-     * @return 实际清除的掉落物数量
-     */
-    private static int clearTrackedDrops(ServerLevel level, DeathInventorySnapshot snapshot) {
-        int clearedDrops = 0;
-        for (UUID dropId : snapshot.droppedItemIds()) {
-            if (level.getEntity(dropId) instanceof ItemEntity drop) {
-                drop.discard();
-                clearedDrops++;
-            }
-        }
-        return clearedDrops;
     }
 
     /**
