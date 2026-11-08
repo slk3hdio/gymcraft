@@ -166,6 +166,8 @@ public final class GymCraftGameTests {
 
         // ===== 可视化 =====
         TEST_FUNCTIONS.register("visualization_runtime", () -> VisualizationGameTests::runtime);
+        TEST_FUNCTIONS.register("visualization_subscription_survives_respawn", () -> VisualizationGameTests::subscriptionSurvivesRespawn);
+        TEST_FUNCTIONS.register("visualization_subscription_survives_dimension_change", () -> VisualizationGameTests::subscriptionSurvivesDimensionChange);
     }
 
     /** 禁止实例化测试注册入口。 */

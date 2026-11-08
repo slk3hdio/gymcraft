@@ -234,6 +234,8 @@ public class AgentRuntime {
             this.mob = joined;
             this.actionExecutor.setMob(joined);
             this.dimensionChangeHandler.accept(previous, joined);
+            // 可视化代次提升：丢弃旧维度的观测与反馈图形，订阅随 agent 跟随到新维度。
+            VisualizationService.reset(joined);
             this.actionExecutor.interrupt("agent changed dimension");
             this.actionController.clearComponents("dimension change");
             this.entityPostObserved = false;
@@ -249,6 +251,8 @@ public class AgentRuntime {
         this.mob = joined;
         this.actionExecutor.setMob(joined);
         this.dimensionChangeHandler.accept(previous, joined);
+        // 可视化代次提升：丢弃死亡前的旧图形（含死亡位置的动作反馈），等待复活后的新数据。
+        VisualizationService.reset(joined);
     }
 
     /** 在受控实体 Pre 事件启动批次或下一个动作。 */

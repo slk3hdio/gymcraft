@@ -51,7 +51,8 @@ public final class VisualizationService {
      * <p>持有创建订阅时的环境实例 {@code env}：同 UUID 实体被 reset 重建后
      * {@code EnvManager.get} 返回新实例，旧订阅据此判定失效。{@code generation} 在
      * 每次 reset 后自增、{@code sequence} 每帧自增，客户端据两者丢弃乱序、重放与
-     * 旧代次数据。</p>
+     * 旧代次数据。订阅跟随 agent 存活：维度变化（原版跨维度传送与 respawn 重召唤
+     * 均产生同 UUID 新实例）不失效，仅实体长时间缺失（宽限超时）才回收。</p>
      */
     private static final class Subscription {
         /** 观察者；离线或失权时订阅回收。 */
@@ -64,12 +65,12 @@ public final class VisualizationService {
         private final McEnv env;
         /** 环境 ID（取自环境元数据），随帧下发供客户端隔离旧环境数据。 */
         private final UUID environment;
-        /** 订阅时的维度；跨维度即失效。 */
-        private final String dimension;
         /** reset 代次，从 0 开始。 */
         private long generation;
         /** 帧序号，每发送一帧自增。 */
         private long sequence;
+        /** 实体连续缺失的 tick 数（等待 respawn 等重召唤窗口）；重新可见即清零。 */
+        private int missingTicks;
 
         /** @param player 观察者 @param request 请求 @param env 当前环境 */
         private Subscription(ServerPlayer player, VisualSubscribePayload request, McEnv env) {
@@ -78,7 +79,6 @@ public final class VisualizationService {
             this.agent = request.agent();
             this.env = env;
             this.environment = UUID.fromString(env.getMetadata().get("env_id").toString());
-            this.dimension = player.level().dimension().identifier().toString();
         }
     }
 
@@ -175,19 +175,23 @@ public final class VisualizationService {
     /**
      * 复查订阅是否仍指向合法目标。
      *
-     * <p>任一条件不满足即判定失效：玩家离线、权限被撤销、跨维度、环境实例被替换
-     * （同 UUID 重建）、实体消失或超出 128 格。</p>
+     * <p>玩家离线、权限被撤销或环境实例被替换（同 UUID 重建）即失效。agent 实体经
+     * {@code getEntityInAnyDimension} 全维度查找——维度变化（原版跨维度传送）与
+     * 重生（respawn 重召唤）产生的同 UUID 新实例不使订阅失效；距离仅在 agent 与
+     * 玩家同维度时校验（跨维度的欧氏距离无意义，此时客户端也不渲染世界图形）。</p>
      *
      * @param subscription 待检查订阅
-     * @return 当前实体；订阅失效时为 null
+     * @return 当前实体；玩家侧/环境侧失效时为 null（onTick 立即回收），
+     *         实体暂缺（等待重召唤）时也为 null（onTick 按宽限期回收）
      */
     private static Mob validMob(Subscription subscription) {
         ServerPlayer player = subscription.player;
         if (player.hasDisconnected() || !permitted(player)
-            || !player.level().dimension().identifier().toString().equals(subscription.dimension)
             || EnvManager.get(subscription.agent).orElse(null) != subscription.env) return null;
-        var entity = ((ServerLevel) player.level()).getEntity(subscription.agent);
-        return entity instanceof Mob mob && mob.distanceToSqr(player) <= 128 * 128 ? mob : null;
+        var entity = ((ServerLevel) player.level()).getEntityInAnyDimension(subscription.agent);
+        if (!(entity instanceof Mob mob)) return null;
+        if (mob.level() == player.level() && mob.distanceToSqr(player) > 128 * 128) return null;
+        return mob;
     }
 
     /**
@@ -286,12 +290,18 @@ public final class VisualizationService {
      * 清空旧观测与反馈图形，等待 reset 观测重新建立画面。帧内随带环境边界图形：
      * 状态范围可能在首个 reset 才确定，代次提升时客户端正好整体替换。</p>
      *
+     * <p>门禁只校验环境在册而不复查实体可见性：本钩子也在实体重绑（维度变化与
+     * respawn 重召唤）时调用，而 {@code EntityJoinLevelEvent} 触发于新实体进入
+     * UUID 索引之前，此刻按 UUID 查询尚不可见。</p>
+     *
      * @param mob reset 后（可能重建的）同 UUID 实体
      */
     public static void reset(Mob mob) {
         ACTIONS.remove(mob.getUUID());
         for (Subscription subscription : SUBSCRIPTIONS.values()) {
-            if (subscription.agent.equals(mob.getUUID()) && validMob(subscription) == mob) {
+            if (subscription.agent.equals(mob.getUUID())
+                && EnvManager.get(mob.getUUID()).orElse(null) == subscription.env) {
+                subscription.missingTicks = 0;
                 subscription.generation++;
                 send(subscription, VisualFrame.Kind.RESET, 0, "", "",
                     "message.gymcraft.visual.waiting_reset", boundaryElements(subscription.env), mob);
@@ -341,7 +351,9 @@ public final class VisualizationService {
      */
     private static void send(Subscription s, VisualFrame.Kind kind, long action, String component, String status,
                              String description, List<VisualElement> elements, Mob mob) {
-        var frame = new VisualFrame(kind, s.request, s.environment, s.agent, s.dimension,
+        // 帧维度取 agent 实际所在维度：跨维度时客户端据此暂停渲染，回到同维度自动恢复。
+        var frame = new VisualFrame(kind, s.request, s.environment, s.agent,
+            mob.level().dimension().identifier().toString(),
             s.generation, ++s.sequence, mob.level().getGameTime(), action, component, status, description,
             elements.size(), VisualFrame.bounded(elements, mob.position()));
         try {
@@ -352,10 +364,18 @@ public final class VisualizationService {
     }
 
     /**
+     * 实体缺失宽限期（tick）：agent 被 remove 后等待重召唤（respawn）或环境自行
+     * 清理的窗口；超过即视为失联回收，防止实体永久缺失时订阅泄漏。
+     */
+    private static final int MISSING_GRACE_TICKS = 600;
+
+    /**
      * 每 tick 兜底回收；由服务端事件总线驱动。
      *
-     * <p>回收离线、越界、失权及环境关闭的订阅（失效玩家仍在线时先补发 CLEAR），
-     * 随后清理已无任何观察者的动作缓存，防止无人观看的 Agent 泄漏快照。</p>
+     * <p>玩家离线/失权、环境实例被替换立即回收；agent 实体暂缺（死亡移除后等待
+     * respawn 重召唤、跨维度传送的装载窗口）按 {@link #MISSING_GRACE_TICKS} 宽限
+     * 保留订阅——重召唤完成或传送落地后自动恢复推送。失效玩家仍在线时先补发
+     * CLEAR。随后清理已无任何观察者的动作缓存，防止无人观看的 Agent 泄漏快照。</p>
      *
      * @param event 服务端 tick 事件
      */
@@ -364,7 +384,12 @@ public final class VisualizationService {
             var iterator = SUBSCRIPTIONS.values().iterator();
             while (iterator.hasNext()) {
                 Subscription s = iterator.next();
-                if (validMob(s) == null) {
+                if (validMob(s) != null) {
+                    s.missingTicks = 0;
+                    continue;
+                }
+                boolean expired = ++s.missingTicks > MISSING_GRACE_TICKS || missingTerminal(s);
+                if (expired) {
                     if (!s.player.hasDisconnected()) sendReply(s.player,
                         new VisualSubscribePayload(s.request, s.agent, true), VisualFrame.Kind.CLEAR,
                         "message.gymcraft.visual.subscription_expired");
@@ -373,6 +398,19 @@ public final class VisualizationService {
             }
             ACTIONS.keySet().removeIf(agent -> SUBSCRIPTIONS.values().stream().noneMatch(s -> s.agent.equals(agent)));
         }
+    }
+
+    /**
+     * 判断订阅是否已确定性失效（与实体缺失的临时状态相区别）：
+     * 玩家离线/失权或环境实例被替换。
+     *
+     * @param subscription 待检查订阅
+     * @return 确定性失效时为 true
+     */
+    private static boolean missingTerminal(Subscription subscription) {
+        ServerPlayer player = subscription.player;
+        return player.hasDisconnected() || !permitted(player)
+            || EnvManager.get(subscription.agent).orElse(null) != subscription.env;
     }
 
     /**

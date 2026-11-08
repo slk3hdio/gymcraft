@@ -72,9 +72,11 @@ public final class VisualizationClient {
     /**
      * 客户端 tick 维护：缓存生命周期与按键处理。
      *
-     * <p>断线时立即清空缓存；服务端订阅维度与本地维度不符（跨维度）或配置总开关
-     * 关闭时取消订阅。SETTINGS 打开设置界面；SELECT 在无界面遮挡时按准星目标切换
-     * 订阅，未开启总开关或准星不是 Mob 时给出提示文字。</p>
+     * <p>断线时立即清空缓存；配置总开关关闭时取消订阅。订阅跟随 agent（服务端
+     * 帧携带 agent 实际维度）：agent 暂时不在玩家维度时只是不渲染世界图形
+     * （{@link VisualizationRenderer} 过滤），订阅保留，回到同维度自动恢复；
+     * 服务端负责失效回收并主动推送 CLEAR。SETTINGS 打开设置界面；SELECT 在无
+     * 界面遮挡时按准星目标切换订阅，未开启总开关或准星不是 Mob 时给出提示文字。</p>
      *
      * @param event 客户端 tick 事件；只访问客户端对象
      */
@@ -85,7 +87,6 @@ public final class VisualizationClient {
             state.clear();
             return;
         }
-        if (!state.dimension().isEmpty() && !minecraft.level.dimension().identifier().toString().equals(state.dimension())) cancel();
         if (!VisualizationConfig.ENABLED.get() && state.agent() != null) cancel();
         state.feedback(System.nanoTime());
         while (SETTINGS.consumeClick()) {

@@ -34,8 +34,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.server.permissions.PermissionSet;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -87,6 +90,117 @@ public final class VisualizationGameTests {
                 var restored = helper.getLevel().getEntity(mob.getUUID());
                 if (restored != null) restored.discard();
             }
+        });
+    }
+
+    /**
+     * 重生不使可视化订阅失效：agent 死亡移除进入订阅宽限期，respawn 重召唤后
+     * 订阅自动恢复（无 CLEAR 帧、收到代次提升的 RESET 帧，后续动作正常推送）。
+     *
+     * @param helper 测试场景
+     */
+    public static void subscriptionSurvivesRespawn(GameTestHelper helper) {
+        Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
+        UUID agentUuid = mob.getUUID();
+        var env = EnvManager.attach("gymcraft:general", mob);
+        TestObserver observer = new TestObserver(helper.getLevel(), mob.position());
+        VisualizationService.subscribe(observer, new VisualSubscribePayload(UUID.randomUUID(), agentUuid, false));
+
+        helper.kill(mob);
+        helper.runAfterDelay(25, () -> {
+            // 死亡移除窗口内订阅必须仍存活（宽限期），respawn 重召唤后恢复推送
+            assertTrue(helper, mob.isRemoved(), "agent must be removed before respawn");
+            long clearBeforeRespawn = observer.frames.stream()
+                .filter(f -> f.kind() == VisualFrame.Kind.CLEAR).count();
+            assertEquals(helper, 0L, clearBeforeRespawn, "subscription was cleared during removal grace period");
+
+            var failure = new AtomicReference<Throwable>();
+            var done = new AtomicBoolean();
+            Thread.startVirtualThread(() -> {
+                try {
+                    var response = env.step(List.of(action("respawn", ProtoRespawn.getDefaultInstance())), 0.0F);
+                    if (!response.getObservation().getHeader().getLastActionStatus().equals("COMPLETED")) {
+                        throw new AssertionError("respawn visualized step failed");
+                    }
+                    var followUp = env.step(List.of(action("noop", ProtoNoop.getDefaultInstance())), 0.0F);
+                    if (!followUp.getObservation().getHeader().getLastActionStatus().equals("COMPLETED")) {
+                        throw new AssertionError("follow-up step on respawned agent failed");
+                    }
+                } catch (Throwable error) { failure.set(error); }
+                finally { done.set(true); }
+            });
+
+            helper.runAfterDelay(20, () -> {
+                try {
+                    assertTrue(helper, done.get() && failure.get() == null, "respawn steps failed: " + failure.get());
+                    assertTrue(helper, observer.frames.stream().noneMatch(f -> f.kind() == VisualFrame.Kind.CLEAR),
+                        "subscription must survive agent respawn");
+                    assertTrue(helper, observer.frames.stream().anyMatch(f -> f.kind() == VisualFrame.Kind.RESET),
+                        "respawn rebind must raise the visualization generation");
+                    assertTrue(helper, observer.frames.stream().anyMatch(f -> f.kind() == VisualFrame.Kind.ACTION
+                            && f.status().equals("COMPLETED") && f.component().equals("gymcraft:noop")),
+                        "frames must resume after respawn");
+                } finally {
+                    EnvManager.close(agentUuid);
+                    var leftover = helper.getLevel().getEntity(agentUuid);
+                    if (leftover != null) leftover.discard();
+                    helper.succeed();
+                }
+            });
+        });
+    }
+
+    /**
+     * 维度变化不使可视化订阅失效：agent 传送下界后订阅跟随（无 CLEAR），帧携带
+     * agent 实际维度，动作图形继续推送。
+     *
+     * @param helper 测试场景
+     */
+    public static void subscriptionSurvivesDimensionChange(GameTestHelper helper) {
+        Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
+        UUID agentUuid = mob.getUUID();
+        var env = EnvManager.attach("gymcraft:simple_mob", mob);
+        TestObserver observer = new TestObserver(helper.getLevel(), mob.position());
+        VisualizationService.subscribe(observer, new VisualSubscribePayload(UUID.randomUUID(), agentUuid, false));
+
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        assertTrue(helper, nether != null, "Nether dimension is unavailable");
+        Entity teleported = mob.teleport(new TeleportTransition(
+            nether, new Vec3(0.5, 70.0, 0.5), Vec3.ZERO, 0.0F, 0.0F,
+            TeleportTransition.DO_NOTHING));
+        assertTrue(helper, teleported instanceof Mob transferred && transferred != mob,
+            "cross-dimension teleport did not create a new instance");
+
+        helper.runAfterDelay(2, () -> {
+            var failure = new AtomicReference<Throwable>();
+            var done = new AtomicBoolean();
+            Thread.startVirtualThread(() -> {
+                try {
+                    var response = env.step(List.of(action("noop", ProtoNoop.getDefaultInstance())), 0.0F);
+                    if (!response.getObservation().getHeader().getLastActionStatus().equals("COMPLETED")) {
+                        throw new AssertionError("step after dimension change failed");
+                    }
+                } catch (Throwable error) { failure.set(error); }
+                finally { done.set(true); }
+            });
+
+            helper.runAfterDelay(8, () -> {
+                try {
+                    assertTrue(helper, done.get() && failure.get() == null, "nether step failed: " + failure.get());
+                    assertTrue(helper, observer.frames.stream().noneMatch(f -> f.kind() == VisualFrame.Kind.CLEAR),
+                        "subscription must survive agent dimension change");
+                    assertTrue(helper, observer.frames.stream().anyMatch(f -> f.kind() == VisualFrame.Kind.RESET
+                            && f.dimension().equals("minecraft:the_nether")),
+                        "rebind must raise generation with the agent's new dimension");
+                    assertTrue(helper, observer.frames.stream().anyMatch(f -> f.kind() == VisualFrame.Kind.ACTION
+                            && f.status().equals("COMPLETED") && f.dimension().equals("minecraft:the_nether")),
+                        "action frames must carry the agent's actual dimension");
+                } finally {
+                    EnvManager.close(agentUuid);
+                    teleported.discard();
+                    helper.succeed();
+                }
+            });
         });
     }
 
