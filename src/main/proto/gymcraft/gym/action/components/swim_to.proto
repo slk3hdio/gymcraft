@@ -8,8 +8,11 @@ option java_outer_classname = "SwimToProto";
 
 // 使用两栖寻路移动到目标方块：可在水中、水面与陆地之间规划路径，
 // 陆地表现与 move_to 一致，是 move_to 的水域增强变体。
-// 坐标按方块位置解释，实际导航目标统一修正为该方块中心的可站立位置
-// （x/z 半格中心、y 为方块底部），整数坐标不再是四块交界的边角。
+// 坐标按方块位置解释，实际导航目标按原版 findSurfacePosition 语义修正为可站立
+// 位置（x/z 半格中心、y 为该格底部）：实心方块上移到其上方第一个可站面、空气格
+// 吸附到下方支撑面、液体等非固体格保持原格（两栖导航本身无此修正，由 GymCraft
+// 统一补齐）。发生修正时完成 description 携带提示，details 的 target_correction
+// 报告修正码、requested 报告原始请求坐标。
 message ProtoSwimTo {
   double x = 1;
   double y = 2;

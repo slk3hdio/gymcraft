@@ -9,8 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.control.LookControl;
-import net.minecraft.world.entity.ai.control.MoveControl;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -26,27 +24,25 @@ import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.navigation.MobNavigationTask;
 import io.github.mousemeya.gymcraft.gym.action.navigation.NavigationPathProvider;
-import io.github.mousemeya.gymcraft.gym.action.navigation.SwimLookControl;
-import io.github.mousemeya.gymcraft.gym.action.navigation.SwimMoveControl;
+import io.github.mousemeya.gymcraft.gym.action.navigation.SwimControlSession;
 import io.github.mousemeya.gymcraft.gym.action.navigation.SwimNavigationTask;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSwimTo;
 import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
 import io.github.mousemeya.gymcraft.gym.space.McSpace;
 import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
-import io.github.mousemeya.gymcraft.mixin.MobLookControlAccessor;
-import io.github.mousemeya.gymcraft.mixin.MobMoveControlAccessor;
 
 /**
  * 游泳动作组件 —— 使用两栖寻路把实体导航到指定方块。
  * <p>
- * 与 {@code move_to} 参数、方块中心目标修正和到达判定（三维欧氏距离）完全一致
- * （目标统一为 {@link MobNavigationTask#blockCenterTarget} 的可站立中心），但寻路使用自有的
+ * 与 {@code move_to} 参数、方块目标修正（{@link MobNavigationTask#surfaceTarget}
+ * 复刻原版 findSurfacePosition 语义）和到达判定（三维欧氏距离）完全一致，但寻路使用自有的
  * {@link net.minecraft.world.entity.ai.navigation.AmphibiousPathNavigation}
  * （原版海龟同款，见 {@link SwimNavigationTask}）：WATER 格可通行、支持水中垂直
  * 移动与水中起点，因此落水、身处深水或目标在彼岸时仍可规划路径；陆地上与
- * move_to 等价。动作期间临时把 Mob 的移动控制器替换为 {@link SwimMoveControl}
- * （水中按俯仰角做原版平滑三维游泳，海豚/青蛙同款；陆地完全委托原控制器，
- * 动作结束/打断时恢复），不上浮切换游泳 pose，保持命中箱与眼高稳定。
+ * move_to 等价。注意两栖导航本身不做终点列扫描修正（原版无此入口），统一由
+ * {@link MobNavigationTask#surfaceTarget} 补齐。动作期间经 {@link SwimControlSession} 临时把 Mob 的移动控制器
+ * 替换为游泳版本（水中按俯仰角做原版平滑三维游泳，海豚/青蛙同款；陆地完全委托
+ * 原控制器，动作结束/打断时恢复），不上浮切换游泳 pose，保持命中箱与眼高稳定。
  * 实现了 {@link EnvironmentRegionAware}：环境区域非空时目标坐标空间收紧到区域边界。
  * </p>
  */
@@ -63,15 +59,8 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
     private double speed = DEFAULT_SPEED;
     /** 当前 swim_to 动作独占的两栖导航任务。 */
     private final SwimNavigationTask navigationTask = new SwimNavigationTask();
-    /** 动作期间安装的游泳移动控制器（含原控制器引用），结束时恢复。 */
-    @Nullable
-    private SwimMoveControl swimMoveControl;
-    /** 动作期间安装的游泳注视控制器，结束时恢复（原版注视控制会把俯仰重置为 0）。 */
-    @Nullable
-    private SwimLookControl swimLookControl;
-    /** 安装前 Mob 的原注视控制器，恢复时使用。 */
-    @Nullable
-    private LookControl originalLookControl;
+    /** 动作期间的游泳控制器换装会话（安装/恢复游泳移动与注视控制器）。 */
+    private final SwimControlSession swimControls = new SwimControlSession();
 
     /** @param mob controller 初始绑定的 Mob */
     public SwimToController(Mob mob) {
@@ -151,23 +140,24 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
         if (agentError != null) {
             return ActionApplyResult.none(agentError);
         }
-        Vec3 target = target(component);
+        MobNavigationTask.BlockTarget target = this.target(component);
+        Vec3 targetPos = target.position();
         var policy = ActionControlPolicy.none()
             .disableGoalFlags(Goal.Flag.MOVE)
             .eraseMemory(MemoryModuleType.WALK_TARGET)
             .eraseMemory(MemoryModuleType.PATH);
-        double distance = distanceTo(mob, target);
+        double distance = distanceTo(mob, targetPos);
         if (distance <= MobNavigationTask.effectiveStopDistance(component.getStopDistance())) {
             return ActionApplyResult.applied(
                 policy,
-                ActionState.completed("reached target", moveDetails(target, component.getStopDistance()))
+                ActionState.completed(reachedDescription(target), moveDetails(component, target))
             );
         }
-        this.installSwimMoveControl(mob);
-        this.navigationTask.begin(mob, target, this.speed, true);
+        this.swimControls.install(mob);
+        this.navigationTask.begin(mob, targetPos, this.speed, true);
         ActionState initialState = ActionState.running(
             "swimming to target",
-            moveDetails(target, component.getStopDistance())
+            moveDetails(component, target)
         );
         LOGGER.info(
             "GymCraft SwimTo apply entity={} target=({}, {}, {}) state={} details={}",
@@ -193,31 +183,32 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
             this.navigationTask.cancel();
-            this.restoreMoveControl(mob);
+            this.swimControls.restore(mob);
             return agentError;
         }
-        Vec3 target = target(component);
+        MobNavigationTask.BlockTarget target = this.target(component);
+        Vec3 targetPos = target.position();
         double stop = component.getStopDistance();
-        double dist = distanceTo(mob, target);
+        double dist = distanceTo(mob, targetPos);
         if (dist <= MobNavigationTask.effectiveStopDistance(stop)) {
             this.navigationTask.cancel();
-            this.restoreMoveControl(mob);
-            ActionState state = ActionState.completed("reached target", moveDetails(target, stop));
+            this.swimControls.restore(mob);
+            ActionState state = ActionState.completed(reachedDescription(target), moveDetails(component, target));
             LOGGER.info("GymCraft SwimTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
             return state;
         }
-        MobNavigationTask.Update update = this.navigationTask.advance(target, false);
+        MobNavigationTask.Update update = this.navigationTask.advance(targetPos, false);
         if (update.exhausted()) {
             ActionState state = ActionState.failed(
                 navigationFailureDescription(update.reason()),
-                moveDetails(target, stop)
+                moveDetails(component, target)
             );
             this.navigationTask.cancel();
-            this.restoreMoveControl(mob);
+            this.swimControls.restore(mob);
             LOGGER.info("GymCraft SwimTo state entity={} status={} description={} details={}", mob.getUUID(), state.status(), state.description(), state.details());
             return state;
         }
-        ActionState state = ActionState.running("swimming", moveDetails(target, stop));
+        ActionState state = ActionState.running("swimming", moveDetails(component, target));
         LOGGER.info("GymCraft SwimTo state entity={} status={} details={}", mob.getUUID(), state.status(), state.details());
         return state;
     }
@@ -226,7 +217,7 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
     @Override
     public void onInterrupt(ProtoSwimTo component) {
         this.navigationTask.cancel();
-        this.restoreMoveControl(this.mob());
+        this.swimControls.restore(this.mob());
     }
 
     /**
@@ -240,47 +231,14 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
         return this.navigationTask.currentPath();
     }
 
-    /**
-     * 安装游泳移动/注视控制器：水中三维游泳（原版海豚/青蛙语义）、陆地保持
-     * 原控制器。重复 apply 时复用已安装实例，不嵌套包装。
-     *
-     * @param mob 受控 Mob
-     */
-    private void installSwimMoveControl(Mob mob) {
-        MoveControl current = mob.getMoveControl();
-        if (this.swimMoveControl != null && current == this.swimMoveControl) {
-            return;
-        }
-        this.swimMoveControl = new SwimMoveControl(mob, current);
-        ((MobMoveControlAccessor) mob).gymcraft$setMoveControl(this.swimMoveControl);
-        this.originalLookControl = mob.getLookControl();
-        this.swimLookControl = new SwimLookControl(mob);
-        ((MobLookControlAccessor) mob).gymcraft$setLookControl(this.swimLookControl);
+    /** @return 请求坐标按可站立语义修正后的导航目标与修正诊断（与 move_to 同一修正）；见 {@link MobNavigationTask#surfaceTarget} */
+    private MobNavigationTask.BlockTarget target(ProtoSwimTo component) {
+        return MobNavigationTask.surfaceTarget(this.mob().level(), component.getX(), component.getY(), component.getZ());
     }
 
-    /**
-     * 恢复动作前的移动/注视控制器；未安装或已被替换（如 reset 重建实体）时为空操作。
-     *
-     * @param mob 受控 Mob
-     */
-    private void restoreMoveControl(Mob mob) {
-        SwimMoveControl installed = this.swimMoveControl;
-        this.swimMoveControl = null;
-        SwimLookControl installedLook = this.swimLookControl;
-        this.swimLookControl = null;
-        LookControl look = this.originalLookControl;
-        this.originalLookControl = null;
-        if (installed != null && mob.getMoveControl() == installed) {
-            ((MobMoveControlAccessor) mob).gymcraft$setMoveControl(installed.groundControl());
-        }
-        if (installedLook != null && look != null && mob.getLookControl() == installedLook) {
-            ((MobLookControlAccessor) mob).gymcraft$setLookControl(look);
-        }
-    }
-
-    /** @return 坐标所在方块的可站立中心（与 move_to 同一修正）；见 {@link MobNavigationTask#blockCenterTarget} */
-    private static Vec3 target(ProtoSwimTo component) {
-        return MobNavigationTask.blockCenterTarget(component.getX(), component.getY(), component.getZ());
+    /** @return 完成描述：发生方块层面修正时携带简短提示（与 move_to 一致） */
+    private static String reachedDescription(MobNavigationTask.BlockTarget target) {
+        return target.adjusted() ? "reached target (adjusted to standable surface)" : "reached target";
     }
 
     /** @return 当前 Mob 脚部位置到目标的三维欧氏距离 */
@@ -309,15 +267,23 @@ public class SwimToController extends AbstractActionComponentController<ProtoSwi
     }
 
     /** @return 包含精确三维距离、垂直差和导航所有权的动作诊断 */
-    private Map<String, Object> moveDetails(Vec3 target, double stopDistance) {
+    private Map<String, Object> moveDetails(ProtoSwimTo component, MobNavigationTask.BlockTarget target) {
         Map<String, Object> details = this.navigationTask.details(
-            target,
-            distanceTo(this.mob(), target),
+            target.position(),
+            distanceTo(this.mob(), target.position()),
             "stop_distance",
-            stopDistance
+            component.getStopDistance()
         );
-        details.put("vertical_delta", this.mob().getY() - target.y);
-        details.put("effective_stop_distance", MobNavigationTask.effectiveStopDistance(stopDistance));
+        details.put("requested", Map.of(
+            "x", component.getX(),
+            "y", component.getY(),
+            "z", component.getZ()
+        ));
+        if (target.adjusted()) {
+            details.put("target_correction", target.correction());
+        }
+        details.put("vertical_delta", this.mob().getY() - target.position().y);
+        details.put("effective_stop_distance", MobNavigationTask.effectiveStopDistance(component.getStopDistance()));
         return details;
     }
 

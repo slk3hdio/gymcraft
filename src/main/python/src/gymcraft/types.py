@@ -47,6 +47,7 @@ ACTION_USE_ITEM: Final = "gymcraft:use_item"
 ACTION_UPDATE_INTERESTING_BLOCKS: Final = "gymcraft:update_interesting_blocks"
 ACTION_SEND_CHAT: Final = "gymcraft:send_chat"
 ACTION_RESPAWN: Final = "gymcraft:respawn"
+ACTION_WAIT_PLAYER_MESSAGE: Final = "gymcraft:wait_player_message"
 
 # ── 观测组件注册 id（完整 wire 键，含 `gymcraft:` 命名空间）────────────────────
 OBS_SELF: Final = "gymcraft:self"

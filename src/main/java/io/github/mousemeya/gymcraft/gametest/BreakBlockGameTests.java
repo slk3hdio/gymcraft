@@ -94,4 +94,72 @@ public final class BreakBlockGameTests {
         assertTrue(helper, mob.getMainHandItem().getDamageValue() == 0, "tool must not take durability on air target");
         helper.succeed();
     }
+
+    /**
+     * 目标位置是纯流体（水）时动作不进入挖掘：直接以 COMPLETED 结束（无块可挖，
+     * 否则流体 destroyTime=100 会被慢慢磨挖直到超时），反馈 details 指明流体，
+     * 主手工具不被触碰、水源不被破坏。
+     *
+     * @param helper 测试场景
+     */
+    public static void fluidTargetCompletesImmediately(GameTestHelper helper) {
+        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STONE_PICKAXE));
+        BlockPos target = new BlockPos(3, 2, 2);
+        helper.setBlock(target, Blocks.WATER);
+        assertTrue(helper, helper.getBlockState(target).is(Blocks.WATER), "precondition: target must be water");
+        BlockPos absolute = helper.absolutePos(target);
+        ProtoBreakBlock action = ProtoBreakBlock.newBuilder()
+            .setX(absolute.getX()).setY(absolute.getY()).setZ(absolute.getZ())
+            .build();
+
+        var controller = new BreakBlockController(mob);
+        var state = controller.apply(action).initialState();
+        assertEquals(helper, ActionStatus.COMPLETED, state.status(), "fluid target should complete immediately");
+        assertEquals(helper, "no block at target position", state.description(),
+            "feedback should still report the missing block");
+        assertEquals(helper, "Block{minecraft:water}", state.details().get("block"), "fluid feedback missing");
+        assertTrue(helper, helper.getBlockState(target).is(Blocks.WATER), "water must not be destroyed by mining");
+        assertTrue(helper, mob.getMainHandItem().getDamageValue() == 0, "tool must not take durability on fluid target");
+        helper.succeed();
+    }
+
+    /**
+     * 工具不正确导致方块不掉落时，RUNNING 与完成态的 description 都携带
+     * " (no drops: incorrect tool)" 后缀（warning 只走 info，description 是
+     * 提示进入观测 last_actions 的唯一载体）；空手挖石头不掉落圆石。
+     *
+     * @param helper 测试场景
+     */
+    public static void incorrectToolHintInDescription(GameTestHelper helper) {
+        Mob mob = spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(2, 1, 2));
+        BlockPos target = new BlockPos(3, 2, 2);
+        helper.setBlock(target, Blocks.STONE);
+        BlockPos absolute = helper.absolutePos(target);
+        ProtoBreakBlock action = ProtoBreakBlock.newBuilder()
+            .setX(absolute.getX()).setY(absolute.getY()).setZ(absolute.getZ())
+            .build();
+
+        var controller = new BreakBlockController(mob);
+        var state = controller.apply(action).initialState();
+        assertEquals(helper, ActionStatus.RUNNING, state.status(), "mining should start");
+        assertEquals(helper, "mining (no drops: incorrect tool)", state.description(),
+            "running feedback should hint no drops");
+        assertEquals(helper, Boolean.FALSE, state.details().get("correct_tool"), "correct_tool feedback wrong");
+        assertEquals(helper, "incorrect tool: the block will not drop items", state.details().get("warning"),
+            "warning detail missing");
+
+        // 空手挖石头（未着地惩罚下约 750 tick），留足余量
+        for (int tick = 0; tick < 1600 && state.status() == ActionStatus.RUNNING; tick++) {
+            state = controller.tick(action);
+        }
+        assertEquals(helper, ActionStatus.COMPLETED, state.status(), "stone did not break in time");
+        assertEquals(helper, "block broken (no drops: incorrect tool)", state.description(),
+            "terminal feedback should hint no drops");
+        assertTrue(helper, helper.getBlockState(target).isAir(), "target block still present");
+        var drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, new AABB(absolute).inflate(2));
+        assertTrue(helper, drops.stream().noneMatch(item -> item.getItem().is(Items.COBBLESTONE)),
+            "stone should not drop cobblestone with bare hands");
+        helper.succeed();
+    }
 }

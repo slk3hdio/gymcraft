@@ -18,7 +18,7 @@ import io.github.mousemeya.gymcraft.gym.health.DamageLogHooks;
 import io.github.mousemeya.gymcraft.gym.rpc.GymCraftRpcServer;
 import io.github.mousemeya.gymcraft.gym.runtime.TickMetricsCollector;
 import io.github.mousemeya.gymcraft.gym.menu.session.MenuSessionHooks;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentHooks;
+import io.github.mousemeya.gymcraft.gym.inventory.AgentBackpackHooks;
 import io.github.mousemeya.gymcraft.network.GymCraftNetwork;
 
 import org.slf4j.Logger;
@@ -90,8 +90,9 @@ public class GymCraft {
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, TickMetricsCollector::onServerTickPre);
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, TickMetricsCollector::onServerTickPost);
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onLivingDeath);
-        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, MobAttachmentHooks::onLivingDrops);
-        // respawn 死亡钩子：掉落登记必须排在 MobAttachmentHooks（背包并入掉落）之后，同 LOWEST 按注册顺序派发
+        NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onLivingDeath);
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, AgentBackpackHooks::onLivingDrops);
+        // respawn 死亡钩子：掉落登记必须排在 AgentBackpackHooks（背包并入掉落）之后，同 LOWEST 按注册顺序派发
         NeoForge.EVENT_BUS.addListener(RespawnDeathHooks::onLivingDeath);
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, RespawnDeathHooks::onLivingDrops);
         NeoForge.EVENT_BUS.addListener(MenuSessionHooks::onEntityLeaveLevel);

@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -36,7 +37,7 @@ import io.github.mousemeya.gymcraft.gym.action.ActionComponentController;
 import io.github.mousemeya.gymcraft.gym.action.ActionDispatcher;
 import io.github.mousemeya.gymcraft.gym.action.ActionComponentFactory;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentSpec;
+import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentCreator;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComposer;
 import io.github.mousemeya.gymcraft.gym.observation.ObservationComponentFactory;
@@ -65,9 +66,8 @@ import io.github.mousemeya.gymcraft.gym.state.RegionEntitySnapshot;
  * 从场景生成 agent 与已有 Mob 挂载；本类不根据环境类型隐式加载场景。
  * <p>
  * 环境状态基线（自持生效范围，快照捕获/恢复/再捕获均在
- * {@link EnvStateSnapshot} 上进行）是构造期创建的不可变字段；附件访问作用域与
- * reset 实体替换由 {@link AgentMobLifecycle} 执行，本类只保留身份、组件装配与
- * RL 主流程的编排。
+ * {@link EnvStateSnapshot} 上进行）是构造期创建的不可变字段；reset 实体替换
+ * 由本类直接执行，本类只保留身份、组件装配与 RL 主流程的编排。
  */
 public abstract class AbstractMcEnv implements McEnv {
     /** reset options：是否在 reset 后和相邻动作之间的空闲期禁用原版 AI。 */
@@ -95,8 +95,6 @@ public abstract class AbstractMcEnv implements McEnv {
     private Map<String, Object> lastResetOptions = Map.of();
     /** 环境状态基线（自持生效范围）：构造期一次性创建，此后不可变。 */
     private final EnvStateSnapshot baseline;
-    /** 受控实体生命周期：附件访问作用域与 reset 实体替换。 */
-    private final AgentMobLifecycle mobLifecycle;
     /** 运行时抗卸载守卫：强加载区域与 agent 所在区块，close 时精确释放。 */
     private final EnvChunkGuard chunkGuard;
 
@@ -112,8 +110,8 @@ public abstract class AbstractMcEnv implements McEnv {
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents
     ) {
-        this(envTypeId, mob, actionComponentFactories, observationComponents, List.of(),
-            null, new AttachScope(null, false, false));
+        this(envTypeId, mob, actionComponentFactories, observationComponents,
+            null, null, new AttachScope(null, false, false));
     }
 
     /**
@@ -125,7 +123,8 @@ public abstract class AbstractMcEnv implements McEnv {
      * @param mob 受控 Mob（须位于服务端世界）
      * @param actionComponentFactories 动作组件工厂
      * @param observationComponents 观测组件工厂
-     * @param attachmentSpecs 当前环境允许访问的附件描述器
+     * @param agentInitializer 构造期初始化函数，在基线冻结前对受控 Mob 执行一次
+     *                          （如创建专属背包附件，使其进入基线快照）；null 表示无初始化
      * @param scenarioSource 显式完整场景；null 表示已有 Mob 挂载
      * @param scope 挂载作用域；scenarioSource 非空时被忽略
      */
@@ -134,7 +133,7 @@ public abstract class AbstractMcEnv implements McEnv {
         Mob mob,
         Collection<? extends ActionComponentFactory<?, ?>> actionComponentFactories,
         Collection<? extends ObservationComponentFactory<?, ?>> observationComponents,
-        Collection<? extends MobAttachmentSpec<?>> attachmentSpecs,
+        @Nullable Consumer<Mob> agentInitializer,
         @Nullable ScenarioStore.LoadedScenario scenarioSource,
         AttachScope scope
     ) {
@@ -142,8 +141,6 @@ public abstract class AbstractMcEnv implements McEnv {
         this.envId = UUID.randomUUID();
         this.actionController = new ActionDispatcher(mob, actionComponentFactories);
         this.observationCreator = new ObservationComposer(mob, observationComponents);
-        // 协作类创建顺序等价原内联顺序：激活附件作用域 → 建状态基线 → 建运行时。
-        this.mobLifecycle = new AgentMobLifecycle(mob, List.copyOf(attachmentSpecs));
         if (!(mob.level() instanceof ServerLevel level)) {
             throw new IllegalArgumentException("GymCraft environments require a server-level Mob: " + envTypeId);
         }
@@ -151,6 +148,12 @@ public abstract class AbstractMcEnv implements McEnv {
         // 抗卸载守卫紧随 level 校验创建；tick 事件只发生在服务端线程，构造完成前不会触发，
         // mob 经 Supplier 延迟取值（此时尚无 agentRuntime）是安全的。
         this.chunkGuard = new EnvChunkGuard(level, this.envId, () -> this.mob());
+        // 子类初始化在基线冻结前执行：写入的实体数据（如专属背包附件）随之进入基线快照，
+        // 成为挂载路径每次 reset 的恢复来源；场景路径的 agent 来自文件 NBT，
+        // 初始化只作用于锚定 Mob（首轮 reset 即被替换）
+        if (agentInitializer != null) {
+            agentInitializer.accept(mob);
+        }
         try {
             if (scenarioSource == null) {
                 // 挂载路径：先强加载区域区块再现场捕获基线（capture 要求区块已加载）
@@ -342,10 +345,7 @@ public abstract class AbstractMcEnv implements McEnv {
         // 先撤销本环境的可视化订阅（内部转交服务端线程，捕获实例防止误删同 UUID 新环境的订阅）。
         VisualizationService.close(this.mob(), this);
         this.agentRuntime.clear();
-        // 区块票先于附件清算释放：guard 自身幂等，且不依赖清算结果
         this.chunkGuard.release();
-        // 附件访问权必须在组件释放清算完成后撤销（清算经物品栏布局读取背包附件）。
-        this.mobLifecycle.deactivate(this.mob());
         NeoForge.EVENT_BUS.unregister(this.agentRuntime);
         this.closed = true;
     }
@@ -407,11 +407,10 @@ public abstract class AbstractMcEnv implements McEnv {
 
     /**
      * 环境侧重置（由 runtime 在服务端 tick 线程经 {@code ResetHandler} 回调）的编排：
-     * 恢复状态基线（场景环境的场景内容在此物化）、替换受控实体（含附件作用域迁移），
+     * 恢复状态基线（场景环境的场景内容在此物化）、替换受控实体，
      * 最后执行每回合逻辑（选项应用与计数器归零）。
      * <p>
-     * 顺序约束由协作类保证：旧实体的组件会话已由 runtime 先行释放；背包附件受访问
-     * 作用域门控，故 {@code clearAllItems} 必须先于 scope 撤销。
+     * 旧实体的组件会话已由 runtime 先行释放，替换时先清空其携带物品再移出世界。
      * </p>
      *
      * @param currentMob 当前（待替换）实体
@@ -428,12 +427,34 @@ public abstract class AbstractMcEnv implements McEnv {
         }
         Mob newMob;
         try (var zone = profiler.zone("reset_mob_replace")) {
-            newMob = this.mobLifecycle.replace(currentMob, restored);
+            newMob = this.replaceMob(currentMob, restored);
         }
         try (var zone = profiler.zone("reset_agent")) {
             this.resetAgent(newMob, seed, options);
         }
         return newMob;
+    }
+
+    /**
+     * 用恢复出的新实体替换当前实体：清空旧实体携带物品（reset 语义为直接删除、不掉落），
+     * 移出旧实体并把新实体加入世界。
+     *
+     * @param currentMob 当前（待替换）实体
+     * @param restored 恢复出的新实体（尚未加入世界）
+     * @return 已加入世界的新实体
+     */
+    private Mob replaceMob(Mob currentMob, Mob restored) {
+        AgentInventoryLayout.clearAllItems(currentMob);
+        if (!currentMob.isRemoved()) {
+            currentMob.discard();
+        }
+        if (!(restored.level() instanceof ServerLevel level)) {
+            throw new IllegalStateException("Restored entity is not in a server level: " + restored.getUUID());
+        }
+        if (!level.addWithUUID(restored)) {
+            throw new IllegalStateException("Failed to add restored entity to level: " + restored.getUUID());
+        }
+        return restored;
     }
 
     /** 应用通用 reset 行为：合并场景 preset options、应用组件参数覆盖、执行每回合逻辑、记录生效 options，最后提交动作间空闲期 AI 选项。 */
@@ -625,9 +646,8 @@ public abstract class AbstractMcEnv implements McEnv {
         this.ensureOpen();
     }
 
-    /** 跨维度后迁移不序列化的环境级实体状态，并立即更新区块跟随票。 */
+    /** 跨维度后立即更新区块跟随票；可序列化附件（专属背包）由原版跨维度复制。 */
     private void onDimensionChange(Mob previous, Mob current) {
-        this.mobLifecycle.rebind(previous, current);
         this.chunkGuard.followAgentNow();
     }
 

@@ -26,6 +26,8 @@ import io.github.mousemeya.gymcraft.gym.action.ActionApplyResult;
 import io.github.mousemeya.gymcraft.gym.action.ActionControlPolicy;
 import io.github.mousemeya.gymcraft.gym.action.ActionState;
 import io.github.mousemeya.gymcraft.gym.action.navigation.MobNavigationTask;
+import io.github.mousemeya.gymcraft.gym.action.navigation.SwimControlSession;
+import io.github.mousemeya.gymcraft.gym.action.navigation.SwimNavigationTask;
 import io.github.mousemeya.gymcraft.gym.action.navigation.NavigationPathProvider;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoPickUpItem;
 import io.github.mousemeya.gymcraft.gym.env.ResetOptionValues;
@@ -38,8 +40,11 @@ import io.github.mousemeya.gymcraft.gym.space.MessageSpace;
  * 拾取掉落物动作组件 —— 按实体 ID 寻路到 {@link ItemEntity} 并把物品收入 Mob 统一物品栏。
  * <p>
  * 多 tick 动作：目标在拾取距离外时先经 {@code Navigation.moveTo} 接近（语义对齐
- * {@code move_to}），进入拾取距离后执行转移。拾取距离判定使用 Mob 脚部位置到
- * 掉落物位置的三维欧氏距离（与 {@code move_to}/{@code swim_to} 的到达度量一致）。
+ * {@code move_to}），进入拾取距离后执行转移。智能体或目标任一在水中时自动切换
+ * 两栖导航（{@link SwimNavigationTask} + 游泳移动控制器，语义对齐
+ * {@code swim_to}），水状态中途翻转（下水/上岸、物品被水流冲上岸/入水）时按
+ * 当前状态切换导航任务重新接近。拾取距离判定使用 Mob 脚部位置到掉落物位置的
+ * 三维欧氏距离（与 {@code move_to}/{@code swim_to} 的到达度量一致）。
  * 落槽规则：先合并进已有相同物品堆叠，
  * 再按 slot_id 升序写入第一个可放且有余量的槽位（含装备槽，空手 Mob 拾到主手属自然行为）；
  * 全部槽位放不下时以 {@code failed} 返回，ItemEntity 原样保留。
@@ -70,8 +75,14 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
     /** 非 null 表示动作已结束（成功或失败），下次 {@link #getState} 返回并清空。 */
     @Nullable
     private ActionState terminal;
-    /** 当前拾取动作独占的可靠导航任务。 */
-    private final MobNavigationTask navigationTask = new MobNavigationTask();
+    /** 陆地（默认）导航任务：目标不在水中时使用。 */
+    private final MobNavigationTask groundTask = new MobNavigationTask();
+    /** 两栖导航任务：目标在水中时使用（原版海龟同款，见 {@link SwimNavigationTask}）。 */
+    private final SwimNavigationTask swimTask = new SwimNavigationTask();
+    /** 当前活动导航任务：apply 时按目标水状态选定，物品水状态翻转时切换。 */
+    private MobNavigationTask activeTask = this.groundTask;
+    /** 两栖导航期间的游泳控制器换装会话（安装/恢复游泳移动与注视控制器）。 */
+    private final SwimControlSession swimControls = new SwimControlSession();
 
     /** @param mob controller 初始绑定的 Mob */
     public PickUpItemController(Mob mob) {
@@ -146,7 +157,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
                 mob.getUUID(), item.getUUID(), state.status());
             return ActionApplyResult.applied(policy, state);
         }
-        this.navigationTask.begin(mob, item.position(), this.speed, false);
+        this.beginNavigation(mob, item);
         ActionState state = ActionState.running("navigating to item", targetDetails(mob, item));
         LOGGER.info("GymCraft PickUpItem apply entity={} item={} state={}",
             mob.getUUID(), item.getUUID(), state.status());
@@ -170,12 +181,12 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         Mob mob = this.mob();
         ActionState agentError = this.validateMobForAction();
         if (agentError != null) {
-            this.navigationTask.cancel();
+            this.stopNavigation();
             return agentError;
         }
         ItemEntity item = resolveItem(mob, component.getEntityId());
         if (item == null) {
-            this.navigationTask.cancel();
+            this.stopNavigation();
             return ActionState.failed("item no longer available", Map.of(
                 "entity_id", component.getEntityId()
             ));
@@ -183,19 +194,23 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
         double distance = distanceTo(mob, item);
         if (distance <= this.pickupReach) {
             if (item.hasPickUpDelay()) {
-                this.navigationTask.holdPosition(MobNavigationTask.Reason.WAITING_FOR_PICKUP_DELAY);
+                this.activeTask.holdPosition(MobNavigationTask.Reason.WAITING_FOR_PICKUP_DELAY);
                 return ActionState.running("waiting for pickup delay", targetDetails(mob, item));
             }
-            this.navigationTask.cancel();
+            this.stopNavigation();
             return tryPickUp(mob, item);
         }
-        MobNavigationTask.Update update = this.navigationTask.advance(item.position(), true);
+        // 水状态翻转（下水/上岸、物品被水流冲上岸/入水）时切换导航任务重新接近
+        if (this.switchTaskIfNeeded(mob, item)) {
+            return ActionState.running("navigating to item", targetDetails(mob, item));
+        }
+        MobNavigationTask.Update update = this.activeTask.advance(item.position(), true);
         if (update.exhausted()) {
             ActionState failure = ActionState.failed(
                 navigationFailureDescription(update.reason()),
                 targetDetails(mob, item)
             );
-            this.navigationTask.cancel();
+            this.stopNavigation();
             return failure;
         }
         return ActionState.running("navigating to item", targetDetails(mob, item));
@@ -204,7 +219,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
     @Override
     public void onInterrupt(ProtoPickUpItem component) {
         this.terminal = null;
-        this.navigationTask.cancel();
+        this.stopNavigation();
     }
 
     /**
@@ -215,7 +230,59 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
     @Override
     @Nullable
     public Path currentPath() {
-        return this.navigationTask.currentPath();
+        return this.activeTask.currentPath();
+    }
+
+    /**
+     * 按智能体与物品当前水状态选定导航任务：任一在水中时使用两栖导航并
+     * 换装游泳移动控制器（智能体落水但物品在岸上时，地面导航从水中起点同样
+     * 无法规划），否则使用地面导航。
+     *
+     * @param mob 受控 Mob
+     * @param item 目标掉落物
+     */
+    private void beginNavigation(Mob mob, ItemEntity item) {
+        this.activeTask = this.taskFor(mob, item);
+        if (this.activeTask == this.swimTask) {
+            this.swimControls.install(mob);
+        }
+        this.activeTask.begin(mob, item.position(), this.speed, false);
+    }
+
+    /**
+     * 智能体或物品的水状态与当前导航任务不一致时（下水/上岸、物品被水流
+     * 冲上岸/入水）切换任务重新接近：两栖导航在陆地上与地面导航等价，
+     * 反方向切换保证陆地语义完全恢复原状。
+     *
+     * @param mob 受控 Mob
+     * @param item 目标掉落物
+     * @return 发生切换时为 true（本次 tick 已重建路径，直接返回运行中）
+     */
+    private boolean switchTaskIfNeeded(Mob mob, ItemEntity item) {
+        MobNavigationTask desired = this.taskFor(mob, item);
+        if (desired == this.activeTask) {
+            return false;
+        }
+        this.activeTask.cancel();
+        this.activeTask = desired;
+        if (desired == this.swimTask) {
+            this.swimControls.install(mob);
+        } else {
+            this.swimControls.restore(mob);
+        }
+        this.activeTask.begin(mob, item.position(), this.speed, false);
+        return true;
+    }
+
+    /** @return 智能体或物品任一在水中时为两栖导航任务，否则为地面导航任务 */
+    private MobNavigationTask taskFor(Mob mob, ItemEntity item) {
+        return mob.isInWater() || item.isInWater() ? this.swimTask : this.groundTask;
+    }
+
+    /** 结束导航并恢复原移动控制器（到达、失败或被打断时调用）。 */
+    private void stopNavigation() {
+        this.activeTask.cancel();
+        this.swimControls.restore(this.mob());
     }
 
     /**
@@ -315,7 +382,7 @@ public class PickUpItemController extends AbstractActionComponentController<Prot
     }
 
     private Map<String, Object> targetDetails(Mob mob, ItemEntity item) {
-        var details = new java.util.LinkedHashMap<String, Object>(this.navigationTask.details(
+        var details = new java.util.LinkedHashMap<String, Object>(this.activeTask.details(
             item.position(),
             distanceTo(mob, item),
             "pickup_reach",

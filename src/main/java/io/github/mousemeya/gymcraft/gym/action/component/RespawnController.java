@@ -146,9 +146,9 @@ public class RespawnController extends AbstractActionComponentController<ProtoRe
         if (!level.addWithUUID(newMob)) {
             throw new IllegalStateException("Failed to add respawned agent to level: " + newMob.getUUID());
         }
-        // 物品栏恢复必须在加入世界之后：EntityJoinLevelEvent 重绑会激活附件访问作用域，
-        // 背包槽（AgentInventoryLayout 的 canAccess 门控）与缺失的可序列化附件
-        // （activate 补建）至此才可用。
+        // 物品栏恢复在加入世界之后执行：新实例的背包附件由 NBT 往返恢复，
+        // AgentInventoryLayout.resolve 按 hasData(AGENT_BACKPACK) 门控背包槽，
+        // 加入前后均可，此顺序沿用验证过的时序并保持与重绑在同一动作内完成。
 
         int restoredItems = 0;
         int clearedDrops = 0;

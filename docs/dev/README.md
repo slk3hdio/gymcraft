@@ -35,7 +35,6 @@ src/main/
 │   ├── gym/env/            McEnv、环境实现与实体快照
 │   ├── gym/runtime/        AgentRuntime tick 调度
 │   ├── gym/rpc/            gRPC 服务与会话
-│   ├── gym/attachment/     通用 Mob 附件描述器、独立访问 API 与 env 访问作用域
 │   ├── gym/fakeplayer/     FakePlayer 执行者、状态同步、库存桥接与事务
 │   ├── gym/menu/           逻辑菜单会话与菜单适配器（session/ 会话与槽位、bridge/ self 菜单、adapter/ 按钮适配）
 │   ├── gym/inventory/      Agent 统一物品栏布局
@@ -54,18 +53,21 @@ src/main/
 | `ActionDispatcher` | 校验和分发 protobuf 动作组件 |
 | `ObservationComposer` | 聚合环境启用的观测组件 |
 | `EntitySnapshot` | reset 时重建相同 UUID 的受控 Mob |
-| `MobAttachmentService` | 在无 env/Agent 依赖下附加、读取和移除类型安全的 Mob 附件 |
 
 ### Mob 附件与专属背包
 
-持久附件由 `MobAttachmentSpec<T>` 描述，并统一通过 `MobAttachmentService` 访问。
-环境构造函数传入允许访问的描述器集合；访问作用域只控制 Agent 可见性，关闭环境不会删除附件数据。
-reset 会在初始快照前附加所声明的数据，并在实体还原后重新激活访问作用域。
+组件会话状态直接以 NeoForge attachment 挂在 Mob 上（`registry/ModAttachments` 注册，
+经 `mob.getData`/`setData`/`removeData` 读写），每次操作取当前实体实例，reset 换实体后天然归零。
 
-`MobAttachments.AGENT_BACKPACK` 是首个通用附件：没有原生容器的 Mob 可获得 27 格持久背包。
-`simple_mob` 启用该描述器，普通 Mob 的统一物品栏因此为装备槽 `0..7` 加背包槽 `8..34`；
-`parkour_mob` 不启用，即使 Mob 已有背包也不会向动作或观测暴露。村民、马等继续使用原生容器。
-背包随实体 NBT 保存，死亡时进入正常掉落；环境 reset 恢复创建环境时的快照。
+`AGENT_BACKPACK` 为 27 格持久化专属背包：由环境在构造器经初始化参数（`Consumer<Mob>`，
+基线冻结前执行）传入 `AgentInventoryLayout::ensureBackpack` 为无原生容器的 Mob 建立一次
+（场景环境的 agent 背包随场景文件 NBT 自带），此后凭实体 NBT 存活——reset 从基线快照
+恢复、跨维度由原版复制。槽位编号为装备槽 `0..7` 之后的 `8..34`；不初始化背包的环境
+（如 parkour_mob）agent 只有装备槽，村民、马等继续使用原生容器。
+背包死亡时由 `AgentBackpackHooks` 进入正常掉落；环境 reset 恢复创建
+环境时的快照。`DAMAGE_LOG` 为纯运行时附件，由 `gymcraft:health_log` 观测组件在
+观测时懒创建并增量消费（reset 换实体后归零）；各组件所需的附件一律由组件自建自理，
+环境侧只负责声明背包。
 
 ## 注册表与组件
 
@@ -82,8 +84,8 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:step_move` | 单 tick 前进、横移、视角和跳跃控制 |
 | `gymcraft:look_at` | 将当前视线对准实体、掉落物或方块 |
 | `gymcraft:use_item` | 固定使用主手持有物向方块、实体或自身使用物品（不选槽位、不换物品）；食物药水等待消费完成，详见[使用物品动作](../use-item-action.md) |
-| `gymcraft:move_to` | 使用寻路移动到目标方块中心，按 Mob 脚部位置到修正后目标的三维欧氏距离判定到达；实际停止距离为 `max(stop_distance, 0.1)` 格（含请求为 0 的情况），避免浮点精确相等和末段越过中心导致绕圈。诊断同时保留请求值与 `effective_stop_distance`；连续 40 tick 未接近当前路径节点或最终目标时有限重规划，最多重试 3 次后失败 |
-| `gymcraft:swim_to` | 参数与判定同 `move_to`，但使用两栖寻路（原版海龟同款）：水中、深水起点或目标在彼岸时仍可规划路径，陆地等价 `move_to`；动作期间临时换用三维游泳移动控制（海豚/青蛙同款，结束自动恢复），不切换游泳姿态。深水垂直岸沿（无坡度直壁）爬升能力有限，优先经岸坡/台阶出水 |
+| `gymcraft:move_to` | 使用寻路移动到目标方块，目标按原版 `findSurfacePosition` 语义修正为可站立位置（实心方块上移到其上方可站面、空气格吸附到支撑面、液体等非固体格保持原格），按 Mob 脚部位置到修正后目标的三维欧氏距离判定到达；实际停止距离为 `max(stop_distance, 0.1)` 格（含请求为 0 的情况），避免浮点精确相等和末段越过中心导致绕圈。目标发生方块层面修正时完成 description 携带 `(adjusted to standable surface)` 提示、details 的 `target_correction` 报告修正码（`raised_above_solid`/`snapped_to_support`）、`requested` 报告原始请求坐标；诊断同时保留请求值与 `effective_stop_distance`；连续 40 tick 未接近当前路径节点或最终目标时有限重规划，最多重试 3 次后失败 |
+| `gymcraft:swim_to` | 参数、目标修正与判定同 `move_to`（两栖导航自身无终点列扫描修正，由 GymCraft 统一补齐），但使用两栖寻路（原版海龟同款）：水中、深水起点或目标在彼岸时仍可规划路径，陆地等价 `move_to`；动作期间临时换用三维游泳移动控制（海豚/青蛙同款，结束自动恢复），不切换游泳姿态。深水垂直岸沿（无坡度直壁）爬升能力有限，优先经岸坡/台阶出水 |
 | `gymcraft:set_attack_target` | 设置实体攻击目标 |
 | `gymcraft:attack_once` | 执行一次近战攻击 |
 | `gymcraft:noop` | 空操作 |
@@ -92,14 +94,16 @@ reset 会在初始快照前附加所声明的数据，并在实体还原后重�
 | `gymcraft:set_block` | 校验距离和实体碰撞后放置方块；物品栏任一槽位有匹配方块物品即可，放置前自动换到主手 |
 | `gymcraft:update_interesting_blocks` | 原子地批量添加或移除 Agent 感兴趣的方块类型 |
 | `gymcraft:send_chat` | 以受控 Mob 的显示名称向全服聊天栏发送纯文本消息；正文最长 256 个 UTF-16 单元 |
+| `gymcraft:wait_player_message` | 待机（抑制自主行为）等待指定玩家在聊天栏发送消息；只等待动作开始之后的新消息（历史消息不触发完成），玩家名匹配忽略大小写，完成 details 携带消息内容/发送者/序号与游戏刻；等待无自身时限，超时由 step 的 `timeout_seconds` 统一中断 |
 | `gymcraft:open_menu` | 打开方块、实体或自身逻辑菜单 |
 | `gymcraft:close_menu` | 关闭逻辑菜单会话 |
 | `gymcraft:move_menu_item` | 在逻辑菜单槽位之间移动物品 |
 | `gymcraft:click_menu_button` | 操作已适配菜单的按钮 |
 
-`move_to` / `swim_to` 会自动把请求坐标取整到所在方块并修正为方块中心的可站立点：传入 `x=10, z=20` 等价于 `x=10.5, z=20.5`。
+`move_to` / `swim_to` 会自动把请求坐标取整到所在方块并按可站立语义修正：传入 `x=10, z=20` 等价于 `x=10.5, z=20.5`；请求格为实心方块时目标上移到其上方可站面（y+1），为空气时吸附到下方支撑面之上。
 `move_to` 与 `pick_up_item` 在路径被清除、替换或卡住时最多自动重规划 3 次；终态的 `action_state.details`
 包含 `navigation_reason`、`repath_attempts`、`path_owned`、`path_can_reach`、当前距离（`distance`，三维欧氏距离）与最后路径终点，可用于区分不可达、外部清路和无进展。
+`pick_up_item` 在智能体或目标掉落物任一处于水中时自动切换两栖寻路与游泳移动控制器（语义对齐 `swim_to`），下水/上岸、物品被水流冲上岸/入水等水状态中途翻转时按当前状态切换导航任务；双方都在陆地时保持地面导航（语义对齐 `move_to`）。
 
 ### 观测组件
 

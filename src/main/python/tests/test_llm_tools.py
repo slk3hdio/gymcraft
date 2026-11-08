@@ -427,6 +427,7 @@ class ActionParserTests(unittest.TestCase):
             "update_interesting_blocks": "/update_interesting_blocks add minecraft:diamond_ore remove minecraft:stone",
             "send_chat": "/send_chat Hello from GymCraft!",
             "respawn": "/respawn",
+            "wait_player_message": "/wait_player_message Steve",
         }
         self.assertEqual(
             {component.command for component in ACTION_REGISTRY.components},

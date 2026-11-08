@@ -31,9 +31,13 @@ import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
 import net.minecraft.world.level.levelgen.structure.structures.BuriedTreasurePieces;
 
 import io.github.mousemeya.gymcraft.GymCraft;
+import io.github.mousemeya.gymcraft.gym.action.ActionState;
+import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
+import io.github.mousemeya.gymcraft.gym.action.component.WaitPlayerMessageController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSendChat;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoWaitPlayerMessage;
 import io.github.mousemeya.gymcraft.gym.chat.ChatCapture;
 import io.github.mousemeya.gymcraft.gym.chat.RecentChatLog;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
@@ -41,6 +45,7 @@ import io.github.mousemeya.gymcraft.gym.env.envs.SimpleMobEnv;
 import io.github.mousemeya.gymcraft.gym.observation.component.WorldStateObservationCreator;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoRecentChat;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoWorldState;
+import io.github.mousemeya.gymcraft.gym.rpc.proto.ResetResponse;
 import io.github.mousemeya.gymcraft.gym.rpc.proto.StepResponse;
 import io.github.mousemeya.gymcraft.gym.space.proto.ProtoFieldEntry;
 
@@ -161,6 +166,116 @@ public final class ChatObservationGameTests {
     }
 
     /**
+     * 验证组件创建时游标即定位到共享缓冲最新（创建前的消息不回放），且 reset 清空
+     * 本环境的聊天历史视图：reset 之前的消息（含上次观测之后尚未消费的）不进入
+     * reset 首帧与后续观测，reset 后新到达的消息正常可见。断言只针对本用例专属
+     * marker，共享缓冲中其他并行用例的消息不构成干扰。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void chatObservationResetClearsHistory(GameTestHelper helper) {
+        Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
+        // 环境创建前的 backlog：GameTest 方法体运行在服务端线程上，可直接同步调用
+        // 捕获器（不能经 runOnServer——在服务端线程上等待自身队列会死锁）
+        broadcastDirect("reset-clear-backlog");
+        SimpleMobEnv env = new SimpleMobEnv(
+            Identifier.fromNamespaceAndPath(GymCraft.MODID, "chat_reset_test"), mob);
+        AtomicReference<StepResponse> creationStep = new AtomicReference<>();
+        AtomicReference<StepResponse> consumedStep = new AtomicReference<>();
+        AtomicReference<ResetResponse> resetObs = new AtomicReference<>();
+        AtomicReference<StepResponse> postResetStep = new AtomicReference<>();
+        AtomicReference<StepResponse> freshStep = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread.startVirtualThread(() -> {
+            try {
+                // 未经 reset 的首个观测：游标在组件创建时已定位最新，backlog 不可见
+                creationStep.set(step(env));
+                broadcast(helper, "reset-clear-pre");
+                consumedStep.set(step(env));
+                // 上一观测之后、reset 之前到达：未被消费，reset 后同样不可见
+                broadcast(helper, "reset-clear-stale");
+                resetObs.set(env.reset(2, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true)));
+                postResetStep.set(step(env));
+                broadcast(helper, "reset-clear-fresh");
+                freshStep.set(step(env));
+            } catch (Throwable error) {
+                failure.set(error);
+            }
+        });
+        helper.runAfterDelay(300, () -> {
+            try {
+                assertTrue(helper, failure.get() == null, "chat reset test failed: " + failure.get());
+                // 创建时定位：环境存在之前的消息不回放
+                ProtoRecentChat creation = unpack(creationStep.get());
+                assertTrue(helper, creation != null && creation.getMessagesList().stream()
+                        .noneMatch(message -> message.getContent().equals("reset-clear-backlog")),
+                    "pre-creation backlog replayed into first observation: " + creation);
+                // 前置 sanity：创建后广播的消息在 reset 清空语义生效前正常可见
+                ProtoRecentChat consumed = unpack(consumedStep.get());
+                assertTrue(helper, consumed != null && consumed.getMessagesList().stream()
+                        .anyMatch(message -> message.getContent().equals("reset-clear-pre")),
+                    "post-creation broadcast missing before reset: " + consumed);
+                assertTrue(helper, consumed != null && consumed.getMessagesList().stream()
+                        .noneMatch(message -> message.getContent().equals("reset-clear-backlog")),
+                    "pre-creation backlog replayed before reset: " + consumed);
+                // reset 首帧：reset 前的消息（创建前的、已消费的与未消费的）都被清出视野
+                ProtoRecentChat resetChat = unpack(resetObs.get());
+                assertTrue(helper, resetChat != null && resetChat.getMessagesList().stream()
+                        .noneMatch(message -> message.getContent().startsWith("reset-clear-")),
+                    "pre-reset messages leaked into reset observation: " + resetChat);
+                // reset 后首个 step：游标已跳到最新，同样不含 reset 前消息
+                ProtoRecentChat postReset = unpack(postResetStep.get());
+                assertTrue(helper, postReset != null && postReset.getMessagesList().stream()
+                        .noneMatch(message -> message.getContent().startsWith("reset-clear-")),
+                    "pre-reset messages leaked after reset: " + postReset);
+                // reset 后新到达的消息正常进入观测
+                ProtoRecentChat fresh = unpack(freshStep.get());
+                assertTrue(helper, fresh != null && fresh.getMessagesList().stream()
+                        .anyMatch(message -> message.getContent().equals("reset-clear-fresh")),
+                    "fresh broadcast missing after reset: " + fresh);
+                assertTrue(helper, fresh != null && fresh.getMessagesList().stream()
+                        .noneMatch(message -> message.getContent().equals("reset-clear-stale")
+                            || message.getContent().equals("reset-clear-pre")
+                            || message.getContent().equals("reset-clear-backlog")),
+                    "stale pre-reset messages reappeared after reset: " + fresh);
+                helper.succeed();
+            } finally {
+                env.close();
+            }
+        });
+    }
+
+    /**
+     * 在当前线程直接向聊天捕获器广播一条两接收者的系统消息。
+     * <p>供已运行在服务端线程上的 GameTest 方法体使用（{@link #broadcast} 经
+     * runOnServer 等待服务端队列，在服务端线程上调用会死锁）。</p>
+     *
+     * @param content 消息文本
+     */
+    private static void broadcastDirect(String content) {
+        Packet<?> packet = new ClientboundSystemChatPacket(
+            Component.literal(content), false);
+        ChatCapture.onOutgoingPacket(new Object(), packet);
+        ChatCapture.onOutgoingPacket(new Object(), packet);
+    }
+
+    /**
+     * 向聊天捕获器广播一条两接收者的系统消息（达到广播判定阈值，应入栏）。
+     * <p>消息文本即 content 参数原样（断言按完整内容匹配）。</p>
+     *
+     * @param helper GameTest 辅助对象
+     * @param content 消息文本
+     */
+    private static void broadcast(GameTestHelper helper, String content) {
+        runOnServer(helper, () -> {
+            Packet<?> packet = new ClientboundSystemChatPacket(
+                Component.literal(content), false);
+            ChatCapture.onOutgoingPacket(new Object(), packet);
+            ChatCapture.onOutgoingPacket(new Object(), packet);
+        });
+    }
+
+    /**
      * 验证受控 Mob 可向全服聊天栏发言，且消息立即进入聊天观测。
      *
      * @param helper GameTest 辅助对象
@@ -197,6 +312,44 @@ public final class ChatObservationGameTests {
             } finally {
                 env.close();
             }
+        });
+    }
+
+    /**
+     * 验证 wait_player_message 动作：以动作开始时的聊天栏为基准只等待新消息
+     * （历史消息即使来自目标玩家也不触发完成），其他玩家的消息不触发完成，
+     * 目标玩家的消息（玩家名匹配忽略大小写）触发完成并携带消息内容与发送者。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void waitPlayerMessageActionCompletes(GameTestHelper helper) {
+        Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
+        helper.runAfterDelay(3, () -> {
+            // 动作开始前的历史消息：即使来自目标玩家也不应触发完成
+            RecentChatLog.append(1, "WaitMsgSteve", "gymcraft wait: stale history");
+            var controller = new WaitPlayerMessageController(mob);
+            // 请求玩家名与实际发送者大小写不同，验证匹配忽略大小写
+            var action = ProtoWaitPlayerMessage.newBuilder().setPlayerName("waitmsgsteve").build();
+            assertTrue(helper, !controller.space().contains(ProtoWaitPlayerMessage.newBuilder()
+                .setPlayerName("bad name!").build()), "invalid player name should be rejected by the space");
+            assertTrue(helper, controller.space().contains(action), "valid player name should pass the space");
+            ActionState initial = controller.apply(action).initialState();
+            assertTrue(helper, initial.status() == ActionStatus.RUNNING,
+                "wait action should start running: " + initial);
+            // 其他玩家的消息不触发完成
+            RecentChatLog.append(2, "WaitMsgOther", "gymcraft wait: noise");
+            assertTrue(helper, controller.tick(action).status() == ActionStatus.RUNNING,
+                "other players' messages must not complete the wait");
+            // 目标玩家的新消息触发完成并携带内容
+            RecentChatLog.append(3, "WaitMsgSteve", "gymcraft wait: expected");
+            ActionState done = controller.tick(action);
+            assertTrue(helper, done.status() == ActionStatus.COMPLETED,
+                "target player message should complete the wait: " + done);
+            assertEquals(helper, "gymcraft wait: expected", done.details().get("message"),
+                "completed details should carry the message content");
+            assertEquals(helper, "WaitMsgSteve", done.details().get("sender"),
+                "completed details should carry the sender");
+            helper.succeed();
         });
     }
 
@@ -389,6 +542,20 @@ public final class ChatObservationGameTests {
             return response.getObservation().getComponentsOrThrow("gymcraft:chat").unpack(ProtoRecentChat.class);
         } catch (InvalidProtocolBufferException error) {
             throw new IllegalStateException("failed to unpack chat observation", error);
+        }
+    }
+
+    /**
+     * 解包 reset 响应首帧观测中的聊天观测组件。
+     *
+     * @param response reset 响应
+     * @return 聊天观测
+     */
+    private static ProtoRecentChat unpack(ResetResponse response) {
+        try {
+            return response.getObservation().getComponentsOrThrow("gymcraft:chat").unpack(ProtoRecentChat.class);
+        } catch (InvalidProtocolBufferException error) {
+            throw new IllegalStateException("failed to unpack chat observation from reset response", error);
         }
     }
 

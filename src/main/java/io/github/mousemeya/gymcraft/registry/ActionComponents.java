@@ -23,6 +23,7 @@ import io.github.mousemeya.gymcraft.gym.action.component.StepMoveController;
 import io.github.mousemeya.gymcraft.gym.action.component.SwimToController;
 import io.github.mousemeya.gymcraft.gym.action.component.UseItemController;
 import io.github.mousemeya.gymcraft.gym.action.component.UpdateInterestingBlocksController;
+import io.github.mousemeya.gymcraft.gym.action.component.WaitPlayerMessageController;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUseItem;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoUpdateInterestingBlocks;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoAttackOnce;
@@ -43,6 +44,7 @@ import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSetBlock;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSendChat;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoStepMove;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoSwimTo;
+import io.github.mousemeya.gymcraft.gym.action.proto.ProtoWaitPlayerMessage;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -139,6 +141,10 @@ public final class ActionComponents {
     public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoSendChat, SendChatController>> SEND_CHAT = REGISTRY.register(
         "send_chat",
         SendChatController.Factory::new
+    );
+    public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoWaitPlayerMessage, WaitPlayerMessageController>> WAIT_PLAYER_MESSAGE = REGISTRY.register(
+        "wait_player_message",
+        WaitPlayerMessageController.Factory::new
     );
 
     public static final DeferredHolder<ActionComponentFactory<?, ?>, ActionComponentFactory<ProtoRespawn, RespawnController>> RESPAWN = REGISTRY.register(

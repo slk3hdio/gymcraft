@@ -72,7 +72,8 @@ public class ParkourMobEnv extends AbstractMcEnv {
                 ActionComponents.SET_BLOCK.get(), ActionComponents.STEP_MOVE.get()),
             List.of(ObservationCreators.SELF.get(), ObservationCreators.NEARBY_BLOCKS.get(),
                 ObservationCreators.WORLD.get()),
-            List.of(),
+            // 无初始化：跳搭环境不使用专属背包
+            null,
             scenario,
             scope);
 

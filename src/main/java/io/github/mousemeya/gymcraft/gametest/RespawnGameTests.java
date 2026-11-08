@@ -27,8 +27,6 @@ import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoMcAction;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoNoop;
 import io.github.mousemeya.gymcraft.gym.action.proto.ProtoRespawn;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.env.McEnv;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentSlot;
@@ -96,8 +94,8 @@ public final class RespawnGameTests {
                         "respawn position must return to the environment baseline");
                     assertTrue(helper, EnvManager.get(agentUuid).orElse(null) == env,
                         "respawn unregistered the environment");
-                    assertTrue(helper, MobAttachmentAccessScope.canAccess(respawned, MobAttachments.AGENT_BACKPACK),
-                        "attachment access scope was not rebound after respawn");
+                    assertTrue(helper, respawned.hasData(ModAttachments.AGENT_BACKPACK),
+                        "backpack attachment must survive respawn via NBT round-trip");
                     ProtoSelfState self = step.getObservation().getComponentsMap()
                         .get("gymcraft:self").unpack(ProtoSelfState.class);
                     assertTrue(helper, self.getAlive(), "self observation must report the respawned agent alive");

@@ -21,6 +21,7 @@ from gymcraft.llm.components.actions import (
     swim_to,
     update_interesting_blocks,
     use_item,
+    wait_player_message,
 )
 from gymcraft.llm.components.registry import ActionRegistry
 
@@ -45,6 +46,7 @@ ACTION_REGISTRY = ActionRegistry([
     update_interesting_blocks.COMPONENT,
     send_chat.COMPONENT,
     respawn.COMPONENT,
+    wait_player_message.COMPONENT,
 ])
 
 __all__ = ["ACTION_REGISTRY"]

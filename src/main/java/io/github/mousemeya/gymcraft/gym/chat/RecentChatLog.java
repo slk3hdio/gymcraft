@@ -14,7 +14,8 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
  * {@code synchronized} 串行化；环形容量固定，追加超出后丢弃最旧条目。
  * 消费语义为增量：每条消息带全局单调递增序号，观测组件以自持游标经
  * {@link #since} 取"上次观测之后"的新消息——缓冲被所有环境共享，不能读后清空，
- * 各环境按游标独立推进，互不偷走对方未读的消息。
+ * 各环境按游标独立推进，互不偷走对方未读的消息；环境 reset 经 {@link #latestSeq}
+ * 把自己的游标跳到最新，只清空该环境的历史视图，不动共享缓冲。
  * </p>
  */
 public final class RecentChatLog {
@@ -118,6 +119,27 @@ public final class RecentChatLog {
             // 超出上限时保留最新 max 条
             int from = Math.max(0, newer.size() - Math.max(max, 0));
             return new ArrayList<>(newer.subList(from, newer.size()));
+        }
+    }
+
+    /**
+     * 返回共享缓冲的最新序号：现存条目中最大的 seq；条目已被环形容量全部淘汰或
+     * 从未有消息时为迄今已分配的最大序号（服务器启动以来从未有消息则为 0）。
+     * <p>
+     * 供两类消费者建立基准游标：观测组件在环境 reset 时把自持游标跳到"最新"，
+     * 实现单环境的聊天历史清空语义——reset 之前的全部消息（含该环境尚未消费的）
+     * 不再进入其后续观测，而共享缓冲本身保留，其他环境的游标与未读消息不受影响；
+     * 等待类动作（如 wait_player_message）以此值为 {@link #since} 的 cursor 建立
+     * 基准，只看到此之后的新消息。读取前先清算捕获候选，保证同 tick 已到达但
+     * 尚未清算的广播也计入被跳过的历史。
+     * </p>
+     *
+     * @return 最新序号（单调不减，调用方可直接赋给增量游标）
+     */
+    public static long latestSeq() {
+        ChatCapture.flushPending();
+        synchronized (ENTRIES) {
+            return nextSeq - 1;
         }
     }
 
