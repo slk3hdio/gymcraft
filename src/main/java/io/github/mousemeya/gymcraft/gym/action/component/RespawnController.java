@@ -35,7 +35,7 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  * 死亡（health&le;0 或已被移出世界）不再阻断本动作——批次在实体移除后仍由
  * 服务端 tick 兜底推进送达。执行序列：按 {@link EntitySnapshot} 从旧实体 NBT
  * 重建同 UUID 新实例（复用 reset 路径机制），程序化修正 NBT 携带的死亡状态
- * （满血、清死亡/受击计时、站姿、清药水效果、复位下落距离），最后旧实体移出
+ * （满血、清死亡/受击计时、站姿、清药水效果、复位下落距离、灭火、补满氧气），最后旧实体移出
  * 世界、新实体加入并经 {@code EntityJoinLevelEvent} 触发运行时重绑
  * （同维度死亡重绑，见 {@code AgentRuntime}）。
  * </p>
@@ -182,7 +182,9 @@ public class RespawnController extends AbstractActionComponentController<ProtoRe
 
     /**
      * 修正重建实例从 NBT 继承的死亡状态：满血、清死亡/受击计时、恢复站姿、
-     * 清药水效果、复位下落距离。
+     * 清药水效果、复位下落距离、灭火与补满氧气——燃烧剩余刻（{@code Fire}）
+     * 与氧气（{@code Air}）均为 NBT 持久化字段，不清理的话死于火/溺水的
+     * agent 复活后立即持续掉血。
      *
      * @param newMob 重建的 agent 实例
      */
@@ -194,6 +196,8 @@ public class RespawnController extends AbstractActionComponentController<ProtoRe
         newMob.setPose(Pose.STANDING);
         newMob.removeAllEffects();
         newMob.fallDistance = 0;
+        newMob.clearFire();
+        newMob.setAirSupply(newMob.getMaxAirSupply());
         newMob.getNavigation().stop();
     }
 

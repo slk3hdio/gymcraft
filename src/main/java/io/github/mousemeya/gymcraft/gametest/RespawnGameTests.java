@@ -67,6 +67,9 @@ public final class RespawnGameTests {
         // 基线捕获后再给物品：证明恢复来自死亡快照而非基线
         putIntoBackpack(mob, new ItemStack(Items.DIAMOND, 3));
         mob.teleportTo(baseline.x + 2.0, baseline.y, baseline.z);
+        // 燃烧刻与氧气都是 NBT 持久化字段：带着火/溺水状态死亡，验证复活时被清理
+        mob.setRemainingFireTicks(100);
+        mob.setAirSupply(0);
         helper.kill(mob);
         // die() 同步完成掉落流程：keep_inventory=true 的死亡掉落被整体取消，物品只在快照里
         assertEquals(helper, 0, countDroppedItems(helper, mob.position(), Items.DIAMOND),
@@ -88,6 +91,10 @@ public final class RespawnGameTests {
 
                     Mob respawned = assertRespawned(helper, mob, agentUuid);
                     assertEquals(helper, 20.0, (double) respawned.getHealth(), "respawned agent health");
+                    assertTrue(helper, respawned.getRemainingFireTicks() <= 0,
+                        "respawn must clear the NBT-persisted burning state");
+                    assertEquals(helper, respawned.getMaxAirSupply(), respawned.getAirSupply(),
+                        "respawn must restore full air supply");
                     ItemStack restored = firstBackpackItem(respawned);
                     assertTrue(helper, restored.is(Items.DIAMOND) && restored.getCount() == 3,
                         "respawn must restore the death inventory snapshot (backpack was cleared at death)");
