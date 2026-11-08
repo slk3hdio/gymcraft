@@ -18,6 +18,8 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -176,6 +178,66 @@ public final class RespawnGameTests {
                             EnvManager.close(agentUuid);
                         }
                     });
+                });
+            });
+        });
+    }
+
+    /**
+     * 验证跨维度死亡的重召唤"回家"语义：agent 传送到下界后死亡，respawn 必须在
+     * 目标维度（环境基线所在的主世界）以基线位置复活——新维度加入走运行时重绑且
+     * 不中断 respawn 自身批次（step 返回 COMPLETED 而非 INTERRUPTED）。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void respawnCrossDimensionReturnsToTarget(GameTestHelper helper) {
+        Mob mob = spawnAgent(helper, EntityType.HUSK, new BlockPos(2, 1, 2));
+        UUID agentUuid = mob.getUUID();
+        Vec3 baseline = mob.position();
+        McEnv env = EnvManager.attach("gymcraft:general", mob);
+
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        assertTrue(helper, nether != null, "Nether dimension is unavailable");
+        Entity teleported = mob.teleport(new TeleportTransition(
+            nether, new Vec3(0.5, 70.0, 0.5), Vec3.ZERO, 0.0F, 0.0F,
+            TeleportTransition.DO_NOTHING));
+        assertTrue(helper, teleported instanceof Mob transferred && transferred != mob,
+            "cross-dimension teleport did not create a new instance");
+        Mob netherMob = (Mob) teleported;
+
+        helper.runAfterDelay(2, () -> {
+            // 在下界死亡并等实体移除
+            netherMob.kill(nether);
+            helper.runAfterDelay(25, () -> {
+                assertTrue(helper, netherMob.isRemoved(), "agent must be removed before respawn");
+                var failure = new AtomicReference<Throwable>();
+                var response = new AtomicReference<StepResponse>();
+                startStep(env, respawnAction(), response, failure);
+
+                helper.runAfterDelay(6, () -> {
+                    try {
+                        assertTrue(helper, failure.get() == null, "cross-dimension respawn raised: " + failure.get());
+                        assertTrue(helper, response.get() != null, "cross-dimension respawn did not return");
+                        assertEquals(helper, "COMPLETED",
+                            response.get().getObservation().getHeader().getLastActionStatus(),
+                            "cross-dimension respawn must not be interrupted by its own rebind");
+
+                        Mob respawned = assertRespawned(helper, netherMob, agentUuid);
+                        assertEquals(helper, helper.getLevel(), respawned.level(),
+                            "respawned agent must return to the target dimension");
+                        assertTrue(helper, respawned.position().distanceTo(baseline) < 1.0,
+                            "respawned agent must return to the target position");
+                        assertTrue(helper, EnvManager.get(agentUuid).orElse(null) == env,
+                            "respawn unregistered the environment");
+                        var leftover = nether.getEntity(agentUuid);
+                        assertTrue(helper, leftover == null,
+                            "old instance must not remain in the death dimension");
+                        helper.succeed();
+                    } finally {
+                        EnvManager.close(agentUuid);
+                        var remainder = helper.getLevel().getEntity(agentUuid);
+                        if (remainder != null) remainder.discard();
+                    }
                 });
             });
         });

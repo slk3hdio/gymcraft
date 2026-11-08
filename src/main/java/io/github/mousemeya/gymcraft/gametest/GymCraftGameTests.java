@@ -53,6 +53,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("respawn_after_removal_rebinds_runtime", () -> RespawnGameTests::respawnAfterRemovalRebindsRuntime);
         TEST_FUNCTIONS.register("respawn_without_inventory_keeps_drops", () -> RespawnGameTests::respawnWithoutInventoryKeepsDrops);
         TEST_FUNCTIONS.register("respawn_fails_when_alive", () -> RespawnGameTests::respawnFailsWhenAlive);
+        TEST_FUNCTIONS.register("respawn_cross_dimension_returns_to_target", () -> RespawnGameTests::respawnCrossDimensionReturnsToTarget);
 
         // ===== 环境契约：动作批次语义 =====
         TEST_FUNCTIONS.register("action_timeout_fails", () -> ActionTimeoutGameTests::actionTimeoutFails);

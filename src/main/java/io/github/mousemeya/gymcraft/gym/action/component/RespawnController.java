@@ -7,11 +7,13 @@ import java.util.Set;
 
 import javax.annotation.Nullable;
 
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 import io.github.mousemeya.gymcraft.gym.ComponentOptionAware;
@@ -45,7 +47,7 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  * 死亡瞬间捕获物品栏快照并整体取消死亡掉落（物品只存在于快照里，复活时恢复，
  * 天然杜绝复制）；false 时死亡完全走原版掉落流程，物品留在死亡点可走回捡拾、
  * 复活后空手。复活位置经 {@link #setRespawnPosition} 由环境构造期配置
- * （null = 原地复活）。
+ * （null = 死亡维度原地复活；配置目标时跨维度重召唤到目标维度与位置）。
  * </p>
  * <p>
  * 批内建议单独或首位发送本动作：动作批次在首个非 COMPLETED 项处停止，
@@ -62,9 +64,18 @@ public class RespawnController extends AbstractActionComponentController<ProtoRe
 
     /** 当前环境实例是否在复活时恢复死亡物品栏。 */
     private boolean keepInventory = DEFAULT_KEEP_INVENTORY;
-    /** 复活位置（同维度世界坐标）；null = 在死亡位置原地复活。 */
+    /** 复活目标（位置 + 所属维度）；null = 在死亡位置原地复活。 */
     @Nullable
-    private Vec3 respawnPosition;
+    private RespawnTarget respawnTarget;
+
+    /**
+     * 复活目标：世界坐标与所属维度。
+     *
+     * @param position 复活位置（目标维度内的世界坐标）
+     * @param dimension 目标维度；agent 死亡于其他维度时目标不适用、回退原地复活
+     */
+    public record RespawnTarget(Vec3 position, ResourceKey<Level> dimension) {
+    }
 
     /** @param mob controller 初始绑定的 Mob */
     public RespawnController(Mob mob) {
@@ -86,12 +97,15 @@ public class RespawnController extends AbstractActionComponentController<ProtoRe
     }
 
     /**
-     * 设置复活位置；必须与 agent 当前维度一致（不做跨维度复活）。
+     * 设置复活目标（位置与所属维度）：agent 在任意维度死亡都重召唤到目标维度
+     * 的目标位置（"回家"语义，如 GeneralEnv 固定回环境基线出生位置）。跨维度
+     * 重召唤的运行时重绑见 {@code AgentRuntime}（按旧实体 KILLED 移除原因与
+     * 原版传送区分，不中断 respawn 自身批次）。
      *
-     * @param respawnPosition 世界坐标；null 表示在死亡位置原地复活
+     * @param respawnTarget 复活目标；null 表示在死亡维度原地复活
      */
-    public void setRespawnPosition(@Nullable Vec3 respawnPosition) {
-        this.respawnPosition = respawnPosition;
+    public void setRespawnPosition(@Nullable RespawnTarget respawnTarget) {
+        this.respawnTarget = respawnTarget;
     }
 
     @Override
@@ -137,18 +151,25 @@ public class RespawnController extends AbstractActionComponentController<ProtoRe
             ? oldMob.getData(ModAttachments.DEATH_INVENTORY)
             : null;
 
-        Mob newMob = EntitySnapshot.capture(oldMob).restore();
+        Mob newMob = EntitySnapshot.capture(oldMob).restore(
+            this.respawnTarget != null ? this.respawnTarget.dimension() : level.dimension());
         reviveState(newMob);
-        if (this.respawnPosition != null) {
-            newMob.setPos(this.respawnPosition.x, this.respawnPosition.y, this.respawnPosition.z);
+        Vec3 applied = null;
+        if (this.respawnTarget != null) {
+            applied = this.respawnTarget.position();
+            newMob.setPos(applied.x, applied.y, applied.z);
         }
 
         if (!oldMob.isRemoved()) {
             // 濒死实体以 KILLED 移除：与死亡超时移除同语义，也使运行时重绑分支
-            // （按 removalReason 排除 reset 的 DISCARDED 路径）能识别重召唤
+            // （按 removalReason 排除 reset 的 DISCARDED 路径、区分原版传送的
+            // CHANGED_DIMENSION）能识别重召唤
             oldMob.remove(Entity.RemovalReason.KILLED);
         }
-        if (!level.addWithUUID(newMob)) {
+        if (!(newMob.level() instanceof ServerLevel targetLevel)) {
+            throw new IllegalStateException("Respawn target level is not loaded: " + newMob.level().dimension());
+        }
+        if (!targetLevel.addWithUUID(newMob)) {
             throw new IllegalStateException("Failed to add respawned agent to level: " + newMob.getUUID());
         }
         // 物品栏恢复在加入世界之后执行：新实例的背包附件由 NBT 往返恢复，
@@ -164,8 +185,9 @@ public class RespawnController extends AbstractActionComponentController<ProtoRe
         }
         details.put("keep_inventory", this.keepInventory);
         details.put("restored_items", restoredItems);
-        details.put("respawn_position", this.respawnPosition != null
-            ? List.of(this.respawnPosition.x, this.respawnPosition.y, this.respawnPosition.z)
+        details.put("respawn_dimension", newMob.level().dimension().identifier());
+        details.put("respawn_position", applied != null
+            ? List.of(applied.x, applied.y, applied.z)
             : "death_position");
 
         String description;

@@ -31,13 +31,27 @@ public record EntitySnapshot(EntityType<?> type, ResourceKey<Level> dimension, C
     }
 
     public Mob restore() {
+        return restore(this.dimension);
+    }
+
+    /**
+     * 在指定维度重建同 UUID 的 agent 实体（跨维度重召唤用）。
+     * <p>
+     * 实体 NBT 与维度无关（位置随后由调用方覆盖），原版跨维度传送也走
+     * "旧维度序列化 → 新维度反序列化" 的同款流程。
+     * </p>
+     *
+     * @param dimension 目标维度；必须已加载
+     * @return 重建的 agent 实体（尚未加入世界）
+     */
+    public Mob restore(ResourceKey<Level> dimension) {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) {
             throw new IllegalStateException("Cannot restore entity before server is available");
         }
-        ServerLevel level = server.getLevel(this.dimension);
+        ServerLevel level = server.getLevel(dimension);
         if (level == null) {
-            throw new IllegalStateException("Cannot restore entity because dimension is not loaded: " + this.dimension);
+            throw new IllegalStateException("Cannot restore entity because dimension is not loaded: " + dimension);
         }
         try (ProblemReporter.ScopedCollector reporter = new ProblemReporter.ScopedCollector(LOGGER)) {
             Entity entity = EntityType.create(

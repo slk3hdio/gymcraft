@@ -211,12 +211,13 @@ public class AgentRuntime {
      * 原版非玩家实体跨维度会以同 UUID 新实例加入目标世界；立即重绑全部动作引用，
      * 并中断依赖旧维度上下文的在途动作，避免后续 step 继续操作已移除的旧实体。
      * <p>
-     * 同维度的同 UUID 新实例加入同样触发重绑：{@code gymcraft:respawn} 动作以重新召唤
-     * 方式复活死亡 agent（旧实例已死亡或被移出世界，新实例加入世界时在本监听器完成
-     * 运行时重绑）。该分支只重绑不中断——join 事件在 respawn 的 apply 内部同步触发，
-     * 此时批次 {@code activeState} 尚未赋值，中断会把 respawn 自身的批次发布成
-     * INTERRUPTED 丢失 step 结果；组件跨动作会话已由死亡事件清理，控制器引用随
-     * {@code setMob} 更新。
+     * 同 UUID 新实例的同维度（respawn 原地/同维度复活）与跨维度（respawn 目标维度
+     * ≠ 死亡维度）加入同样触发重绑：{@code gymcraft:respawn} 动作以重新召唤方式复活
+     * 死亡 agent，新实例加入世界时在本监听器完成运行时重绑。重生分支只重绑不中断——
+     * join 事件在 respawn 的 apply 内部同步触发，此时批次 {@code activeState} 尚未
+     * 赋值，中断会把 respawn 自身的批次发布成 INTERRUPTED 丢失 step 结果；组件跨动作
+     * 会话已由死亡事件清理，控制器引用随 {@code setMob} 更新。重生与原版传送以旧实体
+     * 移除原因区分（KILLED vs CHANGED_DIMENSION）。
      * </p>
      */
     @SubscribeEvent
@@ -229,13 +230,24 @@ public class AgentRuntime {
         }
         Mob previous = this.mob;
         if (joined.level() != previous.level()) {
-            LOGGER.info("GymCraft runtime rebind dimension change entity={} from={} to={}",
-                this.entityId, previous.level().dimension(), joined.level().dimension());
             this.mob = joined;
             this.actionExecutor.setMob(joined);
             this.dimensionChangeHandler.accept(previous, joined);
             // 可视化代次提升：丢弃旧维度的观测与反馈图形，订阅随 agent 跟随到新维度。
             VisualizationService.reset(joined);
+            if (previous.getRemovalReason() == Entity.RemovalReason.KILLED) {
+                // 跨维度重召唤（respawn 目标维度 ≠ 死亡维度）：join 在 respawn 的 apply
+                // 内部同步触发，只重绑不中断——中断会把 respawn 自身的批次发布成
+                // INTERRUPTED 丢失 step 结果；组件跨动作会话已由死亡事件清理。
+                // entityPostObserved 置 false：新实体本 tick 不再触发实体事件，由
+                // onServerTickPost 兜底把批次推进到终态。
+                LOGGER.info("GymCraft runtime rebind respawned agent cross-dimension entity={} from={} to={}",
+                    this.entityId, previous.level().dimension(), joined.level().dimension());
+                this.entityPostObserved = false;
+                return;
+            }
+            LOGGER.info("GymCraft runtime rebind dimension change entity={} from={} to={}",
+                this.entityId, previous.level().dimension(), joined.level().dimension());
             this.actionExecutor.interrupt("agent changed dimension");
             this.actionController.clearComponents("dimension change");
             this.entityPostObserved = false;

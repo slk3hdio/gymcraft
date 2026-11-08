@@ -3,6 +3,7 @@ package io.github.mousemeya.gymcraft.gym.env.envs;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
+import io.github.mousemeya.gymcraft.gym.action.component.RespawnController;
 import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.state.AttachScope;
@@ -92,9 +93,12 @@ public class GeneralEnv extends AbstractMcEnv {
             scope
         );
         this.observationComponent(ObservationCreators.NEARBY_BLOCKS.get()).setMaxBlocks(32);
-        // 死亡经 respawn 动作重新召唤复活，复活位置固定为环境基线的出生位置
-        this.actionComponent(ActionComponents.RESPAWN.get())
-            .setRespawnPosition(this.baselineSnapshot().agent().position());
+        // 死亡经 respawn 动作重新召唤复活，复活位置固定为环境基线的出生位置；
+        // agent 死亡于其他维度时目标不适用、回退原地复活
+        this.actionComponent(ActionComponents.RESPAWN.get()).setRespawnPosition(
+            new RespawnController.RespawnTarget(
+                this.baselineSnapshot().agent().position(),
+                this.baselineSnapshot().agent().dimension()));
     }
 
     /**
