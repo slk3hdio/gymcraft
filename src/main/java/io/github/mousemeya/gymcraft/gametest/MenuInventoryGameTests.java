@@ -19,8 +19,6 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 
 import io.github.mousemeya.gymcraft.gym.action.ActionStatus;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachmentAccessScope;
-import io.github.mousemeya.gymcraft.gym.attachment.MobAttachments;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
 import io.github.mousemeya.gymcraft.gym.inventory.LogicalSlotIdentity;
 import io.github.mousemeya.gymcraft.gym.menu.session.LogicalMenuSession;
@@ -42,7 +40,7 @@ public final class MenuInventoryGameTests {
         placeChest(helper, new BlockPos(0, 1, 2));
         LogicalMenuSession session = openBlockMenu(helper, mob, new BlockPos(0, 1, 2));
 
-        // 僵尸无自带容器：N=7，27 格箱子从 slot_id 8 起
+        // 僵尸无自带容器，也未由环境创建专属背包：N=7，27 格箱子从 slot_id 8 起
         assertEquals(helper, 8 + 27, session.slots().size(), "unexpected session slot count");
         for (int i = 0; i < 8; i++) {
             SessionSlot slot = session.slot(i);

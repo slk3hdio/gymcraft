@@ -35,7 +35,6 @@ src/main/
 │   ├── gym/env/            McEnv、环境实现与实体快照
 │   ├── gym/runtime/        AgentRuntime tick 调度
 │   ├── gym/rpc/            gRPC 服务与会话
-│   ├── gym/attachment/     通用 Mob 附件描述器、独立访问 API 与 env 访问作用域
 │   ├── gym/fakeplayer/     FakePlayer 执行者、状态同步、库存桥接与事务
 │   ├── gym/menu/           逻辑菜单会话与菜单适配器（session/ 会话与槽位、bridge/ self 菜单、adapter/ 按钮适配）
 │   ├── gym/inventory/      Agent 统一物品栏布局
@@ -54,18 +53,21 @@ src/main/
 | `ActionDispatcher` | 校验和分发 protobuf 动作组件 |
 | `ObservationComposer` | 聚合环境启用的观测组件 |
 | `EntitySnapshot` | reset 时重建相同 UUID 的受控 Mob |
-| `MobAttachmentService` | 在无 env/Agent 依赖下附加、读取和移除类型安全的 Mob 附件 |
 
 ### Mob 附件与专属背包
 
-持久附件由 `MobAttachmentSpec<T>` 描述，并统一通过 `MobAttachmentService` 访问。
-环境构造函数传入允许访问的描述器集合；访问作用域只控制 Agent 可见性，关闭环境不会删除附件数据。
-reset 会在初始快照前附加所声明的数据，并在实体还原后重新激活访问作用域。
+组件会话状态直接以 NeoForge attachment 挂在 Mob 上（`registry/ModAttachments` 注册，
+经 `mob.getData`/`setData`/`removeData` 读写），每次操作取当前实体实例，reset 换实体后天然归零。
 
-`MobAttachments.AGENT_BACKPACK` 是首个通用附件：没有原生容器的 Mob 可获得 27 格持久背包。
-`simple_mob` 启用该描述器，普通 Mob 的统一物品栏因此为装备槽 `0..7` 加背包槽 `8..34`；
-`parkour_mob` 不启用，即使 Mob 已有背包也不会向动作或观测暴露。村民、马等继续使用原生容器。
-背包随实体 NBT 保存，死亡时进入正常掉落；环境 reset 恢复创建环境时的快照。
+`AGENT_BACKPACK` 为 27 格持久化专属背包：由环境在构造器经初始化参数（`Consumer<Mob>`，
+基线冻结前执行）传入 `AgentInventoryLayout::ensureBackpack` 为无原生容器的 Mob 建立一次
+（场景环境的 agent 背包随场景文件 NBT 自带），此后凭实体 NBT 存活——reset 从基线快照
+恢复、跨维度由原版复制。槽位编号为装备槽 `0..7` 之后的 `8..34`；不初始化背包的环境
+（如 parkour_mob）agent 只有装备槽，村民、马等继续使用原生容器。
+背包死亡时由 `AgentBackpackHooks` 进入正常掉落；环境 reset 恢复创建
+环境时的快照。`DAMAGE_LOG` 为纯运行时附件，由 `gymcraft:health_log` 观测组件在
+观测时懒创建并增量消费（reset 换实体后归零）；各组件所需的附件一律由组件自建自理，
+环境侧只负责声明背包。
 
 ## 注册表与组件
 
