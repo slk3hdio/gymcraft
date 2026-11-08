@@ -59,8 +59,10 @@ src/main/
 组件会话状态直接以 NeoForge attachment 挂在 Mob 上（`registry/ModAttachments` 注册，
 经 `mob.getData`/`setData`/`removeData` 读写），每次操作取当前实体实例，reset 换实体后天然归零。
 
-`AGENT_BACKPACK` 为 27 格持久化专属背包：没有原生容器的 Mob 在统一物品栏首次解析时
-懒创建，槽位编号为装备槽 `0..7` 之后的 `8..34`；村民、马等继续使用原生容器。
+`AGENT_BACKPACK` 为 27 格持久化专属背包：由环境声明创建（覆写 `AbstractMcEnv.usesAgentBackpack`
+返回 true，环境在构造/reset 实体替换/跨维度时经 `AgentInventoryLayout.ensureBackpack` 为无
+原生容器的 Mob 建立），槽位编号为装备槽 `0..7` 之后的 `8..34`；未声明环境的 Mob 只有装备槽，
+村民、马等继续使用原生容器。
 背包随实体 NBT 保存，死亡时由 `AgentBackpackHooks` 进入正常掉落；环境 reset 恢复创建
 环境时的快照。`DAMAGE_LOG` 由环境在构造/reset 实体替换/跨维度时懒创建（纯运行时、
 不随实体复制），供 `gymcraft:health_log` 观测增量消费。

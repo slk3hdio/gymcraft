@@ -88,6 +88,12 @@ public class GeneralEnv extends AbstractMcEnv {
         this.observationComponent(ObservationCreators.NEARBY_BLOCKS.get()).setMaxBlocks(32);
     }
 
+    /** agent 使用 27 格专属背包（无原生容器时的统一存储槽）。 */
+    @Override
+    protected boolean usesAgentBackpack() {
+        return true;
+    }
+
     /**
      * 环境工厂 —— 注册表引用该内部轻量 {@link McEnvFactory}，而非目标类构造函数。
      */

@@ -63,7 +63,7 @@ public final class ModAttachments {
     /** 专属背包固定容量。 */
     public static final int AGENT_BACKPACK_SIZE = 27;
 
-    /** 27 格专属背包持久化附件；死亡时不复制，由掉落事件转移其内容。 */
+    /** 27 格专属背包持久化附件，由环境显式创建（见 {@code AbstractMcEnv#usesAgentBackpack}）；死亡时不复制，由掉落事件转移其内容。 */
     public static final DeferredHolder<AttachmentType<?>, AttachmentType<ItemStacksResourceHandler>> AGENT_BACKPACK = REGISTRY.register(
         "agent_backpack",
         () -> AttachmentType.serializable(

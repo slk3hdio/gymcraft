@@ -23,7 +23,7 @@ import io.github.mousemeya.gymcraft.registry.ModAttachments;
  * 编号规则（GymCraft 自定义索引，非 Minecraft 全局槽位编号）：
  * <ul>
  *   <li>{@code 0..7} —— {@link EquipmentSlot#getId()} 对应的八个装备槽</li>
- *   <li>{@code 8..N} —— Mob 自带 {@link Container} 或专属背包的局部槽位</li>
+ *   <li>{@code 8..N} —— Mob 自带 {@link Container} 或环境创建的专属背包的局部槽位</li>
  * </ul>
  * Mob 自带容器的发现顺序：
  * <ol>
@@ -65,8 +65,8 @@ public final class AgentInventoryLayout {
             for (int i = 0; i < nativeContainer.container().getContainerSize(); i++) {
                 slots.add(new NativeContainerAgentSlot(mob, nativeContainer, i));
             }
-        } else {
-            // 无原生容器的 Mob 一律使用 27 格专属背包（首次解析时懒创建，随实体 NBT 持久化）
+        } else if (mob.hasData(ModAttachments.AGENT_BACKPACK)) {
+            // 专属背包由环境显式创建（见 ensureBackpack）；无背包的 Mob 只有装备槽
             ItemStacksResourceHandler backpack = mob.getData(ModAttachments.AGENT_BACKPACK);
             for (int i = 0; i < backpack.size(); i++) {
                 slots.add(new BackpackAgentSlot(mob, backpack, i));
@@ -115,6 +115,19 @@ public final class AgentInventoryLayout {
     public static void clearAllItems(Mob mob) {
         for (AgentSlot slot : resolve(mob).slots()) {
             slot.setItem(ItemStack.EMPTY);
+        }
+    }
+
+    /**
+     * 为无原生容器的 Mob 懒创建 27 格专属背包（村民、马等原生容器宿主跳过），
+     * 供环境在构造/reset 实体替换/跨维度后调用；背包随实体 NBT 持久化，
+     * 已存在时不重复创建。物品栏布局只在背包存在时展开槽位。
+     *
+     * @param mob 受控实体
+     */
+    public static void ensureBackpack(Mob mob) {
+        if (findNativeContainer(mob) == null) {
+            mob.getData(ModAttachments.AGENT_BACKPACK);
         }
     }
 

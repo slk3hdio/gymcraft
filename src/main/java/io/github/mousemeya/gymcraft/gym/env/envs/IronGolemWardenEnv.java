@@ -130,6 +130,12 @@ public final class IronGolemWardenEnv extends AbstractMcEnv {
         // 组件空间在基类构造期已按区域收紧，本环境无须再手写。
     }
 
+    /** agent 使用 27 格专属背包（无原生容器时的统一存储槽）。 */
+    @Override
+    protected boolean usesAgentBackpack() {
+        return true;
+    }
+
     /**
      * 每回合重置计数器、里程碑并重注入 Warden 的防钻地记忆（场景内容与 agent 由
      * 状态基线恢复）。

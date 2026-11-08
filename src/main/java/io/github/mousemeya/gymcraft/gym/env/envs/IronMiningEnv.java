@@ -116,6 +116,12 @@ public final class IronMiningEnv extends AbstractMcEnv {
         pickUp.setPickupReach(2.0);
     }
 
+    /** agent 使用 27 格专属背包（无原生容器时的统一存储槽）。 */
+    @Override
+    protected boolean usesAgentBackpack() {
+        return true;
+    }
+
     /**
      * 每回合重置计数器与里程碑（场景内容与 agent 由状态基线恢复）。
      *
