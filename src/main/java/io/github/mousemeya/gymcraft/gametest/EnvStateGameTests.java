@@ -213,6 +213,54 @@ public final class EnvStateGameTests {
     }
 
     /**
+     * 验证基线实体走出区域后的 reset：实体在基线捕获后移出环境区域（模拟游荡/被冲走），
+     * 区域清场清不到它，重建同 UUID 时若无兜底会因 UUID 冲突使整个 reset 抛错；
+     * restore 应按快照 UUID 追杀游走实体并成功恢复基线。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void baselineEntityOutsideRegionRestored(GameTestHelper helper) {
+        Mob mob = MenuGameTestSupport.spawnAgent(helper, EntityType.ZOMBIE, new BlockPos(5, 1, 5));
+        BlockPos origin = BlockPos.containing(mob.position());
+        IronGolemWardenEnv env = new IronGolemWardenEnv(testId("entity_outside_region"), mob,
+            ScenarioStore.loadBundled(helper.getLevel(), "iron_golem_warden").orElseThrow());
+        AtomicReference<UUID> baselineWarden = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread.startVirtualThread(() -> {
+            try {
+                env.reset(1, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
+                runOnServer(helper, () -> {
+                    Warden warden = helper.getLevel()
+                        .getEntitiesOfClass(Warden.class, arenaBounds(origin)).getFirst();
+                    warden.setNoAi(true);
+                    baselineWarden.set(warden.getUUID());
+                    // 移出环境区域（仍在世界中存活）：区域清场查询不到它
+                    warden.snapTo(env.baselineSnapshot().region().maxX() + 2.5,
+                        warden.getY(), origin.getZ() + 0.5, 0.0F, 0.0F);
+                });
+                env.reset(2, Map.of(AbstractMcEnv.DISABLE_VANILLA_AI_OPTION, true));
+                runOnServer(helper, () -> helper.getLevel()
+                    .getEntitiesOfClass(Warden.class, arenaBounds(origin)).getFirst().setNoAi(true));
+            } catch (Throwable error) {
+                failure.set(error);
+            }
+        });
+        helper.runAfterDelay(500, () -> {
+            try {
+                assertTrue(helper, failure.get() == null,
+                    "reset with out-of-region baseline entity failed: " + failure.get());
+                List<Warden> wardens = helper.getLevel().getEntitiesOfClass(Warden.class, arenaBounds(origin));
+                assertEquals(helper, 1, wardens.size(), "out-of-region warden was not restored");
+                assertEquals(helper, baselineWarden.get(), wardens.getFirst().getUUID(),
+                    "restored warden lost its baseline UUID");
+                helper.succeed();
+            } finally {
+                env.close();
+            }
+        });
+    }
+
+    /**
      * 以战斗场原点为中心的实体查询范围。
      *
      * @param origin 战斗场原点

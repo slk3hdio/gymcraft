@@ -145,11 +145,29 @@ public final class RegionEntitySnapshot {
 
     /**
      * 清除区域内现存实体后重建基线实体（保留原 UUID）。
+     * <p>
+     * 基线实体可能在捕获后走出区域（游荡、水流冲刷等），区域清场清不到它们；
+     * 重建前按快照 UUID 兜底追杀存活的同 UUID 实体（{@link ServerLevel#getEntity(UUID)}
+     * 只查已加载实体，区块卸载的实体 knownUuids 已同步移除、本就无冲突），
+     * 避免同 UUID 重建时 {@code addWithUUID} 因 UUID 冲突失败导致整个 reset 抛错。
+     * </p>
      *
      * @param level 服务端世界
      */
     public void restore(ServerLevel level) {
         discardRegionEntities(level, this.region, this.agentUuid);
+        for (SavedEntity saved : this.entities) {
+            UUID uuid = getEntityUuid(saved.data(), "UUID");
+            if (uuid.equals(this.agentUuid)) {
+                // agent 不在区域实体快照内（捕获时排除）；防御性跳过，
+                // 此时旧 agent 实体仍在世界中、由 EntitySnapshot 稍后单独替换
+                continue;
+            }
+            Entity existing = level.getEntity(uuid);
+            if (existing != null) {
+                existing.discard();
+            }
+        }
         for (SavedEntity saved : this.entities) {
             Entity entity;
             try (ProblemReporter.ScopedCollector reporter = new ProblemReporter.ScopedCollector(LOGGER)) {

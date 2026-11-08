@@ -71,7 +71,8 @@ public class GeneralEnv extends AbstractMcEnv {
                 ActionComponents.UPDATE_INTERESTING_BLOCKS.get(),
                 ActionComponents.SEND_CHAT.get(),
                 ActionComponents.SWIM_TO.get(),
-                ActionComponents.RESPAWN.get()
+                ActionComponents.RESPAWN.get(),
+                ActionComponents.WAIT_PLAYER_MESSAGE.get()
             ),
             List.of(
                 ObservationCreators.SELF.get(),

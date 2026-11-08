@@ -110,6 +110,26 @@ public final class PlayerSimGameTests {
     }
 
     /**
+     * 验证玩家模拟实体的近战距离使用玩家式计算：空手时读取
+     * {@code ENTITY_INTERACTION_RANGE}，而不是原版 Mob 的固定小范围。
+     *
+     * @param helper GameTest 辅助对象
+     */
+    public static void playerSimUsesPlayerAttackRange(GameTestHelper helper) {
+        PlayerSimEntity mob = helper.spawn(ModEntities.PLAYER_SIM.get(), new BlockPos(1, 2, 2));
+        var target = helper.spawnWithNoFreeWill(EntityType.PIG, new BlockPos(3, 2, 2));
+        assertTrue(helper, mob.isWithinMeleeAttackRange(target),
+            "player_sim should reach a target within the player's 3-block entity interaction range");
+        mob.getAttribute(Attributes.ENTITY_INTERACTION_RANGE).setBaseValue(1.0);
+        assertTrue(helper, !mob.isWithinMeleeAttackRange(target),
+            "player_sim attack range should follow the entity interaction range attribute");
+        mob.getAttribute(Attributes.ENTITY_INTERACTION_RANGE).setBaseValue(3.0);
+        assertTrue(helper, mob.isWithinMeleeAttackRange(target),
+            "player_sim should regain the player-like range after restoring the attribute");
+        helper.succeed();
+    }
+
+    /**
      * 验证 {@code set_attack_target} 可驱动玩家模拟实体复用原版近战 Goal，
      * 主动寻路接近目标并完成攻击。
      *

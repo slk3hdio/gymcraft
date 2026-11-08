@@ -1,0 +1,92 @@
+# GymCraft Python 端示例配置（TOML）。
+# 复制为同目录的 config.toml 后按需修改；未传 --config 时 demo 默认读取该文件。
+# 未显式给出的键使用框架内置默认值；命令行显式参数优先于配置文件。
+# 所有内置 demo 都可用 `--config <路径>` 指定其他配置文件。
+
+# 所有环境共享的默认任务提示词；命令行 --task 可覆盖。
+task = """Gather enough resources to craft an iron pickaxe. Keep yourself alive."""
+
+# GymCraftEnv 的创建参数；entity_uuid 可省略，由命令行位置参数提供。
+[environment]
+address = "localhost:50051"
+# entity_uuid = "00000000-0000-0000-0000-000000000000"
+
+# env.reset 的参数。可选基准 seed 默认不指定，需要复现时取消注释；
+# 并行运行时，各环境实际使用“基准 seed + 环境序号”。
+[reset]
+# seed = 0
+
+# 通用 reset options：原样透传给服务端，服务端为权威校验方。
+[reset.options]
+disable_vanilla_ai = true
+# 每个 step 最多接受的实际 action 数；0 或负数表示不限制。
+max_actions_per_step = 5
+# 服务端决策步数上限（gymcraft:mining 等任务环境使用）；客户端 demo 不再另设步数限制。
+max_steps = 512
+
+# 动作组件参数；组件 ID 可省略 gymcraft: 前缀（服务端自动补全）。
+[reset.options.components.move_to]
+speed = 1.0
+
+[reset.options.components.break_block]
+reach_distance = 4.5
+
+[reset.options.components.set_block]
+reach_distance = 4.5
+
+[reset.options.components.pick_up_item]
+# 任务环境构造时可能把通用默认值覆盖为更大的值；这里显式指定后以本文件为准。
+pickup_reach = 2.0
+speed = 1.0
+
+# 观测组件参数。
+[reset.options.components.nearby_blocks]
+max_blocks = 20
+max_visited = 1024
+
+[reset.options.components.interesting_blocks]
+max_blocks = 8
+max_visited = 1024
+
+[reset.options.components.nearby_items]
+radius = 16
+max_items = 16
+
+[reset.options.components.world]
+structure_chunk_radius = 1
+
+[reset.options.components.health_log]
+max_records = 16
+
+# LLMGymCraftEnv / LLMEnvConfig 参数（仅 LLM demo 使用）。
+[llm]
+history_turns = 500
+default_timeout_seconds = 10.0
+max_timeout_seconds = 60.0
+max_invalid_retries = 2
+
+# 观测文本渲染（RenderConfig）：数值精度与反馈位/状态位字段划分。
+# 注意：TOML 表一旦开始，后续标量都属于该表，因此 [llm] 的键必须写在 [llm.render] 之前。
+[llm.render]
+float_precision = 2
+feedback_fields = ["last_actions", "gymcraft:chat", "gymcraft:health_log"]
+
+# Chat Completions 客户端与请求参数（CompletionsConfig，仅 LLM demo 使用）。
+# 优先级：命令行显式参数 > 本文件 > LLM_BASE_URL/LLM_API_KEY/LLM_MODEL 等环境变量。
+[llm.completions]
+base_url = "https://api.deepseek.com"
+# 建议通过 --api-key 或 LLM_API_KEY 提供，避免把密钥提交到版本库。
+# api_key = "sk-..."
+model = "deepseek-v4-flash"
+max_retries = 3
+retry_delay = 1.0
+
+# 直接透传给 client.chat.completions.create 的参数（model/messages/stream 除外）。
+[llm.completions.params]
+temperature = 0.2
+max_tokens = 4096
+
+# 供应商私有字段，经 SDK 的 extra_body 透传。
+# DeepSeek 常见 reasoning_effort；其他兼容端点可能使用 thinking = { type = "disabled" }。
+[llm.completions.extra_body]
+reasoning_effort = "none"

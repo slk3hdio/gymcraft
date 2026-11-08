@@ -72,6 +72,7 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("state_entity_rollback", () -> EnvStateGameTests::entityRollbackAcrossResets);
         TEST_FUNCTIONS.register("state_item_cleanup", () -> EnvStateGameTests::itemEntitiesClearedAcrossResets);
         TEST_FUNCTIONS.register("state_warden_no_dig", () -> EnvStateGameTests::wardenBaselineResetKeepsSurfaced);
+        TEST_FUNCTIONS.register("state_entity_outside_region", () -> EnvStateGameTests::baselineEntityOutsideRegionRestored);
 
         // ===== 环境运行时抗卸载（EnvChunkGuard） =====
         TEST_FUNCTIONS.register("chunk_guard_region_forced_and_released", () -> EnvChunkGuardGameTests::attachForcesRegionChunksAndCloseReleases);
@@ -103,6 +104,7 @@ public final class GymCraftGameTests {
         // ===== PlayerSim 受控实体 =====
         TEST_FUNCTIONS.register("player_sim_profile", () -> PlayerSimGameTests::playerSimHasPlayerLikeProfile);
         TEST_FUNCTIONS.register("player_sim_env_agent", () -> PlayerSimGameTests::playerSimWorksAsEnvAgent);
+        TEST_FUNCTIONS.register("player_sim_attack_range", () -> PlayerSimGameTests::playerSimUsesPlayerAttackRange);
         TEST_FUNCTIONS.register("player_sim_attack_target", () -> PlayerSimGameTests::playerSimPursuesConfiguredAttackTarget);
 
         // ===== 动作组件：每族一个代表性用例 =====
@@ -149,6 +151,8 @@ public final class GymCraftGameTests {
         TEST_FUNCTIONS.register("menu_session_id_stable", () -> MenuSessionGameTests::sessionIdStableAcrossObservations);
         TEST_FUNCTIONS.register("menu_reopen_new_id_old_id_rejected", () -> MenuSessionGameTests::reopenGetsNewIdAndOldIdRejected);
         TEST_FUNCTIONS.register("menu_batch_moves_order", () -> MenuSessionGameTests::batchMovesInOrder);
+        TEST_FUNCTIONS.register("menu_batch_moves_partial_progress", () -> MenuSessionGameTests::batchMovesPartialFailureReportsProgress);
+        TEST_FUNCTIONS.register("menu_move_before_observation_reports_unobserved", () -> MenuSessionGameTests::moveBeforeObservationReportsUnobserved);
         TEST_FUNCTIONS.register("inventory_chest_menu_slot_allocation", () -> MenuInventoryGameTests::chestMenuSlotIdAllocation);
         TEST_FUNCTIONS.register("lifecycle_target_destroyed_auto_closes", () -> MenuLifecycleGameTests::targetDestroyedAutoCloses);
         TEST_FUNCTIONS.register("lifecycle_multi_agent_isolation", () -> MenuLifecycleGameTests::multiAgentIsolation);

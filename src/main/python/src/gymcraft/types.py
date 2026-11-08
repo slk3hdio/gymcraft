@@ -60,6 +60,9 @@ OBS_INTERESTING_BLOCKS: Final = "gymcraft:interesting_blocks"
 OBS_CHAT: Final = "gymcraft:chat"
 OBS_HEALTH_LOG: Final = "gymcraft:health_log"
 
+# header 派生的虚拟观测字段：上批动作的逐条反馈，不属于任何观测组件。
+LAST_ACTIONS_FIELD: Final = "last_actions"
+
 # ActionBatch dict 中的 step 共享超时键（秒，<= 0 表示不限制）。
 TIMEOUT_SECONDS: Final = "timeout_seconds"
 

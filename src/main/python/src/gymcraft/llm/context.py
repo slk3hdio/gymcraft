@@ -16,44 +16,21 @@ terminated / truncated / info 只存在于 step 返回值与 ``TurnResult`` 字�
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import cast
 
 from google.protobuf.message import Message as ProtoMessage
 from jinja2 import Environment
 
+from gymcraft.config import RenderConfig
 from gymcraft.llm.components.base import ObservationComponent
-from gymcraft.llm.components.observations import LAST_ACTIONS_FIELD, OBSERVATION_REGISTRY
+from gymcraft.llm.components.observations import OBSERVATION_REGISTRY
 from gymcraft.llm.parser import ActionParser
 from gymcraft.llm.rendering import create_template_env
 from gymcraft.llm.types import ChatMessage, ConversationTurn, LLMContext, TurnResult
-from gymcraft.types import OBS_CHAT, OBS_HEALTH_LOG, Observation
+from gymcraft.types import LAST_ACTIONS_FIELD, Observation
 
 # 状态位 header 行模板（last_actions 不在渲染字段集时使用）。
 _HEADER_TEMPLATE = "observation/header.j2"
-
-
-# LLM 文本观测的显示参数与字段展示位置配置。
-@dataclass(frozen=True)
-class RenderConfig:
-    """控制观测文本精度，以及各观测字段进入反馈位还是状态位。
-
-    渲染不做任何条数裁剪（后端返回多少就渲染多少）；条目数量由环境侧
-    reset options 的 ``components`` 键控制。
-    """
-
-    float_precision: int = 2
-    # 渲染进每步动作反馈（位置 1）的字段；其余字段只在最新状态（位置 2）显示。
-    feedback_fields: tuple[str, ...] = (LAST_ACTIONS_FIELD, OBS_CHAT, OBS_HEALTH_LOG)
-
-    def __post_init__(self) -> None:
-        """拒绝负精度与未知字段名（对照观测注册表校验）。"""
-        if self.float_precision < 0:
-            raise ValueError("float_precision must not be negative")
-        known = set(OBSERVATION_REGISTRY.field_ids())
-        unknown = [field for field in self.feedback_fields if field not in known]
-        if unknown:
-            raise ValueError(f"unknown feedback_fields: {unknown}")
 
 
 # 把任务、短历史和最新观测组合为 Chat Completions 消息；观测渲染唯一入口。

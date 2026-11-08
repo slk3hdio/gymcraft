@@ -17,12 +17,12 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 
 from gymcraft import GymCraftEnv, list_environments
+from gymcraft.config import RenderConfig
 from gymcraft.llm import (
     LAST_ACTIONS_FIELD,
     ActionParseError,
     ActionParser,
     ContextAssembler,
-    RenderConfig,
     TurnResult,
     encode_action_batch,
     wrap_commands,
