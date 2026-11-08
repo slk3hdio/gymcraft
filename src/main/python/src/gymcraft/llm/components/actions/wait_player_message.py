@@ -31,7 +31,6 @@ COMPONENT = ActionComponent(
     component_id=ACTION_WAIT_PLAYER_MESSAGE,
     command="wait_player_message",
     usage="/wait_player_message <player_name>",
-    help="idle in place until that player sends a chat message; completes with the message content, "
-    "ignoring messages sent before the action started; no time limit of its own (ends via step timeout)",
+    help="idle in place until that player sends a chat message; completes with the message content, ",
     parse=_parse,
 )

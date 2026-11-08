@@ -38,7 +38,6 @@ COMPONENT = ActionComponent(
     usage="/look_at entity <entity_id>|block <x> <y> <z>|slot <slot_id>",
     help=(
         "look at any loaded entity (including dropped items) or a block, or inspect your own inventory slot "
-        "(0-7 equipment, 8+ storage) without turning; successful feedback includes the target description."
     ),
     parse=_parse,
 )
