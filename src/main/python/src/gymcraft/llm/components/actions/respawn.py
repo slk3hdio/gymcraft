@@ -23,7 +23,11 @@ COMPONENT = ActionComponent(
     command="respawn",
     usage="/respawn",
     help=(
-        "revive after death."
+        "revive after death by re-summoning (full health, effects cleared); "
+        "keep_inventory is a component option via reset options "
+        "(default true: death drops are cancelled and the pre-death inventory is restored; "
+        "false: items drop at the death spot). "
+        "Send it alone or first in a batch: actions after death all fail."
     ),
     parse=_parse,
 )
