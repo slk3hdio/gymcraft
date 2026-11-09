@@ -3,6 +3,7 @@ package io.github.mousemeya.gymcraft.gym.entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
@@ -10,6 +11,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.control.MoveControl;
 import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.component.AttackRange;
 import net.minecraft.world.level.Level;
 import net.minecraft.util.profiling.Profiler;
 
@@ -26,7 +28,8 @@ import net.minecraft.util.profiling.Profiler;
  * <p>
  * 本实体不注册游荡或自主索敌 Goal：攻击目标完全由环境动作指定。
  * 仅注册原版近战执行 Goal，用于消费 {@code set_attack_target} 写入的目标，
- * 复用标准的追击、注视、视线、攻击距离、冷却和挥手逻辑；清除目标后立即停止。
+ * 复用标准的追击、注视、视线、冷却和挥手逻辑；攻击距离按玩家式
+ * {@link AttackRange} 计算，清除目标后立即停止。
  * 实体像玩家一样永不因距离自然消失。
  * </p>
  */
@@ -73,6 +76,33 @@ public class PlayerSimEntity extends PathfinderMob {
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(1, new MeleeAttackGoal(this, 1.0, true));
+    }
+
+    /**
+     * 使用与玩家一致的方式计算近战攻击范围。
+     * <p>
+     * 原版 {@link Mob#isWithinMeleeAttackRange(LivingEntity)} 使用主手物品的
+     * {@code ATTACK_RANGE} 组件或固定 {@code DEFAULT_ATTACK_REACH} 膨胀包围盒；
+     * 玩家则通过 {@link LivingEntity#getAttackRangeWith(net.minecraft.world.item.ItemStack)}
+     * 与 {@link AttackRange#isInRange(LivingEntity, net.minecraft.world.phys.AABB, double)}
+     * 比较眼睛到目标包围盒的距离。这里采用后者，使空手时读取
+     * {@link Attributes#ENTITY_INTERACTION_RANGE}（3.0），与玩家空手/普通武器一致。
+     * </p>
+     * <p>
+     * 玩家攻击校验使用主手物品；非创造模式玩家不乘 {@code mobFactor}，因此这里也
+     * 直接使用 {@code minReach}/{@code maxReach}。AI 判定不带服务端攻击包的 3 格容差。
+     * </p>
+     *
+     * @param target 候选目标
+     * @return 目标包围盒与眼睛距离处于玩家攻击范围内时为 true
+     */
+    @Override
+    public boolean isWithinMeleeAttackRange(LivingEntity target) {
+        AttackRange range = this.getAttackRangeWith(this.getMainHandItem());
+        double distance = Math.sqrt(target.getBoundingBox().distanceToSqr(this.getEyePosition()));
+        double minReach = range.minReach() - range.hitboxMargin();
+        double maxReach = range.maxReach() + range.hitboxMargin();
+        return distance >= minReach && distance <= maxReach;
     }
 
     /**

@@ -13,14 +13,22 @@ import argparse
 import json
 import os
 import re
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, TextIO
 
 from openai import OpenAI
 from dotenv import load_dotenv
 
-from gymcraft import GymCraftEnv
-from gymcraft.llm import LLMEnvConfig, LLMGymCraftEnv, RenderConfig, chat_completion_text
+from gymcraft import (
+    EnvironmentConfig,
+    GymCraftConfig,
+    GymCraftEnv,
+    LLMGymCraftEnv,
+    ResetConfig,
+    load_config,
+)
+from gymcraft.llm import chat_completion_text
 
 
 EXPECTED_ENV_TYPE = "gymcraft:iron_golem_warden"
@@ -88,16 +96,20 @@ def chat(client: OpenAI, args: argparse.Namespace, messages: Any) -> str:
 
     参数:
         client: OpenAI 兼容客户端。
-        args: 命令行配置（模型名）。
+        args: 命令行配置（含 llm.completions 参数）。
         messages: 对话消息列表。
     返回:
         模型回复文本。
     """
+    completions = args.config.llm.completions
     return chat_completion_text(
         client,
-        args.model,
+        completions.model or "",
         messages,
-        extra_body={"thinking": {"type": "disabled"}},
+        extra_body=completions.extra_body or {"thinking": {"type": "disabled"}},
+        params=completions.params,
+        max_retries=completions.max_retries,
+        retry_delay=completions.retry_delay,
     )
 
 
@@ -109,7 +121,7 @@ def run_trial(
     trial_index: int,
     trace_handle: TextIO | None,
 ) -> tuple[bool, dict[str, Any], list[dict[str, Any]]]:
-    """执行一个完整回合，返回成功标志、终局 info 与逐步轨迹摘要。
+    """执行一个完整回合，直到环境返回 terminated/truncated，返回成功标志、终局 info 与逐步轨迹摘要。
 
     参数:
         client: OpenAI 兼容客户端。
@@ -122,25 +134,23 @@ def run_trial(
         (是否成功, 最后一个 step 的 info, 逐步轨迹记录（含动作块输出与环境反馈）)。
     """
     context, reset_info = env.reset(
-        seed=args.seed,
-        # 渲染不再做条数裁剪；条数上限改由 reset options 的 components 键控制。
-        options={
-            "disable_vanilla_ai": True,
-            "max_steps": args.max_steps,
-            "components": {"nearby_blocks": {"max_blocks": 20}},
-        },
+        seed=args.config.reset.seed,
+        options=args.config.reset_options(),
         task=task,
     )
     write_trace(trace_handle, {"event": "reset", "trial": trial_index, "task": task, "info": reset_info})
     trajectory: list[dict[str, Any]] = []
     info: dict[str, Any] = reset_info
-    for step_index in range(args.max_steps):
+    # 不在客户端计步：每个 trial 只在环境返回 terminated/truncated 时结束。
+    turn = 0
+    while True:
+        turn += 1
         model_text = chat(client, args, context["messages"])
         obs_before_action = context['messages'][-1]['content']
         context, reward, terminated, truncated, info = env.step(model_text)
         action_state = info.get("action_state", {})
         record = {
-            "turn": step_index + 1,
+            "turn": turn,
             "action_block": extract_action_block(model_text),
             "actions": info.get("parsed_actions", []),
             "reward": reward,
@@ -154,7 +164,7 @@ def run_trial(
 
         print(
             "========================================================================\n"
-            f"[trial {trial_index + 1} turn {step_index + 1}] reward={reward:+.3f} "
+            f"[trial {trial_index + 1} turn {turn}] reward={reward:+.3f} "
             f"observation:\n{obs_before_action}\n"
             f"model_text:\n{model_text}\n"
             f"stage={record['stage']} terminated={terminated} truncated={truncated}"
@@ -240,7 +250,7 @@ def reflect(
     prompt = REFLECTION_PROMPT.format(
         task=task,
         stage=info.get("stage", "unknown"),
-        failure_reason=info.get("failure_reason", "") or "(truncated at step limit)",
+        failure_reason=info.get("failure_reason", "") or "(truncated by server)",
         milestones=format_milestones(info),
         steps=info.get("steps", len(trajectory)),
         trajectory=format_trajectory(trajectory),
@@ -255,18 +265,16 @@ def run(args: argparse.Namespace) -> None:
     参数:
         args: 命令行解析后的连接、模型和回合配置。
     """
-    client = OpenAI(api_key=args.api_key, base_url=args.base_url)
-    base_env = GymCraftEnv(args.entity_uuid, address=args.address)
+    config = args.config
+    completions = config.llm.completions
+    client = OpenAI(api_key=completions.api_key, base_url=completions.base_url)
+    base_env = GymCraftEnv(config)
     env_type = str(base_env.remote_metadata.get("env_type_id", ""))
     if env_type != EXPECTED_ENV_TYPE:
         base_env.close()
         raise RuntimeError(f"需要连接 {EXPECTED_ENV_TYPE}，当前环境为 {env_type or 'unknown'}")
 
-    env = LLMGymCraftEnv(
-        base_env,
-        task=args.task,
-        config=LLMEnvConfig(render=RenderConfig()),
-    )
+    env = LLMGymCraftEnv(base_env, config)
     trace_handle: TextIO | None = None
     try:
         if args.trace is not None:
@@ -274,16 +282,17 @@ def run(args: argparse.Namespace) -> None:
             trace_path.parent.mkdir(parents=True, exist_ok=True)
             trace_handle = trace_path.open("w", encoding="utf-8")
         reflections: list[str] = []
+        base_task = config.task or DEFAULT_TASK
         for trial_index in range(args.max_trials):
             # Episodic memory：只把最近一次反思注入下一 trial 的任务提示。
-            task = args.task
+            task = base_task
             if reflections:
-                task = f"{args.task}\n\nReflection from your previous failed attempt:\n{reflections[-1]}"
+                task = f"{base_task}\n\nReflection from your previous failed attempt:\n{reflections[-1]}"
             success, info, trajectory = run_trial(client, args, env, task, trial_index, trace_handle)
             if success:
                 print(f"===== trial {trial_index + 1}: SUCCESS (warden slain) =====")
                 return
-            reflection = reflect(client, args, args.task, info, trajectory)
+            reflection = reflect(client, args, base_task, info, trajectory)
             reflections.append(reflection)
             print(f"===== trial {trial_index + 1}: FAILED, reflection =====\n{reflection}")
             write_trace(trace_handle, {"event": "reflection", "trial": trial_index, "reflection": reflection})
@@ -298,28 +307,81 @@ def main() -> None:
     """解析命令行参数并启动铁傀儡 Reflexion demo。"""
     load_dotenv()
     parser = argparse.ArgumentParser(description="Run a Reflexion LLM in the GymCraft iron-golem-warden task")
-    parser.add_argument("entity_uuid")
-    parser.add_argument("--task", default=DEFAULT_TASK, help="覆盖内置任务提示")
-    parser.add_argument("--address", default="localhost:50051", help="GymCraft gRPC 地址")
-    parser.add_argument("--base-url", default=os.getenv("LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL"))
-    parser.add_argument("--api-key", default=os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
-    parser.add_argument("--model", default=os.getenv("LLM_MODEL") or os.getenv("OPENAI_MODEL"))
-    parser.add_argument("--max-steps", type=int, default=256)
+    parser.add_argument("entity_uuid", nargs="?", help="受控实体 UUID（省略时取配置文件 environment.entity_uuid）")
+    parser.add_argument(
+        "--config",
+        help="TOML 配置文件路径（默认 src/main/python/config.toml；示例见 config.example.toml）",
+    )
+    parser.add_argument("--task", help="覆盖内置任务提示（省略时取配置文件 task）")
+    parser.add_argument("--address", help="GymCraft gRPC 地址（省略时取配置文件 environment.address）")
+    parser.add_argument("--base-url", help="Chat Completions base URL（省略时取配置或环境变量）")
+    parser.add_argument("--api-key", help="Chat Completions API key（省略时取配置或环境变量）")
+    parser.add_argument("--model", help="模型名（省略时取配置或环境变量）")
     parser.add_argument("--max-trials", type=int, default=20)
-    parser.add_argument("--seed", type=int)
+    parser.add_argument("--seed", type=int, help="reset seed（省略时取配置文件 reset.seed）")
     parser.add_argument("--trace", help="可选 JSONL 轨迹输出路径")
     args = parser.parse_args()
-    if not args.api_key:
-        parser.error("请通过 --api-key、LLM_API_KEY 或 OPENAI_API_KEY 提供 API key")
-    if not args.model:
-        parser.error("请通过 --model、LLM_MODEL 或 OPENAI_MODEL 指定模型")
-    if args.max_steps <= 0:
-        parser.error("max-steps 必须大于 0")
+
+    base = _load_config(parser, args.config)
+
+    # 取值优先级：CLI 显式值 > 配置文件 > 内置默认。
+    entity_uuid = args.entity_uuid or base.environment.entity_uuid
+    if not entity_uuid:
+        parser.error("请通过位置参数或配置文件 environment.entity_uuid 提供受控实体 UUID")
+    task = args.task or base.task or DEFAULT_TASK
+    if not task.strip():
+        parser.error("task 不能为空")
+
+    # 配置文件中的 reset options 优先；缺省键补 demo 原有的默认值。
+    reset_options = base.reset_options()
+    reset_options.setdefault("disable_vanilla_ai", True)
+    # 服务端步数上限由 reset.options.max_steps 控制；demo 不注入客户端默认值。
+    components = reset_options.setdefault("components", {})
+    components.setdefault("nearby_blocks", {}).setdefault("max_blocks", 20)
+
+    completions = replace(
+        base.llm.completions,
+        base_url=args.base_url
+        or base.llm.completions.base_url
+        or os.getenv("LLM_BASE_URL")
+        or os.getenv("OPENAI_BASE_URL"),
+        api_key=args.api_key
+        or base.llm.completions.api_key
+        or os.getenv("LLM_API_KEY")
+        or os.getenv("OPENAI_API_KEY"),
+        model=args.model
+        or base.llm.completions.model
+        or os.getenv("LLM_MODEL")
+        or os.getenv("OPENAI_MODEL"),
+    )
+    if not completions.api_key:
+        parser.error("请通过 --api-key、配置文件 llm.completions.api_key、LLM_API_KEY 或 OPENAI_API_KEY 提供 API key")
+    if not completions.model:
+        parser.error("请通过 --model、配置文件 llm.completions.model、LLM_MODEL 或 OPENAI_MODEL 指定模型")
     if args.max_trials <= 0:
         parser.error("max-trials 必须大于 0")
-    if not args.task.strip():
-        parser.error("task 不能为空")
+
+    args.config = GymCraftConfig(
+        task=task,
+        environment=EnvironmentConfig(
+            address=args.address or base.environment.address,
+            entity_uuid=entity_uuid,
+        ),
+        reset=ResetConfig(
+            seed=args.seed if args.seed is not None else base.reset.seed,
+            options=reset_options,
+        ),
+        llm=replace(base.llm, completions=completions),
+    )
     run(args)
+
+
+def _load_config(parser: argparse.ArgumentParser, path: str | None) -> GymCraftConfig:
+    """读取 --config；未指定时读取默认 config.toml，读取失败交给 argparse 报错。"""
+    try:
+        return load_config(path)
+    except (OSError, ValueError) as exc:
+        parser.error(f"读取配置文件失败: {exc}")
 
 
 if __name__ == "__main__":

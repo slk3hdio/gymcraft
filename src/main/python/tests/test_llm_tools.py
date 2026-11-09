@@ -426,6 +426,7 @@ class ActionParserTests(unittest.TestCase):
             "use_item": "/use_item self",
             "update_interesting_blocks": "/update_interesting_blocks add minecraft:diamond_ore remove minecraft:stone",
             "send_chat": "/send_chat Hello from GymCraft!",
+            "respawn": "/respawn",
             "wait_player_message": "/wait_player_message Steve",
         }
         self.assertEqual(

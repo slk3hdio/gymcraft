@@ -192,14 +192,18 @@ gymcraft-demo --help
 | `gymcraft-demo iron-mining <entity_uuid>` | `gymcraft:iron_mining` | 从空手完成采集、合成并取得粗铁 |
 | `gymcraft-demo iron-golem-warden <entity_uuid>` | `gymcraft:iron_golem_warden` | Reflexion 多轮规划与铁傀儡战斗任务 |
 
-使用 `gymcraft-demo <demo> --help` 可以查看该 demo 的完整参数。源码仓库的
+使用 `gymcraft-demo <demo> --help` 可以查看该 demo 的完整参数。四个 demo 默认读取 `src/main/python/config.toml`（不存在时使用内置默认），也可用 `--config <path>` 指定其他文件：任务提示词、gRPC 地址、reset 参数、LLM wrapper 与 Chat Completions 参数可统一写在 TOML 中（示例模板见 `src/main/python/config.example.toml`），命令行显式参数优先。源码仓库的
 `src/main/python/debug/` 目录还包含移动、攻击、方块和菜单等动作的专项调试脚本。
 
 ### LLM 演示示例
 
 ```powershell
-gymcraft-demo llm-chat <entity_uuid> --max-steps 200 --task "beat the game" --api-key <api-key> --base-url https://api.deepseek.com --model deepseek-v4-flash
+gymcraft-demo llm-chat <entity_uuid> --task "beat the game" --api-key <api-key> --base-url https://api.deepseek.com --model deepseek-v4-flash
 ```
+
+demo 不再在客户端按步数截断，episode 由环境返回的 `terminated`/`truncated` 决定；服务端步数上限由 `reset.options.max_steps` 控制。
+
+也可以把任务、地址、reset、LLM wrapper 与 Chat Completions 参数写入 `src/main/python/config.toml`，随后直接运行 demo；实体 UUID 可省略并写在配置文件的 `[environment]` 中。需要多份配置时用 `--config <path>` 指定。
 
 ## 更多文档
 

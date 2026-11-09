@@ -207,6 +207,7 @@ public abstract class AbstractMcEnv implements McEnv {
      * @param componentId 组件注册 ID（如 {@code gymcraft:move_to}）
      * @return 该组件的 controller 实例；环境未声明该组件时为空
      */
+    @Override
     public Optional<ActionComponentController<?>> findActionComponent(String componentId) {
         return Optional.ofNullable(this.actionController.findComponent(componentId));
     }
@@ -304,6 +305,7 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     /** 获取指定动作组件在当前 env 中使用的参数空间。 */
+    @Override
     public McSpace<? extends Message> getActionComponentSpace(String componentId) {
         this.ensureOpen();
         return this.actionController.getComponentSpace(componentId);
@@ -316,6 +318,7 @@ public abstract class AbstractMcEnv implements McEnv {
     }
 
     /** 获取指定观测组件在当前 env 中使用的观测空间。 */
+    @Override
     public McSpace<? extends Message> getObservationComponentSpace(String componentId) {
         this.ensureOpen();
         return this.observationCreator.getComponentSpace(componentId);
@@ -357,6 +360,7 @@ public abstract class AbstractMcEnv implements McEnv {
      *
      * @return 当前生效的环境占用区域；空区域环境为 null
      */
+    @Override
     @Nullable
     public final BoundingBox stateRegion() {
         return this.baseline.region();
@@ -489,6 +493,7 @@ public abstract class AbstractMcEnv implements McEnv {
     /**
      * @return 最近一次 reset 的生效 options（场景保存回放用）；未 reset 过为空 Map
      */
+    @Override
     public Map<String, Object> lastResetOptionsView() {
         return this.lastResetOptions;
     }

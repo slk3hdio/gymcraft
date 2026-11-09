@@ -41,4 +41,19 @@ public final class ResetOptionValues {
         }
         return (int) value;
     }
+
+    /**
+     * 读取布尔参数（gRPC Struct 的布尔以原生 {@link Boolean} 到达）。
+     *
+     * @param options 单组件参数映射
+     * @param key 参数键
+     * @return 布尔值
+     */
+    public static boolean booleanValue(Map<String, Object> options, String key) {
+        Object value = options.get(key);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        throw new IllegalArgumentException("Component option '" + key + "' must be a boolean, got: " + value);
+    }
 }

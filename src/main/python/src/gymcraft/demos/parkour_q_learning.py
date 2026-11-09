@@ -7,7 +7,14 @@ import random
 from collections import defaultdict
 from typing import Any, cast
 
-from gymcraft.client import GymCraftEnv, single_action
+from gymcraft import (
+    EnvironmentConfig,
+    GymCraftConfig,
+    GymCraftEnv,
+    ResetConfig,
+    load_config,
+    single_action,
+)
 from gymcraft.gym.action.components import jump_pb2, noop_pb2, set_block_pb2, step_move_pb2
 from gymcraft.gym.observation.components import nearby_blocks_pb2, self_pb2
 from gymcraft.types import (
@@ -79,26 +86,23 @@ def choose_action(q_values: list[float], epsilon: float, rng: random.Random) -> 
 
 
 def train(args: argparse.Namespace) -> None:
-    """运行 Q-learning 训练和评估回合。"""
-    env = GymCraftEnv(args.entity_uuid, address=args.address)
+    """运行 Q-learning 训练和评估回合；每个 episode 仅由服务端 terminated/truncated 结束。"""
+    config = args.config
+    env = GymCraftEnv(config)
     actions = ["noop", "jump", "set_block", "move_forward", "move_back", "move_left", "move_right"]
     q_table: dict[State, list[float]] = defaultdict(lambda: [0.0] * len(actions))
-    rng = random.Random(args.seed)
+    rng = random.Random(args.rng_seed)
     successes = 0
     try:
         for episode in range(args.episodes):
-            obs, _ = env.reset(options={
-                "disable_vanilla_ai": True,
-                "block": args.block,
-                "block_count": args.block_count,
-                "target_height": args.target_height,
-            })
+            obs, _ = env.reset(seed=config.reset.seed, options=config.reset_options())
             assert OBS_SELF in obs
             initial = obs[OBS_SELF]
             origin_x, origin_z, base_y = math.floor(initial.x), math.floor(initial.z), initial.y
             state = encode_state(obs, args.block_count, origin_x, origin_z, base_y)
             total_reward = 0.0
-            for _ in range(args.max_steps):
+            # 不在客户端计步：每个 episode 只在服务端返回 terminated/truncated 时结束。
+            while True:
                 action_index = choose_action(q_table[state], args.epsilon, rng)
                 obs, reward, terminated, truncated, info = env.step(
                     make_action(actions[action_index], obs, args.block)
@@ -124,22 +128,63 @@ def train(args: argparse.Namespace) -> None:
 def main() -> None:
     """解析命令行参数并启动训练。"""
     parser = argparse.ArgumentParser(description="Train a mob to parkour upward with blocks")
-    parser.add_argument("entity_uuid")
-    parser.add_argument("--address", default="localhost:50051")
+    parser.add_argument("entity_uuid", nargs="?", help="受控实体 UUID（省略时取配置文件 environment.entity_uuid）")
+    parser.add_argument(
+        "--config",
+        help="TOML 配置文件路径（默认 src/main/python/config.toml；示例见 config.example.toml）",
+    )
+    parser.add_argument("--address", help="GymCraft gRPC 地址（省略时取配置文件 environment.address）")
     parser.add_argument("--block", default="minecraft:stone")
     parser.add_argument("--block-count", type=int, default=32)
     parser.add_argument("--target-height", type=int, default=8)
     parser.add_argument("--episodes", type=int, default=200)
-    parser.add_argument("--max-steps", type=int, default=256)
     parser.add_argument("--alpha", type=float, default=0.2)
     parser.add_argument("--gamma", type=float, default=0.95)
     parser.add_argument("--epsilon", type=float, default=0.2)
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, help="reset seed（省略时取配置文件 reset.seed；两者都无则 RNG 用 0）")
     parser.add_argument("--log-interval", type=int, default=10)
     args = parser.parse_args()
+
+    base = _load_config(parser, args.config)
+
+    # 取值优先级：CLI 显式值 > 配置文件 > 内置默认。
+    entity_uuid = args.entity_uuid or base.environment.entity_uuid
+    if not entity_uuid:
+        parser.error("请通过位置参数或配置文件 environment.entity_uuid 提供受控实体 UUID")
+    seed = args.seed if args.seed is not None else base.reset.seed
+    # Q-learning 的 RNG 需要一个确定的整数种子；未显式给出时保持原有的 0。
+    args.rng_seed = seed if seed is not None else 0
+
+    # 配置文件中的 reset options 优先；缺省键补 demo 原有的默认值。
+    reset_options = base.reset_options()
+    reset_options.setdefault("disable_vanilla_ai", True)
+    reset_options.setdefault("block", args.block)
+    reset_options.setdefault("block_count", args.block_count)
+    reset_options.setdefault("target_height", args.target_height)
+    # 配置可能覆盖方块/数量/目标高度，Q-learning 编码必须使用实际生效值。
+    args.block = str(reset_options["block"])
+    args.block_count = int(reset_options["block_count"])
+    args.target_height = int(reset_options["target_height"])
+
     if args.block_count < 1 or args.target_height < 1 or args.episodes < 1:
         parser.error("block-count, target-height and episodes must be positive")
+
+    args.config = GymCraftConfig(
+        environment=EnvironmentConfig(
+            address=args.address or base.environment.address,
+            entity_uuid=entity_uuid,
+        ),
+        reset=ResetConfig(seed=seed, options=reset_options),
+    )
     train(args)
+
+
+def _load_config(parser: argparse.ArgumentParser, path: str | None) -> GymCraftConfig:
+    """读取 --config；未指定时读取默认 config.toml，读取失败交给 argparse 报错。"""
+    try:
+        return load_config(path)
+    except (OSError, ValueError) as exc:
+        parser.error(f"读取配置文件失败: {exc}")
 
 
 if __name__ == "__main__":

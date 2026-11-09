@@ -3,6 +3,8 @@ package io.github.mousemeya.gymcraft.gym.env.envs;
 import io.github.mousemeya.gymcraft.gym.env.AbstractMcEnv;
 import io.github.mousemeya.gymcraft.gym.env.McEnvFactory;
 import io.github.mousemeya.gymcraft.gym.inventory.AgentInventoryLayout;
+import io.github.mousemeya.gymcraft.gym.action.component.RespawnController;
+import io.github.mousemeya.gymcraft.gym.observation.proto.ProtoMcObservation;
 import io.github.mousemeya.gymcraft.gym.scenario.ScenarioStore;
 import io.github.mousemeya.gymcraft.gym.state.AttachScope;
 import io.github.mousemeya.gymcraft.registry.ActionComponents;
@@ -69,7 +71,9 @@ public class GeneralEnv extends AbstractMcEnv {
                 ActionComponents.USE_ITEM.get(),
                 ActionComponents.UPDATE_INTERESTING_BLOCKS.get(),
                 ActionComponents.SEND_CHAT.get(),
-                ActionComponents.SWIM_TO.get()
+                ActionComponents.SWIM_TO.get(),
+                ActionComponents.RESPAWN.get(),
+                ActionComponents.WAIT_PLAYER_MESSAGE.get()
             ),
             List.of(
                 ObservationCreators.SELF.get(),
@@ -89,6 +93,22 @@ public class GeneralEnv extends AbstractMcEnv {
             scope
         );
         this.observationComponent(ObservationCreators.NEARBY_BLOCKS.get()).setMaxBlocks(32);
+        // 死亡经 respawn 动作重新召唤复活，复活位置固定为环境基线的出生位置；
+        // agent 死亡于其他维度时目标不适用、回退原地复活
+        this.actionComponent(ActionComponents.RESPAWN.get()).setRespawnPosition(
+            new RespawnController.RespawnTarget(
+                this.baselineSnapshot().agent().position(),
+                this.baselineSnapshot().agent().dimension()));
+    }
+
+    /**
+     * 死亡不终止 episode：agent 死亡后由 {@code gymcraft:respawn} 动作重新召唤复活
+     * （复活位置为环境基线出生位置，物品栏去留由 respawn 的 {@code keep_inventory}
+     * 组件配置决定）。本环境从此没有自动终止条件，episode 长度完全由客户端控制。
+     */
+    @Override
+    protected boolean isTerminated(ProtoMcObservation observation) {
+        return false;
     }
 
     /**

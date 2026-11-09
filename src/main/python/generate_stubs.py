@@ -29,6 +29,7 @@ PROTO_FILES = [
     "gymcraft/gym/action/components/use_item.proto",
     "gymcraft/gym/action/components/update_interesting_blocks.proto",
     "gymcraft/gym/action/components/send_chat.proto",
+    "gymcraft/gym/action/components/respawn.proto",
     "gymcraft/gym/action/components/wait_player_message.proto",
     "gymcraft/gym/observation/observation.proto",
     "gymcraft/gym/observation/common/entity_view.proto",

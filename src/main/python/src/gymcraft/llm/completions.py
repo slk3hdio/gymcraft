@@ -37,6 +37,7 @@ def chat_completion_text(
     messages: Sequence[Mapping[str, Any]],
     *,
     extra_body: Mapping[str, Any] | None = None,
+    params: Mapping[str, Any] | None = None,
     max_retries: int = 3,
     retry_delay: float = 1.0,
 ) -> str:
@@ -46,17 +47,26 @@ def chat_completion_text(
         client: OpenAI 兼容客户端。
         model: 模型名。
         messages: 对话消息列表；重试只在内部副本上追加催促消息，不修改入参。
-        extra_body: 透传给 create 的 extra_body（如禁用 thinking）。
+        extra_body: 透传给 create 的 extra_body（如供应商私有字段）。
+        params: 透传给 create 的其他参数（如 temperature/max_tokens）；
+            model/messages/stream/extra_body 由本函数统一管理，不应出现。
         max_retries: 总尝试次数（含首次），小于 1 时按 1 处理。
         retry_delay: 退避基准秒数，按 1x/2x/4x 递增。
     返回:
         模型回复文本（保证非空白）。
     抛出:
+        ValueError: ``params`` 包含由本函数管理的保留键。
         RuntimeError: 重试耗尽仍未返回文本。
         openai.OpenAIError: 非瞬时错误直接抛出；瞬时错误重试耗尽后原样抛出。
     """
     attempts = max(1, max_retries)
     request_messages: list[dict[str, Any]] = [dict(message) for message in messages]
+    request_params = dict(params) if params is not None else {}
+    # 这些键由本函数显式管理；允许透传会与显式关键字冲突。
+    reserved = {"model", "messages", "stream", "extra_body"}
+    overlap = sorted(reserved & set(request_params))
+    if overlap:
+        raise ValueError(f"params must not contain reserved keys: {overlap}")
     nudged = False
     for attempt in range(1, attempts + 1):
         try:
@@ -64,6 +74,7 @@ def chat_completion_text(
                 model=model,
                 messages=cast(Any, request_messages),
                 extra_body=dict(extra_body) if extra_body is not None else None,
+                **request_params,
             )
         except _TRANSIENT_ERRORS as error:
             # 瞬时网络/限流/服务端错误：退避后以原消息重试，耗尽则原样抛出。

@@ -12,8 +12,8 @@ from gymcraft.llm.components.observations import (
     self,
     world,
 )
-from gymcraft.llm.components.observations.last_actions import LAST_ACTIONS_FIELD
 from gymcraft.llm.components.registry import ObservationRegistry
+from gymcraft.types import LAST_ACTIONS_FIELD
 
 OBSERVATION_REGISTRY = ObservationRegistry([
     last_actions.COMPONENT,

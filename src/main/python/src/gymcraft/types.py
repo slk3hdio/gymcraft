@@ -46,6 +46,7 @@ ACTION_DROP_ITEM: Final = "gymcraft:drop_item"
 ACTION_USE_ITEM: Final = "gymcraft:use_item"
 ACTION_UPDATE_INTERESTING_BLOCKS: Final = "gymcraft:update_interesting_blocks"
 ACTION_SEND_CHAT: Final = "gymcraft:send_chat"
+ACTION_RESPAWN: Final = "gymcraft:respawn"
 ACTION_WAIT_PLAYER_MESSAGE: Final = "gymcraft:wait_player_message"
 
 # ── 观测组件注册 id（完整 wire 键，含 `gymcraft:` 命名空间）────────────────────
@@ -58,6 +59,9 @@ OBS_NEARBY_ITEMS: Final = "gymcraft:nearby_items"
 OBS_INTERESTING_BLOCKS: Final = "gymcraft:interesting_blocks"
 OBS_CHAT: Final = "gymcraft:chat"
 OBS_HEALTH_LOG: Final = "gymcraft:health_log"
+
+# header 派生的虚拟观测字段：上批动作的逐条反馈，不属于任何观测组件。
+LAST_ACTIONS_FIELD: Final = "last_actions"
 
 # ActionBatch dict 中的 step 共享超时键（秒，<= 0 表示不限制）。
 TIMEOUT_SECONDS: Final = "timeout_seconds"

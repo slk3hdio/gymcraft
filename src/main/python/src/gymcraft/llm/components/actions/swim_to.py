@@ -24,6 +24,6 @@ COMPONENT = ActionComponent(
     component_id=ACTION_SWIM_TO,
     command="swim_to",
     usage="/swim_to <x> <y> <z> [stop_distance]",
-    help="amphibious pathfinding: use in water, deep water, or when the target is across water; on land it behaves like move_to. Coordinates name a block; the agent navigates to that block's standing center",
+    help="",
     parse=_parse,
 )
