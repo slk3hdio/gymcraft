@@ -39,6 +39,6 @@ COMPONENT = ActionComponent(
     component_id=ACTION_USE_ITEM,
     command="use_item",
     usage="/use_item [self|block <x> <y> <z>|entity <id>]",
-    help="use, consume, eat, or throw the item in your main hand.",
+    help="use, consume, eat, or throw the item in your main hand. In some cases, when using an item directly on a target does not work, you may need to face the target first and then use the item on yourself.",
     parse=_parse,
 )
