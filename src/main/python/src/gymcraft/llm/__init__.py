@@ -6,8 +6,9 @@
 """
 
 from gymcraft.config import CompletionsConfig, LLMEnvConfig, RenderConfig
+from gymcraft.llm.async_env import AsyncLLMGymCraftEnv
 from gymcraft.llm.blocks import wrap_commands
-from gymcraft.llm.completions import chat_completion_text
+from gymcraft.llm.completions import async_chat_completion_text, chat_completion_text
 from gymcraft.llm.components.actions import ACTION_REGISTRY
 from gymcraft.llm.components.observations import LAST_ACTIONS_FIELD, OBSERVATION_REGISTRY
 from gymcraft.llm.context import ContextAssembler, render_chat_transcript
@@ -30,6 +31,7 @@ __all__ = [
     "OBSERVATION_REGISTRY",
     "ActionParseError",
     "ActionParser",
+    "AsyncLLMGymCraftEnv",
     "ChatMessage",
     "CompletionsConfig",
     "ContextAssembler",
@@ -44,6 +46,7 @@ __all__ = [
     "ParsedAgentResponse",
     "RenderConfig",
     "TurnResult",
+    "async_chat_completion_text",
     "chat_completion_text",
     "encode_action_batch",
     "render_chat_transcript",

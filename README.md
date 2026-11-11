@@ -173,6 +173,8 @@ observation, reward, terminated, truncated, info = env.step({
 env.close()
 ```
 
+异步程序可改用 `AsyncGymCraftEnv`（原生 `grpc.aio`）：通过 `env = await AsyncGymCraftEnv.connect("entity-uuid-here")` 连接，使用 `await env.reset()` / `await env.step()`，并以 `await env.close()` 或 `async with` 释放资源。异步环境列表接口为 `await async_list_environments()`；完整示例见 `src/main/python/README.md`。
+
 `Connect` 只连接现有环境，不会自动创建环境。`disable_vanilla_ai=True` 仅在 reset 后以及一个动作结束到下一个动作开始之间压制原版 AI；动作执行期间会释放该环境级压制，并只保留动作自身声明的细粒度控制策略。
 
 `max_actions_per_step` 默认为 `9`，限制一个 step 接受的最大 action 数量；超限时整批返回 `FAILED`，且不会执行任何一项。设为 `0` 或负数表示不限制。

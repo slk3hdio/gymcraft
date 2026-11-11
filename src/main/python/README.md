@@ -46,6 +46,29 @@ obs, reward, terminated, truncated, step_info = env.step({
 env.close()
 ```
 
+异步程序可使用原生 `grpc.aio` 版本。通过 `await AsyncGymCraftEnv.connect(...)` 建立会话，再 await `reset()` / `step()`；实例支持 `async with`，退出时自动关闭会话和 channel。`await async_list_environments()` 提供对应的异步环境列表查询。
+
+```python
+import asyncio
+
+from gymcraft import AsyncGymCraftEnv, single_action
+from gymcraft.gym.action.components import noop_pb2
+
+
+async def main() -> None:
+    env = await AsyncGymCraftEnv.connect("entity-uuid-here")
+    async with env:
+        obs, reset_info = await env.reset(options={"disable_vanilla_ai": True})
+        obs, reward, terminated, truncated, step_info = await env.step(
+            single_action("gymcraft:noop", noop_pb2.ProtoNoop())
+        )
+
+
+asyncio.run(main())
+```
+
+同步 `GymCraftEnv` 与上述异步 API 可同时使用，二者的请求、观测解包和返回结构一致。
+
 `reset()` returns `(observation, info)` and `step()` returns `(observation, reward, terminated, truncated, info)` (Gymnasium-style). The observation is the unpacked `Observation` dict: a `header` plus component keys that are full registration ids such as `gymcraft:self`, `gymcraft:nearby_blocks`, `gymcraft:menu`. A step receives an ordered `ActionBatch`; each action has exactly one `component_id` and protobuf `payload`, and the server executes the list serially under one shared `timeout_seconds`. `make_action()` packs one action into `ProtoMcAction`, while `unpack_observation()` converts a raw `ProtoMcObservation` back to an `Observation`.
 
 `max_actions_per_step` 默认为 `9`，限制每个 step 最多接受的 action 数量；超限批次会整体失败且不产生动作副作用，空批次 noop 仍可使用。设为 `0` 或负数表示不限制。
@@ -94,6 +117,35 @@ model_text = """我先靠近箱子。
 context, reward, terminated, truncated, info = env.step(model_text)
 env.close()
 ````
+
+完整异步 LLM 闭环使用 `AsyncOpenAI`、`AsyncLLMGymCraftEnv` 和 `async_chat_completion_text`。模型请求与环境 RPC 都会异步等待，重试退避使用非阻塞的 `asyncio.sleep`：
+
+```python
+import asyncio
+
+from openai import AsyncOpenAI
+from gymcraft import AsyncGymCraftEnv, AsyncLLMGymCraftEnv
+from gymcraft.llm import async_chat_completion_text
+
+
+async def main() -> None:
+    base_env = await AsyncGymCraftEnv.connect("entity-uuid-here")
+    async with AsyncOpenAI(api_key="your-api-key") as client:
+        async with AsyncLLMGymCraftEnv(base_env, task="走到最近的箱子旁并打开它。") as env:
+            context, info = await env.reset(options={"disable_vanilla_ai": True})
+            while True:
+                model_text = await async_chat_completion_text(
+                    client,
+                    "your-model-id",
+                    context["messages"],
+                )
+                context, reward, terminated, truncated, info = await env.step(model_text)
+                if terminated or truncated:
+                    break
+
+
+asyncio.run(main())
+```
 
 动作块位于回复末尾，每个非空行是一条 Minecraft 风格命令。一个动作块可以包含多个动作，服务端严格按文本行顺序串行执行，并允许重复同一组件。多条 `move_menu_item` 会保留为一个组件原生批量负载。调用 `ActionParser.command_reference()` 可以取得当前环境支持的完整命令表。
 

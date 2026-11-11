@@ -11,8 +11,11 @@ from gymcraft.llm.context import ContextAssembler
 from gymcraft.llm.errors import ActionParseError
 from gymcraft.llm.history import ConversationHistory
 from gymcraft.llm.parser import ActionParser, encode_action_batch
-from gymcraft.llm.types import LLMContext, TurnResult
+from gymcraft.llm.types import LLMContext, ParsedAgentResponse, TurnResult
 from gymcraft.types import ActionBatch, Observation
+
+
+_StepResult = tuple[Observation, float, bool, bool, dict[str, Any]]
 
 
 # Wrapper 所需的最小底层环境接口，便于测试和替换 transport。
@@ -33,7 +36,7 @@ class GymCraftEnvLike(Protocol):
         """重置底层环境并返回解包观测与 info 字典。"""
         ...
 
-    def step(self, action: ActionBatch) -> tuple[Observation, float, bool, bool, dict[str, Any]]:
+    def step(self, action: ActionBatch) -> _StepResult:
         """执行有序动作批次并返回 Gymnasium 五元组。"""
         ...
 
@@ -42,38 +45,20 @@ class GymCraftEnvLike(Protocol):
         ...
 
 
-# 只负责串联独立工具组件的 LLM GymCraft wrapper。
-class LLMGymCraftEnv:
-    """接收模型原始文本并返回下一轮通用 Chat Completions 上下文。
-
-    观测与动作结果以结构化形式保留（``TurnResult`` + 观测原文），
-    文本渲染与反馈位/状态位划分统一由 ``ContextAssembler`` 在组装时完成。
-    输入模型的内容严格来自 observation；reward/terminated/truncated/info
-    只出现在 ``step`` 的返回值中。
-    """
+class _LLMEnvBase:
+    """保存同步/异步 wrapper 共有的配置与回合状态，并执行状态转换。"""
 
     def __init__(
         self,
-        env: GymCraftEnvLike,
-        config: GymCraftConfig | LLMEnvConfig | None = None,
+        action_space_spec: ProtoComponentSpaceSet | None,
+        config: GymCraftConfig | LLMEnvConfig | None,
         *,
-        task: str | None = None,
-        action_parser: ActionParser | None = None,
-        context_assembler: ContextAssembler | None = None,
-        history: ConversationHistory | None = None,
+        task: str | None,
+        action_parser: ActionParser | None,
+        context_assembler: ContextAssembler | None,
+        history: ConversationHistory | None,
     ) -> None:
-        """注入底层环境、配置和可替换工具；wrapper 本身不实现协议细节。
-
-        参数:
-            env: 已连接的底层 GymCraft 环境。
-            config: 总配置（同时提供任务与 ``llm`` 子配置），或仅 ``LLMEnvConfig``。
-            task: 显式任务提示；缺省时取总配置的 ``task``。
-            action_parser: 可选动作解析器替换。
-            context_assembler: 可选上下文组装器替换。
-            history: 可选对话历史替换。
-        抛出:
-            ValueError: 无法从参数或配置得到非空任务。
-        """
+        """初始化共享工具组件和回合状态，拒绝缺失或空白任务。"""
         if isinstance(config, GymCraftConfig):
             llm_config = config.llm
             resolved_task = task if task is not None else config.task
@@ -82,34 +67,35 @@ class LLMGymCraftEnv:
             resolved_task = task
         if resolved_task is None or not resolved_task.strip():
             raise ValueError("task must not be empty")
-        self.env = env
         self.task = resolved_task
         self.config = llm_config
         self.action_parser = action_parser or ActionParser(
-            env.action_space_spec,
+            action_space_spec,
             default_timeout_seconds=self.config.default_timeout_seconds,
             max_timeout_seconds=self.config.max_timeout_seconds,
         )
-        self.context_assembler = context_assembler or ContextAssembler(self.action_parser, config=self.config.render)
+        self.context_assembler = context_assembler or ContextAssembler(
+            self.action_parser, config=self.config.render
+        )
         self.history = history or ConversationHistory(self.config.history_turns)
         self._observation: Observation | None = None
         self._turn_index = 0
         self._invalid_attempts = 0
         self._needs_reset = True
 
-    def reset(
-        self,
-        *,
-        seed: int | None = None,
-        options: Mapping[str, Any] | None = None,
-        task: str | None = None,
-    ) -> tuple[LLMContext, dict[str, Any]]:
-        """重置底层环境、历史与纠错计数，并构造首轮 LLM 上下文。"""
+    def _update_task(self, task: str | None) -> None:
+        """在 reset 前应用可选任务覆盖，并拒绝空白任务。"""
         if task is not None:
             if not task.strip():
                 raise ValueError("task must not be empty")
             self.task = task
-        observation, raw_info = self.env.reset(seed=seed, options=options)
+
+    def _finish_reset(
+        self,
+        observation: Observation,
+        raw_info: Mapping[str, Any],
+    ) -> tuple[LLMContext, dict[str, Any]]:
+        """在底层 reset 完成后清理历史并构造首轮完整上下文。"""
         self.history.clear()
         self._turn_index = 0
         self._invalid_attempts = 0
@@ -117,19 +103,17 @@ class LLMGymCraftEnv:
         self._observation = observation
         info = dict(raw_info)
         info["advanced"] = True
-        # 首轮渲染全部字段（含反馈位），避免 chat/health_log 等增量内容在首步丢失
+        # 首轮渲染全部字段（含反馈位），避免 chat/health_log 等增量内容在首步丢失。
         return self._build_context(full_observation=True), info
 
-    def step(self, response_text: str) -> tuple[LLMContext, float, bool, bool, dict[str, Any]]:
-        """解析并提交模型回复；格式错误时不调用底层环境并原地反馈。"""
-        if self._needs_reset:
-            raise RuntimeError("The environment must be reset before stepping, or the previous episode has ended")
-        try:
-            parsed = self.action_parser.parse(response_text)
-        except ActionParseError as exc:
-            return self._handle_invalid_response(response_text, exc)
-
-        observation, reward, terminated, truncated, raw_info = self.env.step(encode_action_batch(parsed.batch))
+    def _finish_step(
+        self,
+        response_text: str,
+        parsed: ParsedAgentResponse,
+        step_result: _StepResult,
+    ) -> tuple[LLMContext, float, bool, bool, dict[str, Any]]:
+        """记录真实环境推进结果，并构造下一轮模型上下文。"""
+        observation, reward, terminated, truncated, raw_info = step_result
         info = dict(raw_info)
         info.update(
             {
@@ -154,11 +138,6 @@ class LLMGymCraftEnv:
         self._needs_reset = terminated or truncated
         return self._build_context(), reward, terminated, truncated, info
 
-    def close(self) -> None:
-        """关闭底层环境会话。"""
-        self.env.close()
-        self._needs_reset = True
-
     def _handle_invalid_response(
         self,
         response_text: str,
@@ -168,7 +147,7 @@ class LLMGymCraftEnv:
         self._invalid_attempts += 1
         truncated = self._invalid_attempts > self.config.max_invalid_retries
         remaining = max(0, self.config.max_invalid_retries - self._invalid_attempts + 1)
-        # 观测未变化：结构化结果不携带新观测，仅记录错误与剩余纠正次数
+        # 观测未变化：结构化结果不携带新观测，仅记录错误与剩余纠正次数。
         result = TurnResult(
             advanced=False,
             reward=0.0,
@@ -200,3 +179,57 @@ class LLMGymCraftEnv:
             turn_index=self._turn_index,
             full_observation=full_observation,
         )
+
+
+# 只负责串联独立工具组件的 LLM GymCraft wrapper。
+class LLMGymCraftEnv(_LLMEnvBase):
+    """同步接收模型文本，执行动作并返回下一轮 Chat Completions 上下文。"""
+
+    def __init__(
+        self,
+        env: GymCraftEnvLike,
+        config: GymCraftConfig | LLMEnvConfig | None = None,
+        *,
+        task: str | None = None,
+        action_parser: ActionParser | None = None,
+        context_assembler: ContextAssembler | None = None,
+        history: ConversationHistory | None = None,
+    ) -> None:
+        """注入已连接的同步环境、配置和可替换工具组件。"""
+        self.env = env
+        super().__init__(
+            env.action_space_spec,
+            config,
+            task=task,
+            action_parser=action_parser,
+            context_assembler=context_assembler,
+            history=history,
+        )
+
+    def reset(
+        self,
+        *,
+        seed: int | None = None,
+        options: Mapping[str, Any] | None = None,
+        task: str | None = None,
+    ) -> tuple[LLMContext, dict[str, Any]]:
+        """重置底层环境、历史与纠错计数，并构造首轮 LLM 上下文。"""
+        self._update_task(task)
+        observation, raw_info = self.env.reset(seed=seed, options=options)
+        return self._finish_reset(observation, raw_info)
+
+    def step(self, response_text: str) -> tuple[LLMContext, float, bool, bool, dict[str, Any]]:
+        """解析并提交模型回复；格式错误时不调用底层环境并原地反馈。"""
+        if self._needs_reset:
+            raise RuntimeError("The environment must be reset before stepping, or the previous episode has ended")
+        try:
+            parsed = self.action_parser.parse(response_text)
+        except ActionParseError as exc:
+            return self._handle_invalid_response(response_text, exc)
+        step_result = self.env.step(encode_action_batch(parsed.batch))
+        return self._finish_step(response_text, parsed, step_result)
+
+    def close(self) -> None:
+        """关闭底层环境会话。"""
+        self.env.close()
+        self._needs_reset = True

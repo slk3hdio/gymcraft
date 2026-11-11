@@ -17,6 +17,7 @@ from gymcraft.gym.rpc.env_service_pb2 import (
     CloseSessionRequest,
     ConnectRequest,
     ListEnvironmentsRequest,
+    ListEnvironmentsResponse,
     ResetRequest,
     ResetResponse,
     StepRequest,
@@ -37,6 +38,41 @@ _TMessage = TypeVar("_TMessage", bound=message.Message)
 # 观测组件注册 id（完整 wire 键，含 `gymcraft:` 命名空间）→ 解包目标 protobuf 消息类型。
 # 源自 LLM 观测组件注册表（单一事实源）；新增观测组件只需在注册表登记。
 _OBSERVATION_COMPONENT_TYPES: dict[str, type[message.Message]] = OBSERVATION_REGISTRY.unpack_map()
+
+
+def _resolve_connection(
+    config: GymCraftConfig | str,
+    entity_uuid: str | None,
+    address: str | None,
+) -> tuple[str, str]:
+    """解析同步与异步客户端共用的实体 UUID 和 gRPC 地址。
+
+    参数:
+        config: 总配置，或旧签名中的实体 UUID 字符串。
+        entity_uuid: 配置模式下的 UUID 覆盖，或旧签名中的第二个位置地址。
+        address: 显式 gRPC 地址。
+    返回:
+        非空实体 UUID 与地址二元组。
+    """
+    if isinstance(config, str):
+        # 兼容旧签名 GymCraftEnv(entity_uuid, address)：第一个位置参数是 UUID，
+        # 第二个位置参数在旧签名中是 address；新签名请用关键字传 entity_uuid。
+        if entity_uuid is not None:
+            if address is not None:
+                raise TypeError("旧签名的第二个位置参数与 address 不能同时提供")
+            resolved_uuid: str | None = config
+            resolved_address = entity_uuid
+        else:
+            resolved_uuid = config
+            resolved_address = address or DEFAULT_ADDRESS
+    else:
+        resolved_uuid = entity_uuid if entity_uuid is not None else config.environment.entity_uuid
+        resolved_address = address if address is not None else config.environment.address
+    if resolved_uuid is None or not resolved_uuid.strip():
+        raise ValueError("未提供 entity_uuid：请传入参数或配置 environment.entity_uuid")
+    if not resolved_address.strip():
+        raise ValueError("未提供 address：请传入参数或配置 environment.address")
+    return resolved_uuid, resolved_address
 
 
 # Gymnasium 式 gRPC 客户端：连接已存在的环境并转发 reset/step。
@@ -61,28 +97,7 @@ class GymCraftEnv(gym.Env[Any, Any]):
             ValueError: 参数与配置都没有提供非空实体 UUID 或地址。
             TypeError: 旧签名的第二个位置参数与 ``address`` 同时提供。
         """
-        if isinstance(config, str):
-            # 兼容旧签名 GymCraftEnv(entity_uuid, address)：第一个位置参数是 UUID，
-            # 第二个位置参数在旧签名中是 address；新签名请用关键字传 entity_uuid。
-            if entity_uuid is not None:
-                if address is not None:
-                    raise TypeError("旧签名的第二个位置参数与 address 不能同时提供")
-                resolved_uuid: str | None = config
-                resolved_address = entity_uuid
-            else:
-                resolved_uuid = config
-                resolved_address = address or DEFAULT_ADDRESS
-        else:
-            resolved_uuid = (
-                entity_uuid if entity_uuid is not None else config.environment.entity_uuid
-            )
-            resolved_address = (
-                address if address is not None else config.environment.address
-            )
-        if resolved_uuid is None or not resolved_uuid.strip():
-            raise ValueError("未提供 entity_uuid：请传入参数或配置 environment.entity_uuid")
-        if not resolved_address.strip():
-            raise ValueError("未提供 address：请传入参数或配置 environment.address")
+        resolved_uuid, resolved_address = _resolve_connection(config, entity_uuid, address)
         self.entity_uuid = resolved_uuid
         self.address = resolved_address
         self.channel = grpc.insecure_channel(resolved_address)
@@ -129,6 +144,21 @@ class GymCraftEnv(gym.Env[Any, Any]):
         self.channel.close()
 
 
+def _unpack_environments(response: ListEnvironmentsResponse) -> list[dict[str, Any]]:
+    """把环境列表响应转换为按实体 UUID 排序的字典列表。"""
+    return sorted(
+        (
+            {
+                "entity_uuid": env.entity_uuid,
+                "env_type": env.env_type,
+                "connected": env.connected,
+            }
+            for env in response.environments
+        ),
+        key=lambda item: item["entity_uuid"],
+    )
+
+
 def list_environments(address: str = DEFAULT_ADDRESS) -> list[dict[str, Any]]:
     """列出服务端当前所有已注册环境。
 
@@ -140,17 +170,7 @@ def list_environments(address: str = DEFAULT_ADDRESS) -> list[dict[str, Any]]:
     channel = grpc.insecure_channel(address)
     try:
         response = GymEnvServiceStub(channel).ListEnvironments(ListEnvironmentsRequest())
-        return sorted(
-            (
-                {
-                    "entity_uuid": env.entity_uuid,
-                    "env_type": env.env_type,
-                    "connected": env.connected,
-                }
-                for env in response.environments
-            ),
-            key=lambda item: item["entity_uuid"],
-        )
+        return _unpack_environments(response)
     finally:
         channel.close()
 
